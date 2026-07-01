@@ -1,17 +1,33 @@
 import os
+import asyncio
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, Query, responses, Request
 from google_auth_oauthlib.flow import Flow
 from db.supabase import SupabaseDB
 from gateway.telegram import TelegramGateway
+from gateway.discord import DiscordGateway
 from cron.consolidate import run_self_improvement
 from utils.logger import StructuredLogger
 
 logger = StructuredLogger("VelaServer")
-app = FastAPI(title="Vela Server")
-
-logger.info("Starting Vela Server...")
-telegram_gateway = TelegramGateway()
 db = SupabaseDB()
+telegram_gateway = TelegramGateway()
+discord_gateway = DiscordGateway(db=db)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("Initializing background services...")
+    discord_task = asyncio.create_task(discord_gateway.start())
+    yield
+    logger.info("Shutting down background services...")
+    await discord_gateway.close()
+    discord_task.cancel()
+    try:
+        await discord_task
+    except asyncio.CancelledError:
+        pass
+
+app = FastAPI(title="Vela Server", lifespan=lifespan)
 
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.send",
