@@ -1,6 +1,6 @@
 from telegram import Update, Bot
 from langchain_core.messages import HumanMessage
-from agent.graph import graph
+from agent.graph import graph,AgentState
 import os
 
 class TelegramGateway:
@@ -27,7 +27,8 @@ class TelegramGateway:
                 "relevant_memories": [],
                 "next_node": ""
             }
-            res = graph.invoke(inputs)
+            
+            res = graph.invoke(AgentState(**inputs))
             
             # The supervisor reply is the last message in the list
             assistant_reply = "I couldn't process that request."
