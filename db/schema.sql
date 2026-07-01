@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS oauth_tokens (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE TABLE IF NOT EXISTS memory_vectors (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
