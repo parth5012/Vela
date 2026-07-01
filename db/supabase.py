@@ -53,3 +53,20 @@ class SupabaseDB:
             self.logger.error("Failed to retrieve OAuth tokens", error=str(e), conversation_id=conversation_id, provider=provider)
             return None
 
+    def get_or_create_discord_conversation(self, discord_channel_id: int) -> str:
+        self.logger.info("Fetching Discord conversation", discord_channel_id=discord_channel_id)
+        try:
+            res = self.client.table("conversations").select("id").eq("discord_channel_id", discord_channel_id).execute()
+            if res.data:
+                conv_id = res.data[0]["id"]
+                self.logger.info("Found existing Discord conversation", discord_channel_id=discord_channel_id, conversation_id=conv_id)
+                return conv_id
+            
+            insert_res = self.client.table("conversations").insert({"discord_channel_id": discord_channel_id}).execute()
+            conv_id = insert_res.data[0]["id"]
+            self.logger.info("Created new Discord conversation record", discord_channel_id=discord_channel_id, conversation_id=conv_id)
+            return conv_id
+        except Exception as e:
+            self.logger.error("Database query failed, returning fallback mock-uuid", error=str(e), discord_channel_id=discord_channel_id)
+            return "mock-conversation-uuid"
+

@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS conversations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    telegram_chat_id BIGINT UNIQUE NOT NULL,
+    telegram_chat_id BIGINT UNIQUE,
+    discord_channel_id BIGINT UNIQUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
