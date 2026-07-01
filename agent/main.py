@@ -3,6 +3,7 @@ from fastapi import FastAPI, Depends, Query, responses, Request
 from google_auth_oauthlib.flow import Flow
 from db.supabase import SupabaseDB
 from gateway.telegram import TelegramGateway
+from cron.consolidate import run_self_improvement
 
 app = FastAPI(title="Vela Server")
 telegram_gateway = TelegramGateway()
@@ -77,3 +78,8 @@ async def telegram_webhook(request: Request):
     payload = await request.json()
     result = await telegram_gateway.handle_update(payload)
     return {"status": "processed", "result": result}
+
+@app.post("/consolidate")
+def trigger_consolidation():
+    msg = run_self_improvement()
+    return {"status": "success", "message": msg}
