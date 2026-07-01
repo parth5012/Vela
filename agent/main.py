@@ -4,8 +4,12 @@ from google_auth_oauthlib.flow import Flow
 from db.supabase import SupabaseDB
 from gateway.telegram import TelegramGateway
 from cron.consolidate import run_self_improvement
+from utils.logger import StructuredLogger
 
+logger = StructuredLogger("VelaServer")
 app = FastAPI(title="Vela Server")
+
+logger.info("Starting Vela Server...")
 telegram_gateway = TelegramGateway()
 db = SupabaseDB()
 
@@ -16,10 +20,12 @@ SCOPES = [
 
 @app.get("/health")
 def health_check():
+    logger.info("Health check pinged")
     return {"status": "ok"}
 
 @app.get("/oauth/login")
 def oauth_login(chat_id: int):
+    logger.info("Generating Google OAuth login URL", chat_id=chat_id)
     client_config = {
         "web": {
             "client_id": os.getenv("GOOGLE_CLIENT_ID", "mock_id"),
@@ -43,6 +49,7 @@ def oauth_login(chat_id: int):
 @app.get("/oauth/callback")
 def oauth_callback(code: str, state: str):
     telegram_chat_id = int(state)
+    logger.info("Received Google OAuth redirect callback", state_chat_id=telegram_chat_id)
     conv_id = db.get_or_create_conversation(telegram_chat_id)
     
     # Exchanging mock code (would exchange real credentials with code in production)
@@ -75,11 +82,14 @@ def oauth_callback(code: str, state: str):
 
 @app.post("/webhooks/telegram")
 async def telegram_webhook(request: Request):
+    logger.info("Telegram webhook endpoint triggered")
     payload = await request.json()
     result = await telegram_gateway.handle_update(payload)
     return {"status": "processed", "result": result}
 
 @app.post("/consolidate")
 def trigger_consolidation():
+    logger.info("Triggering nightly self-improvement consolidation loop")
     msg = run_self_improvement()
+    logger.info("Consolidation loop completed", result=msg)
     return {"status": "success", "message": msg}
