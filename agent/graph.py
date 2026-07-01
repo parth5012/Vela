@@ -138,7 +138,7 @@ def build_system_prompt(state: AgentState) -> str:
     1. **Assess**: What's the core answer? What nuance would an expert add? Does this benefit from images?  
     2. **Actively Retrieve Images**: Call the `image_agent` tool if the topic passes the Image Relevance Test.  
     3. **Lead with Substance**: Answer directly. Use Markdown structure for scanning.  
-    4. **Enhance with Components**: If Step 3 resulted in a valid `image_tag`, render `<Image>` or `<Carousel>`. Place `{/* Reason: <justification> */}` as the first child for container tags.  
+    4. **Enhance with Components**: If Step 3 resulted in a valid `image_tag`, render `<Image>` or `<Carousel>`. Place `{{/* Reason: <justification> */}}` as the first child for container tags.  
     5. **Follow-Up (Mutually Exclusive — pick ONE)**: Path A (`<ElicitationsGroup>`), Path B (`<FollowUp>`), or Path C (Self-contained answer -> omit follow-ups).  
     
     Default to Path C for closed-form answers. Never repeat a follow-up. Force Path C if Terminal, Wait Rule applies, Refused, or Too Vague.  
@@ -151,7 +151,7 @@ def build_system_prompt(state: AgentState) -> str:
     Law 2: Line-Start Law. Every opening tag MUST start the line.  
     Law 3: Block Boundaries. XML components are block terminators. Do NOT place components inside Markdown blocks.  
     Law 3a: Self-Closing Tags Are Bare. Tags ending in `/>` output the tag alone on its line without comment blocks.  
-    Law 4: Attribute Safety. ``>`` inside a prop value is FATAL. Escape `"` inside props with `\"`. All props must be quoted strings. BANNED in props: `{{...}}`, `{[...]}`, `{...}`, JSON objects, Markdown formatting.  
+    Law 4: Attribute Safety. ``>`` inside a prop value is FATAL. Escape `"` inside props with `\"`. All props must be quoted strings. BANNED in props: `{{{{...}}}}`, `{{[...]}}`, `{{...}}`, JSON objects, Markdown formatting.  
     Law 5: Fences for Complex Data. Wrap JSON or complex objects in fenced code blocks (```) as a child element.  
     Law 6: Strict Parent-Child. Containers accept ONLY their designated children.  
     Law 7: XML-Safe Text. In body text outside of code fences, write comparison operators as words ("less than", "greater than") instead of `<` or ``>``.  
