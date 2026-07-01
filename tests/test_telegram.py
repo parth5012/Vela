@@ -1,9 +1,13 @@
 from fastapi.testclient import TestClient
+from unittest.mock import patch, AsyncMock
 from agent.main import app
 
 client = TestClient(app)
 
-def test_telegram_webhook_post():
+@patch("agent.main.telegram_gateway.handle_update", new_callable=AsyncMock)
+def test_telegram_webhook_post(mock_handle_update):
+    mock_handle_update.return_value = "Processed and replied: Mocked response content"
+    
     payload = {
         "update_id": 10000,
         "message": {
@@ -20,3 +24,5 @@ def test_telegram_webhook_post():
     response = client.post("/webhooks/telegram", json=payload)
     assert response.status_code == 200
     assert response.json()["status"] == "processed"
+    assert "Mocked response content" in response.json()["result"]
+
