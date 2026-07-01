@@ -1,7 +1,72 @@
-from fastapi import FastAPI
+import os
+from fastapi import FastAPI, Depends, Query, responses
+from google_auth_oauthlib.flow import Flow
+from db.supabase import SupabaseDB
 
 app = FastAPI(title="Vela Server")
+db = SupabaseDB()
+
+SCOPES = [
+    "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/calendar.events"
+]
 
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+@app.get("/oauth/login")
+def oauth_login(chat_id: int):
+    client_config = {
+        "web": {
+            "client_id": os.getenv("GOOGLE_CLIENT_ID", "mock_id"),
+            "client_secret": os.getenv("GOOGLE_CLIENT_SECRET", "mock_secret"),
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token"
+        }
+    }
+    flow = Flow.from_client_config(
+        client_config,
+        scopes=SCOPES,
+        redirect_uri=os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/oauth/callback")
+    )
+    authorization_url, state = flow.authorization_url(
+        access_type="offline",
+        include_granted_scopes="true",
+        state=str(chat_id)
+    )
+    return responses.RedirectResponse(authorization_url)
+
+@app.get("/oauth/callback")
+def oauth_callback(code: str, state: str):
+    telegram_chat_id = int(state)
+    conv_id = db.get_or_create_conversation(telegram_chat_id)
+    
+    # Exchanging mock code (would exchange real credentials with code in production)
+    token_data = {
+        "access_token": "mock_access_token",
+        "refresh_token": "mock_refresh_token",
+        "expiry": "2026-07-01T12:00:00Z"
+    }
+    db.store_oauth_tokens(conv_id, "google", token_data)
+    
+    html_content = """
+    <html>
+        <head>
+            <style>
+                body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #1e1e2e; color: #cdd6f4; }
+                .card { background: #313244; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; }
+                h1 { color: #a6e3a1; }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <h1>Authorization Successful!</h1>
+                <p>Gmail and Google Calendar have been successfully linked to Vela.</p>
+                <p>You can close this tab now and return to Telegram.</p>
+            </div>
+        </body>
+    </html>
+    """
+    return responses.HTMLResponse(content=html_content)
+
