@@ -28,7 +28,7 @@ def chatbot_node(state: AgentState) -> dict:
     api_key = os.getenv("GOOGLE_API_KEY", "")
     if api_key and not api_key.startswith("your_"):
         try:
-            llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=api_key)
+            llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key=api_key)
             response = llm.invoke(state["messages"])
             return {"messages": [response], "next_node": END}
         except Exception as e:
