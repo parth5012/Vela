@@ -1,7 +1,7 @@
 import os
 import json
 from langchain_core.tools import tool
-from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+from utils.llm import get_llm, get_embeddings
 from db.session import get_db_session
 from db.models import MemoryVector
 from utils.logger import StructuredLogger
@@ -32,8 +32,8 @@ def save_user_memory(conversation_id: str, fact: str) -> str:
 
     try:
         fact = fact.strip()
-        embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-2", google_api_key=api_key)
-        new_vector = embeddings.embed_query(fact, output_dimensionality=768)
+        embeddings = get_embeddings()
+        new_vector = embeddings.embed_query(fact)
 
         with get_db_session() as session:
             # 1. Retrieve the closest matching existing memory
@@ -49,7 +49,7 @@ def save_user_memory(conversation_id: str, fact: str) -> str:
             if existing_match:
                 try:
                     # 2. Check relationship with LLM
-                    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key=api_key)
+                    llm = get_llm()
                     reconciliation_prompt = f"""You are a Memory Reconciliation System. Compare a newly extracted fact with an existing memory and determine if the new fact contradicts, duplicates, refines, or is completely independent of the existing memory.
 
 Existing Memory: "{existing_match.content}"
@@ -113,8 +113,8 @@ def delete_user_memory(conversation_id: str, fact: str) -> str:
         return "Failed to delete memory: GOOGLE_API_KEY not configured."
 
     try:
-        embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-2", google_api_key=api_key)
-        new_vector = embeddings.embed_query(fact, output_dimensionality=768)
+        embeddings = get_embeddings()
+        new_vector = embeddings.embed_query(fact)
 
         with get_db_session() as session:
             existing_match = (
@@ -130,7 +130,7 @@ def delete_user_memory(conversation_id: str, fact: str) -> str:
                 # In pgvector CosineDistance can be queried, or we can just ask the LLM if they match,
                 # or verify distance. Let's do a quick LLM verify to confirm deletion correctness.
                 try:
-                    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key=api_key)
+                    llm = get_llm()
                     verify_prompt = f"""Identify if the following two facts refer to the same subject detail (e.g. matching name, hobby, project or detail to delete).
 Fact 1: "{existing_match.content}"
 Fact 2: "{fact}"

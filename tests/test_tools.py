@@ -18,17 +18,17 @@ def test_code_exec_mock():
 
 from tools.memory import save_user_memory, delete_user_memory
 
-@patch("tools.memory.GoogleGenerativeAIEmbeddings")
-@patch("tools.memory.ChatGoogleGenerativeAI")
+@patch("tools.memory.get_embeddings")
+@patch("tools.memory.get_llm")
 @patch("tools.memory.get_db_session")
-def test_save_user_memory_tool(mock_get_db, mock_llm_class, mock_embeddings_class):
+def test_save_user_memory_tool(mock_get_db, mock_llm_func, mock_embeddings_func):
     mock_llm = MagicMock()
     mock_llm.invoke.return_value = MagicMock(content="NONE")
-    mock_llm_class.return_value = mock_llm
+    mock_llm_func.return_value = mock_llm
 
     mock_embeddings = MagicMock()
     mock_embeddings.embed_query.return_value = [0.1] * 768
-    mock_embeddings_class.return_value = mock_embeddings
+    mock_embeddings_func.return_value = mock_embeddings
 
     mock_session = MagicMock()
     mock_session.query().filter_by().order_by().limit().first.return_value = None
@@ -39,17 +39,17 @@ def test_save_user_memory_tool(mock_get_db, mock_llm_class, mock_embeddings_clas
         assert "Successfully saved new memory" in res
         assert mock_session.add.called
 
-@patch("tools.memory.GoogleGenerativeAIEmbeddings")
-@patch("tools.memory.ChatGoogleGenerativeAI")
+@patch("tools.memory.get_embeddings")
+@patch("tools.memory.get_llm")
 @patch("tools.memory.get_db_session")
-def test_delete_user_memory_tool(mock_get_db, mock_llm_class, mock_embeddings_class):
+def test_delete_user_memory_tool(mock_get_db, mock_llm_func, mock_embeddings_func):
     mock_llm = MagicMock()
     mock_llm.invoke.return_value = MagicMock(content="YES")
-    mock_llm_class.return_value = mock_llm
+    mock_llm_func.return_value = mock_llm
 
     mock_embeddings = MagicMock()
     mock_embeddings.embed_query.return_value = [0.1] * 768
-    mock_embeddings_class.return_value = mock_embeddings
+    mock_embeddings_func.return_value = mock_embeddings
 
     mock_session = MagicMock()
     from db.models import MemoryVector
