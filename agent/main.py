@@ -34,6 +34,12 @@ SCOPES = [
     "https://www.googleapis.com/auth/calendar.events"
 ]
 
+@app.get("/")
+def health():
+    logger.info("Health check pinged")
+    return {"status": "ok"}
+
+    
 @app.get("/health")
 def health_check():
     logger.info("Health check pinged")
