@@ -36,8 +36,8 @@ def build_context(state: AgentState) -> str:
             return ""
             
         # 2. Generate embedding for query
-        embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
-        query_vector = embeddings.embed_query(query_text)
+        embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-2", google_api_key=api_key)
+        query_vector = embeddings.embed_query(query_text, output_dimensionality=768)
         
         # 3. Retrieve top 3 matching memories from database using cosine distance
         with get_db_session() as session:

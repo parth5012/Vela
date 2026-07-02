@@ -32,8 +32,8 @@ def save_user_memory(conversation_id: str, fact: str) -> str:
 
     try:
         fact = fact.strip()
-        embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
-        new_vector = embeddings.embed_query(fact)
+        embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-2", google_api_key=api_key)
+        new_vector = embeddings.embed_query(fact, output_dimensionality=768)
 
         with get_db_session() as session:
             # 1. Retrieve the closest matching existing memory
@@ -113,8 +113,8 @@ def delete_user_memory(conversation_id: str, fact: str) -> str:
         return "Failed to delete memory: GOOGLE_API_KEY not configured."
 
     try:
-        embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
-        new_vector = embeddings.embed_query(fact)
+        embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-2", google_api_key=api_key)
+        new_vector = embeddings.embed_query(fact, output_dimensionality=768)
 
         with get_db_session() as session:
             existing_match = (
