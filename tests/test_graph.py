@@ -36,3 +36,31 @@ def test_build_system_prompt_injects_dynamic_rules(mock_get_db):
     assert "* Must be concise and funny." in prompt
     assert "# Dynamic Rules" in prompt
 
+from db.models import Experience
+from datetime import datetime
+from agent.graph import build_recent_messages
+
+@patch("agent.graph.get_db_session")
+def test_build_recent_messages_loads_history(mock_get_db):
+    mock_session = MagicMock()
+    mock_exp = Experience(
+        conversation_id="conv-123",
+        user_query="Who are you?",
+        agent_response="I am Vela.",
+        created_at=datetime.utcnow()
+    )
+    mock_session.query().filter_by().order_by().limit().all.return_value = [mock_exp]
+    mock_get_db.return_value.__enter__.return_value = mock_session
+
+    state: AgentState = {
+        "messages": [HumanMessage(content="What is my name?")],
+        "telegram_chat_id": 123,
+        "db_conv_id": "real-conv-uuid",
+        "relevant_memories": [],
+        "next_node": ""
+    }
+    history = build_recent_messages(state)
+    assert "Human: Who are you?\nAI: I am Vela." in history
+    assert "Human: What is my name?" in history
+
+

@@ -3,9 +3,10 @@ from typing import Annotated, Sequence, TypedDict
 from langchain_core.messages import BaseMessage, AIMessage, HumanMessage
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
+from langgraph.prebuilt import tools_condition,ToolNode
 from langchain_google_genai import ChatGoogleGenerativeAI
 from db.session import get_db_session
-from db.models import SystemPromptFragment
+from db.models import SystemPromptFragment, Experience
 
 class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
@@ -19,9 +20,29 @@ def build_context(state: AgentState) -> str:
     pass
 
 def build_recent_messages(state: AgentState) -> str:
-    '''fetch recent messages'''
-    messages = state['messages']
-    return "\n".join([str(msg) for msg in messages])
+    # 1. Fetch last 5 experiences from DB as history
+    history_str = ""
+    db_conv_id = state.get("db_conv_id")
+    if db_conv_id and db_conv_id != "conv-123":
+        try:
+            with get_db_session() as session:
+                exps = (
+                    session.query(Experience)
+                    .filter_by(conversation_id=db_conv_id)
+                    .order_by(Experience.created_at.desc())
+                    .limit(5)
+                    .all()
+                )
+                exps.reverse()
+                for exp in exps:
+                    history_str += f"Human: {exp.user_query}\nAI: {exp.agent_response}\n"
+        except Exception:
+            pass
+
+    # 2. Format current messages in state
+    current_str = "\n".join([f"Human: {msg.content}" if isinstance(msg, HumanMessage) else f"AI: {msg.content}" for msg in state['messages']])
+    
+    return history_str + current_str
 
 def build_system_prompt(state: AgentState) -> str:
     context = build_context(state)
@@ -198,19 +219,34 @@ def web_search_node(state: AgentState) -> dict:
 
 def chatbot_node(state: AgentState) -> dict:
     api_key = os.getenv("GOOGLE_API_KEY", "")
+    response_msg = None
     if api_key and not api_key.startswith("your_"):
         try:
             llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key=api_key)
-            response = llm.invoke(build_system_prompt(state) + str(state["messages"][-1]))
-            return {"messages": [response], "next_node": END}
+            response_msg = llm.invoke(build_system_prompt(state) + str(state["messages"][-1]))
         except Exception as e:
-            return {"messages": [AIMessage(content=f"Error invoking LLM: {str(e)}")], "next_node": END}
+            response_msg = AIMessage(content=f"Error invoking LLM: {str(e)}")
     else:
         user_message = state["messages"][-1].content
-        return {
-            "messages": [AIMessage(content=f"Hello! I received your message: '{user_message}'. (Google API Key is not set, running in mock mode)")],
-            "next_node": END
-        }
+        response_msg = AIMessage(content=f"Hello! I received your message: '{user_message}'. (Google API Key is not set, running in mock mode)")
+
+    # Save the interaction to the experiences table in database
+    db_conv_id = state.get("db_conv_id")
+    if db_conv_id and db_conv_id != "conv-123":
+        try:
+            with get_db_session() as session:
+                from db.client import DBClient
+                client = DBClient(session)
+                client.save_experience(
+                    conversation_id=db_conv_id,
+                    user_query=state["messages"][-1].content,
+                    agent_response=response_msg.content
+                )
+                session.commit()
+        except Exception:
+            pass
+
+    return {"messages": [response_msg], "next_node": END}
 
 workflow = StateGraph(AgentState)
 workflow.add_node("supervisor", supervisor_node)
