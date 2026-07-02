@@ -4,6 +4,8 @@ from langchain_core.messages import BaseMessage, AIMessage, HumanMessage
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from langchain_google_genai import ChatGoogleGenerativeAI
+from db.session import get_db_session
+from db.models import SystemPromptFragment
 
 class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
@@ -22,9 +24,18 @@ def build_recent_messages(state: AgentState) -> str:
     return "\n".join([str(msg) for msg in messages])
 
 def build_system_prompt(state: AgentState) -> str:
-    
     context = build_context(state)
     recent_messages = build_recent_messages(state)
+
+    dynamic_rules_section = ""
+    try:
+        with get_db_session() as session:
+            fragment = session.query(SystemPromptFragment).filter_by(key="dynamic_rules").first()
+            if fragment and fragment.content:
+                dynamic_rules_section = f"\n\n# Dynamic Rules\n{fragment.content}\n"
+    except Exception:
+        pass
+
     return f"""# Saved Information  
     Description: Below is some information previously shared by the user. You may use it as general context if explicitly relevant:  
     
@@ -168,6 +179,7 @@ def build_system_prompt(state: AgentState) -> str:
     **Image Routing**: One subject -> Hero `<Image>`. 3-10 subjects -> `<Carousel>`.  
     
     `</routing_principles>`  
+    {dynamic_rules_section}
 
     USER_PROMPT:
     """
