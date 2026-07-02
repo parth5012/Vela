@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import JSON, DateTime, Integer, String, Float, Boolean
-from sqlalchemy.orm import Column, ForeignKey, declarative_base
+from sqlalchemy import JSON, DateTime, Integer, String, Float, Boolean, Column, ForeignKey
+from sqlalchemy.orm import declarative_base
 from pgvector.sqlalchemy import Vector
 
 Base = declarative_base()
@@ -10,7 +10,7 @@ Base = declarative_base()
 class Conversation(Base):
     __tablename__ = "conversations"
     id = Column(String, primary_key=True, default=uuid.uuid4)
-    chat_id = Column(Integer, unique=True, index=True, null=False)
+    chat_id = Column(Integer, unique=True, index=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
 
@@ -18,27 +18,27 @@ class Conversation(Base):
 class OAuthToken(Base):
     __tablename__ = "oauth_tokens"
     conversation_id = Column(
-        String, ForeignKey("conversations.id"), on_delete="CASCADE"
+        String, ForeignKey("conversations.id", ondelete="CASCADE"), primary_key=True
     )
-    token = Column(JSON, null=False)
-    provider = Column(String, null=False)
+    token = Column(JSON, nullable=False)
+    provider = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
 
 class MemoryVector(Base):
     __tablename__ = "memory_vectors"
     id = Column(String, primary_key=True, default=uuid.uuid4)
-    conversation_id = Column(String, ForeignKey("conversations.id"), on_delete="CASCADE")
-    vector = Column(Vector(768), null=False)
-    content = Column(String, null=False)
+    conversation_id = Column(String, ForeignKey("conversations.id", ondelete="CASCADE"))
+    vector = Column(Vector(768), nullable=False)
+    content = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class Experience(Base):
     __tablename__ = "experiences"
     id = Column(String, primary_key=True, default=uuid.uuid4)
-    conversation_id = Column(String, ForeignKey("conversations.id"), on_delete="CASCADE")
-    user_query = Column(String, null=False)
-    agent_response = Column(String, null=False)
+    conversation_id = Column(String, ForeignKey("conversations.id", ondelete="CASCADE"))
+    user_query = Column(String, nullable=False)
+    agent_response = Column(String, nullable=False)
     eval_score = Column(Float, nullable=True)
     eval_reason = Column(String, nullable=True)
     consolidated = Column(Boolean, default=False)
@@ -48,11 +48,11 @@ class SystemPromptFragment(Base):
     __tablename__ = "system_prompt_fragments"
     key = Column(String, primary_key=True)
     content = Column(String, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow,null=False)
+    updated_at = Column(DateTime, default=datetime.utcnow,nullable=False)
 
 class SkillsRegistry(Base):
     __tablename__ = "skills_registry"
     name = Column(String,primary_key=True)
-    description = Column(String,null=False)
+    description = Column(String,nullable=False)
     enabled = Column(Boolean,default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
