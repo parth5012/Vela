@@ -28,29 +28,29 @@ class DiscordGateway:
                 return
 
             self.logger.info("Received Discord message", channel_id=message.channel.id, author=str(message.author))
-            
-            try:
-                conv_id = self.db.get_or_create_discord_conversation(message.channel.id)
-                
-                inputs = {
-                    "messages": [HumanMessage(content=message.content)],
-                    "telegram_chat_id": 0,
-                    "db_conv_id": conv_id,
-                    "relevant_memories": [],
-                    "next_node": ""
-                }
-                
-                async with message.channel.typing():
-                    res = await asyncio.to_thread(graph.invoke, inputs)
-                
-                assistant_reply = "I couldn't process that request."
-                if res.get("messages"):
-                    assistant_reply = res["messages"][-1].content
-                
-                await message.channel.send(assistant_reply)
-                self.logger.info("Sent reply to Discord", channel_id=message.channel.id)
-            except Exception as e:
-                self.logger.error("Error handling Discord message", error=str(e))
+            if message.content.startswith("v."):
+                try:
+                    conv_id = self.db.get_or_create_discord_conversation(message.channel.id)
+                    
+                    inputs = {
+                        "messages": [HumanMessage(content=message.content)],
+                        "telegram_chat_id": 0,
+                        "db_conv_id": conv_id,
+                        "relevant_memories": [],
+                        "next_node": ""
+                    }
+                    
+                    async with message.channel.typing():
+                        res = await asyncio.to_thread(graph.invoke, inputs)
+                    
+                    assistant_reply = "I couldn't process that request."
+                    if res.get("messages"):
+                        assistant_reply = res["messages"][-1].content
+                    
+                    await message.channel.send(assistant_reply)
+                    self.logger.info("Sent reply to Discord", channel_id=message.channel.id)
+                except Exception as e:
+                    self.logger.error("Error handling Discord message", error=str(e))
 
     async def start(self):
         token = os.getenv("DISCORD_BOT_TOKEN")
