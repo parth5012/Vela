@@ -17,7 +17,7 @@ async def test_on_message_handles_incoming_text(mock_graph_invoke):
     mock_message = MagicMock()
     mock_message.author = MagicMock()
     mock_message.author.bot = False
-    mock_message.content = "Hello bot"
+    mock_message.content = "v.Hello bot"
     mock_message.channel = MagicMock()
     mock_message.channel.id = 12345
     
