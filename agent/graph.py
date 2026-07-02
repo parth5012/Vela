@@ -7,7 +7,7 @@ from langgraph.prebuilt import tools_condition,ToolNode
 from langchain_google_genai import ChatGoogleGenerativeAI
 from db.session import get_db_session
 from db.models import SystemPromptFragment, Experience
-
+from tools import tools_list
 
 
 
@@ -208,6 +208,8 @@ def build_system_prompt(state: AgentState) -> str:
     USER_PROMPT:
     """
 
+tools = ToolNode(tools_list)
+
 def supervisor_node(state: AgentState) -> dict:
     last_msg = state["messages"][-1].content.lower()
     if "search" in last_msg:
@@ -267,6 +269,7 @@ workflow.add_conditional_edges(
     }
 )
 workflow.add_edge("web_search", "chatbot")
-workflow.add_edge("chatbot", END)
+workflow.add_conditional_edges("chatbot", tools_condition, {"tools": "tools", END: END})
+workflow.add_edge("tools", "chatbot")
 graph = workflow.compile()
 
