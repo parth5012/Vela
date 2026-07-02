@@ -63,4 +63,79 @@ def test_build_recent_messages_loads_history(mock_get_db):
     assert "Human: Who are you?\nAI: I am Vela." in history
     assert "Human: What is my name?" in history
 
+from db.models import MemoryVector
+from agent.graph import build_context
+
+@patch("agent.graph.GoogleGenerativeAIEmbeddings")
+@patch("agent.graph.get_db_session")
+def test_build_context_retrieves_memories(mock_get_db, mock_embeddings_class):
+    mock_embeddings = MagicMock()
+    mock_embeddings.embed_query.return_value = [0.1] * 768
+    mock_embeddings_class.return_value = mock_embeddings
+
+    mock_session = MagicMock()
+    mock_vector = MemoryVector(
+        conversation_id="real-conv-uuid",
+        content="User's name is Parth",
+        vector=[0.1] * 768
+    )
+    # Mock chain of query, filter_by, order_by, limit, all
+    mock_session.query().filter_by().order_by().limit().all.return_value = [mock_vector]
+    mock_get_db.return_value.__enter__.return_value = mock_session
+
+    state: AgentState = {
+        "messages": [HumanMessage(content="What is my name?")],
+        "telegram_chat_id": 123,
+        "db_conv_id": "real-conv-uuid",
+        "relevant_memories": [],
+        "next_node": ""
+    }
+
+    with patch.dict("os.environ", {"GOOGLE_API_KEY": "AIzaSyFakeKey"}):
+        context = build_context(state)
+        assert "User's name is Parth" in context
+
+from agent.graph import process_memory_extraction
+
+@patch("agent.graph.GoogleGenerativeAIEmbeddings")
+@patch("agent.graph.ChatGoogleGenerativeAI")
+@patch("agent.graph.get_db_session")
+def test_memory_extraction_and_reconciliation(mock_get_db, mock_llm_class, mock_embeddings_class):
+    # 1. Setup mock LLM & Embeddings
+    mock_llm = MagicMock()
+    # Mock extractor outputting JSON fact and mock reconciliation label
+    mock_llm.invoke.side_effect = [
+        MagicMock(content='["User lives in Delhi"]'),
+        MagicMock(content="NONE")
+    ]
+    mock_llm_class.return_value = mock_llm
+
+    mock_embeddings = MagicMock()
+    mock_embeddings.embed_query.return_value = [0.2] * 768
+    mock_embeddings_class.return_value = mock_embeddings
+
+    # 2. Setup mock DB Session
+    mock_session = MagicMock()
+    # Mock no highly similar memories (empty list)
+    mock_session.query().filter_by().order_by().limit().all.return_value = []
+    mock_get_db.return_value.__enter__.return_value = mock_session
+
+    # 3. Call process_memory_extraction
+    process_memory_extraction(
+        conversation_id="real-conv-uuid",
+        user_query="My name is Parth and I live in Delhi",
+        agent_response="Hello Parth! I've noted that you live in Delhi.",
+        api_key="AIzaSyFakeKey"
+    )
+
+    # 4. Assertions
+    # Verify save_memory_vector was called via DBClient session flush / add
+    assert mock_session.add.called
+    added_obj = mock_session.add.call_args[0][0]
+    assert isinstance(added_obj, MemoryVector)
+    assert added_obj.content == "User lives in Delhi"
+    assert added_obj.conversation_id == "real-conv-uuid"
+
+
+
 

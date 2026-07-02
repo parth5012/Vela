@@ -1,12 +1,14 @@
 import os
+import json
+import threading
 from typing import Annotated, Sequence, TypedDict
 from langchain_core.messages import BaseMessage, AIMessage, HumanMessage
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import tools_condition,ToolNode
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from db.session import get_db_session
-from db.models import SystemPromptFragment, Experience
+from db.models import SystemPromptFragment, Experience, MemoryVector
 from tools import tools_list
 
 
@@ -19,8 +21,41 @@ class AgentState(TypedDict):
     next_node: str
 
 def build_context(state: AgentState) -> str:
-    '''fetch long term memory'''
-    pass
+    db_conv_id = state.get("db_conv_id")
+    if not db_conv_id or db_conv_id == "conv-123":
+        return ""
+        
+    api_key = os.getenv("GOOGLE_API_KEY", "")
+    if not api_key or api_key.startswith("your_"):
+        return ""
+        
+    try:
+        # 1. Get query text from last user message
+        query_text = state["messages"][-1].content
+        if not query_text:
+            return ""
+            
+        # 2. Generate embedding for query
+        embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
+        query_vector = embeddings.embed_query(query_text)
+        
+        # 3. Retrieve top 3 matching memories from database using cosine distance
+        with get_db_session() as session:
+            results = (
+                session.query(MemoryVector)
+                .filter_by(conversation_id=db_conv_id)
+                .order_by(MemoryVector.vector.cosine_distance(query_vector))
+                .limit(3)
+                .all()
+            )
+            if not results:
+                return ""
+                
+            formatted_memories = "\n".join([f"- {r.content}" for r in results])
+            return formatted_memories
+    except Exception:
+        # Fail-silent for robust runtime context assembly
+        return ""
 
 def build_recent_messages(state: AgentState) -> str:
     # 1. Fetch last 5 experiences from DB as history
@@ -208,6 +243,105 @@ def build_system_prompt(state: AgentState) -> str:
     USER_PROMPT:
     """
 
+def process_memory_extraction(conversation_id: str, user_query: str, agent_response: str, api_key: str):
+    """Asynchronously extracts, deduplicates, and saves user details/preferences to MemoryVector."""
+    if not api_key or api_key.startswith("your_"):
+        return
+
+    try:
+        # 1. Ask LLM to extract permanent facts
+        llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key=api_key)
+        extractor_prompt = f"""Analyze the following user-agent interaction. Extract any permanent, factual information about the user, including their name, demographics, educational status, career goals, project details, coding stack, preferences, or relationships.
+
+Input:
+User: {user_query}
+Agent: {agent_response}
+
+Instructions:
+- Output a JSON list of strings, where each string is a single, clear, independent fact.
+- Example: ["Completed Class 12 in 2024", "Wants a backend internship for Summer 2026"]
+- Do not extract temporary conversational content (e.g. questions, jokes, greetings).
+- If no permanent facts are found, return an empty list.
+- Return ONLY the JSON list. No explanation or formatting outside the JSON.
+"""
+        response = llm.invoke(extractor_prompt)
+        content_text = response.content.strip()
+        
+        # Clean potential markdown block fences
+        if content_text.startswith("```json"):
+            content_text = content_text[7:]
+        if content_text.endswith("```"):
+            content_text = content_text[:-3]
+        content_text = content_text.strip()
+        
+        new_facts = json.loads(content_text)
+        if not isinstance(new_facts, list) or not new_facts:
+            return
+
+        embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
+
+        for fact in new_facts:
+            if not isinstance(fact, str) or not fact.strip():
+                continue
+            
+            fact = fact.strip()
+            # Generate embedding vector for the new fact
+            new_vector = embeddings.embed_query(fact)
+
+            # Query database for similar memories
+            with get_db_session() as session:
+                existing_match = (
+                    session.query(MemoryVector)
+                    .filter_by(conversation_id=conversation_id)
+                    .order_by(MemoryVector.vector.cosine_distance(new_vector))
+                    .limit(1)
+                    .first()
+                )
+
+                decision = "NONE"
+                # If a match is closer than 0.35 cosine distance, run reconciliation
+                if existing_match:
+                    try:
+                        reconciliation_prompt = f"""You are a Memory Reconciliation System. Compare a newly extracted fact with an existing memory and determine if the new fact contradicts, duplicates, refines, or is completely independent of the existing memory.
+
+Existing Memory: "{existing_match.content}"
+New Fact: "{fact}"
+
+Classification Rules:
+- DUPLICATE: The new fact says the exact same thing as the existing memory.
+- CONFLICT: The new fact contradicts the existing memory (e.g., year, name, or goal has changed).
+- REFINEMENT: The new fact provides more detail or updates the existing memory without direct contradiction.
+- NONE: The new fact is unrelated/independent.
+
+Return ONLY one of the following classification labels: DUPLICATE, CONFLICT, REFINEMENT, NONE.
+"""
+                        rec_response = llm.invoke(reconciliation_prompt)
+                        decision = rec_response.content.strip().upper()
+                    except Exception:
+                        decision = "NONE"
+
+                if decision == "DUPLICATE":
+                    # Skip duplicate
+                    continue
+                elif decision == "CONFLICT":
+                    # Delete existing and insert new
+                    session.delete(existing_match)
+                    session.flush()
+                    new_mem = MemoryVector(conversation_id=conversation_id, content=fact, vector=new_vector)
+                    session.add(new_mem)
+                elif decision == "REFINEMENT":
+                    # Update existing content and vector
+                    existing_match.content = fact
+                    existing_match.vector = new_vector
+                else: # NONE
+                    # Insert new memory
+                    new_mem = MemoryVector(conversation_id=conversation_id, content=fact, vector=new_vector)
+                    session.add(new_mem)
+                
+                session.commit()
+    except Exception:
+        pass
+
 tools = ToolNode(tools_list)
 
 def supervisor_node(state: AgentState) -> dict:
@@ -239,6 +373,7 @@ def chatbot_node(state: AgentState) -> dict:
     db_conv_id = state.get("db_conv_id")
     if db_conv_id and db_conv_id != "conv-123":
         try:
+            # 1. Log interaction experience
             with get_db_session() as session:
                 from db.client import DBClient
                 client = DBClient(session)
@@ -248,6 +383,13 @@ def chatbot_node(state: AgentState) -> dict:
                     agent_response=response_msg.content
                 )
                 session.commit()
+            
+            # 2. Extract and reconcile memories asynchronously in background thread
+            threading.Thread(
+                target=process_memory_extraction,
+                args=(db_conv_id, state["messages"][-1].content, response_msg.content, api_key),
+                daemon=True
+            ).start()
         except Exception:
             pass
 
