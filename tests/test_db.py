@@ -1,31 +1,36 @@
-import pytest
 from unittest.mock import MagicMock, patch
 from db.supabase import SupabaseDB
 
-@patch("db.supabase.create_client")
-def test_get_or_create_conversation(mock_create_client):
-    mock_supabase = MagicMock()
-    mock_create_client.return_value = mock_supabase
+@patch("db.supabase.DBClient")
+@patch("db.supabase.get_db_session")
+def test_get_or_create_conversation(mock_get_db, mock_db_client_class):
+    mock_session = MagicMock()
+    mock_get_db.return_value.__enter__.return_value = mock_session
     
-    # Configure mock return value for execute()
-    mock_execute = MagicMock()
-    mock_execute.data = [{"id": "existing-uuid"}]
-    mock_supabase.table().select().eq().execute.return_value = mock_execute
+    mock_client = MagicMock()
+    mock_conv = MagicMock()
+    mock_conv.id = "existing-uuid"
+    mock_client.get_or_create_conversation.return_value = mock_conv
+    mock_db_client_class.return_value = mock_client
     
     db = SupabaseDB()
     conv_id = db.get_or_create_conversation(12345)
     assert conv_id == "existing-uuid"
+    mock_client.get_or_create_conversation.assert_called_with(12345)
 
-@patch("db.supabase.create_client")
-def test_get_or_create_discord_conversation(mock_create_client):
-    mock_supabase = MagicMock()
-    mock_create_client.return_value = mock_supabase
+@patch("db.supabase.DBClient")
+@patch("db.supabase.get_db_session")
+def test_get_or_create_discord_conversation(mock_get_db, mock_db_client_class):
+    mock_session = MagicMock()
+    mock_get_db.return_value.__enter__.return_value = mock_session
     
-    mock_execute = MagicMock()
-    mock_execute.data = [{"id": "existing-discord-uuid"}]
-    mock_supabase.table().select().eq().execute.return_value = mock_execute
+    mock_client = MagicMock()
+    mock_conv = MagicMock()
+    mock_conv.id = "existing-discord-uuid"
+    mock_client.get_or_create_discord_conversation.return_value = mock_conv
+    mock_db_client_class.return_value = mock_client
     
     db = SupabaseDB()
     conv_id = db.get_or_create_discord_conversation(987654321)
     assert conv_id == "existing-discord-uuid"
-    mock_supabase.table.assert_called_with("conversations")
+    mock_client.get_or_create_discord_conversation.assert_called_with(987654321)
