@@ -8,20 +8,19 @@ class DBClient:
         self.session = session
 
     def get_or_create_conversation(self, telegram_chat_id: int) -> Conversation:
-        conv = self.session.query(Conversation).filter_by(chat_id=telegram_chat_id).first()
+        conv = self.session.query(Conversation).filter_by(telegram_chat_id=telegram_chat_id).first()
         if not conv:
-            # Generate string UUID for id
             conv_id = str(uuid.uuid4())
-            conv = Conversation(id=conv_id, chat_id=telegram_chat_id)
+            conv = Conversation(id=conv_id, telegram_chat_id=telegram_chat_id)
             self.session.add(conv)
             self.session.flush()
         return conv
 
     def get_or_create_discord_conversation(self, discord_channel_id: int) -> Conversation:
-        conv = self.session.query(Conversation).filter_by(chat_id=discord_channel_id).first()
+        conv = self.session.query(Conversation).filter_by(discord_channel_id=discord_channel_id).first()
         if not conv:
             conv_id = str(uuid.uuid4())
-            conv = Conversation(id=conv_id, chat_id=discord_channel_id)
+            conv = Conversation(id=conv_id, discord_channel_id=discord_channel_id)
             self.session.add(conv)
             self.session.flush()
         return conv

@@ -24,7 +24,7 @@ def db_session():
 def test_get_or_create_conversation(db_session):
     client = DBClient(db_session)
     conv = client.get_or_create_conversation(12345)
-    assert conv.chat_id == 12345
+    assert conv.telegram_chat_id == 12345
     assert conv.id is not None
 
     # Fetch again
@@ -34,7 +34,7 @@ def test_get_or_create_conversation(db_session):
 def test_get_or_create_discord_conversation(db_session):
     client = DBClient(db_session)
     conv = client.get_or_create_discord_conversation(98765)
-    assert conv.chat_id == 98765
+    assert conv.discord_channel_id == 98765
     
     conv2 = client.get_or_create_discord_conversation(98765)
     assert conv2.id == conv.id

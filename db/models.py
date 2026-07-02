@@ -10,7 +10,8 @@ Base = declarative_base()
 class Conversation(Base):
     __tablename__ = "conversations"
     id = Column(String, primary_key=True, default=uuid.uuid4)
-    chat_id = Column(Integer, unique=True, index=True, nullable=False)
+    telegram_chat_id = Column(Integer, unique=True, index=True, nullable=True)
+    discord_channel_id = Column(Integer, unique=True, index=True, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
 
