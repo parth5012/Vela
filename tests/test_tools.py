@@ -9,10 +9,10 @@ def test_tavily_search_mock(mock_post):
     mock_post.return_value = mock_res
     
     with patch.dict("os.environ", {"TAVILY_API_KEY": "dummy_key"}):
-        res = search_tavily("test query")
+        res = search_tavily.func("test query")
         assert "test query" in res
 
 def test_code_exec_mock():
-    res = run_python_code("print('hello')")
+    res = run_python_code.func("print('hello')")
     assert "Mock execution output" in res or "Sandbox execution" in res
 

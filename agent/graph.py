@@ -257,6 +257,7 @@ workflow = StateGraph(AgentState)
 workflow.add_node("supervisor", supervisor_node)
 workflow.add_node("web_search", web_search_node)
 workflow.add_node("chatbot", chatbot_node)
+workflow.add_node("tools", ToolNode(tools_list))
 
 workflow.set_entry_point("supervisor")
 workflow.add_conditional_edges(

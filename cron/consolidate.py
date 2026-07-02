@@ -9,6 +9,17 @@ from utils.logger import StructuredLogger
 logger = StructuredLogger("ConsolidatedCron")
 
 def run_self_improvement() -> str:
+    """Executes the nightly self-improvement consolidation loop.
+    
+    1. Fetches all unconsolidated experiences from the database.
+    2. Packages them into a prompt containing the user query, agent reply, and evaluation score.
+    3. Calls the Gemini LLM to analyze pattern weaknesses and update the dynamic prompt rules.
+    4. Saves the updated rules back to the database as the 'dynamic_rules' system prompt fragment.
+    5. Marks the processed experiences as consolidated.
+    
+    Returns:
+        A status string detailing the result of the consolidation.
+    """
     logger.info("Starting run_self_improvement nightly cron job")
     api_key = os.getenv("GOOGLE_API_KEY", "")
     if not api_key or api_key.startswith("your_"):

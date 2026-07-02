@@ -1,3 +1,9 @@
+"""
+Database session management module.
+Configures the SQLAlchemy engine and provides a thread-safe context manager
+for handling session scopes, commits, rollbacks, and clean close operations.
+"""
+
 import os
 from contextlib import contextmanager
 from dotenv import load_dotenv
