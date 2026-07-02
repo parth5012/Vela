@@ -11,7 +11,7 @@ from utils.logger import StructuredLogger
 
 logger = StructuredLogger("VelaServer")
 db = SupabaseDB()
-telegram_gateway = TelegramGateway()
+telegram_gateway = TelegramGateway(db=db)
 discord_gateway = DiscordGateway(db=db)
 
 @asynccontextmanager

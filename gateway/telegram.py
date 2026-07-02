@@ -2,11 +2,13 @@ from telegram import Update, Bot
 from langchain_core.messages import HumanMessage
 from agent.graph import graph
 from utils.logger import StructuredLogger
+from db.supabase import SupabaseDB
 import os
 
 class TelegramGateway:
-    def __init__(self):
+    def __init__(self, db: SupabaseDB):
         self.logger = StructuredLogger("TelegramGateway")
+        self.db = db
         token = os.getenv("TELEGRAM_BOT_TOKEN", "mock_token")
         self.bot = Bot(token=token)
         self.logger.info("Initialized TelegramGateway with bot client")
@@ -27,11 +29,14 @@ class TelegramGateway:
                 
             self.logger.info("Processing user message", chat_id=chat_id, message_length=len(message_text))
             
+            # Fetch the actual conversation UUID from DB
+            conv_id = self.db.get_or_create_conversation(chat_id)
+            
             # Run the LangGraph supervisor graph
             inputs = {
                 "messages": [HumanMessage(content=message_text)],
                 "telegram_chat_id": chat_id,
-                "db_conv_id": "conv-123",
+                "db_conv_id": conv_id,
                 "relevant_memories": [],
                 "next_node": ""
             }
