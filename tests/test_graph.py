@@ -66,12 +66,12 @@ def test_build_recent_messages_loads_history(mock_get_db):
 from db.models import MemoryVector
 from agent.graph import build_context
 
-@patch("agent.graph.GoogleGenerativeAIEmbeddings")
+@patch("agent.graph.get_embeddings")
 @patch("agent.graph.get_db_session")
-def test_build_context_retrieves_memories(mock_get_db, mock_embeddings_class):
+def test_build_context_retrieves_memories(mock_get_db, mock_embeddings_func):
     mock_embeddings = MagicMock()
     mock_embeddings.embed_query.return_value = [0.1] * 768
-    mock_embeddings_class.return_value = mock_embeddings
+    mock_embeddings_func.return_value = mock_embeddings
 
     mock_session = MagicMock()
     mock_vector = MemoryVector(

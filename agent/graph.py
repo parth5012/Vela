@@ -5,8 +5,8 @@ from typing import Annotated, Sequence, TypedDict
 from langchain_core.messages import BaseMessage, AIMessage, HumanMessage
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
-from langgraph.prebuilt import tools_condition,ToolNode
-from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+from langgraph.prebuilt import tools_condition, ToolNode
+from utils.llm import get_llm, get_embeddings
 from db.session import get_db_session
 from db.models import SystemPromptFragment, Experience, MemoryVector
 from tools import tools_list
@@ -36,8 +36,8 @@ def build_context(state: AgentState) -> str:
             return ""
             
         # 2. Generate embedding for query
-        embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-2", google_api_key=api_key)
-        query_vector = embeddings.embed_query(query_text, output_dimensionality=768)
+        embeddings = get_embeddings()
+        query_vector = embeddings.embed_query(query_text)
         
         # 3. Retrieve top 3 matching memories from database using cosine distance
         with get_db_session() as session:
@@ -266,7 +266,7 @@ def chatbot_node(state: AgentState) -> dict:
     response_msg = None
     if api_key and not api_key.startswith("your_"):
         try:
-            llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key=api_key)
+            llm = get_llm()
             response_msg = llm.invoke(build_system_prompt(state) + str(state["messages"][-1]))
         except Exception as e:
             response_msg = AIMessage(content=f"Error invoking LLM: {str(e)}")
