@@ -3,7 +3,7 @@ from typing import List
 from datetime import datetime
 from db.session import get_db_session
 from db.models import Experience, SystemPromptFragment
-from langchain_google_genai import ChatGoogleGenerativeAI
+from utils.llm import get_llm
 from utils.logger import StructuredLogger
 
 logger = StructuredLogger("ConsolidatedCron")
@@ -71,7 +71,7 @@ def run_self_improvement() -> str:
 """
 
             logger.info("Triggering LLM for prompt consolidation", num_experiences=len(experiences))
-            llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key=api_key)
+            llm = get_llm()
             response = llm.invoke(prompt)
             updated_rules = response.content.strip()
 

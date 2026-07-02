@@ -12,12 +12,12 @@ def test_consolidate_endpoint_mock_mode():
     assert response.status_code == 200
     assert response.json()["status"] == "success"
 
-@patch("cron.consolidate.ChatGoogleGenerativeAI")
-def test_run_self_improvement_flow(mock_llm_class):
+@patch("cron.consolidate.get_llm")
+def test_run_self_improvement_flow(mock_llm_func):
     # Set up mock LLM return value
     mock_llm = MagicMock()
     mock_llm.invoke.return_value.content = "* Always start responses with a friendly greeting."
-    mock_llm_class.return_value = mock_llm
+    mock_llm_func.return_value = mock_llm
 
     # 1. Backup original dynamic_rules content
     original_rules = None
