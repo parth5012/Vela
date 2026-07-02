@@ -8,6 +8,9 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from db.session import get_db_session
 from db.models import SystemPromptFragment, Experience
 
+
+
+
 class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
     telegram_chat_id: int

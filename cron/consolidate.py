@@ -1,4 +1,5 @@
 import os
+from typing import List
 from datetime import datetime
 from db.session import get_db_session
 from db.models import Experience, SystemPromptFragment
@@ -16,7 +17,7 @@ def run_self_improvement() -> str:
 
     try:
         with get_db_session() as session:
-            experiences = session.query(Experience).filter_by(consolidated=False).all()
+            experiences : List[Experience] = session.query(Experience).filter_by(consolidated=False).all()
             if not experiences:
                 msg = "Consolidated 0 experiences: No new experiences found."
                 logger.info(msg)
@@ -65,7 +66,7 @@ def run_self_improvement() -> str:
 
             # Update database
             if not rules_fragment:
-                rules_fragment = SystemPromptFragment(key="dynamic_rules", content=updated_rules)
+                rules_fragment :SystemPromptFragment = SystemPromptFragment(key="dynamic_rules", content=updated_rules)
                 session.add(rules_fragment)
             else:
                 rules_fragment.content = updated_rules

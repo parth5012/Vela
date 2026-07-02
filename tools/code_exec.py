@@ -1,6 +1,8 @@
 import os
 import httpx
+from langchain_core.tools import tool
 
+@tool
 def run_python_code(code: str) -> str:
     api_key = os.getenv("E2B_API_KEY", "")
     if not api_key:
