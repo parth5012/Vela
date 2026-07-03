@@ -1,9 +1,11 @@
 import os
 import httpx
 from langchain_core.tools import tool
+from langsmith import traceable
 
 
 @tool
+@traceable(run_type="tool", name="Search Tavily")
 def search_tavily(query: str) -> str:
     """Searches the web using the Tavily Search API and returns a synthesized text answer.
     
