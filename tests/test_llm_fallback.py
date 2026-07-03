@@ -43,11 +43,11 @@ def test_embeddings_fallback_trigger(mock_voyage_class, mock_gemini_class):
     mock_gemini_class.return_value = mock_gemini
 
     mock_voyage = MagicMock()
-    mock_voyage.embed_query.return_value = [0.2] * 768
+    mock_voyage.embed_query.return_value = [0.2] * 512
     mock_voyage_class.return_value = mock_voyage
 
     emb = get_embeddings()
     res = emb.embed_query("Test text")
-    assert res == [0.2] * 768
+    assert res == [0.2] * 512
     mock_gemini.embed_query.assert_called_once_with("Test text")
     mock_voyage.embed_query.assert_called_once_with("Test text")
