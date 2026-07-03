@@ -42,31 +42,9 @@ class TelegramGateway:
                 "next_node": ""
             }
             
-            self.logger.info("Streaming LangGraph supervisor graph", chat_id=chat_id)
-            
-            sent_replies = []
-            try:
-                async for chunk in graph.astream(inputs, stream_mode="updates"):
-                    for node_name, node_output in chunk.items():
-                        if node_name == "chatbot" and "messages" in node_output:
-                            for msg in node_output["messages"]:
-                                if isinstance(msg, AIMessage) and msg.content.strip():
-                                    self.logger.info("Sending streamed AI message to Telegram", chat_id=chat_id)
-                                    try:
-                                        await self.bot.send_message(chat_id=chat_id, text=msg.content)
-                                        sent_replies.append(msg.content)
-                                    except Exception as send_err:
-                                        self.logger.error("Failed to send intermediate message to Telegram", error=str(send_err))
-                                elif isinstance(msg, ToolCall) and msg.content.strip():
-                                    self.logger.info("Sending streamed tool call message to Telegram", chat_id=chat_id)
-                                    try:
-                                        await self.bot.send_message(chat_id=chat_id, text=f'> _{msg.content}_')
-                                        sent_replies.append(msg.content)
-                                    except Exception as send_err:
-                                        self.logger.error("Failed to send tool call message to Telegram", error=str(send_err))
-            except (asyncio.CancelledError, GeneratorExit) as cancel_err:
-                self.logger.info("Graph streaming task cancelled or closed gracefully", chat_id=chat_id, error=type(cancel_err).__name__)
-                raise
+            # Run graph execution (Toggle between streaming and invoking below)
+            sent_replies = await self._run_streaming(chat_id, inputs)
+            # sent_replies = await self._run_invoking(chat_id, inputs)
                                 
             if not sent_replies:
                 # Fallback if chatbot didn't emit any messages
@@ -86,3 +64,47 @@ class TelegramGateway:
         except Exception as e:
             self.logger.error("Error processing update webhook", error=str(e))
             return f"Error: {str(e)}"
+
+    async def _run_streaming(self, chat_id: int, inputs: dict) -> list[str]:
+        sent_replies = []
+        try:
+            async for chunk in graph.astream(inputs, stream_mode="updates"):
+                for node_name, node_output in chunk.items():
+                    if node_name == "chatbot" and "messages" in node_output:
+                        for msg in node_output["messages"]:
+                            if isinstance(msg, AIMessage) and msg.content.strip():
+                                self.logger.info("Sending streamed AI message to Telegram", chat_id=chat_id)
+                                try:
+                                    await self.bot.send_message(chat_id=chat_id, text=msg.content)
+                                    sent_replies.append(msg.content)
+                                except Exception as send_err:
+                                    self.logger.error("Failed to send intermediate message to Telegram", error=str(send_err))
+                            elif isinstance(msg, ToolCall) and msg.content.strip():
+                                self.logger.info("Sending streamed tool call message to Telegram", chat_id=chat_id)
+                                try:
+                                    await self.bot.send_message(chat_id=chat_id, text=f'> _{msg.content}_')
+                                    sent_replies.append(msg.content)
+                                except Exception as send_err:
+                                    self.logger.error("Failed to send tool call message to Telegram", error=str(send_err))
+        except (asyncio.CancelledError, GeneratorExit) as cancel_err:
+            self.logger.info("Graph streaming task cancelled or closed gracefully", chat_id=chat_id, error=type(cancel_err).__name__)
+            raise
+        return sent_replies
+
+    async def _run_invoking(self, chat_id: int, inputs: dict) -> list[str]:
+        self.logger.info("Invoking LangGraph supervisor graph (non-streaming)", chat_id=chat_id)
+        sent_replies = []
+        try:
+            res = await graph.ainvoke(inputs)
+            if "messages" in res:
+                # Send new messages generated during the graph execution
+                new_messages = res["messages"][len(inputs["messages"]):]
+                for msg in new_messages:
+                    if isinstance(msg, AIMessage) and msg.content.strip():
+                        self.logger.info("Sending final AI message to Telegram", chat_id=chat_id)
+                        await self.bot.send_message(chat_id=chat_id, text=msg.content)
+                        sent_replies.append(msg.content)
+        except (asyncio.CancelledError, GeneratorExit) as cancel_err:
+            self.logger.info("Graph invoking task cancelled or closed gracefully", chat_id=chat_id, error=type(cancel_err).__name__)
+            raise
+        return sent_replies
