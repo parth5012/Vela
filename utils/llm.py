@@ -120,7 +120,7 @@ def get_embeddings():
     primary_emb = GoogleGenerativeAIEmbeddings(
         model="models/gemini-embedding-2",
         api_key=google_api_key,
-        output_dimensionality=768,
+        output_dimensionality=512,
     )
 
     embeddings_list = [primary_emb]
@@ -129,7 +129,7 @@ def get_embeddings():
     if voyage_api_key and not voyage_api_key.startswith("your_"):
         embeddings_list.append(
             VoyageAIEmbeddings(
-                model="voyage-3", voyage_api_key=voyage_api_key, output_dimension=768
+                model="voyage-3", voyage_api_key=voyage_api_key, output_dimension=512
             )
         )
 
@@ -139,7 +139,7 @@ def get_embeddings():
             JinaEmbeddings(
                 model="jina-embeddings-v3",
                 jina_api_key=jina_api_key,
-                model_kwargs={"dimensions": 768},
+                model_kwargs={"dimensions": 512},
             )
         )
 
