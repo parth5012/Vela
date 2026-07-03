@@ -4,6 +4,7 @@ from agent.graph import graph
 from utils.logger import StructuredLogger
 from db.supabase import SupabaseDB
 import os
+import asyncio
 
 class TelegramGateway:
     def __init__(self, db: SupabaseDB):
@@ -44,24 +45,38 @@ class TelegramGateway:
             self.logger.info("Streaming LangGraph supervisor graph", chat_id=chat_id)
             
             sent_replies = []
-            async for chunk in graph.astream(inputs, stream_mode="updates"):
-                for node_name, node_output in chunk.items():
-                    if node_name == "chatbot" and "messages" in node_output:
-                        for msg in node_output["messages"]:
-                            if isinstance(msg, AIMessage) and msg.content.strip():
-                                self.logger.info("Sending streamed AI message to Telegram", chat_id=chat_id)
-                                await self.bot.send_message(chat_id=chat_id, text=msg.content)
-                                sent_replies.append(msg.content)
-                            elif isinstance(msg, ToolCall) and msg.content.strip():
-                                self.logger.info("Sending streamed tool call message to Telegram", chat_id=chat_id)
-                                await self.bot.send_message(chat_id=chat_id, text=f'> _{msg.content}_')
-                                sent_replies.append(msg.content)
+            try:
+                async for chunk in graph.astream(inputs, stream_mode="updates"):
+                    for node_name, node_output in chunk.items():
+                        if node_name == "chatbot" and "messages" in node_output:
+                            for msg in node_output["messages"]:
+                                if isinstance(msg, AIMessage) and msg.content.strip():
+                                    self.logger.info("Sending streamed AI message to Telegram", chat_id=chat_id)
+                                    try:
+                                        await self.bot.send_message(chat_id=chat_id, text=msg.content)
+                                        sent_replies.append(msg.content)
+                                    except Exception as send_err:
+                                        self.logger.error("Failed to send intermediate message to Telegram", error=str(send_err))
+                                elif isinstance(msg, ToolCall) and msg.content.strip():
+                                    self.logger.info("Sending streamed tool call message to Telegram", chat_id=chat_id)
+                                    try:
+                                        await self.bot.send_message(chat_id=chat_id, text=f'> _{msg.content}_')
+                                        sent_replies.append(msg.content)
+                                    except Exception as send_err:
+                                        self.logger.error("Failed to send tool call message to Telegram", error=str(send_err))
+            except asyncio.CancelledError:
+                self.logger.info("Graph streaming task cancelled", chat_id=chat_id)
+                raise
                                 
             if not sent_replies:
                 # Fallback if chatbot didn't emit any messages
                 assistant_reply = "I couldn't process that request."
-                await self.bot.send_message(chat_id=chat_id, text=assistant_reply)
-                sent_replies.append(assistant_reply)
+                try:
+                    await self.bot.send_message(chat_id=chat_id, text=assistant_reply)
+                    sent_replies.append(assistant_reply)
+                except Exception as send_err:
+                    self.logger.error("Failed to send fallback message to Telegram", error=str(send_err))
+                    sent_replies.append(assistant_reply)
                 
             self.logger.info("Supervisor graph execution completed", chat_id=chat_id, num_replies=len(sent_replies))
             return f"Processed and replied: '{sent_replies[-1]}'"
