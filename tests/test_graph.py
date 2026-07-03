@@ -70,14 +70,14 @@ from agent.graph import build_context
 @patch("agent.graph.get_db_session")
 def test_build_context_retrieves_memories(mock_get_db, mock_embeddings_func):
     mock_embeddings = MagicMock()
-    mock_embeddings.embed_query.return_value = [0.1] * 768
+    mock_embeddings.embed_query.return_value = [0.1] * 512
     mock_embeddings_func.return_value = mock_embeddings
 
     mock_session = MagicMock()
     mock_vector = MemoryVector(
         conversation_id="real-conv-uuid",
         content="User's name is Parth",
-        vector=[0.1] * 768
+        vector=[0.1] * 512
     )
     # Mock chain of query, filter_by, order_by, limit, all
     mock_session.query().filter_by().order_by().limit().all.return_value = [mock_vector]
