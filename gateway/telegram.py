@@ -64,8 +64,8 @@ class TelegramGateway:
                                         sent_replies.append(msg.content)
                                     except Exception as send_err:
                                         self.logger.error("Failed to send tool call message to Telegram", error=str(send_err))
-            except asyncio.CancelledError:
-                self.logger.info("Graph streaming task cancelled", chat_id=chat_id)
+            except (asyncio.CancelledError, GeneratorExit) as cancel_err:
+                self.logger.info("Graph streaming task cancelled or closed gracefully", chat_id=chat_id, error=type(cancel_err).__name__)
                 raise
                                 
             if not sent_replies:
@@ -80,6 +80,9 @@ class TelegramGateway:
                 
             self.logger.info("Supervisor graph execution completed", chat_id=chat_id, num_replies=len(sent_replies))
             return f"Processed and replied: '{sent_replies[-1]}'"
+        except (asyncio.CancelledError, GeneratorExit) as cancel_err:
+            self.logger.info("Telegram update task aborted due to shutdown or disconnection", error=type(cancel_err).__name__)
+            return "Cancelled"
         except Exception as e:
             self.logger.error("Error processing update webhook", error=str(e))
             return f"Error: {str(e)}"
