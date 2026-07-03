@@ -1,7 +1,7 @@
 import os
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, Query, responses, Request
+from fastapi import FastAPI, Depends, Query, responses, Request, BackgroundTasks
 from google_auth_oauthlib.flow import Flow
 from db.supabase import SupabaseDB
 from gateway.telegram import TelegramGateway
@@ -103,11 +103,11 @@ def oauth_callback(code: str, state: str):
     return responses.HTMLResponse(content=html_content)
 
 @app.post("/webhooks/telegram")
-async def telegram_webhook(request: Request):
+async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
     logger.info("Telegram webhook endpoint triggered")
     payload = await request.json()
-    result = await telegram_gateway.handle_update(payload)
-    return {"status": "processed", "result": result}
+    background_tasks.add_task(telegram_gateway.handle_update, payload)
+    return {"status": "processed", "result": "Task scheduled in background"}
 
 @app.post("/consolidate")
 def trigger_consolidation():

@@ -24,5 +24,6 @@ def test_telegram_webhook_post(mock_handle_update):
     response = client.post("/webhooks/telegram", json=payload)
     assert response.status_code == 200
     assert response.json()["status"] == "processed"
-    assert "Mocked response content" in response.json()["result"]
+    assert response.json()["result"] == "Task scheduled in background"
+    mock_handle_update.assert_called_once_with(payload)
 
