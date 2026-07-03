@@ -16,16 +16,16 @@ discord_gateway = DiscordGateway(db=db)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Initializing background services...")
-    discord_task = asyncio.create_task(discord_gateway.start())
+    # logger.info("Initializing background services...")
+    # discord_task = asyncio.create_task(discord_gateway.start())
     yield
-    logger.info("Shutting down background services...")
-    await discord_gateway.close()
-    discord_task.cancel()
-    try:
-        await discord_task
-    except asyncio.CancelledError:
-        pass
+    # logger.info("Shutting down background services...")
+    # await discord_gateway.close()
+    # discord_task.cancel()
+    # try:
+    #     await discord_task
+    # except asyncio.CancelledError:
+    #     pass
 
 app = FastAPI(title="Vela Server", lifespan=lifespan)
 

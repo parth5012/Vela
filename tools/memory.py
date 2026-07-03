@@ -1,5 +1,6 @@
 import os
 import json
+from tkinter.constants import N
 from langchain_core.tools import tool
 from utils.llm import get_llm, get_embeddings
 from db.session import get_db_session
@@ -38,7 +39,7 @@ def save_user_memory(conversation_id: str, fact: str) -> str:
 
         with get_db_session() as session:
             # 1. Retrieve the closest matching existing memory
-            existing_match = (
+            existing_match :MemoryVector | None = (
                 session.query(MemoryVector)
                 .filter_by(conversation_id=conversation_id)
                 .order_by(MemoryVector.vector.cosine_distance(new_vector))
