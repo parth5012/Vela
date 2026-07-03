@@ -21,7 +21,7 @@ class OAuthToken(Base):
     conversation_id = Column(
         String, ForeignKey("conversations.id", ondelete="CASCADE"), primary_key=True
     )
-    token = Column(JSON, nullable=False)
+    token = Column("token_data", JSON, nullable=False)
     provider = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
@@ -30,7 +30,7 @@ class MemoryVector(Base):
     __tablename__ = "memory_vectors"
     id = Column(String, primary_key=True, default=uuid.uuid4)
     conversation_id = Column(String, ForeignKey("conversations.id", ondelete="CASCADE"))
-    vector = Column(Vector(768), nullable=False)
+    vector = Column("embedding", Vector(768), nullable=False)
     content = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
