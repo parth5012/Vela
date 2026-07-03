@@ -27,7 +27,7 @@ def test_save_user_memory_tool(mock_get_db, mock_llm_func, mock_embeddings_func)
     mock_llm_func.return_value = mock_llm
 
     mock_embeddings = MagicMock()
-    mock_embeddings.embed_query.return_value = [0.1] * 768
+    mock_embeddings.embed_query.return_value = [0.1] * 512
     mock_embeddings_func.return_value = mock_embeddings
 
     mock_session = MagicMock()
@@ -48,12 +48,12 @@ def test_delete_user_memory_tool(mock_get_db, mock_llm_func, mock_embeddings_fun
     mock_llm_func.return_value = mock_llm
 
     mock_embeddings = MagicMock()
-    mock_embeddings.embed_query.return_value = [0.1] * 768
+    mock_embeddings.embed_query.return_value = [0.1] * 512
     mock_embeddings_func.return_value = mock_embeddings
 
     mock_session = MagicMock()
     from db.models import MemoryVector
-    mock_vector = MemoryVector(conversation_id="some-conv-id", content="User is a coder", vector=[0.1] * 768)
+    mock_vector = MemoryVector(conversation_id="some-conv-id", content="User is a coder", vector=[0.1] * 512)
     mock_session.query().filter_by().order_by().limit().first.return_value = mock_vector
     mock_get_db.return_value.__enter__.return_value = mock_session
 
