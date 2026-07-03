@@ -16,6 +16,7 @@ def save_user_memory(conversation_id: str, fact: str) -> str:
     - The user shares personal details (e.g. name, age, demographics).
     - The user specifies details about their projects, tech stack, career goals, or hobbies.
     - The user explicitly requests you to remember or store something.
+    - Break down the information into clear, independent statements.
     
     Do NOT use this tool for temporary conversational details (like questions or transient greetings).
     
