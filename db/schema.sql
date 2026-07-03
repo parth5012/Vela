@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS memory_vectors (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
-    embedding VECTOR(768) NOT NULL,
+    embedding VECTOR(512) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
