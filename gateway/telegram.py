@@ -6,6 +6,23 @@ from db.supabase import SupabaseDB
 import os
 import asyncio
 
+def _get_message_text(content) -> str:
+    if isinstance(content, str):
+        return content
+    elif isinstance(content, list):
+        text_parts = []
+        for part in content:
+            if isinstance(part, str):
+                text_parts.append(part)
+            elif isinstance(part, dict):
+                if "text" in part:
+                    text_parts.append(part["text"])
+        return "".join(text_parts)
+    elif content is None:
+        return ""
+    else:
+        return str(content)
+
 class TelegramGateway:
     def __init__(self, db: SupabaseDB):
         self.logger = StructuredLogger("TelegramGateway")
@@ -72,18 +89,19 @@ class TelegramGateway:
                 for node_name, node_output in chunk.items():
                     if node_name == "chatbot" and "messages" in node_output:
                         for msg in node_output["messages"]:
-                            if isinstance(msg, AIMessage) and msg.content.strip():
+                            msg_text = _get_message_text(msg.content)
+                            if isinstance(msg, AIMessage) and msg_text.strip():
                                 self.logger.info("Sending streamed AI message to Telegram", chat_id=chat_id)
                                 try:
-                                    await self.bot.send_message(chat_id=chat_id, text=msg.content)
-                                    sent_replies.append(msg.content)
+                                    await self.bot.send_message(chat_id=chat_id, text=msg_text)
+                                    sent_replies.append(msg_text)
                                 except Exception as send_err:
                                     self.logger.error("Failed to send intermediate message to Telegram", error=str(send_err))
-                            elif isinstance(msg, ToolCall) and msg.content.strip():
+                            elif isinstance(msg, ToolCall) and msg_text.strip():
                                 self.logger.info("Sending streamed tool call message to Telegram", chat_id=chat_id)
                                 try:
-                                    await self.bot.send_message(chat_id=chat_id, text=f'> _{msg.content}_')
-                                    sent_replies.append(msg.content)
+                                    await self.bot.send_message(chat_id=chat_id, text=f'> _{msg_text}_')
+                                    sent_replies.append(msg_text)
                                 except Exception as send_err:
                                     self.logger.error("Failed to send tool call message to Telegram", error=str(send_err))
         except (asyncio.CancelledError, GeneratorExit) as cancel_err:
@@ -100,10 +118,11 @@ class TelegramGateway:
                 # Send new messages generated during the graph execution
                 new_messages = res["messages"][len(inputs["messages"]):]
                 for msg in new_messages:
-                    if isinstance(msg, AIMessage) and msg.content.strip():
+                    msg_text = _get_message_text(msg.content)
+                    if isinstance(msg, AIMessage) and msg_text.strip():
                         self.logger.info("Sending final AI message to Telegram", chat_id=chat_id)
-                        await self.bot.send_message(chat_id=chat_id, text=msg.content)
-                        sent_replies.append(msg.content)
+                        await self.bot.send_message(chat_id=chat_id, text=msg_text)
+                        sent_replies.append(msg_text)
         except (asyncio.CancelledError, GeneratorExit) as cancel_err:
             self.logger.info("Graph invoking task cancelled or closed gracefully", chat_id=chat_id, error=type(cancel_err).__name__)
             raise
