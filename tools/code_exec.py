@@ -1,10 +1,8 @@
 import os
 import httpx
 from langchain_core.tools import tool
-from langsmith import traceable
 
 @tool
-@traceable(run_type="tool", name="Run Python Code")
 def run_python_code(code: str) -> str:
     """Executes a Python code block in a sandboxed, secure environment and returns the stdout/stderr.
     

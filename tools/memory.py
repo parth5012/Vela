@@ -1,7 +1,6 @@
 import os
 import json
 from langchain_core.tools import tool
-from langsmith import traceable
 from utils.llm import get_llm, get_embeddings
 from db.session import get_db_session
 from db.models import MemoryVector
@@ -10,7 +9,6 @@ from utils.logger import StructuredLogger
 logger = StructuredLogger("MemoryTools")
 
 @tool
-@traceable(run_type="tool", name="Save User Memory")
 def save_user_memory(conversation_id: str, fact: str) -> str:
     """Saves a permanent fact, detail, or preference about the user into long-term memory.
     
@@ -99,7 +97,6 @@ Return ONLY one of the following classification labels: DUPLICATE, CONFLICT, REF
         return f"Failed to save memory: {str(e)}"
 
 @tool
-@traceable(run_type="tool", name="Delete User Memory")
 def delete_user_memory(conversation_id: str, fact: str) -> str:
     """Removes a fact or detail from the user's long-term memory.
     
