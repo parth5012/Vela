@@ -266,7 +266,7 @@ def chatbot_node(state: AgentState) -> dict:
     response_msg = None
     if api_key and not api_key.startswith("your_"):
         try:
-            llm = get_llm()
+            llm = get_llm().bind_tools(tools_list)
             response_msg = llm.invoke(build_system_prompt(state) + str(state["messages"][-1]))
         except Exception as e:
             response_msg = AIMessage(content=f"Error invoking LLM: {str(e)}")

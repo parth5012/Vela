@@ -33,7 +33,7 @@ class FallbackEmbeddings(Embeddings):
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         for emb in self.embeddings_list:
             try:
-                provider_name = emb.__class__.__name__
+                provider_name:str = emb.__class__.__name__
                 logger.info("Attempting document embedding", provider=provider_name)
                 result = emb.embed_documents(texts)
                 logger.info("Success embedding documents", provider=provider_name)
@@ -91,7 +91,7 @@ def get_embeddings():
     google_api_key = os.getenv("GOOGLE_API_KEY", "")
     primary_emb = GoogleGenerativeAIEmbeddings(
         model="models/gemini-embedding-2", 
-        google_api_key=google_api_key,
+        api_key=google_api_key,
         output_dimensionality=768
     )
     
