@@ -1,6 +1,5 @@
 import os
 import json
-from tkinter.constants import N
 from langchain_core.tools import tool
 from langsmith import traceable
 from utils.llm import get_llm, get_embeddings
