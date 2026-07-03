@@ -30,7 +30,7 @@ class MemoryVector(Base):
     __tablename__ = "memory_vectors"
     id = Column(String, primary_key=True, default=uuid.uuid4)
     conversation_id = Column(String, ForeignKey("conversations.id", ondelete="CASCADE"))
-    vector = Column("embedding", Vector(768), nullable=False)
+    vector = Column("embedding", Vector(512), nullable=False)
     content = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
