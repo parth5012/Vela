@@ -43,8 +43,8 @@ class TelegramGateway:
             }
             
             # Run graph execution (Toggle between streaming and invoking below)
-            sent_replies = await self._run_streaming(chat_id, inputs)
-            # sent_replies = await self._run_invoking(chat_id, inputs)
+            # sent_replies = await self._run_streaming(chat_id, inputs)
+            sent_replies = await self._run_invoking(chat_id, inputs)
                                 
             if not sent_replies:
                 # Fallback if chatbot didn't emit any messages
