@@ -3,7 +3,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.embeddings import Embeddings
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_groq import ChatGroq
-from langchain_openai import ChatOpenAI
+from langchain_openrouter import ChatOpenRouter
 from langchain_cohere import ChatCohere
 from langchain_voyageai import VoyageAIEmbeddings
 from langchain_community.embeddings import JinaEmbeddings
@@ -71,10 +71,10 @@ def get_llm():
         
     openrouter_api_key = os.getenv("OPENROUTER_API_KEY", "")
     if openrouter_api_key and not openrouter_api_key.startswith("your_"):
-        fallbacks.append(ChatOpenAI(
-            model="google/gemini-2.5-flash",
-            openai_api_key=openrouter_api_key,
-            openai_api_base="https://openrouter.ai/api/v1",
+        fallbacks.append(ChatOpenRouter(
+            model="anthropic/claude-sonnet-5",
+            api_key=openrouter_api_key,
+            base_url="https://openrouter.ai/api/v1",
             callbacks=[FallbackLoggingHandler()]
         ))
         

@@ -1,5 +1,5 @@
 from telegram import Update, Bot
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage, ToolCall
 from agent.graph import graph
 from utils.logger import StructuredLogger
 from db.supabase import SupabaseDB
@@ -41,21 +41,30 @@ class TelegramGateway:
                 "next_node": ""
             }
             
-            self.logger.info("Invoking LangGraph supervisor graph", chat_id=chat_id)
-            res = graph.invoke(inputs)
+            self.logger.info("Streaming LangGraph supervisor graph", chat_id=chat_id)
             
-            # The supervisor reply is the last message in the list
-            assistant_reply = "I couldn't process that request."
-            if res.get("messages"):
-                assistant_reply = res["messages"][-1].content
+            sent_replies = []
+            async for chunk in graph.astream(inputs, stream_mode="updates"):
+                for node_name, node_output in chunk.items():
+                    if node_name == "chatbot" and "messages" in node_output:
+                        for msg in node_output["messages"]:
+                            if isinstance(msg, AIMessage) and msg.content.strip():
+                                self.logger.info("Sending streamed AI message to Telegram", chat_id=chat_id)
+                                await self.bot.send_message(chat_id=chat_id, text=msg.content)
+                                sent_replies.append(msg.content)
+                            elif isinstance(msg, ToolCall) and msg.content.strip():
+                                self.logger.info("Sending streamed tool call message to Telegram", chat_id=chat_id)
+                                await self.bot.send_message(chat_id=chat_id, text=f'> _{msg.content}_')
+                                sent_replies.append(msg.content)
+                                
+            if not sent_replies:
+                # Fallback if chatbot didn't emit any messages
+                assistant_reply = "I couldn't process that request."
+                await self.bot.send_message(chat_id=chat_id, text=assistant_reply)
+                sent_replies.append(assistant_reply)
                 
-            self.logger.info("Supervisor graph execution completed", chat_id=chat_id, reply_length=len(assistant_reply))
-            
-            # Send message back to user via Telegram Bot API
-            self.logger.info("Sending message back to Telegram user", chat_id=chat_id)
-            await self.bot.send_message(chat_id=chat_id, text=assistant_reply)
-            self.logger.info("Successfully sent reply to Telegram", chat_id=chat_id)
-            return f"Processed and replied: '{assistant_reply}'"
+            self.logger.info("Supervisor graph execution completed", chat_id=chat_id, num_replies=len(sent_replies))
+            return f"Processed and replied: '{sent_replies[-1]}'"
         except Exception as e:
             self.logger.error("Error processing update webhook", error=str(e))
             return f"Error: {str(e)}"
