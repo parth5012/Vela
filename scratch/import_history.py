@@ -1,3 +1,33 @@
+"""Because of Telegram Bot API limitations, bots are not
+  allowed to retrieve past message history (they only
+  receive messages in real-time via webhooks/polling when
+  active).
+
+  To solve this, I've created a CLI helper script so you
+  don't have to write any SQL or manually insert anything.
+
+  ### How to Import Your History
+
+  1. Put your previous chats in a JSON file (e.g.
+  previous_chats.json ) with this format:
+
+    [
+      {
+        "query": "What is the capital of France?",
+        "response": "The capital of France is Paris."
+      },
+      {
+        "query": "Thanks!",
+        "response": "You're welcome!"
+      }
+    ]
+
+  2. Run the import script import_history.py in your terminal:
+
+    python scratch/import_history.py <your_telegram_chat_id>
+  previous_chats.json"""
+
+
 import sys
 import os
 import json
