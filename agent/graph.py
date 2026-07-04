@@ -31,18 +31,21 @@ def supervisor_node(state: AgentState) -> dict:
 def chatbot_node(state: AgentState) -> dict:
     api_key = os.getenv("GOOGLE_API_KEY", "")
     response_msg = None
+    
+    # Extract the user's human message from history
+    user_msg = next((m for m in reversed(state["messages"]) if isinstance(m, HumanMessage)), None)
+    user_message = user_msg.content if user_msg else ""
+    
     if api_key and not api_key.startswith("your_"):
         try:
             llm = get_llm().bind_tools(tools_list)
             system_prompt = build_system_prompt(state)
             response_msg = llm.invoke([
-                SystemMessage(content=system_prompt),
-                state["messages"][-1]
-            ])
+                SystemMessage(content=system_prompt)
+            ] + list(state["messages"]))
         except Exception as e:
             response_msg = AIMessage(content=f"Error invoking LLM: {str(e)}")
     else:
-        user_message = state["messages"][-1].content
         response_msg = AIMessage(content=f"Hello! I received your message: '{user_message}'. (Google API Key is not set, running in mock mode)")
 
     # Save the interaction to the experiences table in database
@@ -55,7 +58,7 @@ def chatbot_node(state: AgentState) -> dict:
                 client = DBClient(session)
                 client.save_experience(
                     conversation_id=db_conv_id,
-                    user_query=state["messages"][-1].content,
+                    user_query=user_message,
                     agent_response=response_msg.content
                 )
                 session.commit()

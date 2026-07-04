@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS memory_vectors (
     embedding VECTOR(512) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_memory_vectors_conversation_id ON memory_vectors(conversation_id);
 
 CREATE TABLE IF NOT EXISTS experiences (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -33,6 +34,7 @@ CREATE TABLE IF NOT EXISTS experiences (
     consolidated BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_experiences_conversation_id ON experiences(conversation_id);
 
 CREATE TABLE IF NOT EXISTS system_prompt_fragments (
     key VARCHAR(100) PRIMARY KEY,

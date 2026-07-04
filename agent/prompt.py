@@ -272,10 +272,11 @@ def build_context(state: AgentState) -> str:
         
     try:
         # 1. Get query text from last user message
-        query_text = state["messages"][-1].content
-        if not query_text:
+        user_msg = next((m for m in reversed(state["messages"]) if isinstance(m, HumanMessage)), None)
+        if not user_msg or not user_msg.content:
             return ""
-            
+        query_text = user_msg.content
+        
         # 2. Generate embedding for query
         embeddings = get_embeddings()
         query_vector = embeddings.embed_query(query_text)

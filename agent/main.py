@@ -174,14 +174,51 @@ async def chat_message(payload: MessagePayload):
 
         full_response = ""
         
-        # Async generator looping over LangGraph events
-        async for event in graph.astream_events(initial_state, version="v2"):
-            kind = event.get("event")
-            if kind == "on_chat_model_stream":
-                chunk = event.get("data", {}).get("chunk")
-                if chunk and chunk.content:
-                    full_response += chunk.content
-                    yield f"data: {json.dumps({'type': 'content', 'delta': chunk.content})}\n\n"
+        # Run graph.astream_events in a background producer task and queue the events.
+        # This allows us to periodically yield SSE keep-alive pings to prevent Render timeouts
+        # during long-running tool executions.
+        queue = asyncio.Queue()
+
+        async def producer():
+            try:
+                async for event in graph.astream_events(initial_state, version="v2"):
+                    await queue.put(event)
+            except Exception as e:
+                await queue.put(e)
+            finally:
+                await queue.put(None)
+
+        producer_task = asyncio.create_task(producer())
+
+        try:
+            while True:
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=15.0)
+                except asyncio.TimeoutError:
+                    # Yield SSE comment ping to keep connection alive
+                    yield ": keep-alive\n\n"
+                    continue
+
+                if event is None:
+                    break
+                if isinstance(event, Exception):
+                    logger.error("Error in graph execution stream", error=str(event))
+                    yield f"data: {json.dumps({'type': 'error', 'message': str(event)})}\n\n"
+                    break
+
+                kind = event.get("event")
+                if kind == "on_chat_model_stream":
+                    chunk = event.get("data", {}).get("chunk")
+                    if chunk and chunk.content:
+                        full_response += chunk.content
+                        yield f"data: {json.dumps({'type': 'content', 'delta': chunk.content})}\n\n"
+        finally:
+            if not producer_task.done():
+                producer_task.cancel()
+                try:
+                    await producer_task
+                except asyncio.CancelledError:
+                    pass
 
         # Generate a dynamic title if thread title is 'New Chat'
         if thread_title == "New Chat":

@@ -31,7 +31,7 @@ class OAuthToken(Base):
 class MemoryVector(Base):
     __tablename__ = "memory_vectors"
     id = Column(String, primary_key=True, default=uuid.uuid4)
-    conversation_id = Column(String, ForeignKey("conversations.id", ondelete="CASCADE"))
+    conversation_id = Column(String, ForeignKey("conversations.id", ondelete="CASCADE"), index=True)
     vector = Column("embedding", Vector(512), nullable=False)
     content = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -39,7 +39,7 @@ class MemoryVector(Base):
 class Experience(Base):
     __tablename__ = "experiences"
     id = Column(String, primary_key=True, default=uuid.uuid4)
-    conversation_id = Column(String, ForeignKey("conversations.id", ondelete="CASCADE"))
+    conversation_id = Column(String, ForeignKey("conversations.id", ondelete="CASCADE"), index=True)
     user_query = Column(String, nullable=False)
     agent_response = Column(String, nullable=False)
     eval_score = Column(Float, nullable=True)
