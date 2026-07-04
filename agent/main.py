@@ -114,4 +114,4 @@ def trigger_consolidation():
     logger.info("Triggering nightly self-improvement consolidation loop")
     msg = run_self_improvement()
     logger.info("Consolidation loop completed", result=msg)
-    return {"status": "success", "message": msg}
+    return {"status": "success"}
