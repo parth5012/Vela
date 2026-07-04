@@ -1,5 +1,6 @@
 from sqlalchemy.sql.operators import startswith_op
 from telegram import Update, Bot
+from collections import deque
 from langchain_core.messages import HumanMessage, AIMessage, ToolCall
 from agent.graph import graph
 from utils.logger import StructuredLogger
@@ -30,10 +31,24 @@ class TelegramGateway:
         self.db = db
         token = os.getenv("TELEGRAM_BOT_TOKEN", "mock_token")
         self.bot = Bot(token=token)
+        self.processed_updates = set()
+        self.update_history = deque(maxlen=1000)
         self.logger.info("Initialized TelegramGateway with bot client")
 
     async def handle_update(self, payload: dict) -> str:
         self.logger.info("Received update webhook payload", payload=payload)
+        
+        # Deduplicate incoming webhook updates from Telegram
+        update_id = payload.get("update_id")
+        if update_id is not None:
+            if update_id in self.processed_updates:
+                self.logger.warning("Ignored duplicate webhook update", update_id=update_id)
+                return f"Ignored duplicate update {update_id}"
+            self.processed_updates.add(update_id)
+            self.update_history.append(update_id)
+            if len(self.update_history) >= 1000:
+                self.processed_updates = set(self.update_history)
+
         try:
             update = Update.de_json(payload, self.bot)
             if not update or not update.effective_chat or not update.effective_message:
@@ -48,8 +63,8 @@ class TelegramGateway:
                 
             self.logger.info("Processing user message", chat_id=chat_id, message_length=len(message_text))
             
-            # Fetch the actual conversation UUID from DB
-            conv_id = self.db.get_or_create_conversation(chat_id)
+            # Fetch the actual conversation UUID from DB (in a thread pool to keep the event loop non-blocking)
+            conv_id = await asyncio.to_thread(self.db.get_or_create_conversation, chat_id)
             
             # Run the LangGraph supervisor graph
             inputs = {
@@ -74,10 +89,11 @@ class TelegramGateway:
                     self.logger.error("Failed to send fallback message to Telegram", error=str(send_err))
                     sent_replies.append(assistant_reply)
 
-            # Store the interaction response in database
+            # Store the interaction response in database (in a thread pool to keep the event loop non-blocking)
             if sent_replies:
                 combined_response = "\n".join(sent_replies)
-                self.db.save_experience(
+                await asyncio.to_thread(
+                    self.db.save_experience,
                     conversation_id=conv_id,
                     user_query=message_text,
                     agent_response=combined_response
