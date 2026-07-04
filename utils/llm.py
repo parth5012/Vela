@@ -131,7 +131,7 @@ def get_embeddings():
     if voyage_api_key and not voyage_api_key.startswith("your_"):
         embeddings_list.append(
             VoyageAIEmbeddings(
-                model="voyage-3", voyage_api_key=voyage_api_key, output_dimension=512
+                model="voyage-3", api_key=voyage_api_key, output_dimension=512
             )
         )
 
