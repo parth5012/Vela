@@ -7,3 +7,4 @@ GEMINI.md
 .gemini/
 graphify-out/
 *.json
+.worktrees/
