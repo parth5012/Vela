@@ -1,7 +1,8 @@
 import os
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, Query, responses, Request, BackgroundTasks
+from fastapi import FastAPI, Depends, Query, responses, Request, BackgroundTasks, Security, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from google_auth_oauthlib.flow import Flow
 from db.supabase import SupabaseDB
 from gateway.telegram import TelegramGateway
@@ -40,7 +41,28 @@ def health():
     return {"status": "ok"}
 
     
-@app.get("/health")
+security = HTTPBearer(auto_error=False)
+
+def verify_api_key(credentials: HTTPAuthorizationCredentials = Security(security)):
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authenticated"
+        )
+    expected_key = os.getenv("VELA_API_KEY")
+    if not expected_key or expected_key.startswith("your_"):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="API Key is not configured on the server."
+        )
+    if credentials.credentials != expected_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API key."
+        )
+    return credentials.credentials
+
+@app.get("/health", dependencies=[Depends(verify_api_key)])
 def health_check():
     logger.info("Health check pinged")
     return {"status": "ok"}
