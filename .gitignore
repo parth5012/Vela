@@ -6,3 +6,4 @@ docs/
 GEMINI.md
 .gemini/
 graphify-out/
+*.json
