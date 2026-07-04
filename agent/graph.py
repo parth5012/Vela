@@ -86,6 +86,7 @@ def build_system_prompt(state: AgentState) -> str:
     context = build_context(state)
     recent_messages = build_recent_messages(state)
     db_conv_id = state.get("db_conv_id", "")
+    telegram_chat_id = state.get("telegram_chat_id", 0)
 
     dynamic_rules_section = ""
     try:
@@ -98,6 +99,7 @@ def build_system_prompt(state: AgentState) -> str:
 
     return f"""[Metadata]
     Active Conversation ID: {db_conv_id}
+    Telegram Chat ID: {telegram_chat_id}
 
     # Saved Information  
     Description: Below is some information previously shared by the user. You may use it as general context if explicitly relevant:  

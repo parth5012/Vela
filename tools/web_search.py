@@ -5,7 +5,7 @@ from langchain_tavily import TavilySearch
 
 
 # Ensure your environment variable is set
-os.environ["TAVILY_API_KEY"] = os.getenv("TAVILY_API_KEY", "")
+os.environ["TAVILY_API_KEY"] = os.getenv("TAVILY_API_KEY", "") or "mock_key"
 
 # Instantiate the tool with your desired defaults
 tavily_tool = TavilySearch(

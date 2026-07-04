@@ -1,16 +1,12 @@
 from unittest.mock import patch, MagicMock
-from tools.web_search import search_tavily
+from tools.web_search import tavily_tool
 from tools.code_exec import run_python_code
 
-@patch("tools.web_search.httpx.post")
-def test_tavily_search_mock(mock_post):
-    mock_res = MagicMock()
-    mock_res.json.return_value = {"answer": "Mocked answer for test query"}
-    mock_post.return_value = mock_res
-    
-    with patch.dict("os.environ", {"TAVILY_API_KEY": "dummy_key"}):
-        res = search_tavily.func("test query")
-        assert "test query" in res
+@patch("langchain_tavily.TavilySearch._run")
+def test_tavily_search_mock(mock_run):
+    mock_run.return_value = "Mocked answer for test query"
+    res = tavily_tool.invoke("test query")
+    assert "Mocked answer" in res
 
 def test_code_exec_mock():
     res = run_python_code.func("print('hello')")
@@ -61,5 +57,20 @@ def test_delete_user_memory_tool(mock_get_db, mock_llm_func, mock_embeddings_fun
         res = delete_user_memory.func("some-conv-id", "User is a coder")
         assert "Successfully deleted memory" in res
         assert mock_session.delete.called
+
+
+from tools.status_update import send_status_message
+
+@patch("tools.status_update.httpx.post")
+def test_send_status_message_tool(mock_post):
+    mock_res = MagicMock()
+    mock_res.raise_for_status = MagicMock()
+    mock_post.return_value = mock_res
+    
+    with patch.dict("os.environ", {"TELEGRAM_BOT_TOKEN": "12345:fake_token"}):
+        res = send_status_message.func(chat_id=1111, message="working on it")
+        assert "Status message sent successfully" in res
+        mock_post.assert_called_once()
+
 
 
