@@ -14,6 +14,8 @@ class Conversation(Base):
     discord_channel_id = Column(Integer, unique=True, index=True, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
+    title = Column(String(255), default="New Chat")
+
 
 
 class OAuthToken(Base):

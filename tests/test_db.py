@@ -34,3 +34,14 @@ def test_get_or_create_discord_conversation(mock_get_db, mock_db_client_class):
     conv_id = db.get_or_create_discord_conversation(987654321)
     assert conv_id == "existing-discord-uuid"
     mock_client.get_or_create_discord_conversation.assert_called_with(987654321)
+
+def test_conversations_table_has_title_column():
+    from db.session import get_db_session
+    from sqlalchemy import text
+    with get_db_session() as session:
+        result = session.execute(text(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name='conversations' AND column_name='title';"
+        )).fetchone()
+        assert result is not None, "Conversations table is missing 'title' column"
+
