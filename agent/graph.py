@@ -1,8 +1,6 @@
 import os
-import json
-import threading
 from typing import Annotated, Sequence, TypedDict
-from langchain_core.messages import BaseMessage, AIMessage, HumanMessage
+from langchain_core.messages import BaseMessage, AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import tools_condition, ToolNode
@@ -11,6 +9,8 @@ from db.session import get_db_session
 from db.models import SystemPromptFragment, Experience, MemoryVector
 from tools import tools_list
 
+# import json
+# import threading
 
 
 class AgentState(TypedDict):
@@ -68,7 +68,7 @@ def build_recent_messages(state: AgentState) -> str:
                     session.query(Experience)
                     .filter_by(conversation_id=db_conv_id)
                     .order_by(Experience.created_at.desc())
-                    .limit(5)
+                    .limit(3)
                     .all()
                 )
                 exps.reverse()
@@ -272,7 +272,11 @@ def chatbot_node(state: AgentState) -> dict:
     if api_key and not api_key.startswith("your_"):
         try:
             llm = get_llm().bind_tools(tools_list)
-            response_msg = llm.invoke(build_system_prompt(state) + str(state["messages"][-1]))
+            system_prompt = build_system_prompt(state)
+            response_msg = llm.invoke([
+                SystemMessage(content=system_prompt),
+                state["messages"][-1]
+            ])
         except Exception as e:
             response_msg = AIMessage(content=f"Error invoking LLM: {str(e)}")
     else:
