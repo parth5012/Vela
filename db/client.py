@@ -155,3 +155,43 @@ class DBClient:
             self.session.add(frag)
         self.session.flush()
         return frag
+
+    def get_client_conversations(self) -> list[Conversation]:
+        """Retrieves all conversations created by the mobile client (no external gateway ID)."""
+        return self.session.query(Conversation).filter(
+            Conversation.telegram_chat_id.is_(None),
+            Conversation.discord_channel_id.is_(None)
+        ).order_by(Conversation.updated_at.desc()).all()
+
+    def create_client_conversation(self, title: str = "New Chat") -> Conversation:
+        """Creates a new client conversation thread."""
+        conv_id = str(uuid.uuid4())
+        conv = Conversation(id=conv_id, title=title)
+        self.session.add(conv)
+        self.session.flush()
+        return conv
+
+    def update_conversation_title(self, conversation_id: str, title: str) -> Conversation | None:
+        """Updates the title of a specific conversation."""
+        conv = self.session.query(Conversation).filter_by(id=conversation_id).first()
+        if conv:
+            conv.title = title
+            conv.updated_at = datetime.utcnow()
+            self.session.flush()
+        return conv
+
+    def delete_conversation(self, conversation_id: str) -> bool:
+        """Deletes a conversation. Cascades to experiences and oauth_tokens automatically."""
+        conv = self.session.query(Conversation).filter_by(id=conversation_id).first()
+        if conv:
+            self.session.delete(conv)
+            self.session.flush()
+            return True
+        return False
+
+    def get_conversation_history(self, conversation_id: str) -> list[Experience]:
+        """Fetches all experiences associated with a conversation ordered chronologically."""
+        return self.session.query(Experience).filter_by(
+            conversation_id=conversation_id
+        ).order_by(Experience.created_at.asc()).all()
+

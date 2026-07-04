@@ -70,3 +70,42 @@ def test_update_prompt_fragment(db_session):
     
     frag = client.update_prompt_fragment("test_key", "updated content")
     assert frag.content == "updated content"
+
+def test_client_conversation_crud_operations():
+    from db.session import get_db_session
+    from db.client import DBClient
+    with get_db_session() as session:
+        client = DBClient(session)
+        # 1. Create client-specific conversation
+        conv = client.create_client_conversation(title="Test Math Topic")
+        session.commit()
+        assert conv.id is not None
+        assert conv.title == "Test Math Topic"
+        
+        conv_id = conv.id
+        
+        # 2. Retrieve client-specific conversations
+        conversations = client.get_client_conversations()
+        assert len(conversations) > 0
+        assert conversations[0].id == conv_id
+        
+        # 3. Update conversation title
+        updated_conv = client.update_conversation_title(conv_id, "Updated Math Topic")
+        session.commit()
+        assert updated_conv.title == "Updated Math Topic"
+        
+        # 4. Fetch history (experiences)
+        client.save_experience(conversation_id=conv_id, user_query="1+1?", agent_response="2")
+        session.commit()
+        history = client.get_conversation_history(conv_id)
+        assert len(history) == 1
+        assert history[0].user_query == "1+1?"
+        assert history[0].agent_response == "2"
+        
+        # 5. Delete conversation
+        success = client.delete_conversation(conv_id)
+        session.commit()
+        assert success is True
+        assert client.get_conversation_history(conv_id) == []
+
+
