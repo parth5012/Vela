@@ -1,7 +1,7 @@
 import uuid
 from sqlalchemy.orm import Session
 from db.models import Conversation, OAuthToken, MemoryVector, Experience, SystemPromptFragment, SkillsRegistry
-from datetime import datetime
+from datetime import datetime, UTC
 
 class DBClient:
     """Wrapper database client offering standard CRUD queries using SQLAlchemy session scopes.
@@ -66,7 +66,7 @@ class DBClient:
         token = self.session.query(OAuthToken).filter_by(conversation_id=conversation_id, provider=provider).first()
         if token:
             token.token = token_data
-            token.updated_at = datetime.utcnow()
+            token.updated_at = datetime.now(UTC).replace(tzinfo=None)
         else:
             token = OAuthToken(conversation_id=conversation_id, provider=provider, token=token_data)
             self.session.add(token)
@@ -149,7 +149,7 @@ class DBClient:
         frag = self.session.query(SystemPromptFragment).filter_by(key=key).first()
         if frag:
             frag.content = content
-            frag.updated_at = datetime.utcnow()
+            frag.updated_at = datetime.now(UTC).replace(tzinfo=None)
         else:
             frag = SystemPromptFragment(key=key, content=content)
             self.session.add(frag)
@@ -166,7 +166,8 @@ class DBClient:
     def create_client_conversation(self, title: str = "New Chat") -> Conversation:
         """Creates a new client conversation thread."""
         conv_id = str(uuid.uuid4())
-        conv = Conversation(id=conv_id, title=title)
+        truncated_title = title[:255] if title is not None else None
+        conv = Conversation(id=conv_id, title=truncated_title)
         self.session.add(conv)
         self.session.flush()
         return conv
@@ -175,8 +176,8 @@ class DBClient:
         """Updates the title of a specific conversation."""
         conv = self.session.query(Conversation).filter_by(id=conversation_id).first()
         if conv:
-            conv.title = title
-            conv.updated_at = datetime.utcnow()
+            conv.title = title[:255] if title is not None else None
+            conv.updated_at = datetime.now(UTC).replace(tzinfo=None)
             self.session.flush()
         return conv
 

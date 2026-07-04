@@ -1,5 +1,5 @@
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from db.models import Base
 from db.client import DBClient
@@ -8,6 +8,13 @@ from db.client import DBClient
 def db_session():
     # Create in-memory SQLite database for testing DBClient operations
     engine = create_engine("sqlite:///:memory:")
+    
+    @event.listens_for(engine, "connect")
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
     # We build the tables needed for the tests (skipping MemoryVector/pgvector for SQLite tests)
     Base.metadata.create_all(bind=engine, tables=[
         Base.metadata.tables["conversations"],
@@ -71,41 +78,50 @@ def test_update_prompt_fragment(db_session):
     frag = client.update_prompt_fragment("test_key", "updated content")
     assert frag.content == "updated content"
 
-def test_client_conversation_crud_operations():
-    from db.session import get_db_session
-    from db.client import DBClient
-    with get_db_session() as session:
-        client = DBClient(session)
-        # 1. Create client-specific conversation
-        conv = client.create_client_conversation(title="Test Math Topic")
-        session.commit()
-        assert conv.id is not None
-        assert conv.title == "Test Math Topic"
-        
-        conv_id = conv.id
-        
-        # 2. Retrieve client-specific conversations
-        conversations = client.get_client_conversations()
-        assert len(conversations) > 0
-        assert conversations[0].id == conv_id
-        
-        # 3. Update conversation title
-        updated_conv = client.update_conversation_title(conv_id, "Updated Math Topic")
-        session.commit()
-        assert updated_conv.title == "Updated Math Topic"
-        
-        # 4. Fetch history (experiences)
-        client.save_experience(conversation_id=conv_id, user_query="1+1?", agent_response="2")
-        session.commit()
-        history = client.get_conversation_history(conv_id)
-        assert len(history) == 1
-        assert history[0].user_query == "1+1?"
-        assert history[0].agent_response == "2"
-        
-        # 5. Delete conversation
-        success = client.delete_conversation(conv_id)
-        session.commit()
-        assert success is True
-        assert client.get_conversation_history(conv_id) == []
+def test_client_conversation_crud_operations(db_session):
+    client = DBClient(db_session)
+    # 1. Create client-specific conversation
+    conv = client.create_client_conversation(title="Test Math Topic")
+    db_session.commit()
+    assert conv.id is not None
+    assert conv.title == "Test Math Topic"
+    
+    conv_id = conv.id
+    
+    # 2. Retrieve client-specific conversations
+    conversations = client.get_client_conversations()
+    assert len(conversations) > 0
+    assert conversations[0].id == conv_id
+    
+    # 3. Update conversation title
+    updated_conv = client.update_conversation_title(conv_id, "Updated Math Topic")
+    db_session.commit()
+    assert updated_conv.title == "Updated Math Topic"
+    
+    # 4. Fetch history (experiences)
+    client.save_experience(conversation_id=conv_id, user_query="1+1?", agent_response="2")
+    db_session.commit()
+    history = client.get_conversation_history(conv_id)
+    assert len(history) == 1
+    assert history[0].user_query == "1+1?"
+    assert history[0].agent_response == "2"
+    
+    # 5. Delete conversation
+    success = client.delete_conversation(conv_id)
+    db_session.commit()
+    assert success is True
+    assert client.get_conversation_history(conv_id) == []
 
 
+def test_conversation_title_truncation(db_session):
+    client = DBClient(db_session)
+    long_title = "A" * 300
+    conv = client.create_client_conversation(title=long_title)
+    db_session.commit()
+    assert len(conv.title) == 255
+    assert conv.title == "A" * 255
+    
+    updated_conv = client.update_conversation_title(conv.id, "B" * 400)
+    db_session.commit()
+    assert len(updated_conv.title) == 255
+    assert updated_conv.title == "B" * 255
