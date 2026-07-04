@@ -1,5 +1,5 @@
 import os
-from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import tools_condition, ToolNode
 from utils.llm import get_llm
@@ -18,15 +18,15 @@ tools = ToolNode(tools_list)
 
 def supervisor_node(state: AgentState) -> dict:
     last_msg = state["messages"][-1].content.lower()
-    if "search" in last_msg:
-        return {"next_node": "web_search"}
+    # if "search" in last_msg:
+    #     return {"next_node": "web_search"}
     return {"next_node": "chatbot"}
 
-def web_search_node(state: AgentState) -> dict:
-    return {
-        "messages": [AIMessage(content="Search results: I found some information regarding your query.")],
-        "next_node": "chatbot"
-    }
+# def web_search_node(state: AgentState) -> dict:
+#     return {
+#         "messages": [HumanMessage(content="Search results: I found some information regarding your query.")],
+#         "next_node": "chatbot"
+#     }
 
 def chatbot_node(state: AgentState) -> dict:
     api_key = os.getenv("GOOGLE_API_KEY", "")
@@ -66,7 +66,7 @@ def chatbot_node(state: AgentState) -> dict:
 
 workflow = StateGraph(AgentState)
 workflow.add_node("supervisor", supervisor_node)
-workflow.add_node("web_search", web_search_node)
+# workflow.add_node("web_search", web_search_node)
 workflow.add_node("chatbot", chatbot_node)
 workflow.add_node("tools", ToolNode(tools_list))
 
@@ -75,12 +75,12 @@ workflow.add_conditional_edges(
     "supervisor",
     lambda state: state["next_node"],
     {
-        "web_search": "web_search",
+        # "web_search": "web_search",
         "chatbot": "chatbot",
         END: END
     }
 )
-workflow.add_edge("web_search", "chatbot")
+# workflow.add_edge("web_search", "chatbot")
 workflow.add_conditional_edges("chatbot", tools_condition, {"tools": "tools", END: END})
 workflow.add_edge("tools", "chatbot")
 graph = workflow.compile()

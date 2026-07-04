@@ -80,7 +80,7 @@ def get_llm():
     if groq_api_key and not groq_api_key.startswith("your_"):
         fallbacks.append(
             ChatGroq(
-                model="llama-3.3-70b-specdec",
+                model="qwen/qwen3-32b",
                 groq_api_key=groq_api_key,
                 callbacks=[FallbackLoggingHandler()],
                 max_retries=3,

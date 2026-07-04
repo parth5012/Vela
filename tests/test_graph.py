@@ -14,10 +14,11 @@ def test_supervisor_routing_to_end():
     assert result["next_node"] == "None" or result["next_node"] == "__end__"
 
 from unittest.mock import patch, MagicMock
-from agent.graph import build_system_prompt, AgentState
+from agent.prompt import build_system_prompt
+from agent.state import AgentState
 from db.models import SystemPromptFragment
 
-@patch("agent.graph.get_db_session")
+@patch("agent.prompt.get_db_session")
 def test_build_system_prompt_injects_dynamic_rules(mock_get_db):
     # Set up mock DB session returning a mock fragment
     mock_session = MagicMock()
@@ -38,9 +39,9 @@ def test_build_system_prompt_injects_dynamic_rules(mock_get_db):
 
 from db.models import Experience
 from datetime import datetime
-from agent.graph import build_recent_messages
+from agent.prompt import build_recent_messages
 
-@patch("agent.graph.get_db_session")
+@patch("agent.prompt.get_db_session")
 def test_build_recent_messages_loads_history(mock_get_db):
     mock_session = MagicMock()
     mock_exp = Experience(
@@ -64,10 +65,10 @@ def test_build_recent_messages_loads_history(mock_get_db):
     assert "Human: What is my name?" in history
 
 from db.models import MemoryVector
-from agent.graph import build_context
+from agent.prompt import build_context
 
-@patch("agent.graph.get_embeddings")
-@patch("agent.graph.get_db_session")
+@patch("agent.prompt.get_embeddings")
+@patch("agent.prompt.get_db_session")
 def test_build_context_retrieves_memories(mock_get_db, mock_embeddings_func):
     mock_embeddings = MagicMock()
     mock_embeddings.embed_query.return_value = [0.1] * 512

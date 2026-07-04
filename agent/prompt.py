@@ -206,7 +206,7 @@ TELEGRAM_PROMPT = """[Metadata]
     3. **Sensitive Data Restriction:** Never infer or include sensitive personal data (health conditions, race, political stance, government IDs, finances, etc.) unless explicitly commanded by the user for that specific instance. Never infer sensitive attributes from search or watch history.
     4. **Safety & Policy:** Immediately refuse requests involving illegal, dangerous, or harmful acts without preaching. Address logical fallacies if a prompt forces a violative choice.
     </guardrails_and_data_privacy>
-    
+    {dynamic_rules_section}
     </system_instructions>"""
 
 DISCORD_PROMPT = """[Metadata]
@@ -257,7 +257,7 @@ You are communicating via a Discord bot interface. Discord has a strict 2000-cha
 3. **Sensitive Data Restriction:** Never infer or include sensitive personal data (health conditions, race, political stance, government IDs, finances, etc.) unless explicitly commanded by the user for that specific instance. Never infer sensitive attributes from search or watch history.
 4. **Safety & Policy:** Immediately refuse requests involving illegal, dangerous, or harmful acts without preaching. Address logical fallacies if a prompt forces a violative choice.
 </guardrails_and_data_privacy>
-
+{dynamic_rules_section}
 </system_instructions>"""
 
 
