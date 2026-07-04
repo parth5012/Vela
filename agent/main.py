@@ -9,6 +9,18 @@ from gateway.telegram import TelegramGateway
 from gateway.discord import DiscordGateway
 from cron.consolidate import run_self_improvement
 from utils.logger import StructuredLogger
+from db.client import DBClient
+from db.session import get_db_session
+import json
+import uuid
+from pydantic import BaseModel
+
+from fastapi.responses import StreamingResponse
+from langchain_core.messages import HumanMessage
+from agent.graph import graph
+from db.models import Conversation
+
+
 
 logger = StructuredLogger("VelaServer")
 db = SupabaseDB()
@@ -66,6 +78,128 @@ def verify_api_key(credentials: HTTPAuthorizationCredentials = Security(security
 def health_check():
     logger.info("Health check pinged")
     return {"status": "ok"}
+
+
+@app.get("/chat/threads", dependencies=[Depends(verify_api_key)])
+def list_threads():
+    try:
+        with get_db_session() as session:
+            client = DBClient(session)
+            threads = client.get_client_conversations()
+            return [
+                {
+                    "id": t.id,
+                    "title": t.title,
+                    "created_at": t.created_at.isoformat(),
+                    "updated_at": t.updated_at.isoformat()
+                }
+                for t in threads
+            ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/chat/threads/{thread_id}", dependencies=[Depends(verify_api_key)])
+def get_thread_history(thread_id: str):
+    try:
+        with get_db_session() as session:
+            client = DBClient(session)
+            experiences = client.get_conversation_history(thread_id)
+            messages = []
+            for exp in experiences:
+                messages.append({
+                    "id": f"usr-{exp.id}",
+                    "role": "user",
+                    "content": exp.user_query,
+                    "created_at": exp.created_at.isoformat()
+                })
+                messages.append({
+                    "id": f"ast-{exp.id}",
+                    "role": "assistant",
+                    "content": exp.agent_response,
+                    "created_at": exp.created_at.isoformat()
+                })
+            return messages
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/chat/threads/{thread_id}", dependencies=[Depends(verify_api_key)])
+def delete_thread(thread_id: str):
+    try:
+        with get_db_session() as session:
+            client = DBClient(session)
+            success = client.delete_conversation(thread_id)
+            if not success:
+                raise HTTPException(status_code=404, detail="Thread not found")
+            session.commit()
+            return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class MessagePayload(BaseModel):
+    thread_id: str
+    message: str
+
+
+@app.post("/chat/message", dependencies=[Depends(verify_api_key)])
+async def chat_message(payload: MessagePayload):
+    async def sse_generator():
+        # Retrieve or create thread
+        is_valid_uuid = False
+        try:
+            uuid.UUID(payload.thread_id)
+            is_valid_uuid = True
+        except ValueError:
+            pass
+
+        with get_db_session() as session:
+            client = DBClient(session)
+            conv = None
+            if is_valid_uuid:
+                conv = session.query(Conversation).filter_by(id=payload.thread_id).first()
+            if not conv:
+                conv = client.create_client_conversation()
+                session.commit()
+            thread_uuid = conv.id
+            thread_title = conv.title
+
+
+        initial_state = {
+            "messages": [HumanMessage(content=payload.message)],
+            "db_conv_id": thread_uuid,
+            "next_node": "supervisor"
+        }
+
+        full_response = ""
+        
+        # Async generator looping over LangGraph events
+        async for event in graph.astream_events(initial_state, version="v2"):
+            kind = event.get("event")
+            if kind == "on_chat_model_stream":
+                chunk = event.get("data", {}).get("chunk")
+                if chunk and chunk.content:
+                    full_response += chunk.content
+                    yield f"data: {json.dumps({'type': 'content', 'delta': chunk.content})}\n\n"
+
+        # Generate a dynamic title if thread title is 'New Chat'
+        if thread_title == "New Chat":
+            new_title = payload.message[:30] + "..." if len(payload.message) > 30 else payload.message
+            with get_db_session() as session:
+                client = DBClient(session)
+                client.update_conversation_title(thread_uuid, new_title)
+                session.commit()
+            title_to_send = new_title
+        else:
+            title_to_send = thread_title
+
+        # Send final completed event
+        yield f"data: {json.dumps({'type': 'done', 'thread_title': title_to_send})}\n\n"
+
+    return StreamingResponse(sse_generator(), media_type="text/event-stream")
+
+
 
 @app.get("/oauth/login")
 def oauth_login(chat_id: int):

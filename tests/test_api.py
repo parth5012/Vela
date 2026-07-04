@@ -32,6 +32,40 @@ def test_endpoints_require_api_key_auth(monkeypatch):
     resp = client.get("/health", headers={"Authorization": "Bearer super-secret-key"})
     assert resp.status_code == 200
 
+
+def test_conversation_rest_endpoints(monkeypatch):
+    monkeypatch.setenv("VELA_API_KEY", "secret-test-key")
+    from fastapi.testclient import TestClient
+    from agent.main import app
+    client = TestClient(app)
+    headers = {"Authorization": "Bearer secret-test-key"}
+    
+    # 1. Check get threads
+    resp = client.get("/chat/threads", headers=headers)
+    assert resp.status_code == 200
+    initial_length = len(resp.json())
+
+    # 2. Check get thread history for non-existent thread returns 500 or 404
+    resp = client.get("/chat/threads/non-existent-uuid", headers=headers)
+    assert resp.status_code == 500 or resp.status_code == 404
+
+
+def test_streaming_chat_message(monkeypatch):
+    monkeypatch.setenv("VELA_API_KEY", "secret-test-key")
+    from fastapi.testclient import TestClient
+    from agent.main import app
+    client = TestClient(app)
+    
+    headers = {"Authorization": "Bearer secret-test-key"}
+    payload = {"thread_id": "conv-123", "message": "Verify math $1+1=2$"}
+    
+    # We will test sending a message
+    with client.stream("POST", "/chat/message", json=payload, headers=headers) as response:
+        assert response.status_code == 200
+        assert "text/event-stream" in response.headers["content-type"]
+
+
+
 # @patch("agent.main.discord_gateway.start", new_callable=AsyncMock)
 # @patch("agent.main.discord_gateway.close", new_callable=AsyncMock)
 # def test_lifespan_starts_and_stops_discord_gateway(mock_close, mock_start):
