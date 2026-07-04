@@ -72,6 +72,15 @@ class TelegramGateway:
                 except Exception as send_err:
                     self.logger.error("Failed to send fallback message to Telegram", error=str(send_err))
                     sent_replies.append(assistant_reply)
+
+            # Store the interaction response in database
+            if sent_replies:
+                combined_response = "\n".join(sent_replies)
+                self.db.save_experience(
+                    conversation_id=conv_id,
+                    user_query=message_text,
+                    agent_response=combined_response
+                )
                 
             self.logger.info("Supervisor graph execution completed", chat_id=chat_id, num_replies=len(sent_replies))
             return f"Processed and replied: '{sent_replies[-1]}'"

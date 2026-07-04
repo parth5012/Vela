@@ -58,3 +58,16 @@ class SupabaseDB:
         except Exception as e:
             self.logger.error("Database query failed, returning fallback mock-uuid", error=str(e), discord_channel_id=discord_channel_id)
             return "mock-conversation-uuid"
+
+    def save_experience(self, conversation_id: str, user_query: str, agent_response: str) -> str | None:
+        self.logger.info("Saving experience via SQLAlchemy", conversation_id=conversation_id)
+        try:
+            with get_db_session() as session:
+                client = DBClient(session)
+                exp = client.save_experience(conversation_id, user_query, agent_response)
+                session.commit()
+                return exp.id
+        except Exception as e:
+            self.logger.error("Failed to save experience", error=str(e), conversation_id=conversation_id)
+            return None
+
