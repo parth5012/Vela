@@ -91,9 +91,10 @@ def get_llm():
     if openrouter_api_key and not openrouter_api_key.startswith("your_"):
         fallbacks.append(
             ChatOpenRouter(
-                model="anthropic/claude-sonnet-5",
+                # model="anthropic/claude-sonnet-5",
+                model="nvidia/nemotron-3-ultra-550b-a55b:free",
                 api_key=openrouter_api_key,
-                base_url="https://openrouter.ai/api/v1",
+                # base_url="https://openrouter.ai/api/v1",
                 callbacks=[FallbackLoggingHandler()],
                 max_retries=3,
             )
@@ -103,7 +104,8 @@ def get_llm():
     if cohere_api_key and not cohere_api_key.startswith("your_"):
         fallbacks.append(
             ChatCohere(
-                model="command-r-plus",
+                # model="command-r-plus",
+                model="command-a-03-2025",
                 cohere_api_key=cohere_api_key,
                 callbacks=[FallbackLoggingHandler()],
                 # max_retries=3,

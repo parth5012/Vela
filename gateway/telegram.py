@@ -1,3 +1,4 @@
+from sqlalchemy.sql.operators import startswith_op
 from telegram import Update, Bot
 from langchain_core.messages import HumanMessage, AIMessage, ToolCall
 from agent.graph import graph
@@ -63,7 +64,7 @@ class TelegramGateway:
             # sent_replies = await self._run_streaming(chat_id, inputs)
             sent_replies = await self._run_invoking(chat_id, inputs)
                                 
-            if not sent_replies:
+            if not sent_replies or sent_replies[-1].strip().startswith("Error invoking LLM"):
                 # Fallback if chatbot didn't emit any messages
                 assistant_reply = "I couldn't process that request."
                 try:
