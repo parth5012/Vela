@@ -234,15 +234,12 @@ async def chat_message(payload: MessagePayload):
                             full_response += content_str
                             yield f"data: {json.dumps({'type': 'content', 'delta': content_str})}\n\n"
         except asyncio.CancelledError:
-            logger.info("SSE generator cancelled by client disconnect")
+            logger.info("SSE generator cancelled by client disconnect. Agent will continue running in the background.")
             raise
         finally:
-            if not producer_task.done():
-                producer_task.cancel()
-                try:
-                    await producer_task
-                except asyncio.CancelledError:
-                    pass
+            # We let the producer_task continue running to completion in the background
+            # so the agent can finish processing and write the result to the database.
+            pass
 
         # Generate a dynamic title if thread title is 'New Chat'
         if thread_title == "New Chat":
