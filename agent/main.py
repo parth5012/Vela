@@ -324,13 +324,14 @@ def branch_thread(payload: BranchPayload):
             if not parent_conv:
                 raise HTTPException(status_code=404, detail="Parent thread not found")
             
-            new_conv = Conversation(id=payload.new_thread_id, title=payload.title[:255])
+            new_conv = Conversation(id=payload.new_thread_id, title=payload.title[:255], persona=parent_conv.persona)
             session.add(new_conv)
             session.flush()
             
             experiences = client.get_conversation_history(payload.parent_thread_id)
             target_exp_id = payload.upto_message_id.replace("usr-", "").replace("ast-", "")
             
+            found_target = False
             for exp in experiences:
                 new_exp = Experience(
                     id=str(uuid.uuid4()),
@@ -344,10 +345,16 @@ def branch_thread(payload: BranchPayload):
                 )
                 session.add(new_exp)
                 if str(exp.id) == target_exp_id:
+                    found_target = True
                     break
+            
+            if not found_target:
+                raise HTTPException(status_code=404, detail="Message not found in parent thread")
             
             session.commit()
             return {"status": "success"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -367,6 +374,8 @@ def truncate_thread(thread_id: str, payload: TruncatePayload):
             
             session.commit()
             return {"status": "success"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
