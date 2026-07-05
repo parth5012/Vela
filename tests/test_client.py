@@ -125,3 +125,16 @@ def test_conversation_title_truncation(db_session):
     db_session.commit()
     assert len(updated_conv.title) == 255
     assert updated_conv.title == "B" * 255
+
+
+def test_conversation_persona_creation_and_default(db_session):
+    client = DBClient(db_session)
+    # Default persona should be "personal assistant"
+    conv = client.create_client_conversation(title="Test Persona Default")
+    db_session.commit()
+    assert conv.persona == "personal assistant"
+
+    # Specific persona
+    conv_teacher = client.create_client_conversation(title="Test Persona Teacher", persona="teacher")
+    db_session.commit()
+    assert conv_teacher.persona == "teacher"

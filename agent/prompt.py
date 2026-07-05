@@ -1,5 +1,5 @@
 from agent.state import AgentState
-from db.models import SystemPromptFragment, Experience, MemoryVector
+from db.models import SystemPromptFragment, Experience, MemoryVector, Conversation
 import os
 from utils.llm import  get_embeddings
 from db.session import get_db_session
@@ -56,7 +56,8 @@ You are a concise, reliable weather forecasting assistant. For any query:
 1. Begin with the current temperature and conditions (e.g., "It is currently 22°C and sunny").  
 2. Include a 3-hour forecast (e.g., "Clouds forming at 3 PM").  
 3. Avoid vague terms like "partly cloudy" — use precise descriptors (e.g., "30% cloud cover").  
-4. If the user asks for advice (e.g., "Should I bring an umbrella?"), respond with a clear YES/NO and reasoning.  
+4. If the user asks for advice (e.g., "Should I bring an umbrella?"), respond with a clear YES/NO and reasoning. 
+5. Consider token and cost optimization in the prompt 
 ```
 
 **Invalid Prompt Output:**  
@@ -230,7 +231,7 @@ MARKDOWN_LATEX_PROMPT = """[Metadata]
     {dynamic_rules_section}
 
     USER_PROMPT:"""
-TELEGRAM_PROMPT = """[Metadata]
+MAIN_PROMPT = """[Metadata]
     Active Conversation ID: {db_conv_id}
     Telegram Chat ID: {telegram_chat_id}
     
@@ -392,11 +393,50 @@ def build_recent_messages(state: AgentState) -> str:
     
     return history_str + current_str
 
+PERSONA_PROMPTS = {
+    "personal assistant": "",
+    "teacher": """
+<persona_instructions>
+Identity/Role: You are a friendly, encouraging, and knowledgeable Teacher.
+Voice & Tone: Patient, warm, supportive, and pedagogical. Use relatable analogies and clear, step-by-step explanations.
+Guidelines:
+1. Simplify complex technical terms or concepts. Explain them clearly as if explaining to a student.
+2. Provide concrete, illustrative examples for abstract concepts.
+3. At the end of the explanation, ask a supportive guiding question to check understanding or prompt further discussion.
+4. Encourage learning and critical thinking.
+</persona_instructions>
+""",
+    "analyst": """
+<persona_instructions>
+Identity/Role: You are a sharp, logical, and detail-oriented Analyst.
+Voice & Tone: Objective, precise, structured, data-driven, and highly analytical.
+Guidelines:
+1. Break down user requests or problems into structured components (e.g., pros/cons, metrics, risks, key variables).
+2. Focus on facts, evidence, data, trends, and business or technical logic.
+3. Offer objective recommendations and highlight potential trade-offs or risks.
+4. Avoid fluff and keep findings highly structured with bullet points or tables.
+</persona_instructions>
+"""
+}
+
 def build_system_prompt(state: AgentState) -> str:
     context = build_context(state)
     recent_messages = build_recent_messages(state)
     db_conv_id = state.get("db_conv_id", "")
     telegram_chat_id = state.get("telegram_chat_id", 0)
+
+    # Retrieve the persona (default to "personal assistant")
+    persona = state.get("persona") or "personal assistant"
+    if persona == "personal assistant" and db_conv_id and db_conv_id != "conv-123":
+        try:
+            with get_db_session() as session:
+                conv = session.query(Conversation).filter_by(id=db_conv_id).first()
+                if conv and conv.persona:
+                    persona = conv.persona
+        except Exception:
+            pass
+
+    persona_section = PERSONA_PROMPTS.get(persona, "")
 
     dynamic_rules_section = ""
     try:
@@ -407,4 +447,7 @@ def build_system_prompt(state: AgentState) -> str:
     except Exception:
         pass
 
-    return TELEGRAM_PROMPT.format(db_conv_id=db_conv_id, telegram_chat_id=telegram_chat_id, context=context, recent_messages=recent_messages, dynamic_rules_section=dynamic_rules_section)
+    if persona_section:
+        dynamic_rules_section += f"\n{persona_section}"
+
+    return MAIN_PROMPT.format(db_conv_id=db_conv_id, telegram_chat_id=telegram_chat_id, context=context, recent_messages=recent_messages, dynamic_rules_section=dynamic_rules_section)

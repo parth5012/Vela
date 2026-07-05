@@ -65,6 +65,35 @@ def test_streaming_chat_message(monkeypatch):
         assert "text/event-stream" in response.headers["content-type"]
 
 
+def test_streaming_chat_message_with_personas(monkeypatch):
+    monkeypatch.setenv("VELA_API_KEY", "secret-test-key")
+    from fastapi.testclient import TestClient
+    from agent.main import app
+    client = TestClient(app)
+    
+    headers = {"Authorization": "Bearer secret-test-key"}
+    
+    # 1. Test invalid persona returns 400
+    payload_invalid = {"thread_id": "conv-124", "message": "hello", "persona": "wizard"}
+    resp = client.post("/chat/message", json=payload_invalid, headers=headers)
+    assert resp.status_code == 400
+    assert "Unsupported persona" in resp.json()["detail"]
+
+    # 2. Test valid persona "teacher" starts stream successfully
+    payload_valid = {"thread_id": "conv-125", "message": "Can you teach me binary search?", "persona": "teacher"}
+    with client.stream("POST", "/chat/message", json=payload_valid, headers=headers) as response:
+        assert response.status_code == 200
+        assert "text/event-stream" in response.headers["content-type"]
+        
+    # 3. Test list threads returns persona
+    resp = client.get("/chat/threads", headers=headers)
+    assert resp.status_code == 200
+    threads = resp.json()
+    assert len(threads) > 0
+    # The created conversation from previous stream should be in the list, check if persona exists in keys
+    assert "persona" in threads[0]
+
+
 
 # @patch("agent.main.discord_gateway.start", new_callable=AsyncMock)
 # @patch("agent.main.discord_gateway.close", new_callable=AsyncMock)

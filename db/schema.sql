@@ -50,4 +50,5 @@ CREATE TABLE IF NOT EXISTS skills_registry (
 );
 
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS title VARCHAR(255) DEFAULT 'New Chat';
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS persona VARCHAR(50) DEFAULT 'personal assistant' NOT NULL;
 

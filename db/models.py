@@ -15,6 +15,7 @@ class Conversation(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
     title = Column(String(255), default="New Chat")
+    persona = Column(String(50), default="personal assistant", nullable=False)
 
 
 
