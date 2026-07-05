@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage
 from agent.graph import graph
-from db.models import Conversation
+from db.models import Conversation, Experience
 
 
 
@@ -30,16 +30,20 @@ discord_gateway = DiscordGateway(db=db)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # logger.info("Initializing background services...")
-    # discord_task = asyncio.create_task(discord_gateway.start())
+    # Run database migration (add persona column if missing)
+    try:
+        from db.session import engine
+        from sqlalchemy import inspect
+        inspector = inspect(engine)
+        columns = [col['name'] for col in inspector.get_columns('conversations')]
+        if 'persona' not in columns:
+            logger.info("Database migration: adding 'persona' column to 'conversations' table")
+            with engine.begin() as conn:
+                conn.execute("ALTER TABLE conversations ADD COLUMN persona VARCHAR(50) DEFAULT 'personal assistant' NOT NULL")
+    except Exception as e:
+        logger.error("Failed to run database migration for persona column", error=str(e))
+
     yield
-    # logger.info("Shutting down background services...")
-    # await discord_gateway.close()
-    # discord_task.cancel()
-    # try:
-    #     await discord_task
-    # except asyncio.CancelledError:
-    #     pass
 
 app = FastAPI(title="Vela Server", lifespan=lifespan)
 
@@ -91,6 +95,7 @@ def list_threads():
                 {
                     "id": t.id,
                     "title": t.title,
+                    "persona": t.persona,
                     "created_at": t.created_at.isoformat(),
                     "updated_at": t.updated_at.isoformat()
                 }
@@ -158,13 +163,31 @@ def delete_thread(thread_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class BranchPayload(BaseModel):
+    parent_thread_id: str
+    new_thread_id: str
+    upto_message_id: str
+    title: str
+
+class TruncatePayload(BaseModel):
+    upto_message_id: str
+
+
 class MessagePayload(BaseModel):
     thread_id: str
     message: str
+    persona: str = "personal assistant"
 
 
 @app.post("/chat/message", dependencies=[Depends(verify_api_key)])
 async def chat_message(payload: MessagePayload):
+    allowed_personas = ["personal assistant", "teacher", "analyst"]
+    if payload.persona not in allowed_personas:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported persona: '{payload.persona}'. Supported personas are: {allowed_personas}"
+        )
+
     async def sse_generator():
         # Retrieve or create thread
         is_valid_uuid = False
@@ -180,16 +203,22 @@ async def chat_message(payload: MessagePayload):
             if is_valid_uuid:
                 conv = session.query(Conversation).filter_by(id=payload.thread_id).first()
             if not conv:
-                conv = client.create_client_conversation()
+                conv = client.create_client_conversation(persona=payload.persona)
                 session.commit()
+            else:
+                if payload.persona != conv.persona:
+                    conv.persona = payload.persona
+                    session.commit()
             thread_uuid = conv.id
             thread_title = conv.title
+            thread_persona = conv.persona
 
 
         initial_state = {
             "messages": [HumanMessage(content=payload.message)],
             "db_conv_id": thread_uuid,
-            "next_node": "supervisor"
+            "next_node": "supervisor",
+            "persona": thread_persona
         }
 
         full_response = ""
@@ -264,7 +293,8 @@ async def chat_message(payload: MessagePayload):
         # Generate a dynamic title if thread title is 'New Chat'
         if thread_title == "New Chat":
             # new_title = payload.message[:30] + "..." if len(payload.message) > 30 else payload.message
-            new_title = get_llm().invoke("Return the Title for this conversation below : \n Conversation \n" + payload.message[:30])
+            response = get_llm().invoke("Return the Title for this conversation below : \n Conversation \n" + payload.message[:30])
+            new_title = str(response.content) if hasattr(response, "content") else str(response)
             with get_db_session() as session:
                 client = DBClient(session)
                 client.update_conversation_title(thread_uuid, new_title)
@@ -274,9 +304,65 @@ async def chat_message(payload: MessagePayload):
             title_to_send = thread_title
 
         # Send final completed event
-        yield f"data: {json.dumps({'type': 'done', 'thread_title': title_to_send})}\n\n"
+        yield f"data: {json.dumps({'type': 'done', 'thread_title': title_to_send, 'persona': thread_persona})}\n\n"
 
     return StreamingResponse(sse_generator(), media_type="text/event-stream")
+
+
+@app.post("/chat/threads/branch", dependencies=[Depends(verify_api_key)])
+def branch_thread(payload: BranchPayload):
+    try:
+        with get_db_session() as session:
+            client = DBClient(session)
+            parent_conv = session.query(Conversation).filter_by(id=payload.parent_thread_id).first()
+            if not parent_conv:
+                raise HTTPException(status_code=404, detail="Parent thread not found")
+            
+            new_conv = Conversation(id=payload.new_thread_id, title=payload.title[:255])
+            session.add(new_conv)
+            session.flush()
+            
+            experiences = client.get_conversation_history(payload.parent_thread_id)
+            target_exp_id = payload.upto_message_id.replace("usr-", "").replace("ast-", "")
+            
+            for exp in experiences:
+                new_exp = Experience(
+                    id=str(uuid.uuid4()),
+                    conversation_id=payload.new_thread_id,
+                    user_query=exp.user_query,
+                    agent_response=exp.agent_response,
+                    eval_score=exp.eval_score,
+                    eval_reason=exp.eval_reason,
+                    created_at=exp.created_at,
+                    consolidated=exp.consolidated
+                )
+                session.add(new_exp)
+                if str(exp.id) == target_exp_id:
+                    break
+            
+            session.commit()
+            return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/chat/threads/{thread_id}/truncate", dependencies=[Depends(verify_api_key)])
+def truncate_thread(thread_id: str, payload: TruncatePayload):
+    try:
+        with get_db_session() as session:
+            target_exp_id = payload.upto_message_id.replace("usr-", "").replace("ast-", "")
+            target_exp = session.query(Experience).filter_by(id=target_exp_id, conversation_id=thread_id).first()
+            if not target_exp:
+                raise HTTPException(status_code=404, detail="Message not found in thread")
+            
+            session.query(Experience).filter(
+                Experience.conversation_id == thread_id,
+                Experience.created_at >= target_exp.created_at
+            ).delete(synchronize_session=False)
+            
+            session.commit()
+            return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 
