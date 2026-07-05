@@ -1,3 +1,4 @@
+from agent.persona import PERSONA_LIST
 from utils.llm import get_llm
 import os
 import asyncio
@@ -107,28 +108,7 @@ def list_threads():
 
 @app.get("/chat/personas", dependencies=[Depends(verify_api_key)])
 def list_personas():
-    return [
-        {
-            "id": "personal assistant",
-            "name": "Personal Assistant",
-            "description": "Warm, approachable, and direct general assistant."
-        },
-        {
-            "id": "teacher",
-            "name": "Teacher",
-            "description": "Patient, encouraging pedagogical guide that explains concepts clearly."
-        },
-        {
-            "id": "analyst",
-            "name": "Analyst",
-            "description": "Structured, logical, data-driven analyst focusing on facts and risk assessment."
-        },
-        {
-            "id": "prompt builder",
-            "name": "Prompt Builder",
-            "description": "Specialized assistant designed to help craft, structure, and refine AI agent prompts."
-        }
-    ]
+    return PERSONA_LIST
 
 
 @app.get("/chat/threads/{thread_id}", dependencies=[Depends(verify_api_key)])
