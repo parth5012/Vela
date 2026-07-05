@@ -112,6 +112,136 @@ def test_streaming_chat_message_with_personas(monkeypatch):
 
 
 
+def test_branch_and_truncate_endpoints(monkeypatch):
+    monkeypatch.setenv("VELA_API_KEY", "secret-test-key")
+    from fastapi.testclient import TestClient
+    from agent.main import app
+    from db.session import get_db_session
+    from db.models import Conversation, Experience
+    import uuid
+    from datetime import datetime, timedelta
+
+    client = TestClient(app)
+    headers = {"Authorization": "Bearer secret-test-key"}
+
+    # Setup parent conversation and some experiences
+    parent_id = str(uuid.uuid4())
+    new_id = str(uuid.uuid4())
+    exp_id1 = str(uuid.uuid4())
+    exp_id2 = str(uuid.uuid4())
+    exp_id3 = str(uuid.uuid4())
+
+    with get_db_session() as session:
+        # Create parent conversation with persona 'teacher'
+        parent_conv = Conversation(id=parent_id, title="Parent Thread", persona="teacher")
+        session.add(parent_conv)
+        session.flush()
+
+        # Add 3 experiences (messages) with incremental timestamps
+        now = datetime.utcnow()
+        exp1 = Experience(
+            id=exp_id1,
+            conversation_id=parent_id,
+            user_query="Query 1",
+            agent_response="Response 1",
+            created_at=now - timedelta(minutes=10)
+        )
+        exp2 = Experience(
+            id=exp_id2,
+            conversation_id=parent_id,
+            user_query="Query 2",
+            agent_response="Response 2",
+            created_at=now - timedelta(minutes=5)
+        )
+        exp3 = Experience(
+            id=exp_id3,
+            conversation_id=parent_id,
+            user_query="Query 3",
+            agent_response="Response 3",
+            created_at=now
+        )
+        session.add_all([exp1, exp2, exp3])
+        session.commit()
+
+    # --- Test Authentication ---
+    bad_headers = {"Authorization": "Bearer wrong-key"}
+    branch_payload = {
+        "parent_thread_id": parent_id,
+        "new_thread_id": new_id,
+        "upto_message_id": f"usr-{exp_id2}",
+        "title": "Branched Thread"
+    }
+    resp = client.post("/chat/threads/branch", json=branch_payload, headers=bad_headers)
+    assert resp.status_code == 401
+
+    truncate_payload = {"upto_message_id": f"usr-{exp_id2}"}
+    resp = client.post(f"/chat/threads/{parent_id}/truncate", json=truncate_payload, headers=bad_headers)
+    assert resp.status_code == 401
+
+    # --- Test Branching: 404 for invalid parent thread ---
+    invalid_branch_payload = {
+        "parent_thread_id": "non-existent-parent",
+        "new_thread_id": new_id,
+        "upto_message_id": f"usr-{exp_id2}",
+        "title": "Branched Thread"
+    }
+    resp = client.post("/chat/threads/branch", json=invalid_branch_payload, headers=headers)
+    assert resp.status_code == 404
+    assert "Parent thread not found" in resp.json()["detail"]
+
+    # --- Test Branching: 404 for non-existent upto_message_id ---
+    invalid_msg_branch_payload = {
+        "parent_thread_id": parent_id,
+        "new_thread_id": new_id,
+        "upto_message_id": "usr-non-existent-msg",
+        "title": "Branched Thread"
+    }
+    resp = client.post("/chat/threads/branch", json=invalid_msg_branch_payload, headers=headers)
+    assert resp.status_code == 404
+    assert "Message not found in parent thread" in resp.json()["detail"]
+
+    # --- Test Branching: Success case ---
+    resp = client.post("/chat/threads/branch", json=branch_payload, headers=headers)
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "success"}
+
+    # Verify that the new thread has correct persona and history (copied up to message 2)
+    with get_db_session() as session:
+        new_conv = session.query(Conversation).filter_by(id=new_id).first()
+        assert new_conv is not None
+        assert new_conv.title == "Branched Thread"
+        assert new_conv.persona == "teacher"  # Persona copied
+
+        new_exps = session.query(Experience).filter_by(conversation_id=new_id).order_by(Experience.created_at).all()
+        assert len(new_exps) == 2  # exp1 and exp2
+        assert new_exps[0].user_query == "Query 1"
+        assert new_exps[1].user_query == "Query 2"
+
+    # --- Test Truncating: 404 for non-existent message ---
+    invalid_trunc_payload = {"upto_message_id": "usr-non-existent-msg"}
+    resp = client.post(f"/chat/threads/{parent_id}/truncate", json=invalid_trunc_payload, headers=headers)
+    assert resp.status_code == 404
+    assert "Message not found in thread" in resp.json()["detail"]
+
+    # --- Test Truncating: Success case ---
+    # We truncate parent_id from exp2 (which removes exp2 and exp3)
+    resp = client.post(f"/chat/threads/{parent_id}/truncate", json=truncate_payload, headers=headers)
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "success"}
+
+    # Verify parent_id now only contains exp1
+    with get_db_session() as session:
+        remaining_exps = session.query(Experience).filter_by(conversation_id=parent_id).order_by(Experience.created_at).all()
+        assert len(remaining_exps) == 1
+        assert remaining_exps[0].id == exp_id1
+
+        # Clean up database
+        session.query(Experience).filter(Experience.conversation_id.in_([parent_id, new_id])).delete(synchronize_session=False)
+        session.query(Conversation).filter(Conversation.id.in_([parent_id, new_id])).delete(synchronize_session=False)
+        session.commit()
+
+
+
 # @patch("agent.main.discord_gateway.start", new_callable=AsyncMock)
 # @patch("agent.main.discord_gateway.close", new_callable=AsyncMock)
 # def test_lifespan_starts_and_stops_discord_gateway(mock_close, mock_start):
