@@ -125,6 +125,25 @@ def get_thread_history(thread_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+
+class TitlePayload(BaseModel):
+    thread_id : str
+    title: str
+
+@app.post("/chat/threads/",dependencies=[Depends(verify_api_key)])
+def update_thread_title(payload: TitlePayload):
+    try:
+        with get_db_session() as session:
+            client = DBClient(session)
+            success = client.update_conversation_title(payload.thread_id,payload.title)
+            if not success:
+                raise HTTPException(status_code=404, detail="Thread not found")
+            session.commit()
+            return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.delete("/chat/threads/{thread_id}", dependencies=[Depends(verify_api_key)])
 def delete_thread(thread_id: str):
     try:
