@@ -233,7 +233,7 @@ def test_branch_and_truncate_endpoints(monkeypatch):
     with get_db_session() as session:
         remaining_exps = session.query(Experience).filter_by(conversation_id=parent_id).order_by(Experience.created_at).all()
         assert len(remaining_exps) == 1
-        assert remaining_exps[0].id == exp_id1
+        assert str(remaining_exps[0].id) == exp_id1
 
         # Clean up database
         session.query(Experience).filter(Experience.conversation_id.in_([parent_id, new_id])).delete(synchronize_session=False)

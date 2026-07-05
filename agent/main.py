@@ -320,7 +320,11 @@ def branch_thread(payload: BranchPayload):
     try:
         with get_db_session() as session:
             client = DBClient(session)
-            parent_conv = session.query(Conversation).filter_by(id=payload.parent_thread_id).first()
+            try:
+                parent_conv = session.query(Conversation).filter_by(id=payload.parent_thread_id).first()
+            except Exception:
+                parent_conv = None
+
             if not parent_conv:
                 raise HTTPException(status_code=404, detail="Parent thread not found")
             
@@ -363,7 +367,10 @@ def truncate_thread(thread_id: str, payload: TruncatePayload):
     try:
         with get_db_session() as session:
             target_exp_id = payload.upto_message_id.replace("usr-", "").replace("ast-", "")
-            target_exp = session.query(Experience).filter_by(id=target_exp_id, conversation_id=thread_id).first()
+            try:
+                target_exp = session.query(Experience).filter_by(id=target_exp_id, conversation_id=thread_id).first()
+            except Exception:
+                target_exp = None
             if not target_exp:
                 raise HTTPException(status_code=404, detail="Message not found in thread")
             
