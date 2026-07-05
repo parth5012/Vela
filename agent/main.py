@@ -105,6 +105,32 @@ def list_threads():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/chat/personas", dependencies=[Depends(verify_api_key)])
+def list_personas():
+    return [
+        {
+            "id": "personal assistant",
+            "name": "Personal Assistant",
+            "description": "Warm, approachable, and direct general assistant."
+        },
+        {
+            "id": "teacher",
+            "name": "Teacher",
+            "description": "Patient, encouraging pedagogical guide that explains concepts clearly."
+        },
+        {
+            "id": "analyst",
+            "name": "Analyst",
+            "description": "Structured, logical, data-driven analyst focusing on facts and risk assessment."
+        },
+        {
+            "id": "prompt builder",
+            "name": "Prompt Builder",
+            "description": "Specialized assistant designed to help craft, structure, and refine AI agent prompts."
+        }
+    ]
+
+
 @app.get("/chat/threads/{thread_id}", dependencies=[Depends(verify_api_key)])
 def get_thread_history(thread_id: str):
     try:
@@ -181,7 +207,7 @@ class MessagePayload(BaseModel):
 
 @app.post("/chat/message", dependencies=[Depends(verify_api_key)])
 async def chat_message(payload: MessagePayload):
-    allowed_personas = ["personal assistant", "teacher", "analyst"]
+    allowed_personas = ["personal assistant", "teacher", "analyst", "prompt builder"]
     if payload.persona not in allowed_personas:
         raise HTTPException(
             status_code=400,

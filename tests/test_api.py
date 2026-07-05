@@ -93,6 +93,23 @@ def test_streaming_chat_message_with_personas(monkeypatch):
     # The created conversation from previous stream should be in the list, check if persona exists in keys
     assert "persona" in threads[0]
 
+    # 4. Test valid persona "prompt builder" starts stream successfully
+    payload_pb = {"thread_id": "conv-126", "message": "Help me build a system prompt for a weather bot", "persona": "prompt builder"}
+    with client.stream("POST", "/chat/message", json=payload_pb, headers=headers) as response:
+        assert response.status_code == 200
+        assert "text/event-stream" in response.headers["content-type"]
+
+    # 5. Test get personas list endpoint
+    resp_personas = client.get("/chat/personas", headers=headers)
+    assert resp_personas.status_code == 200
+    personas = resp_personas.json()
+    assert len(personas) == 4
+    persona_ids = [p["id"] for p in personas]
+    assert "prompt builder" in persona_ids
+    assert "teacher" in persona_ids
+    assert "analyst" in persona_ids
+    assert "personal assistant" in persona_ids
+
 
 
 # @patch("agent.main.discord_gateway.start", new_callable=AsyncMock)
