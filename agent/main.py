@@ -1,3 +1,4 @@
+from utils.llm import get_llm
 import os
 import asyncio
 from contextlib import asynccontextmanager
@@ -243,7 +244,8 @@ async def chat_message(payload: MessagePayload):
 
         # Generate a dynamic title if thread title is 'New Chat'
         if thread_title == "New Chat":
-            new_title = payload.message[:30] + "..." if len(payload.message) > 30 else payload.message
+            # new_title = payload.message[:30] + "..." if len(payload.message) > 30 else payload.message
+            new_title = get_llm().invoke("Return the Title for this conversation below : \n Conversation \n" + payload.message[:30])
             with get_db_session() as session:
                 client = DBClient(session)
                 client.update_conversation_title(thread_uuid, new_title)
