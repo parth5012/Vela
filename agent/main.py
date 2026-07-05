@@ -183,6 +183,9 @@ async def chat_message(payload: MessagePayload):
             try:
                 async for event in graph.astream_events(initial_state, version="v2"):
                     await queue.put(event)
+            except asyncio.CancelledError:
+                logger.info("Graph execution stream cancelled by client request")
+                # Do not raise or queue; exit cleanly
             except Exception as e:
                 await queue.put(e)
             finally:
@@ -210,8 +213,29 @@ async def chat_message(payload: MessagePayload):
                 if kind == "on_chat_model_stream":
                     chunk = event.get("data", {}).get("chunk")
                     if chunk and chunk.content:
-                        full_response += chunk.content
-                        yield f"data: {json.dumps({'type': 'content', 'delta': chunk.content})}\n\n"
+                        content = chunk.content
+                        content_str = ""
+                        if isinstance(content, list):
+                            for item in content:
+                                if isinstance(item, str):
+                                    content_str += item
+                                elif isinstance(item, dict):
+                                    content_str += item.get("text", "")
+                                elif hasattr(item, "text"):
+                                    content_str += item.text
+                                elif hasattr(item, "get") and "text" in item:
+                                    content_str += item.get("text")
+                        elif isinstance(content, str):
+                            content_str = content
+                        else:
+                            content_str = str(content)
+
+                        if content_str:
+                            full_response += content_str
+                            yield f"data: {json.dumps({'type': 'content', 'delta': content_str})}\n\n"
+        except asyncio.CancelledError:
+            logger.info("SSE generator cancelled by client disconnect")
+            raise
         finally:
             if not producer_task.done():
                 producer_task.cancel()
