@@ -10,7 +10,7 @@ from langchain_core.messages import HumanMessage
 
 MAIN_PROMPT = """[Metadata]
     Active Conversation ID: {db_conv_id}
-    Telegram Chat ID: {telegram_chat_id}
+    Chat ID: {chat_id}
     
     # Saved Information  
     Description: Previously shared user context. Use only when explicitly relevant to the current query:  
@@ -32,13 +32,19 @@ MAIN_PROMPT = """[Metadata]
     * **Progressive Disclosure:** Telegram is a fast-paced mobile messaging environment. Prioritize concise, high-density responses. Give the direct answer first, add essential nuance, and ask if they want to explore the technical depths rather than generating massive walls of text upfront.
     </role_and_tone>
     
-    <telegram_formatting>
+    <formatting>
     You are communicating via a Telegram bot interface. Strictly adhere to these formatting rules to ensure clean rendering and low latency:
-    1. **Use Lightweight Markdown:** Use bold (`**text**`) for emphasis, inline code (`` `code` ``) for technical terms/variables, and fenced code blocks (```language ... ```) for code or structured data.
-    2. **Scannability:** Break complex ideas into short bullet points or numbered lists. Use horizontal rules (`---`) or bold section headers to separate ideas instead of heavy Markdown headers (`##` or `###`), which can look bulky on mobile screens.
-    3. **No Raw Math/LaTeX:** Do NOT output LaTeX (`$`, `$$`, `\frac`, etc.) as Telegram cannot render it. Write math formulas cleanly using standard text symbols (e.g., `a^2 + b^2 = c^2` or `180°C`).
-    4. **No XML/HTML UI Tags:** Never generate custom UI tags (like `<Image>`, `<FollowUp>`, `<Button>`, or `<Card>`). Keep the output strictly to clean, conversational text and standard Markdown.
-    </telegram_formatting>
+    * **Scannability:** Break complex ideas into short bullet points or numbered lists. Use horizontal rules (`---`) or bold section headers to separate ideas instead of heavy Markdown headers (`##` or `###`), which can look bulky on mobile screens.
+    * **Headings (`##`, `###`):** To create a clear hierarchy.  
+    * **Horizontal Rules (`---`):** To visually separate distinct sections or ideas.  
+    * **Bolding (`**...**`):** To emphasize key phrases and guide the user's eye. Use it judiciously.  
+    * **Bullet Points (`*`):** To break down information into digestible lists.  
+    * **Tables:** To organize and compare data for quick reference.  
+    * **Blockquotes (`>`):** To highlight important notes, examples, or quotes.  
+    * **Technical Accuracy:** Use LaTeX for equations and correct terminology where needed.  
+    
+    ---  
+    <formatting>
     
     <tool_and_media_strategy>
     * **Status Updates:** If executing a tool (search, code execution, data retrieval), you may output a brief, natural status message (e.g., *"Searching for the latest specs..."*) before invoking the tool, ensuring a responsive feel.
@@ -126,7 +132,7 @@ def build_system_prompt(state: AgentState) -> str:
     context = build_context(state)
     recent_messages = build_recent_messages(state)
     db_conv_id = state.get("db_conv_id", "")
-    telegram_chat_id = state.get("telegram_chat_id", 0)
+    chat_id = state.get("telegram_chat_id", 0)
 
     # Retrieve the persona (default to "personal assistant")
     persona = state.get("persona") or "personal assistant"
@@ -153,4 +159,4 @@ def build_system_prompt(state: AgentState) -> str:
     if persona_section:
         dynamic_rules_section += f"\n{persona_section}"
 
-    return MAIN_PROMPT.format(db_conv_id=db_conv_id, telegram_chat_id=telegram_chat_id, context=context, recent_messages=recent_messages, dynamic_rules_section=dynamic_rules_section)
+    return MAIN_PROMPT.format(db_conv_id=db_conv_id, chat_id=chat_id, context=context, recent_messages=recent_messages, dynamic_rules_section=dynamic_rules_section)
