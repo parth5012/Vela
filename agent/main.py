@@ -113,19 +113,15 @@ def list_personas():
 
 @app.get("/chat/threads/{thread_id}", dependencies=[Depends(verify_api_key)])
 def get_thread_history(thread_id: str):
-    try:
-        uuid.UUID(thread_id)
-    except ValueError:
-        raise HTTPException(status_code=404, detail="Invalid thread ID format")
-
+    normalized_id = normalize_thread_id(thread_id)
     try:
         with get_db_session() as session:
-            conv = session.query(Conversation).filter_by(id=thread_id).first()
+            conv = session.query(Conversation).filter_by(id=normalized_id).first()
             if not conv:
                 raise HTTPException(status_code=404, detail="Thread not found")
 
             client = DBClient(session)
-            experiences = client.get_conversation_history(thread_id)
+            experiences = client.get_conversation_history(normalized_id)
             messages = []
             for exp in experiences:
                 messages.append({
@@ -152,12 +148,14 @@ class TitlePayload(BaseModel):
     thread_id : str
     title: str
 
-@app.post("/chat/threads/",dependencies=[Depends(verify_api_key)])
+@app.post("/chats/threads", dependencies=[Depends(verify_api_key)])
+@app.post("/chat/threads/", dependencies=[Depends(verify_api_key)])
 def update_thread_title(payload: TitlePayload):
+    normalized_id = normalize_thread_id(payload.thread_id)
     try:
         with get_db_session() as session:
             client = DBClient(session)
-            success = client.update_conversation_title(payload.thread_id,payload.title)
+            success = client.update_conversation_title(normalized_id, payload.title)
             if not success:
                 raise HTTPException(status_code=404, detail="Thread not found")
             session.commit()
@@ -168,16 +166,27 @@ def update_thread_title(payload: TitlePayload):
 
 @app.delete("/chat/threads/{thread_id}", dependencies=[Depends(verify_api_key)])
 def delete_thread(thread_id: str):
+    normalized_id = normalize_thread_id(thread_id)
     try:
         with get_db_session() as session:
             client = DBClient(session)
-            success = client.delete_conversation(thread_id)
+            success = client.delete_conversation(normalized_id)
             if not success:
                 raise HTTPException(status_code=404, detail="Thread not found")
             session.commit()
             return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def normalize_thread_id(thread_id: str) -> str:
+    try:
+        uuid.UUID(thread_id)
+        return thread_id
+    except ValueError:
+        # Generate a deterministic UUID from the non-UUID thread_id string
+        NAMESPACE_VELA = uuid.UUID('e654936d-9d7a-421b-bb49-853f8018eeb0')
+        return str(uuid.uuid5(NAMESPACE_VELA, thread_id))
 
 
 class BranchPayload(BaseModel):
@@ -207,20 +216,13 @@ async def chat_message(payload: MessagePayload):
 
     async def sse_generator():
         # Retrieve or create thread
-        is_valid_uuid = False
-        try:
-            uuid.UUID(payload.thread_id)
-            is_valid_uuid = True
-        except ValueError:
-            pass
+        normalized_id = normalize_thread_id(payload.thread_id)
 
         with get_db_session() as session:
             client = DBClient(session)
-            conv = None
-            if is_valid_uuid:
-                conv = session.query(Conversation).filter_by(id=payload.thread_id).first()
+            conv = session.query(Conversation).filter_by(id=normalized_id).first()
             if not conv:
-                conv = client.create_client_conversation(persona=payload.persona)
+                conv = client.create_client_conversation(persona=payload.persona, conversation_id=normalized_id)
                 session.commit()
             else:
                 if payload.persona != conv.persona:
@@ -329,28 +331,30 @@ async def chat_message(payload: MessagePayload):
 @app.post("/chat/threads/branch", dependencies=[Depends(verify_api_key)])
 def branch_thread(payload: BranchPayload):
     try:
+        parent_id = normalize_thread_id(payload.parent_thread_id)
+        new_id = normalize_thread_id(payload.new_thread_id)
         with get_db_session() as session:
             client = DBClient(session)
             try:
-                parent_conv = session.query(Conversation).filter_by(id=payload.parent_thread_id).first()
+                parent_conv = session.query(Conversation).filter_by(id=parent_id).first()
             except Exception:
                 parent_conv = None
 
             if not parent_conv:
                 raise HTTPException(status_code=404, detail="Parent thread not found")
             
-            new_conv = Conversation(id=payload.new_thread_id, title=payload.title[:255], persona=parent_conv.persona)
+            new_conv = Conversation(id=new_id, title=payload.title[:255], persona=parent_conv.persona)
             session.add(new_conv)
             session.flush()
             
-            experiences = client.get_conversation_history(payload.parent_thread_id)
+            experiences = client.get_conversation_history(parent_id)
             target_exp_id = payload.upto_message_id.replace("usr-", "").replace("ast-", "")
             
             found_target = False
             for exp in experiences:
                 new_exp = Experience(
                     id=str(uuid.uuid4()),
-                    conversation_id=payload.new_thread_id,
+                    conversation_id=new_id,
                     user_query=exp.user_query,
                     agent_response=exp.agent_response,
                     eval_score=exp.eval_score,
@@ -375,18 +379,19 @@ def branch_thread(payload: BranchPayload):
 
 @app.post("/chat/threads/{thread_id}/truncate", dependencies=[Depends(verify_api_key)])
 def truncate_thread(thread_id: str, payload: TruncatePayload):
+    normalized_id = normalize_thread_id(thread_id)
     try:
         with get_db_session() as session:
             target_exp_id = payload.upto_message_id.replace("usr-", "").replace("ast-", "")
             try:
-                target_exp = session.query(Experience).filter_by(id=target_exp_id, conversation_id=thread_id).first()
+                target_exp = session.query(Experience).filter_by(id=target_exp_id, conversation_id=normalized_id).first()
             except Exception:
                 target_exp = None
             if not target_exp:
                 raise HTTPException(status_code=404, detail="Message not found in thread")
             
             session.query(Experience).filter(
-                Experience.conversation_id == thread_id,
+                Experience.conversation_id == normalized_id,
                 Experience.created_at >= target_exp.created_at
             ).delete(synchronize_session=False)
             
