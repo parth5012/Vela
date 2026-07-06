@@ -16,6 +16,7 @@ tavily_tool = TavilySearch(
 )
 @tool
 def web_search(query: str) -> str:
+    """Search the web for up-to-date information on a query."""
     try:
         results = tavily_tool.invoke({"query": query})
         return results
