@@ -20,7 +20,7 @@ def web_search(query: str) -> str:
         results = tavily_tool.invoke({"query": query})
         return results
     except Exception:
-        return DuckDuckGoSearchResults(output_format="json").invoke({"query": query})
+        return DuckDuckGoSearchResults().invoke({"query": query})
 
 # @tool
 # def search_tavily(query: str) -> str:
