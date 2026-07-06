@@ -49,8 +49,10 @@ def chatbot_node(state: AgentState) -> dict:
         response_msg = AIMessage(content=f"Hello! I received your message: '{user_message}'. (Google API Key is not set, running in mock mode)")
 
     # Save the interaction to the experiences table in database
+    # Only save if this is a final agent response (no intermediate tool calls)
     db_conv_id = state.get("db_conv_id")
-    if db_conv_id and db_conv_id != "conv-123":
+    is_tool_call = bool(getattr(response_msg, "tool_calls", None))
+    if db_conv_id and db_conv_id != "conv-123" and not is_tool_call:
         try:
             # 1. Log interaction experience
             with get_db_session() as session:

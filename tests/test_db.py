@@ -39,9 +39,11 @@ def test_conversations_table_has_title_column():
     from db.session import get_db_session
     from sqlalchemy import text
     with get_db_session() as session:
-        result = session.execute(text(
-            "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name='conversations' AND column_name='title';"
-        )).fetchone()
+        dialect_name = session.bind.dialect.name
+        if dialect_name == "sqlite":
+            query = "SELECT name FROM pragma_table_info('conversations') WHERE name='title';"
+        else:
+            query = "SELECT column_name FROM information_schema.columns WHERE table_name='conversations' AND column_name='title';"
+        result = session.execute(text(query)).fetchone()
         assert result is not None, "Conversations table is missing 'title' column"
 

@@ -79,11 +79,7 @@ async def test_telegram_gateway_handle_update_saves_experience(mock_graph_ainvok
     mock_db.get_or_create_conversation.assert_called_once_with(1111)
     mock_graph_ainvoke.assert_called_once()
     gateway.bot.send_message.assert_called_once_with(chat_id=1111, text="Hello from AI!")
-    mock_db.save_experience.assert_called_once_with(
-        conversation_id="test-telegram-conv-uuid",
-        user_query="Hello assistant",
-        agent_response="Hello from AI!"
-    )
+    mock_db.save_experience.assert_not_called()
 
 
 

@@ -89,16 +89,8 @@ class TelegramGateway:
                     self.logger.error("Failed to send fallback message to Telegram", error=str(send_err))
                     sent_replies.append(assistant_reply)
 
-            # Store the interaction response in database (in a thread pool to keep the event loop non-blocking)
-            if sent_replies:
-                combined_response = "\n".join(sent_replies)
-                await asyncio.to_thread(
-                    self.db.save_experience,
-                    conversation_id=conv_id,
-                    user_query=message_text,
-                    agent_response=combined_response
-                )
-                
+            # Central logging is handled by the chatbot node inside the supervisor graph execution,
+            # so we don't save the experience here to prevent duplicate entries in the database.
             self.logger.info("Supervisor graph execution completed", chat_id=chat_id, num_replies=len(sent_replies))
             return f"Processed and replied: '{sent_replies[-1]}'"
         except (asyncio.CancelledError, GeneratorExit) as cancel_err:

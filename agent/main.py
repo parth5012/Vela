@@ -114,7 +114,16 @@ def list_personas():
 @app.get("/chat/threads/{thread_id}", dependencies=[Depends(verify_api_key)])
 def get_thread_history(thread_id: str):
     try:
+        uuid.UUID(thread_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Invalid thread ID format")
+
+    try:
         with get_db_session() as session:
+            conv = session.query(Conversation).filter_by(id=thread_id).first()
+            if not conv:
+                raise HTTPException(status_code=404, detail="Thread not found")
+
             client = DBClient(session)
             experiences = client.get_conversation_history(thread_id)
             messages = []
@@ -132,6 +141,8 @@ def get_thread_history(thread_id: str):
                     "created_at": exp.created_at.isoformat()
                 })
             return messages
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
