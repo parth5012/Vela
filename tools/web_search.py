@@ -1,7 +1,7 @@
 import os
-import httpx
 from langchain_core.tools import tool
 from langchain_tavily import TavilySearch
+from langchain_community.tools import DuckDuckGoSearchResults
 
 
 # Ensure your environment variable is set
@@ -14,6 +14,13 @@ tavily_tool = TavilySearch(
     search_depth="advanced", # Uncomment for deeper, more thorough scraping
     include_answer=True      # Uncomment if you want Tavily's short AI summary included
 )
+@tool
+def web_search(query: str) -> str:
+    try:
+        results = tavily_tool.invoke({"query": query})
+        return results
+    except Exception:
+        return DuckDuckGoSearchResults(output_format="json").invoke({"query": query})
 
 # @tool
 # def search_tavily(query: str) -> str:
