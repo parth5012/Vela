@@ -301,6 +301,28 @@ async def chat_message(payload: MessagePayload):
                         if content_str:
                             full_response += content_str
                             yield f"data: {json.dumps({'type': 'content', 'delta': content_str})}\n\n"
+                elif kind == "on_tool_start":
+                    tool_name = event.get("name")
+                    tool_input = event.get("data", {}).get("input", {})
+                    try:
+                        input_str = json.dumps(tool_input)
+                    except Exception:
+                        input_str = str(tool_input)
+                    escaped_input = input_str.replace('\\', '\\\\').replace('"', '\\"')
+                    tool_start_tag = f'<call:{tool_name} input="{escaped_input}">'
+                    full_response += tool_start_tag
+                    yield f"data: {json.dumps({'type': 'content', 'delta': tool_start_tag})}\n\n"
+                elif kind == "on_tool_end":
+                    tool_name = event.get("name")
+                    tool_output = event.get("data", {}).get("output", "")
+                    if not isinstance(tool_output, str):
+                        try:
+                            tool_output = json.dumps(tool_output)
+                        except Exception:
+                            tool_output = str(tool_output)
+                    tool_end_tag = f'{tool_output}</call:{tool_name}>'
+                    full_response += tool_end_tag
+                    yield f"data: {json.dumps({'type': 'content', 'delta': tool_end_tag})}\n\n"
         except asyncio.CancelledError:
             logger.info("SSE generator cancelled by client disconnect. Agent will continue running in the background.")
             raise
@@ -308,6 +330,22 @@ async def chat_message(payload: MessagePayload):
             # We let the producer_task continue running to completion in the background
             # so the agent can finish processing and write the result to the database.
             pass
+
+        # Update the latest Experience record with full_response if it contains tool calls or thoughts
+        if full_response:
+            try:
+                with get_db_session() as session:
+                    last_exp = (
+                        session.query(Experience)
+                        .filter_by(conversation_id=normalized_id)
+                        .order_by(Experience.created_at.desc())
+                        .first()
+                    )
+                    if last_exp:
+                        last_exp.agent_response = full_response
+                        session.commit()
+            except Exception as e:
+                logger.error("Failed to update database with full_response", error=str(e))
 
         # Generate a dynamic title if thread title is 'New Chat'
         if thread_title == "New Chat":
