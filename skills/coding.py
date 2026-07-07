@@ -1,16 +1,13 @@
-from abc import ABC, abstractmethod
+from skills.base import BaseSkill
 
-class BaseSkill(ABC):
+class CodingSkill(BaseSkill):
     @property
-    @abstractmethod
     def name(self) -> str:
-        pass
+        return "Coding"
 
     @property
-    @abstractmethod
     def description(self) -> str:
-        pass
+        return "Coding skill"
 
-    @abstractmethod
     async def execute(self, state: dict) -> str:
         pass
