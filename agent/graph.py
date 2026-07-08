@@ -14,6 +14,9 @@ from agent.state import AgentState
 from agent.prompt import build_system_prompt
 
 
+from utils.logger import StructuredLogger
+
+logger = StructuredLogger("GraphSupervisor")
 tools = ToolNode(tools_list)
 
 @traceable(name='Supervisor')
@@ -55,25 +58,25 @@ Example response format:
 """
 
     # 3. Query the LLM
-    llm = get_llm()
-    response = llm.invoke([SystemMessage(content=supervisor_prompt)] + list(state["messages"]))
-    response_content = response.content.strip()
-
-    # 4. Parse the LLM's response robustly
     intent = "none"
     skill_name = None
     parsed = False
 
-    json_match = re.search(r"\{.*?\}", response_content, re.DOTALL)
-    if json_match:
-        try:
+    try:
+        llm = get_llm()
+        response = llm.invoke([SystemMessage(content=supervisor_prompt)] + list(state["messages"]))
+        response_content = response.content.strip()
+
+        # 4. Parse the LLM's response robustly
+        json_match = re.search(r"\{.*?\}", response_content, re.DOTALL)
+        if json_match:
             data = json.loads(json_match.group(0))
             if "intent" in data:
                 intent = data.get("intent")
                 skill_name = data.get("skill_name")
                 parsed = True
-        except Exception:
-            pass
+    except Exception as e:
+        logger.error("Failed to query or parse supervisor LLM classification, falling back to heuristics", error=str(e))
 
     # Fallback to heuristic checks if parsing fails or outputs are invalid
     if not parsed or intent not in ["activate", "deactivate", "continue", "none"]:
