@@ -2,7 +2,25 @@ import pytest
 from langchain_core.messages import HumanMessage
 from agent.graph import graph
 
-def test_supervisor_routing_to_end():
+from unittest.mock import patch, MagicMock
+from langchain_core.messages import AIMessage
+
+@pytest.mark.asyncio
+@patch("agent.graph.get_llm")
+async def test_supervisor_routing_to_end(mock_get_llm):
+    # Mock LLM invoke returning a mock message with content="chatbot"
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = AIMessage(content="chatbot")
+    
+    # Mock for chatbot_node async invoke
+    mock_bound_llm = MagicMock()
+    async def mock_ainvoke(*args, **kwargs):
+        return AIMessage(content="Hello from mock chatbot!")
+    mock_bound_llm.ainvoke = mock_ainvoke
+    mock_llm.bind_tools.return_value = mock_bound_llm
+    
+    mock_get_llm.return_value = mock_llm
+
     inputs = {
         "messages": [HumanMessage(content="Hello assistant!")],
         "telegram_chat_id": 999,
@@ -10,8 +28,8 @@ def test_supervisor_routing_to_end():
         "relevant_memories": [],
         "next_node": ""
     }
-    result = graph.invoke(inputs)
-    assert result["next_node"] == "None" or result["next_node"] == "__end__"
+    result = await graph.ainvoke(inputs)
+    assert result["next_node"] == "__end__"
 
 from unittest.mock import patch, MagicMock
 from agent.prompt import build_system_prompt

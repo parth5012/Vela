@@ -21,7 +21,9 @@ tools = ToolNode(tools_list)
 @traceable(name='Supervisor')
 def supervisor_node(state: AgentState) -> dict:
     llm = get_llm()
-    supervisor_prompt = """You are a supervisor that decides which node to route to next based on the user's message.
+    skills_with_descriptions = "\n".join([f"- {s.name}: {s.description}" for s in skills])
+    skill_prompt = state.get("skill_prompt") or "None"
+    supervisor_prompt = f"""You are a supervisor that decides which node to route to next based on the user's message.
     You have access to the following skills and their descriptions: {skills_with_descriptions}.
     You are also given the following skill prompt: {skill_prompt}.
     Make sure to route to the appropriate node based on the user's message.
