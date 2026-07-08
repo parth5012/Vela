@@ -361,7 +361,7 @@ async def chat_message(payload: MessagePayload):
         # Generate a dynamic title if thread title is 'New Chat'
         if thread_title == "New Chat":
             # new_title = payload.message[:30] + "..." if len(payload.message) > 30 else payload.message
-            response = get_title(payload.message)
+            response = get_title(initial_message)
             new_title = str(response.content) if hasattr(response, "content") else str(response)
             with get_db_session() as session:
                 client = DBClient(session)
