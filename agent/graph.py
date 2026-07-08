@@ -34,7 +34,7 @@ def supervisor_node(state: AgentState) -> dict:
     
 
 
-def chatbot_node(state: AgentState) -> dict:
+async def chatbot_node(state: AgentState) -> dict:
     api_key = os.getenv("GOOGLE_API_KEY", "")
     response_msg = None
     
@@ -45,8 +45,8 @@ def chatbot_node(state: AgentState) -> dict:
     if api_key and not api_key.startswith("your_"):
         try:
             llm = get_llm().bind_tools(tools_list)
-            system_prompt = build_system_prompt(state)
-            response_msg = llm.invoke([
+            system_prompt = await build_system_prompt(state)
+            response_msg = await llm.ainvoke([
                 SystemMessage(content=system_prompt)
             ] + list(state["messages"]))
         except Exception as e:
@@ -65,9 +65,9 @@ def chatbot_node(state: AgentState) -> dict:
                 from db.client import DBClient
                 client = DBClient(session)
                 client.save_experience(
-                    conversation_id=db_conv_id,
-                    user_query=user_message,
-                    agent_response=response_msg.content
+                     conversation_id=db_conv_id,
+                     user_query=user_message,
+                     agent_response=response_msg.content
                 )
                 session.commit()
         except Exception:
