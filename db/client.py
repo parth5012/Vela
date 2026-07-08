@@ -181,6 +181,15 @@ class DBClient:
             self.session.flush()
         return conv
 
+    def update_conversation_active_skill(self, conversation_id: str, active_skill: str | None) -> Conversation | None:
+        """Updates the active skill of a specific conversation."""
+        conv = self.session.query(Conversation).filter_by(id=conversation_id).first()
+        if conv:
+            conv.active_skill = active_skill[:50] if active_skill is not None else None
+            conv.updated_at = datetime.now(UTC).replace(tzinfo=None)
+            self.session.flush()
+        return conv
+
     def delete_conversation(self, conversation_id: str) -> bool:
         """Deletes a conversation. Cascades to experiences and oauth_tokens automatically."""
         conv = self.session.query(Conversation).filter_by(id=conversation_id).first()

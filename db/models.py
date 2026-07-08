@@ -16,6 +16,7 @@ class Conversation(Base):
     updated_at = Column(DateTime, default=datetime.utcnow)
     title = Column(String(255), default="New Chat")
     persona = Column(String(50), default="personal assistant", nullable=False)
+    active_skill = Column(String(50), nullable=True, default=None)
 
 
 

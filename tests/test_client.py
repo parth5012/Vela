@@ -138,3 +138,22 @@ def test_conversation_persona_creation_and_default(db_session):
     conv_teacher = client.create_client_conversation(title="Test Persona Teacher", persona="teacher")
     db_session.commit()
     assert conv_teacher.persona == "teacher"
+
+
+def test_conversation_active_skill_update(db_session):
+    client = DBClient(db_session)
+    conv = client.create_client_conversation(title="Test Active Skill")
+    db_session.commit()
+    # Initial active_skill should be None
+    assert conv.active_skill is None
+
+    # Update active_skill
+    updated_conv = client.update_conversation_active_skill(conv.id, "google_calendar")
+    db_session.commit()
+    assert updated_conv is not None
+    assert updated_conv.active_skill == "google_calendar"
+
+    # Update with None
+    updated_conv = client.update_conversation_active_skill(conv.id, None)
+    db_session.commit()
+    assert updated_conv.active_skill is None

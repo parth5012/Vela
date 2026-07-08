@@ -31,7 +31,7 @@ discord_gateway = DiscordGateway(db=db)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Run database migration (add persona column if missing)
+    # Run database migration (add persona and active_skill columns if missing)
     try:
         from db.session import engine
         from sqlalchemy import inspect
@@ -41,8 +41,12 @@ async def lifespan(app: FastAPI):
             logger.info("Database migration: adding 'persona' column to 'conversations' table")
             with engine.begin() as conn:
                 conn.execute("ALTER TABLE conversations ADD COLUMN persona VARCHAR(50) DEFAULT 'personal assistant' NOT NULL")
+        if 'active_skill' not in columns:
+            logger.info("Database migration: adding 'active_skill' column to 'conversations' table")
+            with engine.begin() as conn:
+                conn.execute("ALTER TABLE conversations ADD COLUMN active_skill VARCHAR(50) DEFAULT NULL")
     except Exception as e:
-        logger.error("Failed to run database migration for persona column", error=str(e))
+        logger.error("Failed to run database migration", error=str(e))
 
     yield
 
@@ -241,7 +245,7 @@ async def chat_message(payload: MessagePayload):
         }
 
         full_response = ""
-        
+        logger.info("Starting chat message", thread_id=normalized_id, persona=thread_persona)
         # Run graph.astream_events in a background producer task and queue the events.
         # This allows us to periodically yield SSE keep-alive pings to prevent Render timeouts
         # during long-running tool executions.
@@ -329,7 +333,7 @@ async def chat_message(payload: MessagePayload):
         finally:
             # We let the producer_task continue running to completion in the background
             # so the agent can finish processing and write the result to the database.
-            pass
+            logger.info("SSE generator finished", thread_id=normalized_id)
 
         # Update the latest Experience record with full_response if it contains tool calls or thoughts
         if full_response:
@@ -342,12 +346,13 @@ async def chat_message(payload: MessagePayload):
                         .first()
                     )
                     if last_exp:
-                        last_exp.agent_response = full_response
+                        last_exp.agent_response = full_response or ''
                         session.commit()
                     else:
                         new_exp = Experience(conversation_id=normalized_id, agent_response=full_response)
                         session.add(new_exp)
                         session.commit()
+                    logger.info("Experience record updated", conversation_id=normalized_id)
             except Exception as e:
                 logger.error("Failed to update database with full_response", error=str(e))
 
