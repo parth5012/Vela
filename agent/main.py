@@ -1,3 +1,4 @@
+from utils.helpers import get_title
 from agent.persona import PERSONA_LIST
 from utils.llm import get_llm
 import os
@@ -360,7 +361,7 @@ async def chat_message(payload: MessagePayload):
         # Generate a dynamic title if thread title is 'New Chat'
         if thread_title == "New Chat":
             # new_title = payload.message[:30] + "..." if len(payload.message) > 30 else payload.message
-            response = get_llm().invoke("Return the Title for this conversation below : \n Conversation \n" + payload.message[:30])
+            response = get_title(payload.message)
             new_title = str(response.content) if hasattr(response, "content") else str(response)
             with get_db_session() as session:
                 client = DBClient(session)
