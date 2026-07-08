@@ -135,6 +135,167 @@ def test_build_context_retrieves_memories(mock_get_db, mock_embeddings_func):
         assert "User's name is Parth" in context
 
 
+from agent.graph import supervisor_node
+
+@patch("agent.graph.get_db_session")
+@patch("agent.graph.get_llm")
+def test_supervisor_activate_brainstorming_skill(mock_get_llm, mock_get_db):
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = AIMessage(content='{"intent": "activate", "skill_name": "BrainstormingSkill"}')
+    mock_get_llm.return_value = mock_llm
+
+    mock_session = MagicMock()
+    mock_get_db.return_value.__enter__.return_value = mock_session
+    mock_conv = MagicMock()
+    mock_conv.active_skill = None
+    mock_session.query().filter_by().first.return_value = mock_conv
+
+    state = {
+        "messages": [HumanMessage(content="Let's brainstorm a new feature")],
+        "db_conv_id": "conv-456",
+        "active_skill": None
+    }
+
+    result = supervisor_node(state)
+    assert result["active_skill"] == "BrainstormingSkill"
+    assert result["next_node"] == "chatbot"
+    
+    assert mock_conv.active_skill == "BrainstormingSkill"
+    mock_session.commit.assert_called_once()
+
+
+@patch("agent.graph.get_db_session")
+@patch("agent.graph.get_llm")
+def test_supervisor_deactivate_skill(mock_get_llm, mock_get_db):
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = AIMessage(content='{"intent": "deactivate", "skill_name": null}')
+    mock_get_llm.return_value = mock_llm
+
+    mock_session = MagicMock()
+    mock_get_db.return_value.__enter__.return_value = mock_session
+    mock_conv = MagicMock()
+    mock_conv.active_skill = "BrainstormingSkill"
+    mock_session.query().filter_by().first.return_value = mock_conv
+
+    state = {
+        "messages": [HumanMessage(content="stop")],
+        "db_conv_id": "conv-456",
+        "active_skill": "BrainstormingSkill"
+    }
+
+    result = supervisor_node(state)
+    assert result["active_skill"] is None
+    assert result["next_node"] == "chatbot"
+
+    assert mock_conv.active_skill is None
+    mock_session.commit.assert_called_once()
+
+
+@patch("agent.graph.get_db_session")
+@patch("agent.graph.get_llm")
+def test_supervisor_continue_skill(mock_get_llm, mock_get_db):
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = AIMessage(content='{"intent": "continue", "skill_name": "BrainstormingSkill"}')
+    mock_get_llm.return_value = mock_llm
+
+    mock_session = MagicMock()
+    mock_get_db.return_value.__enter__.return_value = mock_session
+    mock_conv = MagicMock()
+    mock_conv.active_skill = "BrainstormingSkill"
+    mock_session.query().filter_by().first.return_value = mock_conv
+
+    state = {
+        "messages": [HumanMessage(content="I want it to have database integration")],
+        "db_conv_id": "conv-456",
+        "active_skill": "BrainstormingSkill"
+    }
+
+    result = supervisor_node(state)
+    assert result["active_skill"] == "BrainstormingSkill"
+    assert result["next_node"] == "chatbot"
+
+    mock_session.commit.assert_not_called()
+
+
+@patch("agent.graph.get_db_session")
+@patch("agent.graph.get_llm")
+def test_supervisor_no_skill_active(mock_get_llm, mock_get_db):
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = AIMessage(content='{"intent": "none", "skill_name": null}')
+    mock_get_llm.return_value = mock_llm
+
+    mock_session = MagicMock()
+    mock_get_db.return_value.__enter__.return_value = mock_session
+    mock_conv = MagicMock()
+    mock_conv.active_skill = None
+    mock_session.query().filter_by().first.return_value = mock_conv
+
+    state = {
+        "messages": [HumanMessage(content="What is the weather today?")],
+        "db_conv_id": "conv-456",
+        "active_skill": None
+    }
+
+    result = supervisor_node(state)
+    assert result["active_skill"] is None
+    assert result["next_node"] == "chatbot"
+
+    mock_session.commit.assert_not_called()
+
+
+@patch("agent.graph.get_db_session")
+@patch("agent.graph.get_llm")
+def test_supervisor_heuristic_deactivate(mock_get_llm, mock_get_db):
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = AIMessage(content="Error: raw text response instead of JSON")
+    mock_get_llm.return_value = mock_llm
+
+    mock_session = MagicMock()
+    mock_get_db.return_value.__enter__.return_value = mock_session
+    mock_conv = MagicMock()
+    mock_conv.active_skill = "BrainstormingSkill"
+    mock_session.query().filter_by().first.return_value = mock_conv
+
+    state = {
+        "messages": [HumanMessage(content="Please exit now")],
+        "db_conv_id": "conv-456",
+        "active_skill": "BrainstormingSkill"
+    }
+
+    result = supervisor_node(state)
+    assert result["active_skill"] is None
+    assert result["next_node"] == "chatbot"
+    assert mock_conv.active_skill is None
+    mock_session.commit.assert_called_once()
+
+
+@patch("agent.graph.get_db_session")
+@patch("agent.graph.get_llm")
+def test_supervisor_heuristic_activate(mock_get_llm, mock_get_db):
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = AIMessage(content='{"status": "failure"}')
+    mock_get_llm.return_value = mock_llm
+
+    mock_session = MagicMock()
+    mock_get_db.return_value.__enter__.return_value = mock_session
+    mock_conv = MagicMock()
+    mock_conv.active_skill = None
+    mock_session.query().filter_by().first.return_value = mock_conv
+
+    state = {
+        "messages": [HumanMessage(content="Let's do some brainstorming")],
+        "db_conv_id": "conv-456",
+        "active_skill": None
+    }
+
+    result = supervisor_node(state)
+    assert result["active_skill"] == "BrainstormingSkill"
+    assert result["next_node"] == "chatbot"
+    assert mock_conv.active_skill == "BrainstormingSkill"
+    mock_session.commit.assert_called_once()
+
+
+
 
 
 

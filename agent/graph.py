@@ -1,37 +1,135 @@
 import os
+import json
+import re
 from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
 from langsmith import traceable
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import tools_condition, ToolNode
 from utils.llm import get_llm
 from db.session import get_db_session
+from db.models import Conversation
 from skills import skills
 from tools import tools_list
 from agent.state import AgentState
 from agent.prompt import build_system_prompt
 
 
-# import json
-# import threading
-
-
-
 tools = ToolNode(tools_list)
 
 @traceable(name='Supervisor')
 def supervisor_node(state: AgentState) -> dict:
-    llm = get_llm()
+    # 1. Load active_skill from database if valid db_conv_id is set
+    active_skill = state.get("active_skill")
+    db_conv_id = state.get("db_conv_id")
+    if db_conv_id and db_conv_id != "conv-123":
+        try:
+            with get_db_session() as session:
+                conv = session.query(Conversation).filter_by(id=db_conv_id).first()
+                if conv:
+                    active_skill = conv.active_skill
+        except Exception:
+            pass
+
+    # 2. Format a system classification prompt containing the descriptions of registered skills
     skills_with_descriptions = "\n".join([f"- {s.name}: {s.description}" for s in skills])
-    skill_prompt = state.get("skill_prompt") or "None"
-    supervisor_prompt = f"""You are a supervisor that decides which node to route to next based on the user's message.
-    You have access to the following skills and their descriptions: {skills_with_descriptions}.
-    You are also given the following skill prompt: {skill_prompt}.
-    Make sure to route to the appropriate node based on the user's message.
-    """
-    
+    skills_list = [s.name for s in skills]
+
+    supervisor_prompt = f"""You are a supervisor that classifies the user's intent regarding skills.
+The available skills are:
+{skills_with_descriptions}
+
+Currently active skill: {active_skill or 'None'}
+
+Based on the conversation history (with the user's latest input being the last message), decide the user's intent:
+1. "activate": The user is asking to start/use/activate one of the available skills. E.g., they ask to brainstorm, start a design, grill them, etc.
+2. "deactivate": The user is explicitly asking to stop, exit, cancel, deactivate, or quit the currently active skill. E.g., "stop", "exit", "quit", "cancel".
+3. "continue": A skill is currently active, and the user is continuing the conversation within that skill (answering questions, providing feedback for the skill, etc.), and not asking to deactivate or switch skills.
+4. "none": No skill is currently active, and the user is not requesting to activate any skill. E.g., they are just having a normal conversation.
+
+You must return ONLY a JSON block containing the fields 'intent' and 'skill_name'. Do not write any explanations or other text.
+Allowed intents: "activate", "deactivate", "continue", "none"
+Allowed skill_names: {", ".join([f'"{name}"' for name in skills_list])} or null.
+
+Example response format:
+{{"intent": "activate", "skill_name": "BrainstormingSkill"}}
+"""
+
+    # 3. Query the LLM
+    llm = get_llm()
     response = llm.invoke([SystemMessage(content=supervisor_prompt)] + list(state["messages"]))
-    
-    return {"next_node": response.content}
+    response_content = response.content.strip()
+
+    # 4. Parse the LLM's response robustly
+    intent = "none"
+    skill_name = None
+    parsed = False
+
+    json_match = re.search(r"\{.*?\}", response_content, re.DOTALL)
+    if json_match:
+        try:
+            data = json.loads(json_match.group(0))
+            if "intent" in data:
+                intent = data.get("intent")
+                skill_name = data.get("skill_name")
+                parsed = True
+        except Exception:
+            pass
+
+    # Fallback to heuristic checks if parsing fails or outputs are invalid
+    if not parsed or intent not in ["activate", "deactivate", "continue", "none"]:
+        user_msg = next((m for m in reversed(state["messages"]) if isinstance(m, HumanMessage)), None)
+        user_text = user_msg.content.lower() if (user_msg and user_msg.content) else ""
+        
+        if active_skill and any(word in user_text for word in ["stop", "exit", "deactivate", "cancel", "quit"]):
+            intent = "deactivate"
+            skill_name = None
+        else:
+            matched_skill = None
+            for s in skills:
+                name_lower = s.name.lower()
+                keyword = s.name.replace("Skill", "").lower()
+                if keyword in user_text or name_lower in user_text:
+                    matched_skill = s.name
+                    break
+            
+            if matched_skill:
+                intent = "activate"
+                skill_name = matched_skill
+            elif active_skill:
+                intent = "continue"
+                skill_name = active_skill
+            else:
+                intent = "none"
+                skill_name = None
+
+    # 5. Resolve new_active_skill
+    new_active_skill = active_skill
+    if intent == "activate":
+        new_active_skill = skill_name
+    elif intent == "deactivate":
+        new_active_skill = None
+    elif intent == "none":
+        new_active_skill = None
+    elif intent == "continue":
+        new_active_skill = active_skill
+
+    if new_active_skill not in skills_list:
+        new_active_skill = None
+
+    # 6. Update the DB active_skill column if changed
+    if db_conv_id and db_conv_id != "conv-123":
+        if new_active_skill != active_skill:
+            try:
+                with get_db_session() as session:
+                    conv = session.query(Conversation).filter_by(id=db_conv_id).first()
+                    if conv:
+                        conv.active_skill = new_active_skill
+                        session.commit()
+            except Exception:
+                pass
+
+    return {"active_skill": new_active_skill, "next_node": "chatbot"}
+
 
     
 
