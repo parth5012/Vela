@@ -344,6 +344,10 @@ async def chat_message(payload: MessagePayload):
                     if last_exp:
                         last_exp.agent_response = full_response
                         session.commit()
+                    else:
+                        new_exp = Experience(conversation_id=normalized_id, agent_response=full_response)
+                        session.add(new_exp)
+                        session.commit()
             except Exception as e:
                 logger.error("Failed to update database with full_response", error=str(e))
 
