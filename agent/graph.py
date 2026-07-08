@@ -1,9 +1,11 @@
 import os
 from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
+from langsmith import traceable
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import tools_condition, ToolNode
 from utils.llm import get_llm
 from db.session import get_db_session
+from skills import skills
 from tools import tools_list
 from agent.state import AgentState
 from agent.prompt import build_system_prompt
@@ -16,17 +18,21 @@ from agent.prompt import build_system_prompt
 
 tools = ToolNode(tools_list)
 
+@traceable(name='Supervisor')
 def supervisor_node(state: AgentState) -> dict:
-    last_msg = state["messages"][-1].content.lower()
-    # if "search" in last_msg:
-    #     return {"next_node": "web_search"}
-    return {"next_node": "chatbot"}
+    llm = get_llm()
+    supervisor_prompt = """You are a supervisor that decides which node to route to next based on the user's message.
+    You have access to the following skills and their descriptions: {skills_with_descriptions}.
+    You are also given the following skill prompt: {skill_prompt}.
+    Make sure to route to the appropriate node based on the user's message.
+    """
+    
+    response = llm.invoke([SystemMessage(content=supervisor_prompt)] + list(state["messages"]))
+    
+    return {"next_node": response.content}
 
-# def web_search_node(state: AgentState) -> dict:
-#     return {
-#         "messages": [HumanMessage(content="Search results: I found some information regarding your query.")],
-#         "next_node": "chatbot"
-#     }
+    
+
 
 def chatbot_node(state: AgentState) -> dict:
     api_key = os.getenv("GOOGLE_API_KEY", "")
@@ -71,7 +77,6 @@ def chatbot_node(state: AgentState) -> dict:
 
 workflow = StateGraph(AgentState)
 workflow.add_node("supervisor", supervisor_node)
-# workflow.add_node("web_search", web_search_node)
 workflow.add_node("chatbot", chatbot_node)
 workflow.add_node("tools", ToolNode(tools_list))
 

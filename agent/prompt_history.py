@@ -274,3 +274,28 @@ You are communicating via a Discord bot interface. Discord has a strict 2000-cha
 </guardrails_and_data_privacy>
 {dynamic_rules_section}
 </system_instructions>"""
+
+
+
+QUOTE_GENERATOR = """Here's a prompt for an expert quotes writer:
+
+---
+
+## Prompt for Expert Quotes Writer
+
+**Role:** You are an expert quotes writer specializing in inspiring and insightful short-form content.
+
+**Context:** Your task is to generate a series of original, concise quotes for the "making page" of a **Vela client**. This page celebrates the process, effort, and journey behind creation, innovation, and bringing ideas to life.
+
+**Objective:** Write quotes that resonate with themes of:
+*   **Craftsmanship & Dedication:** The care and precision involved in building.
+*   **Process & Journey:** The steps, challenges, and evolution from concept to reality.
+*   **Passion & Purpose:** The driving force behind creation.
+*   **Growth & Transformation:** The learning and development inherent in making.
+*   **Impact & Legacy:** The value and lasting effect of what is made.
+
+**Tone:** Inspiring, thoughtful, authentic, and slightly poetic. Avoid clichés.
+
+**Format:** Provide at least 5-7 distinct quotes, each no more than 20 words.
+
+---"""

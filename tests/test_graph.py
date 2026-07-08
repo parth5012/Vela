@@ -18,8 +18,9 @@ from agent.prompt import build_system_prompt
 from agent.state import AgentState
 from db.models import SystemPromptFragment
 
+@pytest.mark.asyncio
 @patch("agent.prompt.get_db_session")
-def test_build_system_prompt_injects_dynamic_rules(mock_get_db):
+async def test_build_system_prompt_injects_dynamic_rules(mock_get_db):
     # Set up mock DB session returning a mock fragment
     mock_session = MagicMock()
     mock_fragment = SystemPromptFragment(key="dynamic_rules", content="* Must be concise and funny.")
@@ -33,9 +34,28 @@ def test_build_system_prompt_injects_dynamic_rules(mock_get_db):
         "relevant_memories": [],
         "next_node": ""
     }
-    prompt = build_system_prompt(state)
+    prompt = await build_system_prompt(state)
     assert "* Must be concise and funny." in prompt
     assert "# Dynamic Rules" in prompt
+
+@pytest.mark.asyncio
+@patch("agent.prompt.get_db_session")
+async def test_build_system_prompt_injects_active_skill(mock_get_db):
+    mock_session = MagicMock()
+    mock_session.query().filter_by().first.return_value = None
+    mock_get_db.return_value.__enter__.return_value = mock_session
+
+    state: AgentState = {
+        "messages": [],
+        "telegram_chat_id": 12345,
+        "db_conv_id": "conv-123",
+        "relevant_memories": [],
+        "next_node": "",
+        "active_skill": "BrainstormingSkill"
+    }
+    prompt = await build_system_prompt(state)
+    assert "# Active Skill Instructions" in prompt
+    assert "### Brainstorming Ideas Into Designs" in prompt
 
 from db.models import Experience
 from datetime import datetime

@@ -128,7 +128,7 @@ def build_recent_messages(state: AgentState) -> str:
 
 
 
-def build_system_prompt(state: AgentState) -> str:
+async def build_system_prompt(state: AgentState) -> str:
     context = build_context(state)
     recent_messages = build_recent_messages(state)
     db_conv_id = state.get("db_conv_id", "")
@@ -158,5 +158,14 @@ def build_system_prompt(state: AgentState) -> str:
 
     if persona_section:
         dynamic_rules_section += f"\n{persona_section}"
+
+    active_skill = state.get("active_skill")
+    if active_skill:
+        from skills import skills
+        skill_obj = next((s for s in skills if s.name == active_skill), None)
+        if skill_obj:
+            skill_content = await skill_obj.execute(state)
+            if skill_content:
+                dynamic_rules_section += f"\n\n# Active Skill Instructions\n{skill_content}"
 
     return MAIN_PROMPT.format(db_conv_id=db_conv_id, chat_id=chat_id, context=context, recent_messages=recent_messages, dynamic_rules_section=dynamic_rules_section)

@@ -10,3 +10,5 @@ class AgentState(TypedDict, total=False):
     relevant_memories: list[str]
     next_node: str
     persona: Optional[str]
+    skill_prompt: Optional[str]
+    active_skill: Optional[str]
