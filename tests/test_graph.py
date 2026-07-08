@@ -6,11 +6,19 @@ from unittest.mock import patch, MagicMock
 from langchain_core.messages import AIMessage
 
 @pytest.mark.asyncio
+@patch("agent.graph.get_db_session")
 @patch("agent.graph.get_llm")
-async def test_supervisor_routing_to_end(mock_get_llm):
+async def test_supervisor_routing_to_end(mock_get_llm, mock_get_db):
+    # Mock DB Session
+    mock_session = MagicMock()
+    mock_get_db.return_value.__enter__.return_value = mock_session
+    mock_conv = MagicMock()
+    mock_conv.active_skill = None
+    mock_session.query().filter_by().first.return_value = mock_conv
+
     # Mock LLM invoke returning a mock message with content="chatbot"
     mock_llm = MagicMock()
-    mock_llm.invoke.return_value = AIMessage(content="chatbot")
+    mock_llm.invoke.return_value = AIMessage(content='{"intent": "none", "skill_name": null}')
     
     # Mock for chatbot_node async invoke
     mock_bound_llm = MagicMock()
