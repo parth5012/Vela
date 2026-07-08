@@ -47,3 +47,24 @@ def test_conversations_table_has_title_column():
         result = session.execute(text(query)).fetchone()
         assert result is not None, "Conversations table is missing 'title' column"
 
+
+@patch("db.supabase.DBClient")
+@patch("db.supabase.get_db_session")
+def test_update_conversation_active_skill(mock_get_db, mock_db_client_class):
+    mock_session = MagicMock()
+    mock_get_db.return_value.__enter__.return_value = mock_session
+    
+    mock_client = MagicMock()
+    mock_conv = MagicMock()
+    mock_client.update_conversation_active_skill.return_value = mock_conv
+    mock_db_client_class.return_value = mock_client
+    
+    db = SupabaseDB()
+    result = db.update_conversation_active_skill("conv-uuid", "google_calendar")
+    assert result is True
+    mock_client.update_conversation_active_skill.assert_called_with("conv-uuid", "google_calendar")
+
+    mock_client.update_conversation_active_skill.return_value = None
+    result = db.update_conversation_active_skill("conv-uuid", None)
+    assert result is False
+

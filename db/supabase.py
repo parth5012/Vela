@@ -71,3 +71,17 @@ class SupabaseDB:
             self.logger.error("Failed to save experience", error=str(e), conversation_id=conversation_id)
             return None
 
+    def update_conversation_active_skill(self, conversation_id: str, active_skill: str | None) -> bool:
+        self.logger.info("Updating active skill via SQLAlchemy", conversation_id=conversation_id, active_skill=active_skill)
+        try:
+            with get_db_session() as session:
+                client = DBClient(session)
+                conv = client.update_conversation_active_skill(conversation_id, active_skill)
+                if conv:
+                    session.commit()
+                    return True
+                return False
+        except Exception as e:
+            self.logger.error("Failed to update active skill", error=str(e), conversation_id=conversation_id)
+            return False
+

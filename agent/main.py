@@ -349,7 +349,7 @@ async def chat_message(payload: MessagePayload):
                         last_exp.agent_response = full_response or ''
                         session.commit()
                     else:
-                        new_exp = Experience(conversation_id=normalized_id, agent_response=full_response)
+                        new_exp = Experience(conversation_id=normalized_id, user_query=payload.message, agent_response=full_response)
                         session.add(new_exp)
                         session.commit()
                     logger.info("Experience record updated", conversation_id=normalized_id)
