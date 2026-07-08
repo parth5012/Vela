@@ -243,6 +243,7 @@ async def chat_message(payload: MessagePayload):
             "next_node": "supervisor",
             "persona": thread_persona
         }
+        initial_message = payload.message
 
         full_response = ""
         logger.info("Starting chat message", thread_id=normalized_id, persona=thread_persona)
@@ -349,7 +350,7 @@ async def chat_message(payload: MessagePayload):
                         last_exp.agent_response = full_response or ''
                         session.commit()
                     else:
-                        new_exp = Experience(conversation_id=normalized_id, user_query=payload.message, agent_response=full_response)
+                        new_exp = Experience(conversation_id=normalized_id, user_query=initial_message, agent_response=full_response)
                         session.add(new_exp)
                         session.commit()
                     logger.info("Experience record updated", conversation_id=normalized_id)
