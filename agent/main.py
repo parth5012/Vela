@@ -34,17 +34,17 @@ async def lifespan(app: FastAPI):
     # Run database migration (add persona and active_skill columns if missing)
     try:
         from db.session import engine
-        from sqlalchemy import inspect
+        from sqlalchemy import inspect, text
         inspector = inspect(engine)
         columns = [col['name'] for col in inspector.get_columns('conversations')]
         if 'persona' not in columns:
             logger.info("Database migration: adding 'persona' column to 'conversations' table")
             with engine.begin() as conn:
-                conn.execute("ALTER TABLE conversations ADD COLUMN persona VARCHAR(50) DEFAULT 'personal assistant' NOT NULL")
+                conn.execute(text("ALTER TABLE conversations ADD COLUMN persona VARCHAR(50) DEFAULT 'personal assistant' NOT NULL"))
         if 'active_skill' not in columns:
             logger.info("Database migration: adding 'active_skill' column to 'conversations' table")
             with engine.begin() as conn:
-                conn.execute("ALTER TABLE conversations ADD COLUMN active_skill VARCHAR(50) DEFAULT NULL")
+                conn.execute(text("ALTER TABLE conversations ADD COLUMN active_skill VARCHAR(50) DEFAULT NULL"))
     except Exception as e:
         logger.error("Failed to run database migration", error=str(e))
 
