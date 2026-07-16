@@ -112,7 +112,7 @@ def build_recent_messages(state: AgentState) -> str:
                     session.query(Experience)
                     .filter_by(conversation_id=db_conv_id)
                     .order_by(Experience.created_at.desc())
-                    .limit(3)
+                    .limit(5)
                     .all()
                 )
                 exps.reverse()
@@ -166,6 +166,6 @@ async def build_system_prompt(state: AgentState) -> str:
         if skill_obj:
             skill_content = await skill_obj.execute(state)
             if skill_content:
-                dynamic_rules_section += f"\n\n# Active Skill Instructions\n{skill_content}"
+                dynamic_rules_section += f"\n\n# Active Skill Instructions\n{skill_content}\n"
 
     return MAIN_PROMPT.format(db_conv_id=db_conv_id, chat_id=chat_id, context=context, recent_messages=recent_messages, dynamic_rules_section=dynamic_rules_section)

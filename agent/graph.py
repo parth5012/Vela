@@ -12,9 +12,9 @@ from skills import skills
 from tools import tools_list
 from agent.state import AgentState
 from agent.prompt import build_system_prompt
-
-
 from utils.logger import StructuredLogger
+
+
 
 logger = StructuredLogger("GraphSupervisor")
 tools = ToolNode(tools_list)
