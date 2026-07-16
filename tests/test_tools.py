@@ -38,6 +38,32 @@ def test_save_user_memory_tool(mock_get_db, mock_llm_func, mock_embeddings_func)
 @patch("tools.memory.get_embeddings")
 @patch("tools.memory.get_llm")
 @patch("tools.memory.get_db_session")
+def test_save_user_memory_unrelated_threshold(mock_get_db, mock_llm_func, mock_embeddings_func):
+    mock_llm = MagicMock()
+    mock_llm_func.return_value = mock_llm
+
+    mock_embeddings = MagicMock()
+    mock_embeddings.embed_query.return_value = [0.1] + [0.0] * 511
+    mock_embeddings_func.return_value = mock_embeddings
+
+    # Mock an existing memory with an orthogonal vector to simulate distance >= 0.35 (distance = 1.0)
+    from db.models import MemoryVector
+    mock_vector = MemoryVector(conversation_id="some-conv-id", content="User likes cheese", vector=[0.0] * 511 + [0.9])
+    
+    mock_session = MagicMock()
+    mock_session.query().filter_by().order_by().limit().first.return_value = mock_vector
+    mock_get_db.return_value.__enter__.return_value = mock_session
+
+    with patch.dict("os.environ", {"GOOGLE_API_KEY": "AIzaSyFakeKey"}):
+        res = save_user_memory.func("some-conv-id", "User's name is Alice")
+        assert "Successfully saved new memory" in res
+        # LLM should NOT be called because distance is >= 0.35
+        assert not mock_llm.invoke.called
+        assert mock_session.add.called
+
+@patch("tools.memory.get_embeddings")
+@patch("tools.memory.get_llm")
+@patch("tools.memory.get_db_session")
 def test_delete_user_memory_tool(mock_get_db, mock_llm_func, mock_embeddings_func):
     mock_llm = MagicMock()
     mock_llm.invoke.return_value = MagicMock(content="YES")

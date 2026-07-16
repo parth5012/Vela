@@ -8,6 +8,15 @@ from utils.logger import StructuredLogger
 
 logger = StructuredLogger("MemoryTools")
 
+def calculate_cosine_distance(v1: list[float], v2: list[float]) -> float:
+    """Calculates the cosine distance between two embedding vectors."""
+    dot_product = sum(x * y for x, y in zip(v1, v2))
+    norm_v1 = sum(x * x for x in v1) ** 0.5
+    norm_v2 = sum(x * x for x in v2) ** 0.5
+    if norm_v1 == 0 or norm_v2 == 0:
+        return 1.0
+    return 1.0 - (dot_product / (norm_v1 * norm_v2))
+
 @tool
 def save_user_memory(conversation_id: str, fact: str) -> str:
     """Saves a permanent fact, detail, or preference about the user into long-term memory.
@@ -48,10 +57,16 @@ def save_user_memory(conversation_id: str, fact: str) -> str:
 
             decision = "NONE"
             if existing_match:
-                try:
-                    # 2. Check relationship with LLM
-                    llm = get_llm()
-                    reconciliation_prompt = f"""You are a Memory Reconciliation System. Compare a newly extracted fact with an existing memory and determine if the new fact contradicts, duplicates, refines, or is completely independent of the existing memory.
+                # Calculate the cosine distance between the existing match and the new vector
+                distance = calculate_cosine_distance(existing_match.vector, new_vector)
+                logger.info("Found closest memory match", content=existing_match.content, distance=distance)
+                
+                # Reconcile only if the memories are semantically related (cosine distance < 0.35)
+                if distance < 0.35:
+                    try:
+                        # 2. Check relationship with LLM
+                        llm = get_llm()
+                        reconciliation_prompt = f"""You are a Memory Reconciliation System. Compare a newly extracted fact with an existing memory and determine if the new fact contradicts, duplicates, refines, or is completely independent of the existing memory.
 
 Existing Memory: "{existing_match.content}"
 New Fact: "{fact}"
@@ -64,9 +79,13 @@ Classification Rules:
 
 Return ONLY one of the following classification labels: DUPLICATE, CONFLICT, REFINEMENT, NONE.
 """
-                    rec_response = llm.invoke(reconciliation_prompt)
-                    decision = rec_response.content.strip().upper()
-                except Exception:
+                        rec_response = llm.invoke(reconciliation_prompt)
+                        decision = rec_response.content.strip().upper()
+                        logger.info("Memory reconciliation decision", existing=existing_match.content, new=fact, decision=decision)
+                    except Exception as ex:
+                        logger.error("LLM invoke failed in save_user_memory", error=str(ex))
+                        decision = "NONE"
+                else:
                     decision = "NONE"
 
             if decision == "DUPLICATE":
@@ -128,25 +147,27 @@ def delete_user_memory(conversation_id: str, fact: str) -> str:
 
             if existing_match:
                 # Confirming it's close enough (cosine distance < 0.35)
-                # In pgvector CosineDistance can be queried, or we can just ask the LLM if they match,
-                # or verify distance. Let's do a quick LLM verify to confirm deletion correctness.
-                try:
-                    llm = get_llm()
-                    verify_prompt = f"""Identify if the following two facts refer to the same subject detail (e.g. matching name, hobby, project or detail to delete).
+                distance = calculate_cosine_distance(existing_match.vector, new_vector)
+                logger.info("Found closest deletion memory match", content=existing_match.content, distance=distance)
+                
+                if distance < 0.35:
+                    try:
+                        llm = get_llm()
+                        verify_prompt = f"""Identify if the following two facts refer to the same subject detail (e.g. matching name, hobby, project or detail to delete).
 Fact 1: "{existing_match.content}"
 Fact 2: "{fact}"
 Return YES if Fact 1 matches or is described by Fact 2, otherwise return NO.
 """
-                    res = llm.invoke(verify_prompt)
-                    match = res.content.strip().upper()
-                except Exception:
-                    match = "YES"
+                        res = llm.invoke(verify_prompt)
+                        match = res.content.strip().upper()
+                    except Exception:
+                        match = "YES"
 
-                if "YES" in match:
-                    deleted_content = existing_match.content
-                    session.delete(existing_match)
-                    session.commit()
-                    return f"Successfully deleted memory: '{deleted_content}'"
+                    if "YES" in match:
+                        deleted_content = existing_match.content
+                        session.delete(existing_match)
+                        session.commit()
+                        return f"Successfully deleted memory: '{deleted_content}'"
             
             return f"No matching memory found to delete for: '{fact}'"
     except Exception as e:
