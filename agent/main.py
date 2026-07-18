@@ -21,6 +21,7 @@ from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage
 from agent.graph import graph
 from db.models import Conversation, Experience
+from tools.webview_browser import PENDING_TASKS
 
 
 
@@ -515,6 +516,26 @@ async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
     payload = await request.json()
     background_tasks.add_task(telegram_gateway.handle_update, payload)
     return {"status": "processed", "result": "Task scheduled in background"}
+
+class WebViewResponsePayload(BaseModel):
+    conversation_id: str
+    status: str
+    result: str
+
+@app.post("/chat/webview/response", dependencies=[Depends(verify_api_key)])
+def submit_webview_response(payload: WebViewResponsePayload):
+    conversation_id = payload.conversation_id
+    if conversation_id in PENDING_TASKS:
+        PENDING_TASKS[conversation_id]["response"] = {
+            "status": payload.status,
+            "result": payload.result
+        }
+        PENDING_TASKS[conversation_id]["event"].set()
+        logger.info("Received WebView response for task", conversation_id=conversation_id, status=payload.status)
+        return {"status": "accepted"}
+    else:
+        logger.warning("Received WebView response but no pending task found", conversation_id=conversation_id)
+        raise HTTPException(status_code=404, detail="No pending task found for this conversation ID")
 
 @app.post("/consolidate")
 def trigger_consolidation():

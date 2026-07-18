@@ -2,6 +2,7 @@ from tools.code_exec import run_python_code
 from tools.web_search import web_search
 from tools.memory import save_user_memory, delete_user_memory
 from tools.status_update import send_status_message
+from tools.webview_browser import webview_browser
 
 
 tools_list = [
@@ -10,6 +11,7 @@ tools_list = [
     save_user_memory,
     delete_user_memory,
     send_status_message,
+    webview_browser,
 ]
 
 __all__ = ["tools_list"]
