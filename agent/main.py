@@ -264,6 +264,20 @@ async def chat_message(payload: MessagePayload):
                 await queue.put(e)
             finally:
                 await queue.put(None)
+                # Check and evaluate any active running webview session for this thread
+                try:
+                    from tools.webview_browser import evaluate_webview_session
+                    from db.models import WebViewAutomationSession
+                    with get_db_session() as db_session:
+                        active_session = (
+                            db_session.query(WebViewAutomationSession)
+                            .filter_by(conversation_id=normalized_id, status="running")
+                            .first()
+                        )
+                        if active_session:
+                            asyncio.create_task(evaluate_webview_session(active_session.id))
+                except Exception as ex:
+                    logger.error("Failed to trigger webview session evaluation", error=str(ex))
 
         producer_task = asyncio.create_task(producer())
 

@@ -61,3 +61,30 @@ class SkillsRegistry(Base):
     description = Column(String,nullable=False)
     enabled = Column(Boolean,default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class WebViewAutomationSession(Base):
+    __tablename__ = "webview_automation_sessions"
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    conversation_id = Column(String, ForeignKey("conversations.id", ondelete="CASCADE"), index=True)
+    task_description = Column(String, nullable=False)
+    status = Column(String(50), default="running")  # running, completed, failed, timeout
+    is_success = Column(Boolean, nullable=True)
+    eval_score = Column(Float, nullable=True)
+    eval_reason = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+class WebViewAutomationStep(Base):
+    __tablename__ = "webview_automation_steps"
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    session_id = Column(String, ForeignKey("webview_automation_sessions.id", ondelete="CASCADE"), index=True)
+    step_number = Column(Integer, nullable=False)
+    page_url = Column(String, nullable=True)
+    dom_snapshot = Column(JSON, nullable=True)  # Minified DOM
+    agent_thoughts = Column(String, nullable=True)
+    action = Column(String(50), nullable=False)
+    target = Column(String, nullable=True)
+    value = Column(String, nullable=True)
+    status = Column(String(20), nullable=False)  # success, error, timeout
+    observation = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
