@@ -55,7 +55,8 @@ app = FastAPI(title="Vela Server", lifespan=lifespan)
 
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.send",
-    "https://www.googleapis.com/auth/calendar.events"
+    "https://www.googleapis.com/auth/calendar.events",
+    "https://www.googleapis.com/auth/drive.file"
 ]
 
 @app.get("/")
@@ -531,6 +532,53 @@ async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
     background_tasks.add_task(telegram_gateway.handle_update, payload)
     return {"status": "processed", "result": "Task scheduled in background"}
 
+
+@app.post("/webhooks/carbonvoice")
+async def carbonvoice_webhook(request: Request):
+    logger.info("Carbon Voice webhook endpoint triggered")
+    content_type = request.headers.get("content-type", "")
+    payload = {}
+    audio_bytes = None
+    audio_filename = None
+    audio_mime_type = None
+
+    if "application/json" in content_type:
+        try:
+            payload = await request.json()
+        except Exception as e:
+            logger.error("Failed to parse JSON body", error=str(e))
+            raise HTTPException(status_code=400, detail="Invalid JSON body")
+    elif "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
+        try:
+            form_data = await request.form()
+            for key, value in form_data.items():
+                if isinstance(value, str):
+                    payload[key] = value
+            
+            file_field = form_data.get("file") or form_data.get("audio") or form_data.get("media")
+            if file_field and hasattr(file_field, "file"):
+                audio_bytes = await file_field.read()
+                audio_filename = file_field.filename
+                audio_mime_type = file_field.content_type
+        except Exception as e:
+            logger.error("Failed to parse form data", error=str(e))
+            raise HTTPException(status_code=400, detail="Invalid form data")
+    else:
+        try:
+            raw_body = await request.body()
+            payload = {"text": raw_body.decode("utf-8")}
+        except Exception:
+            pass
+
+    from gateway.carbonvoice import CarbonVoiceGateway
+    gateway = CarbonVoiceGateway(db)
+    result = await gateway.handle_webhook(
+        payload=payload,
+        audio_file_bytes=audio_bytes,
+        audio_filename=audio_filename,
+        audio_mime_type=audio_mime_type
+    )
+    return result
 class WebViewResponsePayload(BaseModel):
     conversation_id: str
     status: str

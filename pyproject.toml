@@ -7,6 +7,7 @@ requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.110.0",
     "uvicorn[standard]>=0.28.0",
+    "python-multipart>=0.0.18",
     "langgraph>=0.0.30",
     "langchain-core>=0.1.40",
     "langchain-google-genai>=1.0.2",
