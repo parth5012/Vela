@@ -19,7 +19,7 @@ def mock_db():
 
 @pytest.fixture
 def mock_graph_invoke():
-    with patch("gateway.carbonvoice.graph.invoke") as mock:
+    with patch("gateway.carbonvoice.graph.ainvoke", new_callable=AsyncMock) as mock:
         mock.return_value = {
             "messages": [
                 AIMessage(content="Hello! I am Vela, your assistant. How can I help you?")
@@ -132,13 +132,13 @@ def test_carbonvoice_webhook_endpoint_json(monkeypatch):
     # Patch handle_webhook of the gateway class used in endpoint
     with patch("gateway.carbonvoice.CarbonVoiceGateway.handle_webhook", new_callable=AsyncMock) as mock_handle:
         mock_handle.return_value = mock_result
-        
+
         response = client.post(
             "/webhooks/carbonvoice",
             json={"transcript": "Hello World", "conversation_id": "test-conv"},
             headers={"Authorization": "Bearer test-key"}
         )
-        
+
         assert response.status_code == 200
         assert response.json()["status"] == "success"
         assert response.json()["assistant_response"] == "Hi there!"

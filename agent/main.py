@@ -570,13 +570,15 @@ async def carbonvoice_webhook(request: Request):
         except Exception:
             pass
 
+    auth_header = request.headers.get("authorization")
     from gateway.carbonvoice import CarbonVoiceGateway
     gateway = CarbonVoiceGateway(db)
     result = await gateway.handle_webhook(
         payload=payload,
         audio_file_bytes=audio_bytes,
         audio_filename=audio_filename,
-        audio_mime_type=audio_mime_type
+        audio_mime_type=audio_mime_type,
+        auth_header=auth_header
     )
     return result
 class WebViewResponsePayload(BaseModel):

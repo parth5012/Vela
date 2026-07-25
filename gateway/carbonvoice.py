@@ -21,9 +21,10 @@ class CarbonVoiceGateway:
     async def handle_webhook(
         self,
         payload: dict,
-        audio_file_bytes: bytes | None = None,
-        audio_filename: str | None = None,
-        audio_mime_type: str | None = None
+        audio_file_bytes: bytes = None,
+        audio_filename: str = None,
+        audio_mime_type: str = None,
+        auth_header: str = None
     ) -> dict:
         """
         Processes a webhook from Carbon Voice:
@@ -137,8 +138,11 @@ class CarbonVoiceGateway:
         if not audio_bytes and audio_url:
             self.logger.info("Downloading audio from URL", audio_url=audio_url)
             try:
+                headers = {}
+                if auth_header:
+                    headers["Authorization"] = auth_header
                 async with httpx.AsyncClient() as client:
-                    response = await client.get(audio_url, timeout=15.0)
+                    response = await client.get(audio_url, headers=headers, timeout=15.0)
                     if response.status_code == 200:
                         audio_bytes = response.content
                         self.logger.info("Successfully downloaded audio from URL")
@@ -200,9 +204,9 @@ class CarbonVoiceGateway:
                 "persona": "personal assistant"
             }
             try:
-                # Use thread pool to run synchronous graph invoke safely in async context
-                res = await asyncio.to_thread(graph.invoke, inputs)
-                if res and res.get("messages"):
+                # Use ainvoke for asynchronous graph execution (since graph contains async chatbot_node)
+                res = await graph.ainvoke(inputs)
+                if res.get("messages"):
                     assistant_reply = res["messages"][-1].content
             except Exception as graph_err:
                 self.logger.error("Error executing supervisor graph", error=str(graph_err))

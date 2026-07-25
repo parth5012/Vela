@@ -41,7 +41,7 @@ class DiscordGateway:
                     }
                     
                     async with message.channel.typing():
-                        res = await asyncio.to_thread(graph.invoke, inputs)
+                        res = await graph.ainvoke(inputs)
                     
                     assistant_reply = "I couldn't process that request."
                     if res.get("messages"):

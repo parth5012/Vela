@@ -4,7 +4,7 @@ from langchain_core.messages import AIMessage
 from gateway.discord import DiscordGateway
 
 @pytest.mark.asyncio
-@patch("gateway.discord.graph.invoke")
+@patch("gateway.discord.graph.ainvoke", new_callable=AsyncMock)
 async def test_on_message_handles_incoming_text(mock_graph_invoke):
     mock_db = MagicMock()
     mock_db.get_or_create_discord_conversation.return_value = "discord-conv-uuid"
