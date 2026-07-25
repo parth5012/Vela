@@ -215,6 +215,47 @@ class CarbonVoiceGateway:
             self.logger.warning("Empty transcription received, skipping supervisor invocation.")
             assistant_reply = "Received empty audio/transcription."
 
+        # Send reply back to Carbon Voice if auth_header is available
+        if auth_header and assistant_reply and not assistant_reply.startswith("Error processing request"):
+            channel_id = (
+                resource_obj.get("channel_id")
+                or resource_obj.get("channel_guid")
+                or payload.get("channel_id")
+                or message_obj.get("channel_id")
+            )
+            reply_to_message_id = (
+                resource_obj.get("id")
+                or resource_obj.get("message_guid")
+                or payload.get("message_id")
+                or message_obj.get("id")
+            )
+
+            if channel_id:
+                self.logger.info("Sending reply back to Carbon Voice", channel_id=channel_id, reply_to_message_id=reply_to_message_id)
+                try:
+                    headers = {"Authorization": auth_header, "Content-Type": "application/json"}
+                    reply_payload = {
+                        "channel_id": channel_id,
+                        "unique_client_id": str(uuid.uuid4()),
+                        "is_text_message": True,
+                        "is_streaming": False,
+                        "transcript": assistant_reply,
+                        "reply_to_message_id": reply_to_message_id
+                    }
+                    async with httpx.AsyncClient() as client:
+                        response = await client.post(
+                            "https://api.carbonvoice.app/v3/messages/start",
+                            headers=headers,
+                            json=reply_payload,
+                            timeout=15.0
+                        )
+                        if response.status_code == 200:
+                            self.logger.info("Successfully sent reply to Carbon Voice")
+                        else:
+                            self.logger.warning("Failed to send reply to Carbon Voice", status_code=response.status_code, response_text=response.text)
+                except Exception as send_err:
+                    self.logger.error("Error sending reply to Carbon Voice", error=str(send_err))
+
         # Return results to webhook client
         return {
             "status": "success",

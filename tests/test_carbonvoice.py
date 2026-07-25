@@ -214,3 +214,44 @@ async def test_carbonvoice_gateway_official_payload(mock_db, mock_graph_invoke, 
     assert result["transcription"] == "Hello Vela, please record note."
     assert "Hello! I am Vela" in result["assistant_response"]
     assert result["dataset_collection"]["saved_to_drive"] is True
+
+
+@pytest.mark.asyncio
+async def test_carbonvoice_gateway_sends_reply(mock_db, mock_graph_invoke, mock_google_drive):
+    gateway = CarbonVoiceGateway(db=mock_db)
+
+    payload = {
+        "eventName": "message.posted.to.channel",
+        "data": {
+            "eventName": "message.posted.to.channel",
+            "resourceId": "msg_98765",
+            "resourceType": "message",
+            "resource": {
+                "id": "msg_98765",
+                "channel_id": "chan_54321",
+                "transcript_txt": "Hello Vela, please record note.",
+                "audio_stream_url": "https://example.com/audio.wav",
+                "status": "FINISHED"
+            }
+        }
+    }
+
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.content = b"success"
+
+    with patch("httpx.AsyncClient.get") as mock_get, \
+         patch("httpx.AsyncClient.post") as mock_post:
+        
+        mock_get.return_value = MagicMock(status_code=200, content=b"audio data", headers={"content-type": "audio/wav"})
+        mock_post.return_value = mock_response
+
+        result = await gateway.handle_webhook(payload=payload, auth_header="Bearer test-token")
+
+        assert result["status"] == "success"
+        mock_post.assert_called_once()
+        args, kwargs = mock_post.call_args
+        assert args[0] == "https://api.carbonvoice.app/v3/messages/start"
+        assert kwargs["headers"]["Authorization"] == "Bearer test-token"
+        assert kwargs["json"]["channel_id"] == "chan_54321"
+        assert "Hello! I am Vela" in kwargs["json"]["transcript"]
