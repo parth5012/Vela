@@ -80,11 +80,43 @@ async def test_carbonvoice_gateway_no_google_credentials(mock_db, mock_graph_inv
         
         result = await gateway.handle_webhook(payload=payload)
         
-        assert result["status"] == "success"
-        assert result["dataset_collection"]["saved_to_drive"] is False
-        assert result["dataset_collection"]["drive_audio_file_id"] is None
-        assert result["dataset_collection"]["drive_text_file_id"] is None
-        assert "Hello! I am Vela" in result["assistant_response"]
+    assert result["status"] == "success"
+    assert result["dataset_collection"]["saved_to_drive"] is False
+    assert result["dataset_collection"]["drive_audio_file_id"] is None
+    assert result["dataset_collection"]["drive_text_file_id"] is None
+    assert "Hello! I am Vela" in result["assistant_response"]
+
+@pytest.mark.asyncio
+async def test_carbonvoice_gateway_nested_payload(mock_db, mock_graph_invoke, mock_google_drive, mock_httpx_get):
+    gateway = CarbonVoiceGateway(db=mock_db)
+
+    payload = {
+        "event": "message.finished",
+        "data": {
+            "message": {
+                "id": "msg-123",
+                "transcript": "Hello Vela, please record note.",
+                "audio": {
+                    "url": "https://example.com/audio.wav"
+                },
+                "conversation": {
+                    "id": "test-conv-123",
+                    "type": "channel",
+                    "folder_id": None,
+                    "conversation_sequence": 4,
+                    "status": "active"
+                }
+            }
+        }
+    }
+
+    result = await gateway.handle_webhook(payload=payload)
+
+    assert result["status"] == "success"
+    assert result["conversation_id"] == "f079ca9e-de8d-5ad7-baf8-7323f8d63301"
+    assert result["transcription"] == "Hello Vela, please record note."
+    assert "Hello! I am Vela" in result["assistant_response"]
+    assert result["dataset_collection"]["saved_to_drive"] is True
 
 def test_carbonvoice_webhook_endpoint_json(monkeypatch):
     monkeypatch.setenv("VELA_API_KEY", "test-key")

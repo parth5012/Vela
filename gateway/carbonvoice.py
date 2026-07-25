@@ -35,22 +35,37 @@ class CarbonVoiceGateway:
         self.logger.info("Handling Carbon Voice webhook request", payload=payload)
 
         # 1. Extract transcription text
-        # Accept 'transcript', 'text', 'message', or 'notes' fields
+        # Accept 'transcript', 'text', 'message', 'notes' fields, handling both flat and nested payloads
+        data_obj = payload.get("data", {}) if isinstance(payload.get("data"), dict) else {}
+        message_obj = data_obj.get("message", {}) if isinstance(data_obj.get("message"), dict) else {}
+
         message_text = (
-            payload.get("transcript") or 
-            payload.get("text") or 
-            payload.get("message") or 
-            payload.get("notes") or 
-            ""
+            payload.get("transcript")
+            or payload.get("text")
+            or payload.get("message")
+            or payload.get("notes")
+            or message_obj.get("transcript")
+            or message_obj.get("text")
+            or message_obj.get("message")
+            or message_obj.get("notes")
+            or ""
         ).strip()
 
-        # 2. Extract conversation ID or Telegram/Discord mapping
-        # Try to resolve to a conversation_id
+        # 2. Extract conversation Telegram/Discord mapping
+        # Try resolve conversation_id
+        conversation_obj = message_obj.get("conversation", {}) if isinstance(message_obj.get("conversation"), dict) else {}
         raw_conv_id = (
-            payload.get("conversation_id") or 
-            payload.get("chat_id") or 
-            payload.get("channel_id") or 
-            payload.get("user_id")
+            payload.get("conversation_id")
+            or payload.get("chat_id")
+            or payload.get("channel_id")
+            or payload.get("user_id")
+            or message_obj.get("conversation_id")
+            or message_obj.get("chat_id")
+            or message_obj.get("channel_id")
+            or message_obj.get("user_id")
+            or conversation_obj.get("id")
+            or conversation_obj.get("conversation_id")
+            or conversation_obj.get("guid")
         )
 
         if not raw_conv_id:
@@ -90,7 +105,11 @@ class CarbonVoiceGateway:
 
         # 3. Retrieve Audio Bytes
         audio_bytes = audio_file_bytes
-        audio_url = payload.get("audio_url")
+        audio_url = (
+            payload.get("audio_url")
+            or message_obj.get("audio", {}).get("url")
+            or message_obj.get("audio", {}).get("presigned_url")
+        )
         
         # Deduce filename and mime-type
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
