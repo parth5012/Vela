@@ -1,5 +1,6 @@
 import os
 import io
+from datetime import datetime
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
@@ -44,12 +45,28 @@ def get_google_credentials(conversation_id: str, db) -> Credentials | None:
     token_data = db.get_oauth_tokens(conversation_id, "google")
     
     if not token_data:
+        logger.info("No Google OAuth credentials found for this conversation, checking latest available credentials in database")
+        try:
+            token_data = db.get_latest_oauth_tokens("google")
+        except AttributeError:
+            token_data = None
+            
+    if not token_data:
         logger.warning("No Google OAuth credentials found in database", conversation_id=conversation_id)
         return None
         
     if not client_id or not client_secret:
         logger.error("Google Client ID or Client Secret not configured in environment variables")
         return None
+
+    # Parse expiry string to datetime
+    expiry_str = token_data.get("expiry")
+    expiry = None
+    if expiry_str:
+        try:
+            expiry = datetime.fromisoformat(expiry_str)
+        except Exception:
+            pass
 
     try:
         # Construct credentials object
@@ -59,7 +76,8 @@ def get_google_credentials(conversation_id: str, db) -> Credentials | None:
             token_uri="https://oauth2.googleapis.com/token",
             client_id=client_id,
             client_secret=client_secret,
-            scopes=["https://www.googleapis.com/auth/drive.file"]
+            scopes=["https://www.googleapis.com/auth/drive.file"],
+            expiry=expiry
         )
         
         # Check and refresh if token is expired

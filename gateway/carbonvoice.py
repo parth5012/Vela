@@ -136,11 +136,12 @@ class CarbonVoiceGateway:
 
         # If audio is not directly sent but a URL is provided, download it
         if not audio_bytes and audio_url:
-            self.logger.info("Downloading audio from URL", audio_url=audio_url)
+            self.logger.info("Downloading audio URL", audio_url=audio_url)
             try:
                 headers = {}
-                if auth_header:
-                    headers["Authorization"] = auth_header
+                # Do NOT forward the incoming Authorization header (which contains our VELA_API_KEY)
+                # to the external audio URL download request, as it leaks credentials and causes
+                # S3 presigned URLs to fail with invalid authorization headers.
                 async with httpx.AsyncClient() as client:
                     response = await client.get(audio_url, headers=headers, timeout=15.0)
                     if response.status_code == 200:

@@ -68,3 +68,21 @@ def test_update_conversation_active_skill(mock_get_db, mock_db_client_class):
     result = db.update_conversation_active_skill("conv-uuid", None)
     assert result is False
 
+@patch("db.supabase.get_db_session")
+def test_get_latest_oauth_tokens(mock_get_db):
+    mock_session = MagicMock()
+    mock_get_db.return_value.__enter__.return_value = mock_session
+
+    mock_token = MagicMock()
+    mock_token.token = {"access_token": "latest_token"}
+    
+    mock_query = MagicMock()
+    mock_session.query.return_value = mock_query
+    mock_query.filter_by.return_value = mock_query
+    mock_query.order_by.return_value = mock_query
+    mock_query.first.return_value = mock_token
+
+    db = SupabaseDB()
+    result = db.get_latest_oauth_tokens("google")
+    assert result == {"access_token": "latest_token"}
+

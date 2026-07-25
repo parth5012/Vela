@@ -255,3 +255,40 @@ async def test_carbonvoice_gateway_sends_reply(mock_db, mock_graph_invoke, mock_
         assert kwargs["headers"]["Authorization"] == "Bearer test-token"
         assert kwargs["json"]["channel_id"] == "chan_54321"
         assert "Hello! I am Vela" in kwargs["json"]["transcript"]
+
+
+def test_get_google_credentials_fallback():
+    from utils.google_drive import get_google_credentials
+    mock_db = MagicMock()
+    # First call returns None (specific conversation has no token)
+    # Second call (attribute lookup on get_latest_oauth_tokens) returns a valid dict
+    mock_db.get_oauth_tokens.return_value = None
+    mock_db.get_latest_oauth_tokens.return_value = {
+        "access_token": "fallback-access-token",
+        "refresh_token": "fallback-refresh-token",
+        "expiry": "2026-07-26T12:00:00Z"
+    }
+
+    with patch("utils.google_drive.os.getenv") as mock_getenv, \
+         patch("utils.google_drive.Credentials") as mock_credentials_class, \
+         patch("utils.google_drive.Request") as mock_request_class:
+        
+        # Ensure no global environment fallback is active in this test branch
+        mock_getenv.side_effect = lambda name: "mock-value" if name in ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"] else None
+        
+        # When construction occurs, return a mock credentials object
+        mock_creds = MagicMock()
+        mock_creds.expired = True
+        mock_creds.refresh_token = "fallback-refresh-token"
+        mock_creds.token = "new-access-token"
+        mock_creds.expiry = MagicMock()
+        mock_creds.expiry.isoformat.return_value = "2026-07-26T13:00:00Z"
+        
+        mock_credentials_class.return_value = mock_creds
+
+        result = get_google_credentials("cv-conv-uuid", mock_db)
+        
+        # Check that it fell back, refreshed the credentials, and saved them
+        assert result == mock_creds
+        mock_db.get_latest_oauth_tokens.assert_called_with("google")
+        mock_db.store_oauth_tokens.assert_called_once()

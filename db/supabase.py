@@ -47,6 +47,19 @@ class SupabaseDB:
             self.logger.error("Failed to retrieve OAuth tokens", error=str(e), conversation_id=conversation_id, provider=provider)
             return None
 
+    def get_latest_oauth_tokens(self, provider: str) -> dict | None:
+        self.logger.info("Retrieving latest OAuth tokens via SQLAlchemy", provider=provider)
+        try:
+            from db.models import OAuthToken
+            with get_db_session() as session:
+                token_record = session.query(OAuthToken).filter_by(provider=provider).order_by(OAuthToken.updated_at.desc()).first()
+                tokens = token_record.token if token_record else None
+                self.logger.info("Latest OAuth tokens query result", provider=provider, found=tokens is not None)
+                return tokens
+        except Exception as e:
+            self.logger.error("Failed to retrieve latest OAuth tokens", error=str(e), provider=provider)
+            return None
+
     def get_or_create_discord_conversation(self, discord_channel_id: int) -> str:
         self.logger.info("Fetching Discord conversation via SQLAlchemy", discord_channel_id=discord_channel_id)
         try:

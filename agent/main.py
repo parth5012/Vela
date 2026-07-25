@@ -533,7 +533,7 @@ async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
     return {"status": "processed", "result": "Task scheduled in background"}
 
 
-@app.post("/webhooks/carbonvoice")
+@app.post("/webhooks/carbonvoice", dependencies=[Depends(verify_api_key)])
 async def carbonvoice_webhook(request: Request):
     logger.info("Carbon Voice webhook endpoint triggered")
     content_type = request.headers.get("content-type", "")
