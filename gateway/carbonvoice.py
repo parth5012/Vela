@@ -36,11 +36,16 @@ class CarbonVoiceGateway:
 
         # 1. Extract transcription text
         # Accept 'transcript', 'text', 'message', 'notes' fields, handling both flat and nested payloads
-        data_obj = payload.get("data", {}) if isinstance(payload.get("data"), dict) else {}
-        message_obj = data_obj.get("message", {}) if isinstance(data_obj.get("message"), dict) else {}
+        data_obj = payload.get("data", {}) if isinstance(payload.get("data"), dict) else payload
+        resource_obj = data_obj.get("resource", {}) if isinstance(data_obj.get("resource"), dict) else {}
+        message_obj = data_obj.get("message", {}) if isinstance(data_obj.get("message"), dict) else data_obj
 
         message_text = (
-            payload.get("transcript")
+            resource_obj.get("transcript_txt")
+            or resource_obj.get("text")
+            or resource_obj.get("message")
+            or resource_obj.get("notes")
+            or payload.get("transcript")
             or payload.get("text")
             or payload.get("message")
             or payload.get("notes")
@@ -48,14 +53,20 @@ class CarbonVoiceGateway:
             or message_obj.get("text")
             or message_obj.get("message")
             or message_obj.get("notes")
-            or ""
-        ).strip()
+        )
+        if message_text:
+            message_text = message_text.strip()
+        else:
+            message_text = ""
 
         # 2. Extract conversation Telegram/Discord mapping
-        # Try resolve conversation_id
+        # Try to resolve conversation_id
         conversation_obj = message_obj.get("conversation", {}) if isinstance(message_obj.get("conversation"), dict) else {}
         raw_conv_id = (
-            payload.get("conversation_id")
+            resource_obj.get("channel_id")
+            or resource_obj.get("channel_guid")
+            or resource_obj.get("conversation_id")
+            or payload.get("conversation_id")
             or payload.get("chat_id")
             or payload.get("channel_id")
             or payload.get("user_id")
@@ -106,7 +117,9 @@ class CarbonVoiceGateway:
         # 3. Retrieve Audio Bytes
         audio_bytes = audio_file_bytes
         audio_url = (
-            payload.get("audio_url")
+            resource_obj.get("audio_stream_url")
+            or resource_obj.get("message_url")
+            or payload.get("audio_url")
             or message_obj.get("audio", {}).get("url")
             or message_obj.get("audio", {}).get("presigned_url")
         )

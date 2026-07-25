@@ -8,3 +8,4 @@ GEMINI.md
 graphify-out/
 *.json
 .worktrees/
+.tmp/

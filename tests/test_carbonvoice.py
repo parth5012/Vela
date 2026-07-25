@@ -185,3 +185,32 @@ def test_carbonvoice_webhook_endpoint_multipart(monkeypatch):
         assert kwargs["audio_file_bytes"] == b"mock audio content"
         assert kwargs["audio_filename"] == "test.wav"
         assert kwargs["audio_mime_type"] == "audio/wav"
+
+
+@pytest.mark.asyncio
+async def test_carbonvoice_gateway_official_payload(mock_db, mock_graph_invoke, mock_google_drive, mock_httpx_get):
+    gateway = CarbonVoiceGateway(db=mock_db)
+
+    payload = {
+        "eventName": "message.posted.to.channel",
+        "data": {
+            "eventName": "message.posted.to.channel",
+            "resourceId": "msg_98765",
+            "resourceType": "message",
+            "resource": {
+                "id": "msg_98765",
+                "channel_id": "chan_54321",
+                "transcript_txt": "Hello Vela, please record note.",
+                "audio_stream_url": "https://example.com/audio.wav",
+                "status": "FINISHED"
+            }
+        }
+    }
+
+    result = await gateway.handle_webhook(payload=payload)
+
+    assert result["status"] == "success"
+    assert result["conversation_id"] is not None
+    assert result["transcription"] == "Hello Vela, please record note."
+    assert "Hello! I am Vela" in result["assistant_response"]
+    assert result["dataset_collection"]["saved_to_drive"] is True
