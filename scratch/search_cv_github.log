@@ -1,0 +1,18 @@
+How to Register for Webhooks (Incoming Messages) Subscribe to be notified when new messages are posted to a channel. The creator id + ne filter excludes...
+---
+Identity Give your agent a voice Connect any AI agent or automation tool to Carbon Voice and talk to it like a person — on the go, async, from your phone, or desktop shortcuts. Create and manage agent identities. Manage Agent Access Tokens and webhook configuration.
+---
+Integrate Carbon Voice and Webhooks by Zapier in a few minutes. Quickly connect Carbon Voice and Webhooks by Zapier with over 9,000 apps on Zapier, the world's largest automation platform.
+---
+hermes-plugin — Carbon Voice A Hermes Agent plugin by PhononX that connects Hermes to Carbon Voice, so the Hermes agent appears as a bot user inside Carbon Voice channels.
+---
+cv-contracts Project Overview This repository contains a collection of TypeScript interfaces and enums that are used to model various entities and events with Carbon Voice API. These entities include users, channels, workspaces, and messages, among others. The primary idea is to have a centralized place for webhook communication with Carbon ...
+---
+creatorId (optional) — Carbon Voice user id; when set, only messages from this user are delivered (in addition to excluding the PAT user). baseUrl — API base (default https://api.carbonvoice.app). publicWebhookBaseUrl (optional) — public origin of your OpenClaw gateway for Carbon Voice webhooks. Omit for PAT-only websocket mode.
+---
+Point Carbon Voice at your agent, get an access token, register a webhook. Your agent receives transcribed text, sends text back, and your users hear it as voice.
+---
+Carbon Voice lets you record voice memos and chat with your team. Transcriptions and quick AI Actions create structured text to turn your ideas into action.
+---
+Carbon Voice is the best-in-class asynchronous voice and text messaging app for on-the-go businesses & teams. Users can record voice memos, start async meetings, chat with your team, and more!
+---

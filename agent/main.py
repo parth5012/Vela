@@ -67,19 +67,24 @@ def health():
     
 security = HTTPBearer(auto_error=False)
 
-def verify_api_key(credentials: HTTPAuthorizationCredentials = Security(security)):
+def verify_api_key(request: Request, credentials: HTTPAuthorizationCredentials = Security(security)):
+    auth_header = request.headers.get("authorization")
+    logger.info("Received API key verification request", auth_header_present=auth_header is not None, auth_header_prefix=auth_header[:15] if auth_header else None)
     if credentials is None:
+        logger.warning("Authentication failed: No credentials provided.")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authenticated"
         )
-    expected_key = os.getenv("VELA_API_KEY","vela5012")
+    expected_key = os.getenv("VELA_API_KEY", "vela5012")
     if not expected_key or expected_key.startswith("your_"):
+        logger.error("Authentication failed: VELA_API_KEY is not configured on the server.")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="API Key is not configured on the server."
         )
     if credentials.credentials != expected_key:
+        logger.warning("Authentication failed: Invalid credentials key mismatch.")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing API key."
@@ -533,7 +538,7 @@ async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
     return {"status": "processed", "result": "Task scheduled in background"}
 
 
-@app.post("/webhooks/carbonvoice", dependencies=[Depends(verify_api_key)])
+@app.post("/webhooks/carbonvoice")
 async def carbonvoice_webhook(request: Request):
     logger.info("Carbon Voice webhook endpoint triggered")
     content_type = request.headers.get("content-type", "")
