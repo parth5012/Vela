@@ -1,5 +1,6 @@
 from utils.helpers import get_title
 from agent.persona import PUBLIC_LIST as PERSONA_LIST
+from agent.registry import AGENT_REGISTRY
 from utils.llm import get_llm
 import os
 import asyncio
@@ -223,7 +224,7 @@ class MessagePayload(BaseModel):
 
 @app.post("/chat/message", dependencies=[Depends(verify_api_key)])
 async def chat_message(payload: MessagePayload):
-    allowed_agents = ["personal assistant", "teacher", "analyst", "prompt builder"]
+    allowed_agents = [config.identifier for config in AGENT_REGISTRY.list_agents()]
     if payload.agent not in allowed_agents:
         raise HTTPException(
             status_code=400,
