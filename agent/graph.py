@@ -54,7 +54,7 @@ Allowed intents: "activate", "deactivate", "continue", "none"
 Allowed skill_names: {", ".join([f'"{name}"' for name in skills_list])} or null.
 
 Example response format:
-{{"intent": "activate", "skill_name": "BrainstormingSkill"}}
+{{"intent": "activate", "skill_name": "BrainstormingSkill"}} \n \n
 """
 
     # 3. Query the LLM
