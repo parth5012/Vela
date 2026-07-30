@@ -17,6 +17,10 @@ from db.client import DBClient
 from db.session import get_db_session
 import json
 import uuid
+import base64
+import urllib.parse
+from datetime import datetime, timedelta, timezone
+import httpx
 from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage
@@ -555,21 +559,138 @@ def revoke_oauth_token(payload: RevokePayload):
 
 
 @app.get("/oauth/token/status", dependencies=[Depends(verify_api_key)])
-def get_oauth_status(conversation_id: str = Query(...)):
-    """Returns whether Google OAuth tokens exist for the given conversation."""
+def get_oauth_status(conversation_id: str = Query(default=None)):
+    """Returns Google OAuth connection status for a conversation.
+
+    For the mobile client flow (where conversation_id may not be known by
+    the client), the endpoint falls back to the latest Google tokens in the
+    database — acceptable for this single-tenant backend.
+
+    Returns:
+        ``{"connected": true/false}`` plus, when connected:
+        ``user`` (name, email, picture), ``access_token``, ``refresh_token``,
+        ``id_token``, and ``expires_at``.
+    """
     try:
         with get_db_session() as session:
-            client = DBClient(session)
-            tokens = client.get_oauth_token(conversation_id, "google")
-            return {"connected": tokens is not None}
+            dbc = DBClient(session)
+
+            token_record = None
+            if conversation_id:
+                token_record = dbc.get_oauth_token(conversation_id, "google")
+
+            # Fallback: latest Google tokens across all conversations (single-tenant)
+            if not token_record:
+                from db.models import OAuthToken
+                token_record = (
+                    session.query(OAuthToken)
+                    .filter_by(provider="google")
+                    .order_by(OAuthToken.updated_at.desc())
+                    .first()
+                )
+
+            if not token_record:
+                return {"connected": False}
+
+            token_data = token_record.token
+            user_info = token_data.get("user_info", {})
+
+            result = {
+                "connected": True,
+                "user": {
+                    "name": user_info.get("name", "Google User"),
+                    "email": user_info.get("email", ""),
+                    "picture": user_info.get("picture", ""),
+                },
+                "access_token": token_data.get("access_token", ""),
+                "refresh_token": token_data.get("refresh_token", ""),
+                "id_token": token_data.get("id_token", ""),
+                "expires_at": token_data.get("expiry", ""),
+            }
+            return result
     except Exception as e:
         logger.error("Failed to check OAuth token status", error=str(e))
         return {"connected": False}
 
 
+@app.get("/oauth/google/authorize")
+def oauth_google_authorize(
+    redirect_uri: str = Query(default="vela-client://oauth/callback"),
+    api_key: str = Query(None),
+):
+    """Mobile client OAuth entry point.
+
+    Called by the Vela Android client via ``WebBrowser.openAuthSessionAsync``.
+    Validates the API key, creates a client conversation, encodes the
+    conversation ID and redirect URI into the state parameter, then redirects
+    to Google's OAuth consent screen.
+
+    After the user authorizes, Google redirects to ``/oauth/callback`` which
+    exchanges the code for tokens and redirects back to the client's custom
+    scheme (e.g. ``vela-client://oauth/callback?status=success``).
+    """
+    logger.info("Google OAuth authorize endpoint called")
+
+    # Validate the API key
+    expected_key = os.getenv("VELA_API_KEY", "vela5012")
+    if not api_key or api_key != expected_key:
+        logger.warning("Invalid API key in OAuth authorize request")
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    # Get or create a client conversation for this OAuth flow
+    with get_db_session() as session:
+        client = DBClient(session)
+        conv = client.create_client_conversation(
+            title="Google Workspace OAuth",
+            agent="personal assistant",
+        )
+        session.commit()
+        conversation_id = conv.id
+
+    logger.info("Created conversation for OAuth flow", conversation_id=conversation_id)
+
+    # Encode state: conversation_id + client redirect_uri
+    state_data = base64.urlsafe_b64encode(
+        json.dumps({
+            "cid": conversation_id,
+            "ruri": redirect_uri,
+        }).encode()
+    ).decode()
+
+    client_config = {
+        "web": {
+            "client_id": os.getenv("GOOGLE_CLIENT_ID", ""),
+            "client_secret": os.getenv("GOOGLE_CLIENT_SECRET", ""),
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+        }
+    }
+
+    backend_redirect_uri = os.getenv(
+        "GOOGLE_REDIRECT_URI",
+        "http://localhost:8000/oauth/callback",
+    )
+
+    flow = Flow.from_client_config(
+        client_config,
+        scopes=SCOPES,
+        redirect_uri=backend_redirect_uri,
+    )
+    authorization_url, _ = flow.authorization_url(
+        access_type="offline",
+        include_granted_scopes="true",
+        state=state_data,
+        prompt="consent",
+    )
+
+    logger.info("Redirecting to Google OAuth", url=authorization_url[:80] + "...")
+    return responses.RedirectResponse(authorization_url)
+
+
 @app.get("/oauth/login")
 def oauth_login(chat_id: int):
-    logger.info("Generating Google OAuth login URL", chat_id=chat_id)
+    """Legacy Telegram OAuth entry point — kept for backward compatibility."""
+    logger.info("Generating Google OAuth login URL (legacy)", chat_id=chat_id)
     client_config = {
         "web": {
             "client_id": os.getenv("GOOGLE_CLIENT_ID", "mock_id"),
@@ -590,20 +711,130 @@ def oauth_login(chat_id: int):
     )
     return responses.RedirectResponse(authorization_url)
 
+
 @app.get("/oauth/callback")
 def oauth_callback(code: str, state: str):
-    telegram_chat_id = int(state)
-    logger.info("Received Google OAuth redirect callback", state_chat_id=telegram_chat_id)
-    conv_id = db.get_or_create_conversation(telegram_chat_id)
-    
-    # Exchanging mock code (would exchange real credentials with code in production)
-    token_data = {
-        "access_token": "mock_access_token",
-        "refresh_token": "mock_refresh_token",
-        "expiry": "2026-07-01T12:00:00Z"
+    """Google OAuth callback — exchanges auth code for real tokens.
+
+    Handles two state formats:
+    1. **Mobile client flow** (new): base64-encoded JSON with ``cid`` and ``ruri``.
+       After storing tokens, redirects to the client's custom scheme URI.
+    2. **Telegram flow** (legacy): plain ``chat_id`` integer.
+       After storing tokens, renders a success HTML page.
+    """
+    logger.info("Google OAuth callback received")
+
+    # ── Try to decode state as the new JSON format ──
+    conversation_id = None
+    redirect_uri = None
+    try:
+        decoded = base64.urlsafe_b64decode(state.encode()).decode()
+        parsed = json.loads(decoded)
+        conversation_id = parsed.get("cid")
+        redirect_uri = parsed.get("ruri")
+        logger.info("Decoded mobile client state", conversation_id=conversation_id)
+    except Exception:
+        logger.info("State is not JSON — treating as legacy telegram chat_id")
+
+    # ── Fallback to legacy Telegram flow ──
+    if not conversation_id:
+        try:
+            telegram_chat_id = int(state)
+            logger.info("Legacy Telegram OAuth callback", chat_id=telegram_chat_id)
+            conversation_id = db.get_or_create_conversation(telegram_chat_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid state parameter")
+
+    # ── Exchange the authorization code for real tokens ──
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+    backend_redirect_uri = os.getenv(
+        "GOOGLE_REDIRECT_URI",
+        "http://localhost:8000/oauth/callback",
+    )
+
+    if not client_id or not client_secret:
+        logger.error("GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET not configured")
+        if redirect_uri:
+            return responses.RedirectResponse(
+                f"{redirect_uri}?status=error&message=Server+not+configured"
+            )
+        return responses.HTMLResponse(
+            "<html><body><h1>Configuration Error</h1><p>Google OAuth is not configured.</p></body></html>",
+            status_code=500,
+        )
+
+    try:
+        token_response = httpx.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "code": code,
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "redirect_uri": backend_redirect_uri,
+                "grant_type": "authorization_code",
+            },
+            timeout=30,
+        )
+        token_response.raise_for_status()
+        google_tokens = token_response.json()
+        logger.info("Token exchange successful")
+    except Exception as e:
+        logger.error("Token exchange failed", error=str(e))
+        if redirect_uri:
+            return responses.RedirectResponse(
+                f"{redirect_uri}?status=error&message=Token+exchange+failed"
+            )
+        return responses.HTMLResponse(
+            f"<html><body><h1>Token Exchange Failed</h1><p>{str(e)}</p></body></html>",
+            status_code=500,
+        )
+
+    access_token = google_tokens.get("access_token", "")
+    refresh_token = google_tokens.get("refresh_token", "")
+    expires_in = google_tokens.get("expires_in", 3600)
+    id_token_jwt = google_tokens.get("id_token", "")
+
+    # Calculate absolute expiry
+    expiry = (datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))).isoformat()
+
+    # ── Fetch user info from Google's userinfo endpoint ──
+    user_info = {}
+    try:
+        user_resp = httpx.get(
+            "https://www.googleapis.com/oauth2/v2/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=10,
+        )
+        if user_resp.status_code == 200:
+            user_info = user_resp.json()
+            logger.info("Fetched Google user info", email=user_info.get("email"))
+    except Exception as e:
+        logger.error("Failed to fetch user info", error=str(e))
+
+    # ── Store tokens in database ──
+    token_record = {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "expiry": expiry,
+        "scopes": SCOPES,
+        "id_token": id_token_jwt,
+        "user_info": user_info,
     }
-    db.store_oauth_tokens(conv_id, "google", token_data)
-    
+
+    db.store_oauth_tokens(conversation_id, "google", token_record)
+    logger.info("OAuth tokens stored", conversation_id=conversation_id)
+
+    # ── Redirect back to client (mobile flow) ──
+    if redirect_uri:
+        params = urllib.parse.urlencode({
+            "status": "success",
+        })
+        client_redirect = f"{redirect_uri}?{params}"
+        logger.info("Redirecting back to mobile client", url=client_redirect)
+        return responses.RedirectResponse(client_redirect)
+
+    # ── Legacy Telegram flow: show success HTML ──
     html_content = """
     <html>
         <head>
