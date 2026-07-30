@@ -67,12 +67,14 @@ class TelegramGateway:
             conv_id = await asyncio.to_thread(self.db.get_or_create_conversation, chat_id)
             
             # Run the LangGraph supervisor graph
+            # Hardcode "personal assistant" agent — ignore any database-defined agent
             inputs = {
                 "messages": [HumanMessage(content=message_text)],
                 "telegram_chat_id": chat_id,
                 "db_conv_id": conv_id,
                 "relevant_memories": [],
-                "next_node": ""
+                "next_node": "",
+                "persona": "personal assistant"
             }
             
             # Run graph execution (Toggle between streaming and invoking below)

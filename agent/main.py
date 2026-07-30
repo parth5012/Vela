@@ -32,16 +32,20 @@ discord_gateway = DiscordGateway(db=db)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Run database migration (add persona and active_skill columns if missing)
+    # Run database migration: rename persona → agent, ensure active_skill exists
     try:
         from db.session import engine
         from sqlalchemy import inspect, text
         inspector = inspect(engine)
         columns = [col['name'] for col in inspector.get_columns('conversations')]
-        if 'persona' not in columns:
-            logger.info("Database migration: adding 'persona' column to 'conversations' table")
+        if 'persona' in columns:
+            logger.info("Database migration: renaming 'persona' column to 'agent'")
             with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE conversations ADD COLUMN persona VARCHAR(50) DEFAULT 'personal assistant' NOT NULL"))
+                conn.execute(text("ALTER TABLE conversations RENAME COLUMN persona TO agent"))
+        elif 'agent' not in columns:
+            logger.info("Database migration: adding 'agent' column to 'conversations' table")
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE conversations ADD COLUMN agent VARCHAR(50) DEFAULT 'personal assistant' NOT NULL"))
         if 'active_skill' not in columns:
             logger.info("Database migration: adding 'active_skill' column to 'conversations' table")
             with engine.begin() as conn:
@@ -107,7 +111,7 @@ def list_threads():
                 {
                     "id": t.id,
                     "title": t.title,
-                    "persona": t.persona,
+                    "agent": t.agent,
                     "created_at": t.created_at.isoformat(),
                     "updated_at": t.updated_at.isoformat()
                 }
@@ -213,16 +217,17 @@ class TruncatePayload(BaseModel):
 class MessagePayload(BaseModel):
     thread_id: str
     message: str
-    persona: str = "personal assistant"
+    agent: str = "personal assistant"
+    google_access_token: str = ""
 
 
 @app.post("/chat/message", dependencies=[Depends(verify_api_key)])
 async def chat_message(payload: MessagePayload):
-    allowed_personas = ["personal assistant", "teacher", "analyst", "prompt builder"]
-    if payload.persona not in allowed_personas:
+    allowed_agents = ["personal assistant", "teacher", "analyst", "prompt builder"]
+    if payload.agent not in allowed_agents:
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported persona: '{payload.persona}'. Supported personas are: {allowed_personas}"
+            detail=f"Unsupported agent: '{payload.agent}'. Supported agents are: {allowed_agents}"
         )
 
     async def sse_generator():
@@ -233,27 +238,39 @@ async def chat_message(payload: MessagePayload):
             client = DBClient(session)
             conv = session.query(Conversation).filter_by(id=normalized_id).first()
             if not conv:
-                conv = client.create_client_conversation(persona=payload.persona, conversation_id=normalized_id)
+                conv = client.create_client_conversation(agent=payload.agent, conversation_id=normalized_id)
                 session.commit()
             else:
-                if payload.persona != conv.persona:
-                    conv.persona = payload.persona
+                if payload.agent != conv.agent:
+                    conv.agent = payload.agent
                     session.commit()
             thread_uuid = conv.id
             thread_title = conv.title
-            thread_persona = conv.persona
+            thread_agent = conv.agent
 
+            # Auto-store Google access token if provided in the message payload
+            if payload.google_access_token:
+                existing = client.get_oauth_token(normalized_id, "google")
+                if existing:
+                    merged = dict(existing.token)
+                    merged["access_token"] = payload.google_access_token
+                    client.store_oauth_token(normalized_id, "google", merged)
+                else:
+                    client.store_oauth_token(normalized_id, "google", {
+                        "access_token": payload.google_access_token,
+                    })
+                session.commit()
 
         initial_state = {
             "messages": [HumanMessage(content=payload.message)],
             "db_conv_id": thread_uuid,
             "next_node": "supervisor",
-            "persona": thread_persona
+            "persona": thread_agent
         }
         initial_message = payload.message
 
         full_response = ""
-        logger.info("Starting chat message", thread_id=normalized_id, persona=thread_persona)
+        logger.info("Starting chat message", thread_id=normalized_id, agent=thread_agent)
         # Run graph.astream_events in a background producer task and queue the events.
         # This allows us to periodically yield SSE keep-alive pings to prevent Render timeouts
         # during long-running tool executions.
@@ -392,7 +409,7 @@ async def chat_message(payload: MessagePayload):
             title_to_send = thread_title
 
         # Send final completed event
-        yield f"data: {json.dumps({'type': 'done', 'thread_title': title_to_send, 'persona': thread_persona})}\n\n"
+        yield f"data: {json.dumps({'type': 'done', 'thread_title': title_to_send, 'agent': thread_agent})}\n\n"
 
     return StreamingResponse(sse_generator(), media_type="text/event-stream")
 
@@ -412,7 +429,7 @@ def branch_thread(payload: BranchPayload):
             if not parent_conv:
                 raise HTTPException(status_code=404, detail="Parent thread not found")
             
-            new_conv = Conversation(id=new_id, title=payload.title[:255], persona=parent_conv.persona)
+            new_conv = Conversation(id=new_id, title=payload.title[:255], agent=parent_conv.agent)
             session.add(new_conv)
             session.flush()
             
@@ -471,6 +488,82 @@ def truncate_thread(thread_id: str, payload: TruncatePayload):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+
+class ClientOAuthPayload(BaseModel):
+    conversation_id: str
+    access_token: str
+    refresh_token: str = ""
+    expiry: str = ""
+    scopes: list[str] = []
+
+@app.post("/oauth/token", dependencies=[Depends(verify_api_key)])
+def store_oauth_token(payload: ClientOAuthPayload):
+    """Receives Google OAuth tokens from the mobile app client and stores them.
+    
+    The Vela agent tools can later retrieve these tokens to access Google Workspace
+    APIs (Gmail, Calendar, Drive) on behalf of the user.
+    """
+    logger.info("Storing OAuth tokens from mobile client", conversation_id=payload.conversation_id)
+    try:
+        with get_db_session() as session:
+            client = DBClient(session)
+            # Ensure the conversation exists (create if it doesn't)
+            conv = session.query(Conversation).filter_by(id=payload.conversation_id).first()
+            if not conv:
+                conv = client.create_client_conversation(conversation_id=payload.conversation_id)
+                session.commit()
+
+            token_data = {
+                "access_token": payload.access_token,
+                "refresh_token": payload.refresh_token,
+                "expiry": payload.expiry,
+                "scopes": payload.scopes,
+            }
+            client.store_oauth_token(payload.conversation_id, "google", token_data)
+            session.commit()
+
+        logger.info("OAuth tokens stored successfully", conversation_id=payload.conversation_id)
+        return {"status": "success", "provider": "google"}
+    except Exception as e:
+        logger.error("Failed to store OAuth tokens", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class RevokePayload(BaseModel):
+    conversation_id: str
+
+@app.post("/oauth/token/revoke", dependencies=[Depends(verify_api_key)])
+def revoke_oauth_token(payload: RevokePayload):
+    """Revokes Google OAuth tokens for a conversation."""
+    logger.info("Revoking OAuth tokens for conversation", conversation_id=payload.conversation_id)
+    try:
+        with get_db_session() as session:
+            from db.models import OAuthToken
+            token_record = session.query(OAuthToken).filter_by(
+                conversation_id=payload.conversation_id, provider="google"
+            ).first()
+            if token_record:
+                session.delete(token_record)
+                session.commit()
+                logger.info("OAuth tokens revoked successfully", conversation_id=payload.conversation_id)
+            return {"status": "success"}
+    except Exception as e:
+        logger.error("Failed to revoke OAuth tokens", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/oauth/token/status", dependencies=[Depends(verify_api_key)])
+def get_oauth_status(conversation_id: str = Query(...)):
+    """Returns whether Google OAuth tokens exist for the given conversation."""
+    try:
+        with get_db_session() as session:
+            client = DBClient(session)
+            tokens = client.get_oauth_token(conversation_id, "google")
+            return {"connected": tokens is not None}
+    except Exception as e:
+        logger.error("Failed to check OAuth token status", error=str(e))
+        return {"connected": False}
 
 
 @app.get("/oauth/login")

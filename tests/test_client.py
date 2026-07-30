@@ -127,17 +127,17 @@ def test_conversation_title_truncation(db_session):
     assert updated_conv.title == "B" * 255
 
 
-def test_conversation_persona_creation_and_default(db_session):
+def test_conversation_agent_creation_and_default(db_session):
     client = DBClient(db_session)
-    # Default persona should be "personal assistant"
-    conv = client.create_client_conversation(title="Test Persona Default")
+    # Default agent should be "personal assistant"
+    conv = client.create_client_conversation(title="Test Agent Default")
     db_session.commit()
-    assert conv.persona == "personal assistant"
+    assert conv.agent == "personal assistant"
 
-    # Specific persona
-    conv_teacher = client.create_client_conversation(title="Test Persona Teacher", persona="teacher")
+    # Specific agent
+    conv_teacher = client.create_client_conversation(title="Test Agent Teacher", agent="teacher")
     db_session.commit()
-    assert conv_teacher.persona == "teacher"
+    assert conv_teacher.agent == "teacher"
 
 
 def test_conversation_active_skill_update(db_session):

@@ -134,14 +134,14 @@ async def build_system_prompt(state: AgentState) -> str:
     db_conv_id = state.get("db_conv_id", "")
     chat_id = state.get("telegram_chat_id", 0)
 
-    # Retrieve the persona (default to "personal assistant")
+    # Retrieve the persona from state (gateways hardcode "personal assistant"; API sets it explicitly)
     persona = state.get("persona") or "personal assistant"
     if persona == "personal assistant" and db_conv_id and db_conv_id != "conv-123":
         try:
             with get_db_session() as session:
                 conv = session.query(Conversation).filter_by(id=db_conv_id).first()
-                if conv and conv.persona:
-                    persona = conv.persona
+                if conv and conv.agent:
+                    persona = conv.agent
         except Exception:
             pass
 

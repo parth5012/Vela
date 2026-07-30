@@ -73,28 +73,28 @@ def test_streaming_chat_message_with_personas(monkeypatch):
     
     headers = {"Authorization": "Bearer secret-test-key"}
     
-    # 1. Test invalid persona returns 400
-    payload_invalid = {"thread_id": "conv-124", "message": "hello", "persona": "wizard"}
+    # 1. Test invalid agent returns 400
+    payload_invalid = {"thread_id": "conv-124", "message": "hello", "agent": "wizard"}
     resp = client.post("/chat/message", json=payload_invalid, headers=headers)
     assert resp.status_code == 400
-    assert "Unsupported persona" in resp.json()["detail"]
+    assert "Unsupported agent" in resp.json()["detail"]
 
-    # 2. Test valid persona "teacher" starts stream successfully
-    payload_valid = {"thread_id": "conv-125", "message": "Can you teach me binary search?", "persona": "teacher"}
+    # 2. Test valid agent "teacher" starts stream successfully
+    payload_valid = {"thread_id": "conv-125", "message": "Can you teach me binary search?", "agent": "teacher"}
     with client.stream("POST", "/chat/message", json=payload_valid, headers=headers) as response:
         assert response.status_code == 200
         assert "text/event-stream" in response.headers["content-type"]
         
-    # 3. Test list threads returns persona
+    # 3. Test list threads returns agent
     resp = client.get("/chat/threads", headers=headers)
     assert resp.status_code == 200
     threads = resp.json()
     assert len(threads) > 0
-    # The created conversation from previous stream should be in the list, check if persona exists in keys
-    assert "persona" in threads[0]
+    # The created conversation from previous stream should be in the list, check if agent exists in keys
+    assert "agent" in threads[0]
 
-    # 4. Test valid persona "prompt builder" starts stream successfully
-    payload_pb = {"thread_id": "conv-126", "message": "Help me build a system prompt for a weather bot", "persona": "prompt builder"}
+    # 4. Test valid agent "prompt builder" starts stream successfully
+    payload_pb = {"thread_id": "conv-126", "message": "Help me build a system prompt for a weather bot", "agent": "prompt builder"}
     with client.stream("POST", "/chat/message", json=payload_pb, headers=headers) as response:
         assert response.status_code == 200
         assert "text/event-stream" in response.headers["content-type"]
@@ -132,8 +132,8 @@ def test_branch_and_truncate_endpoints(monkeypatch):
     exp_id3 = str(uuid.uuid4())
 
     with get_db_session() as session:
-        # Create parent conversation with persona 'teacher'
-        parent_conv = Conversation(id=parent_id, title="Parent Thread", persona="teacher")
+        # Create parent conversation with agent 'teacher'
+        parent_conv = Conversation(id=parent_id, title="Parent Thread", agent="teacher")
         session.add(parent_conv)
         session.flush()
 
@@ -210,7 +210,7 @@ def test_branch_and_truncate_endpoints(monkeypatch):
         new_conv = session.query(Conversation).filter_by(id=new_id).first()
         assert new_conv is not None
         assert new_conv.title == "Branched Thread"
-        assert new_conv.persona == "teacher"  # Persona copied
+        assert new_conv.agent == "teacher"  # Agent copied
 
         new_exps = session.query(Experience).filter_by(conversation_id=new_id).order_by(Experience.created_at).all()
         assert len(new_exps) == 2  # exp1 and exp2

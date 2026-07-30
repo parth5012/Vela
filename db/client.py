@@ -163,11 +163,11 @@ class DBClient:
             Conversation.discord_channel_id.is_(None)
         ).order_by(Conversation.updated_at.desc()).all()
 
-    def create_client_conversation(self, title: str = "New Chat", persona: str = "personal assistant", conversation_id: str = None) -> Conversation:
+    def create_client_conversation(self, title: str = "New Chat", agent: str = "personal assistant", conversation_id: str = None) -> Conversation:
         """Creates a new client conversation thread."""
         conv_id = conversation_id or str(uuid.uuid4())
         truncated_title = title[:255] if title is not None else None
-        conv = Conversation(id=conv_id, title=truncated_title, persona=persona)
+        conv = Conversation(id=conv_id, title=truncated_title, agent=agent)
         self.session.add(conv)
         self.session.flush()
         return conv

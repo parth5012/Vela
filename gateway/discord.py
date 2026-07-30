@@ -32,12 +32,14 @@ class DiscordGateway:
                 try:
                     conv_id = self.db.get_or_create_discord_conversation(message.channel.id)
                     
+                    # Hardcode "personal assistant" agent — ignore any database-defined agent
                     inputs = {
                         "messages": [HumanMessage(content=message.content)],
                         "telegram_chat_id": 0,
                         "db_conv_id": conv_id,
                         "relevant_memories": [],
-                        "next_node": ""
+                        "next_node": "",
+                        "persona": "personal assistant"
                     }
                     
                     async with message.channel.typing():
