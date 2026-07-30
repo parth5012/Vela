@@ -12,6 +12,7 @@ from skills import skills
 from tools import tools_list
 from agent.state import AgentState
 from agent.prompt import build_system_prompt
+from agent.registry import AGENT_REGISTRY
 from utils.logger import StructuredLogger
 
 
@@ -147,7 +148,13 @@ async def chatbot_node(state: AgentState) -> dict:
     
     if api_key and not api_key.startswith("your_"):
         try:
-            llm = get_llm().bind_tools(tools_list)
+            # Resolve tools from the active agent's registry entry
+            agent_id = state.get("agent") or "personal assistant"
+            agent_config = AGENT_REGISTRY.get(agent_id)
+            allowed_tool_names = agent_config.tool_names if agent_config else []
+            allowed_tools = [t for t in tools_list if t.name in allowed_tool_names]
+
+            llm = get_llm().bind_tools(allowed_tools or tools_list)
             system_prompt = await build_system_prompt(state)
             response_msg = await llm.ainvoke([
                 SystemMessage(content=system_prompt)

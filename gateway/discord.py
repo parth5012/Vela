@@ -39,7 +39,7 @@ class DiscordGateway:
                         "db_conv_id": conv_id,
                         "relevant_memories": [],
                         "next_node": "",
-                        "persona": "personal assistant"
+                        "agent": "personal assistant"
                     }
                     
                     async with message.channel.typing():

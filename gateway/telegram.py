@@ -74,7 +74,7 @@ class TelegramGateway:
                 "db_conv_id": conv_id,
                 "relevant_memories": [],
                 "next_node": "",
-                "persona": "personal assistant"
+                "agent": "personal assistant"
             }
             
             # Run graph execution (Toggle between streaming and invoking below)

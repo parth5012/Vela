@@ -202,7 +202,7 @@ class CarbonVoiceGateway:
                 "db_conv_id": conv_id,
                 "relevant_memories": [],
                 "next_node": "supervisor",
-                "persona": "personal assistant"
+                "agent": "personal assistant"
             }
             try:
                 # Use ainvoke for asynchronous graph execution (since graph contains async chatbot_node)

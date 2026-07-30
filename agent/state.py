@@ -9,6 +9,6 @@ class AgentState(TypedDict, total=False):
     db_conv_id: str
     relevant_memories: list[str]
     next_node: str
-    persona: Optional[str]
+    agent: Optional[str]
     skill_prompt: Optional[str]
     active_skill: Optional[str]

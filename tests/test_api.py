@@ -103,12 +103,13 @@ def test_streaming_chat_message_with_personas(monkeypatch):
     resp_personas = client.get("/chat/personas", headers=headers)
     assert resp_personas.status_code == 200
     personas = resp_personas.json()
-    assert len(personas) == 4
+    assert len(personas) == 5
     persona_ids = [p["id"] for p in personas]
     assert "prompt builder" in persona_ids
     assert "teacher" in persona_ids
     assert "analyst" in persona_ids
     assert "personal assistant" in persona_ids
+    assert "google_workspace" in persona_ids
 
 
 

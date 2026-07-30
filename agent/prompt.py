@@ -1,5 +1,5 @@
 from agent.state import AgentState
-from agent.persona import PERSONA_PROMPTS
+from agent.registry import AGENT_REGISTRY
 from db.models import SystemPromptFragment, Experience, MemoryVector, Conversation
 import os
 from utils.llm import  get_embeddings
@@ -134,18 +134,20 @@ async def build_system_prompt(state: AgentState) -> str:
     db_conv_id = state.get("db_conv_id", "")
     chat_id = state.get("telegram_chat_id", 0)
 
-    # Retrieve the persona from state (gateways hardcode "personal assistant"; API sets it explicitly)
-    persona = state.get("persona") or "personal assistant"
-    if persona == "personal assistant" and db_conv_id and db_conv_id != "conv-123":
+    # Retrieve the active agent from state (gateways hardcode; API sets it explicitly)
+    agent_id = state.get("agent") or "personal assistant"
+    if agent_id == "personal assistant" and db_conv_id and db_conv_id != "conv-123":
         try:
             with get_db_session() as session:
                 conv = session.query(Conversation).filter_by(id=db_conv_id).first()
                 if conv and conv.agent:
-                    persona = conv.agent
+                    agent_id = conv.agent
         except Exception:
             pass
 
-    persona_section = PERSONA_PROMPTS.get(persona, "")
+    # Look up agent instructions from the formal registry
+    agent_config = AGENT_REGISTRY.get(agent_id)
+    persona_section = agent_config.prompt_instructions if agent_config else ""
 
     dynamic_rules_section = ""
     try:

@@ -1,5 +1,5 @@
 from utils.helpers import get_title
-from agent.persona import PERSONA_LIST
+from agent.persona import PUBLIC_LIST as PERSONA_LIST
 from utils.llm import get_llm
 import os
 import asyncio
@@ -265,7 +265,7 @@ async def chat_message(payload: MessagePayload):
             "messages": [HumanMessage(content=payload.message)],
             "db_conv_id": thread_uuid,
             "next_node": "supervisor",
-            "persona": thread_agent
+            "agent": thread_agent
         }
         initial_message = payload.message
 
