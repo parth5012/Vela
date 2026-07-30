@@ -149,6 +149,10 @@ _registry.register(AgentConfig(
         "save_user_memory",
         "delete_user_memory",
         "send_status_message",
+        "gmail_send_email",
+        "gmail_read_emails",
+        "calendar_list_events",
+        "calendar_create_event",
     ],
 ))
 

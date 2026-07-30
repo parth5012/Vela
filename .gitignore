@@ -9,3 +9,4 @@ graphify-out/
 *.json
 .worktrees/
 .tmp/
+*.db
