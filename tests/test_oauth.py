@@ -3,6 +3,7 @@
 import os
 import json
 import base64
+import httpx
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock, ANY
 from agent.main import app
@@ -73,6 +74,11 @@ def test_oauth_login_redirect(mock_db, mock_flow_class):
     assert response.status_code == 307
     assert "accounts.google.com" in response.headers["location"]
 
+    # Regression: confidential web-client flow must not generate a PKCE
+    # code_challenge that the manual token exchange can never answer.
+    call_kwargs = mock_flow_class.from_client_config.call_args.kwargs
+    assert call_kwargs.get("autogenerate_code_verifier") is False
+
 
 # ---------------------------------------------------------------------------
 # /oauth/google/authorize (mobile client flow)
@@ -93,6 +99,11 @@ def test_google_authorize_success(mock_db_client_class, mock_flow_class):
     )
     assert response.status_code == 307
     assert "accounts.google.com" in response.headers["location"]
+
+    # Regression: must NOT send a PKCE code_challenge to Google, because the
+    # callback performs a manual token exchange without a code_verifier.
+    call_kwargs = mock_flow_class.from_client_config.call_args.kwargs
+    assert call_kwargs.get("autogenerate_code_verifier") is False
 
 
 @patch("agent.main.Flow")
@@ -237,6 +248,48 @@ def test_callback_mobile_flow_token_exchange_failure(mock_db, mock_httpx):
     )
     assert response.status_code == 307
     assert "status=error" in response.headers["location"]
+
+
+@patch("agent.main.httpx")
+@patch("agent.main.db")
+@patch("agent.main.logger")
+def test_callback_mobile_flow_token_exchange_http_error_logs_body(
+    mock_logger, mock_db, mock_httpx
+):
+    """HTTP 400 from Google must log the response body (e.g. invalid_grant)."""
+    _set_env_vars()
+    state_data = base64.urlsafe_b64encode(
+        json.dumps({"cid": "conv-123", "ruri": CLIENT_REDIRECT_URI}).encode()
+    ).decode()
+
+    # Simulate Google returning 400 with an invalid_grant body.
+    resp = MagicMock()
+    resp.status_code = 400
+    resp.text = '{"error": "invalid_grant", "error_description": "Missing code verifier"}'
+    mock_httpx.post.return_value = resp
+    mock_httpx.HTTPStatusError = httpx.HTTPStatusError
+    mock_httpx.post.side_effect = httpx.HTTPStatusError(
+        "Client error '400 Bad Request'",
+        request=httpx.Request("POST", "https://oauth2.googleapis.com/token"),
+        response=httpx.Response(400, text=resp.text),
+    )
+
+    response = client.get(
+        f"/oauth/callback?code=bad_code&state={state_data}",
+        follow_redirects=False,
+    )
+    assert response.status_code == 307
+    assert "status=error" in response.headers["location"]
+
+    # Error log must include the Google response body so the real reason is visible.
+    mock_logger.error.assert_called()
+    error_calls = [
+        c for c in mock_logger.error.call_args_list if "Token exchange failed" in str(c)
+    ]
+    assert error_calls
+    call_kwargs = error_calls[0].kwargs
+    assert call_kwargs.get("status_code") == 400
+    assert "invalid_grant" in call_kwargs.get("response_body", "")
 
 
 # ---------------------------------------------------------------------------

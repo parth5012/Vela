@@ -21,6 +21,7 @@ import base64
 import urllib.parse
 from datetime import datetime, timedelta, timezone
 import httpx
+from httpx import HTTPStatusError
 from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage
@@ -671,10 +672,15 @@ def oauth_google_authorize(
         "http://localhost:8000/oauth/callback",
     )
 
+    # PKCE is disabled on purpose: this is a confidential web-client flow where
+    # the server exchanges the code with its client_secret. The callback performs
+    # a manual token exchange that never sends a code_verifier, so auto-generating
+    # one here would make Google reject the exchange with a 400.
     flow = Flow.from_client_config(
         client_config,
         scopes=SCOPES,
         redirect_uri=backend_redirect_uri,
+        autogenerate_code_verifier=False,
     )
     authorization_url, _ = flow.authorization_url(
         access_type="offline",
@@ -702,7 +708,8 @@ def oauth_login(chat_id: int):
     flow = Flow.from_client_config(
         client_config,
         scopes=SCOPES,
-        redirect_uri=os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/oauth/callback")
+        redirect_uri=os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/oauth/callback"),
+        autogenerate_code_verifier=False,
     )
     authorization_url, state = flow.authorization_url(
         access_type="offline",
@@ -779,6 +786,24 @@ def oauth_callback(code: str, state: str):
         token_response.raise_for_status()
         google_tokens = token_response.json()
         logger.info("Token exchange successful")
+    except HTTPStatusError as e:
+        # Include the response body — it carries the real Google error reason
+        # (e.g. invalid_grant, redirect_uri_mismatch) that the exception alone hides.
+        body = e.response.text if e.response is not None else ""
+        logger.error(
+            "Token exchange failed",
+            error=str(e),
+            status_code=e.response.status_code if e.response is not None else None,
+            response_body=body[:500],
+        )
+        if redirect_uri:
+            return responses.RedirectResponse(
+                f"{redirect_uri}?status=error&message=Token+exchange+failed"
+            )
+        return responses.HTMLResponse(
+            f"<html><body><h1>Token Exchange Failed</h1><p>{str(e)}</p></body></html>",
+            status_code=500,
+        )
     except Exception as e:
         logger.error("Token exchange failed", error=str(e))
         if redirect_uri:
