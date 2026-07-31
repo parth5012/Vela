@@ -23,6 +23,7 @@ def _set_env_vars():
     os.environ["GOOGLE_CLIENT_ID"] = "test-client-id-123"
     os.environ["GOOGLE_CLIENT_SECRET"] = "test-client-secret-456"
     os.environ["GOOGLE_REDIRECT_URI"] = OAUTH_REDIRECT_URI
+    os.environ["VELA_API_KEY"] = TEST_API_KEY
 
 
 def _make_flow_mock(return_url="https://accounts.google.com/o/oauth2/auth?state=xyz"):
@@ -281,6 +282,7 @@ def test_callback_legacy_telegram_flow(mock_db, mock_httpx):
 # /oauth/token/status (with and without conversation_id)
 # ---------------------------------------------------------------------------
 
+@patch.dict(os.environ, {"VELA_API_KEY": TEST_API_KEY})
 @patch("agent.main.DBClient")
 def test_token_status_not_connected(mock_db_client_class):
     """When no tokens exist, returns connected: False."""
@@ -297,6 +299,7 @@ def test_token_status_not_connected(mock_db_client_class):
     assert data["connected"] is False
 
 
+@patch.dict(os.environ, {"VELA_API_KEY": TEST_API_KEY})
 @patch("agent.main.DBClient")
 def test_token_status_connected(mock_db_client_class):
     """When tokens exist, returns connected: True with user info."""
@@ -334,6 +337,7 @@ def test_token_status_connected(mock_db_client_class):
 # /oauth/token — POST (mobile client direct token storage)
 # ---------------------------------------------------------------------------
 
+@patch.dict(os.environ, {"VELA_API_KEY": TEST_API_KEY})
 @patch("agent.main.DBClient")
 def test_store_oauth_token_endpoint(mock_db_client_class):
     """POST /oauth/token should store tokens for a conversation."""

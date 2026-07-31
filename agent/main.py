@@ -634,7 +634,7 @@ def oauth_google_authorize(
     # Validate the API key
     expected_key = os.getenv("VELA_API_KEY", "vela5012")
     if not api_key or api_key != expected_key:
-        logger.warning("Invalid API key in OAuth authorize request")
+        logger.warning('Received invalid API key: {api_key}')
         raise HTTPException(status_code=401, detail="Invalid API key")
 
     # Get or create a client conversation for this OAuth flow
