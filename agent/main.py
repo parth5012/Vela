@@ -22,7 +22,7 @@ import urllib.parse
 from datetime import datetime, timedelta, timezone
 import httpx
 from httpx import HTTPStatusError
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator, Field, AliasChoices
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage
 from agent.graph import graph
@@ -223,7 +223,7 @@ class TruncatePayload(BaseModel):
 class MessagePayload(BaseModel):
     thread_id: str
     message: str
-    agent: str = "personal assistant"
+    agent: str = Field(default="personal assistant", validation_alias=AliasChoices("agent", "persona"))
     google_access_token: str = ""
 
 
@@ -369,6 +369,9 @@ async def chat_message(payload: MessagePayload):
                             tool_output = json.dumps(tool_output)
                         except Exception:
                             tool_output = str(tool_output)
+                    # Simulate SSE emission when Google Workspace tool blocked due to auth_required
+                    if "Google Workspace not connected" in tool_output or "auth_required" in tool_output:
+                        yield f"data:{json.dumps({'type': 'auth_required', 'provider': 'google'})}\n\n"
                     tool_end_tag = f'{tool_output}</call:{tool_name}>'
                     full_response += tool_end_tag
                     yield f"data: {json.dumps({'type': 'content', 'delta': tool_end_tag})}\n\n"

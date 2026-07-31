@@ -54,9 +54,9 @@ def ensure_google_auth(
     logger.info("Running auth gate", conversation_id=conversation_id)
 
     # 1. Read tokens from DB
-    token_data = db.get_oauth_tokens(conversation_id, "google")
+    token_data = db.get_oauth_tokens("global", "google")
     if not token_data:
-        logger.info("No OAuth tokens found — auth required", conversation_id=conversation_id)
+        logger.info("No OAuth tokens found, auth required", conversation_id=conversation_id)
         return AUTH_REQUIRED
 
     # 2. Build Credentials object
@@ -80,11 +80,11 @@ def ensure_google_auth(
             expiry=expiry,
         )
 
-        # 3. Auto-refresh if expired
+        # 3. Auto-refresh expired credentials
         if creds.expired and creds.refresh_token:
-            logger.info("Access token expired — refreshing", conversation_id=conversation_id)
+            logger.info("Access token expired, refreshing", conversation_id=conversation_id)
             creds.refresh(Request())
-            _persist_tokens(db, conversation_id, creds, resolved_scopes)
+            _persist_tokens(db, "global", creds, resolved_scopes)
             logger.info("Refreshed tokens persisted", conversation_id=conversation_id)
 
         return creds

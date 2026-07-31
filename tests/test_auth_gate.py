@@ -76,7 +76,7 @@ def test_valid_tokens_returns_credentials():
 
     assert result is not AUTH_REQUIRED
     assert result is dummy_creds
-    db.get_oauth_tokens.assert_called_once_with("conv-456", "google")
+    db.get_oauth_tokens.assert_called_once_with("global", "google")
     mock_creds.assert_called_once()
 
 
@@ -105,7 +105,7 @@ def test_expired_tokens_refreshes_and_persists():
     refreshed_creds.refresh.assert_called_once_with(mock_request.return_value)
     # Verify tokens were persisted back
     db.store_oauth_tokens.assert_called_once_with(
-        "conv-789",
+        "global",
         "google",
         {
             "access_token": "at-updated-xyz",
