@@ -652,7 +652,7 @@ def oauth_google_authorize(
     # Encode state: conversation_id + client redirect_uri
     state_data = base64.urlsafe_b64encode(
         json.dumps({
-            "cid": conversation_id,
+            "cid": str(conversation_id),
             "ruri": redirect_uri,
         }).encode()
     ).decode()
