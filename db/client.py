@@ -54,15 +54,26 @@ class DBClient:
 
     def store_oauth_token(self, conversation_id: str, provider: str, token_data: dict) -> OAuthToken:
         """Saves or updates OAuth credentials for a specific provider in a conversation.
-        
+
         Args:
-            conversation_id: The UUID representing the conversation.
-            provider: The OAuth provider name (e.g. 'google').
-            token_data: A dictionary containing access/refresh tokens.
-            
+            conversation_id: UUID representing conversation.
+            provider: OAuth provider name (e.g. 'google').
+            token_data: dictionary containing access/refresh tokens.
+
         Returns:
-            The stored OAuthToken instance.
+            stored OAuthToken instance.
         """
+        # Ensure conversation exists to satisfy foreign key constraints
+        conv = self.session.query(Conversation).filter_by(id=conversation_id).first()
+        if not conv:
+            conv = Conversation(
+                id=conversation_id,
+                title="Global Google Workspace Credentials" if conversation_id == "global" else "Google Workspace OAuth",
+                agent="personal assistant"
+            )
+            self.session.add(conv)
+            self.session.flush()
+
         token = self.session.query(OAuthToken).filter_by(conversation_id=conversation_id, provider=provider).first()
         if token:
             token.token = token_data

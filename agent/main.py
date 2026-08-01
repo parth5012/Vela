@@ -224,7 +224,7 @@ class MessagePayload(BaseModel):
     thread_id: str
     message: str
     agent: str = Field(default="personal assistant", validation_alias=AliasChoices("agent", "persona"))
-    google_access_token: str = ""
+    google_access_token: str | None = None
 
 
 @app.post("/chat/message", dependencies=[Depends(verify_api_key)])
@@ -254,18 +254,6 @@ async def chat_message(payload: MessagePayload):
             thread_title = conv.title
             thread_agent = conv.agent
 
-            # Auto-store Google access token if provided in the message payload
-            if payload.google_access_token:
-                existing = client.get_oauth_token(normalized_id, "google")
-                if existing:
-                    merged = dict(existing.token)
-                    merged["access_token"] = payload.google_access_token
-                    client.store_oauth_token(normalized_id, "google", merged)
-                else:
-                    client.store_oauth_token(normalized_id, "google", {
-                        "access_token": payload.google_access_token,
-                    })
-                session.commit()
 
         initial_state = {
             "messages": [HumanMessage(content=payload.message)],
@@ -579,19 +567,7 @@ def get_oauth_status(conversation_id: str = Query(default=None)):
         with get_db_session() as session:
             dbc = DBClient(session)
 
-            token_record = None
-            if conversation_id:
-                token_record = dbc.get_oauth_token(conversation_id, "google")
-
-            # Fallback: latest Google tokens across all conversations (single-tenant)
-            if not token_record:
-                from db.models import OAuthToken
-                token_record = (
-                    session.query(OAuthToken)
-                    .filter_by(provider="google")
-                    .order_by(OAuthToken.updated_at.desc())
-                    .first()
-                )
+            token_record = dbc.get_oauth_token("global", "google")
 
             if not token_record:
                 return {"connected": False}
@@ -641,17 +617,9 @@ def oauth_google_authorize(
         logger.warning(f'Received invalid API key: {api_key}')
         raise HTTPException(status_code=401, detail="Invalid API key")
 
-    # Get or create a client conversation for this OAuth flow
-    with get_db_session() as session:
-        client = DBClient(session)
-        conv = client.create_client_conversation(
-            title="Google Workspace OAuth",
-            agent="personal assistant",
-        )
-        session.commit()
-        conversation_id = conv.id
-
-    logger.info("Created conversation for OAuth flow", conversation_id=conversation_id)
+    # Use global conversation ID for OAuth flow instead of creating throwaway ones
+    conversation_id = "global"
+    logger.info("Using global conversation for OAuth flow", conversation_id=conversation_id)
 
     # Encode state: conversation_id + client redirect_uri
     state_data = base64.urlsafe_b64encode(
@@ -850,8 +818,8 @@ def oauth_callback(code: str, state: str):
         "user_info": user_info,
     }
 
-    db.store_oauth_tokens(conversation_id, "google", token_record)
-    logger.info("OAuth tokens stored", conversation_id=conversation_id)
+    db.store_oauth_tokens("global", "google", token_record)
+    logger.info("OAuth tokens stored", conversation_id="global")
 
     # ── Redirect back to client (mobile flow) ──
     if redirect_uri:

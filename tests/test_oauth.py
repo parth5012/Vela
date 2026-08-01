@@ -136,7 +136,7 @@ def test_google_authorize_state_encoding(mock_db_client_class, mock_flow_class):
     """Verify the state parameter contains base64-encoded JSON with cid and ruri."""
     _set_env_vars()
 
-    expected_cid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    expected_cid = "global"
     mock_db = MagicMock()
     mock_db.create_client_conversation.return_value.id = expected_cid
     mock_db_client_class.return_value = mock_db
@@ -222,7 +222,7 @@ def test_callback_mobile_flow_success(mock_db, mock_httpx):
     # Verify tokens were stored (with user_info merged)
     mock_db.store_oauth_tokens.assert_called_once()
     call_args = mock_db.store_oauth_tokens.call_args
-    assert call_args[0][0] == conversation_id
+    assert call_args[0][0] == "global"
     assert call_args[0][1] == "google"
     stored = call_args[0][2]
     assert stored["access_token"] == "at-test-abc"
@@ -327,7 +327,7 @@ def test_callback_legacy_telegram_flow(mock_db, mock_httpx):
 
     # Verify tokens were stored for the Telegram conversation
     mock_db.store_oauth_tokens.assert_called_once_with(
-        "conv-telegram-123", "google", ANY
+        "global", "google", ANY
     )
 
 
