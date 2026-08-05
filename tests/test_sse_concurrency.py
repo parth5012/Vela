@@ -15,7 +15,7 @@ async def test_sse_concurrency():
     
     # Reset global semaphore to load env var
     import agent.main
-    agent.main._concurrency_semaphore = None
+    agent.concurrency._semaphore = None
     
     mock_db = MagicMock()
     mock_db_session = MagicMock()
@@ -119,41 +119,45 @@ async def test_concurrency_semaphore_limits():
     # Test default
     if "MAX_CONCURRENT_STREAMS" in os.environ:
         del os.environ["MAX_CONCURRENT_STREAMS"]
-    agent.main._concurrency_semaphore = None
-    sem = agent.main.get_concurrency_semaphore()
+    agent.concurrency._semaphore = None
+    sem = agent.concurrency.get_stream_semaphore()
     assert sem._value == 2
 
     # Test ceiling 4
     os.environ["MAX_CONCURRENT_STREAMS"] = "5"
-    agent.main._concurrency_semaphore = None
-    sem = agent.main.get_concurrency_semaphore()
+    agent.concurrency._semaphore = None
+    sem = agent.concurrency.get_stream_semaphore()
     assert sem._value == 4
 
     # Test normal config
     os.environ["MAX_CONCURRENT_STREAMS"] = "3"
-    agent.main._concurrency_semaphore = None
-    sem = agent.main.get_concurrency_semaphore()
+    agent.concurrency._semaphore = None
+    sem = agent.concurrency.get_stream_semaphore()
     assert sem._value == 3
 
     # Test invalid string config
     os.environ["MAX_CONCURRENT_STREAMS"] = "abc"
-    agent.main._concurrency_semaphore = None
-    sem = agent.main.get_concurrency_semaphore()
+    agent.concurrency._semaphore = None
+    sem = agent.concurrency.get_stream_semaphore()
     assert sem._value == 2
 
     # Test float config
     os.environ["MAX_CONCURRENT_STREAMS"] = "2.5"
-    agent.main._concurrency_semaphore = None
-    sem = agent.main.get_concurrency_semaphore()
+    agent.concurrency._semaphore = None
+    sem = agent.concurrency.get_stream_semaphore()
     assert sem._value == 2
 
     # Test zero or negative config
     os.environ["MAX_CONCURRENT_STREAMS"] = "0"
-    agent.main._concurrency_semaphore = None
-    sem = agent.main.get_concurrency_semaphore()
-    assert sem._value == 2
+    agent.concurrency._semaphore = None
+    sem = agent.concurrency.get_stream_semaphore()
+    assert sem._value == 1
 
     os.environ["MAX_CONCURRENT_STREAMS"] = "-1"
-    agent.main._concurrency_semaphore = None
-    sem = agent.main.get_concurrency_semaphore()
-    assert sem._value == 2
+    agent.concurrency._semaphore = None
+    sem = agent.concurrency.get_stream_semaphore()
+    assert sem._value == 1
+
+    # Clean up env var after tests
+    del os.environ["MAX_CONCURRENT_STREAMS"]
+    agent.concurrency._semaphore = None
