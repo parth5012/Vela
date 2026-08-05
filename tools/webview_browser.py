@@ -14,6 +14,7 @@ logger = StructuredLogger("WebViewBrowserTool")
 # Key: conversation_id (string)
 # Value: dict with "event": asyncio.Event, "response": dict
 PENDING_TASKS = {}
+LAST_TOOL_START_TOKENS = {}
 
 @traceable(name="DB: Initialize Automation Step", tags=["webview", "database"])
 def db_log_step_start(conversation_id: str, action: str, target: str, value: str, thoughts: str, current_url: str, minified_dom: str):
@@ -86,10 +87,11 @@ def db_log_step_start(conversation_id: str, action: str, target: str, value: str
     return session_id, step_number
 
 @traceable(name="Wait for Client WebView Event", tags=["webview", "network"])
-async def wait_for_client_event(conversation_id: str, action: str, target: str, value: str):
+async def wait_for_client_event(conversation_id: str, action: str, target: str, value: str, task_token: str = None):
     """Blocks execution and awaits the HTTP response from the mobile client WebView."""
     event = asyncio.Event()
-    PENDING_TASKS[conversation_id] = {
+    key = f"{conversation_id}_{task_token}" if task_token else conversation_id
+    PENDING_TASKS[key] = {
         "event": event,
         "response": None
     }
@@ -99,7 +101,7 @@ async def wait_for_client_event(conversation_id: str, action: str, target: str, 
     try:
         # Wait up to 60 seconds for the mobile client to process and post the response
         await asyncio.wait_for(event.wait(), timeout=60.0)
-        task_data = PENDING_TASKS.get(conversation_id)
+        task_data = PENDING_TASKS.get(key)
         if task_data and task_data["response"]:
             resp = task_data["response"]
             status = resp.get("status", "error")
@@ -110,7 +112,7 @@ async def wait_for_client_event(conversation_id: str, action: str, target: str, 
         status = "timeout"
         result = "Timeout waiting for client WebView response. Make sure the Vela app has the browser tab open."
     finally:
-        PENDING_TASKS.pop(conversation_id, None)
+        PENDING_TASKS.pop(key, None)
         
     return status, result
 
@@ -182,11 +184,13 @@ async def webview_browser(
         logger.error("Failed to initialize session/step log", error=str(e))
 
     # 2. Block and wait for client to complete execution
+    task_token = LAST_TOOL_START_TOKENS.pop(conversation_id, None)
     status, result = await wait_for_client_event(
         conversation_id=conversation_id,
         action=action,
         target=target,
-        value=value
+        value=value,
+        task_token=task_token
     )
 
     # 3. Save step results in DB
