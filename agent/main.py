@@ -227,24 +227,7 @@ class MessagePayload(BaseModel):
     google_access_token: str | None = None
 
 
-
-_concurrency_semaphore = None
-
-def get_concurrency_semaphore():
-    global _concurrency_semaphore
-    if _concurrency_semaphore is None:
-        import os
-        limit_val = os.getenv("MAX_CONCURRENT_STREAMS", "2")
-        try:
-            limit = int(limit_val)
-            if limit < 1:
-                limit = 2
-            elif limit > 4:
-                limit = 4
-        except ValueError:
-            limit = 2
-        _concurrency_semaphore = asyncio.Semaphore(limit)
-    return _concurrency_semaphore
+from agent.concurrency import get_stream_semaphore
 
 @app.post("/chat/message", dependencies=[Depends(verify_api_key)])
 async def chat_message(payload: MessagePayload):
@@ -256,9 +239,10 @@ async def chat_message(payload: MessagePayload):
         )
 
     async def sse_generator():
-        semaphore = get_concurrency_semaphore()
+        semaphore = get_stream_semaphore()
         await semaphore.acquire()
         producer_started = False
+        normalized_id = None
         try:
             # Retrieve or create thread
             normalized_id = normalize_thread_id(payload.thread_id)
@@ -395,6 +379,9 @@ async def chat_message(payload: MessagePayload):
                 logger.info("SSE generator cancelled by client disconnect. Agent will continue running in the background.")
                 raise
             finally:
+                if not producer_started:
+                    semaphore.release()
+                    logger.info("Semaphore released because producer failed to start", thread_id=normalized_id)
                 # We let the producer_task continue running to completion in the background
                 # so the agent can finish processing and write the result to the database.
                 logger.info("SSE generator finished", thread_id=normalized_id)
