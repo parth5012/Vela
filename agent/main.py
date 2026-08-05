@@ -227,6 +227,25 @@ class MessagePayload(BaseModel):
     google_access_token: str | None = None
 
 
+
+_concurrency_semaphore = None
+
+def get_concurrency_semaphore():
+    global _concurrency_semaphore
+    if _concurrency_semaphore is None:
+        import os
+        limit_val = os.getenv("MAX_CONCURRENT_STREAMS", "2")
+        try:
+            limit = int(limit_val)
+            if limit < 1:
+                limit = 2
+            elif limit > 4:
+                limit = 4
+        except ValueError:
+            limit = 2
+        _concurrency_semaphore = asyncio.Semaphore(limit)
+    return _concurrency_semaphore
+
 @app.post("/chat/message", dependencies=[Depends(verify_api_key)])
 async def chat_message(payload: MessagePayload):
     allowed_agents = [config.identifier for config in AGENT_REGISTRY.list_agents()]
@@ -237,176 +256,189 @@ async def chat_message(payload: MessagePayload):
         )
 
     async def sse_generator():
-        # Retrieve or create thread
-        normalized_id = normalize_thread_id(payload.thread_id)
-
-        with get_db_session() as session:
-            client = DBClient(session)
-            conv = session.query(Conversation).filter_by(id=normalized_id).first()
-            if not conv:
-                conv = client.create_client_conversation(agent=payload.agent, conversation_id=normalized_id)
-                session.commit()
-            else:
-                if payload.agent != conv.agent:
-                    conv.agent = payload.agent
-                    session.commit()
-            thread_uuid = conv.id
-            thread_title = conv.title
-            thread_agent = conv.agent
-
-
-        initial_state = {
-            "messages": [HumanMessage(content=payload.message)],
-            "db_conv_id": thread_uuid,
-            "next_node": "supervisor",
-            "agent": thread_agent
-        }
-        initial_message = payload.message
-
-        full_response = ""
-        logger.info("Starting chat message", thread_id=normalized_id, agent=thread_agent)
-        # Run graph.astream_events in a background producer task and queue the events.
-        # This allows us to periodically yield SSE keep-alive pings to prevent Render timeouts
-        # during long-running tool executions.
-        queue = asyncio.Queue()
-
-        async def producer():
-            try:
-                async for event in graph.astream_events(initial_state, version="v2"):
-                    await queue.put(event)
-            except asyncio.CancelledError:
-                logger.info("Graph execution stream cancelled by client request")
-                # Do not raise or queue; exit cleanly
-            except Exception as e:
-                await queue.put(e)
-            finally:
-                await queue.put(None)
-                # Check and evaluate any active running webview session for this thread
-                try:
-                    from tools.webview_browser import evaluate_webview_session
-                    from db.models import WebViewAutomationSession
-                    with get_db_session() as db_session:
-                        active_session = (
-                            db_session.query(WebViewAutomationSession)
-                            .filter_by(conversation_id=normalized_id, status="running")
-                            .first()
-                        )
-                        if active_session:
-                            asyncio.create_task(evaluate_webview_session(active_session.id))
-                except Exception as ex:
-                    logger.error("Failed to trigger webview session evaluation", error=str(ex))
-
-        producer_task = asyncio.create_task(producer())
-
+        semaphore = get_concurrency_semaphore()
+        await semaphore.acquire()
+        producer_started = False
         try:
-            while True:
-                try:
-                    event = await asyncio.wait_for(queue.get(), timeout=15.0)
-                except asyncio.TimeoutError:
-                    # Yield SSE comment ping to keep connection alive
-                    yield ": keep-alive\n\n"
-                    continue
+            # Retrieve or create thread
+            normalized_id = normalize_thread_id(payload.thread_id)
 
-                if event is None:
-                    break
-                if isinstance(event, Exception):
-                    logger.error("Error in graph execution stream", error=str(event))
-                    yield f"data: {json.dumps({'type': 'error', 'message': str(event)})}\n\n"
-                    break
-
-                kind = event.get("event")
-                if kind == "on_chat_model_stream":
-                    chunk = event.get("data", {}).get("chunk")
-                    if chunk and chunk.content:
-                        content = chunk.content
-                        content_str = ""
-                        if isinstance(content, list):
-                            for item in content:
-                                if isinstance(item, str):
-                                    content_str += item
-                                elif isinstance(item, dict):
-                                    content_str += item.get("text", "")
-                                elif hasattr(item, "text"):
-                                    content_str += item.text
-                                elif hasattr(item, "get") and "text" in item:
-                                    content_str += item.get("text")
-                        elif isinstance(content, str):
-                            content_str = content
-                        else:
-                            content_str = str(content)
-
-                        if content_str:
-                            full_response += content_str
-                            yield f"data: {json.dumps({'type': 'content', 'delta': content_str})}\n\n"
-                elif kind == "on_tool_start":
-                    tool_name = event.get("name")
-                    tool_input = event.get("data", {}).get("input", {})
-                    try:
-                        input_str = json.dumps(tool_input)
-                    except Exception:
-                        input_str = str(tool_input)
-                    escaped_input = input_str.replace('\\', '\\\\').replace('"', '\\"')
-                    tool_start_tag = f'<call:{tool_name} input="{escaped_input}">'
-                    full_response += tool_start_tag
-                    yield f"data: {json.dumps({'type': 'content', 'delta': tool_start_tag})}\n\n"
-                elif kind == "on_tool_end":
-                    tool_name = event.get("name")
-                    tool_output = event.get("data", {}).get("output", "")
-                    if not isinstance(tool_output, str):
-                        try:
-                            tool_output = json.dumps(tool_output)
-                        except Exception:
-                            tool_output = str(tool_output)
-                    # Simulate SSE emission when Google Workspace tool blocked due to auth_required
-                    if "Google Workspace not connected" in tool_output or "auth_required" in tool_output:
-                        yield f"data:{json.dumps({'type': 'auth_required', 'provider': 'google'})}\n\n"
-                    tool_end_tag = f'{tool_output}</call:{tool_name}>'
-                    full_response += tool_end_tag
-                    yield f"data: {json.dumps({'type': 'content', 'delta': tool_end_tag})}\n\n"
-        except asyncio.CancelledError:
-            logger.info("SSE generator cancelled by client disconnect. Agent will continue running in the background.")
-            raise
-        finally:
-            # We let the producer_task continue running to completion in the background
-            # so the agent can finish processing and write the result to the database.
-            logger.info("SSE generator finished", thread_id=normalized_id)
-
-        # Update the latest Experience record with full_response if it contains tool calls or thoughts
-        if full_response:
-            try:
-                with get_db_session() as session:
-                    last_exp = (
-                        session.query(Experience)
-                        .filter_by(conversation_id=normalized_id)
-                        .order_by(Experience.created_at.desc())
-                        .first()
-                    )
-                    if last_exp:
-                        last_exp.agent_response = full_response or ''
-                        session.commit()
-                    else:
-                        new_exp = Experience(conversation_id=normalized_id, user_query=initial_message, agent_response=full_response)
-                        session.add(new_exp)
-                        session.commit()
-                    logger.info("Experience record updated", conversation_id=normalized_id)
-            except Exception as e:
-                logger.error("Failed to update database with full_response", error=str(e))
-
-        # Generate a dynamic title if thread title is 'New Chat'
-        if thread_title == "New Chat":
-            # new_title = payload.message[:30] + "..." if len(payload.message) > 30 else payload.message
-            response = get_title(initial_message)
-            new_title = str(response.content) if hasattr(response, "content") else str(response)
             with get_db_session() as session:
                 client = DBClient(session)
-                client.update_conversation_title(thread_uuid, new_title)
-                session.commit()
-            title_to_send = new_title
-        else:
-            title_to_send = thread_title
+                conv = session.query(Conversation).filter_by(id=normalized_id).first()
+                if not conv:
+                    conv = client.create_client_conversation(agent=payload.agent, conversation_id=normalized_id)
+                    session.commit()
+                else:
+                    if payload.agent != conv.agent:
+                        conv.agent = payload.agent
+                        session.commit()
+                thread_uuid = conv.id
+                thread_title = conv.title
+                thread_agent = conv.agent
 
-        # Send final completed event
-        yield f"data: {json.dumps({'type': 'done', 'thread_title': title_to_send, 'agent': thread_agent})}\n\n"
+
+            initial_state = {
+                "messages": [HumanMessage(content=payload.message)],
+                "db_conv_id": thread_uuid,
+                "next_node": "supervisor",
+                "agent": thread_agent
+            }
+            initial_message = payload.message
+
+            full_response = ""
+            logger.info("Starting chat message", thread_id=normalized_id, agent=thread_agent)
+            # Run graph.astream_events in a background producer task and queue the events.
+            # This allows us to periodically yield SSE keep-alive pings to prevent Render timeouts
+            # during long-running tool executions.
+            queue = asyncio.Queue()
+
+            async def producer():
+                try:
+                    async for event in graph.astream_events(initial_state, version="v2"):
+                        await queue.put(event)
+                except asyncio.CancelledError:
+                    logger.info("Graph execution stream cancelled by client request")
+                    # Do not raise or queue; exit cleanly
+                except Exception as e:
+                    await queue.put(e)
+                finally:
+                    try:
+                        await queue.put(None)
+                    finally:
+                        semaphore.release()
+                        logger.info("Semaphore released by producer", thread_id=normalized_id)
+                    # Check and evaluate any active running webview session for this thread
+                    try:
+                        from tools.webview_browser import evaluate_webview_session
+                        from db.models import WebViewAutomationSession
+                        with get_db_session() as db_session:
+                            active_session = (
+                                db_session.query(WebViewAutomationSession)
+                                .filter_by(conversation_id=normalized_id, status="running")
+                                .first()
+                            )
+                            if active_session:
+                                asyncio.create_task(evaluate_webview_session(active_session.id))
+                    except Exception as ex:
+                        logger.error("Failed to trigger webview session evaluation", error=str(ex))
+
+            producer_task = asyncio.create_task(producer())
+            producer_started = True
+
+            try:
+                while True:
+                    try:
+                        event = await asyncio.wait_for(queue.get(), timeout=15.0)
+                    except asyncio.TimeoutError:
+                        # Yield SSE comment ping to keep connection alive
+                        yield ": keep-alive\n\n"
+                        continue
+
+                    if event is None:
+                        break
+                    if isinstance(event, Exception):
+                        logger.error("Error in graph execution stream", error=str(event))
+                        yield f"data: {json.dumps({'type': 'error', 'message': str(event)})}\n\n"
+                        break
+
+                    kind = event.get("event")
+                    if kind == "on_chat_model_stream":
+                        chunk = event.get("data", {}).get("chunk")
+                        if chunk and chunk.content:
+                            content = chunk.content
+                            content_str = ""
+                            if isinstance(content, list):
+                                for item in content:
+                                    if isinstance(item, str):
+                                        content_str += item
+                                    elif isinstance(item, dict):
+                                        content_str += item.get("text", "")
+                                    elif hasattr(item, "text"):
+                                        content_str += item.text
+                                    elif hasattr(item, "get") and "text" in item:
+                                        content_str += item.get("text")
+                            elif isinstance(content, str):
+                                content_str = content
+                            else:
+                                content_str = str(content)
+
+                            if content_str:
+                                full_response += content_str
+                                yield f"data: {json.dumps({'type': 'content', 'delta': content_str})}\n\n"
+                    elif kind == "on_tool_start":
+                        tool_name = event.get("name")
+                        tool_input = event.get("data", {}).get("input", {})
+                        try:
+                            input_str = json.dumps(tool_input)
+                        except Exception:
+                            input_str = str(tool_input)
+                        escaped_input = input_str.replace('\\', '\\\\').replace('"', '\\"')
+                        tool_start_tag = f'<call:{tool_name} input="{escaped_input}">'
+                        full_response += tool_start_tag
+                        yield f"data: {json.dumps({'type': 'content', 'delta': tool_start_tag})}\n\n"
+                    elif kind == "on_tool_end":
+                        tool_name = event.get("name")
+                        tool_output = event.get("data", {}).get("output", "")
+                        if not isinstance(tool_output, str):
+                            try:
+                                tool_output = json.dumps(tool_output)
+                            except Exception:
+                                tool_output = str(tool_output)
+                        # Simulate SSE emission when Google Workspace tool blocked due to auth_required
+                        if "Google Workspace not connected" in tool_output or "auth_required" in tool_output:
+                            yield f"data:{json.dumps({'type': 'auth_required', 'provider': 'google'})}\n\n"
+                        tool_end_tag = f'{tool_output}</call:{tool_name}>'
+                        full_response += tool_end_tag
+                        yield f"data: {json.dumps({'type': 'content', 'delta': tool_end_tag})}\n\n"
+            except asyncio.CancelledError:
+                logger.info("SSE generator cancelled by client disconnect. Agent will continue running in the background.")
+                raise
+            finally:
+                # We let the producer_task continue running to completion in the background
+                # so the agent can finish processing and write the result to the database.
+                logger.info("SSE generator finished", thread_id=normalized_id)
+
+            # Update the latest Experience record with full_response if it contains tool calls or thoughts
+            if full_response:
+                try:
+                    with get_db_session() as session:
+                        last_exp = (
+                            session.query(Experience)
+                            .filter_by(conversation_id=normalized_id)
+                            .order_by(Experience.created_at.desc())
+                            .first()
+                        )
+                        if last_exp:
+                            last_exp.agent_response = full_response or ''
+                            session.commit()
+                        else:
+                            new_exp = Experience(conversation_id=normalized_id, user_query=initial_message, agent_response=full_response)
+                            session.add(new_exp)
+                            session.commit()
+                        logger.info("Experience record updated", conversation_id=normalized_id)
+                except Exception as e:
+                    logger.error("Failed to update database with full_response", error=str(e))
+
+            # Generate a dynamic title if thread title is 'New Chat'
+            if thread_title == "New Chat":
+                # new_title = payload.message[:30] + "..." if len(payload.message) > 30 else payload.message
+                response = get_title(initial_message)
+                new_title = str(response.content) if hasattr(response, "content") else str(response)
+                with get_db_session() as session:
+                    client = DBClient(session)
+                    client.update_conversation_title(thread_uuid, new_title)
+                    session.commit()
+                title_to_send = new_title
+            else:
+                title_to_send = thread_title
+
+            # Send final completed event
+            yield f"data: {json.dumps({'type': 'done', 'thread_title': title_to_send, 'agent': thread_agent})}\n\n"
+        finally:
+            if not producer_started:
+                semaphore.release()
+                logger.info("Semaphore released in sse_generator finally because producer never started", thread_id=normalized_id)
 
     return StreamingResponse(sse_generator(), media_type="text/event-stream")
 
