@@ -946,7 +946,7 @@ def submit_webview_response(payload: WebViewResponsePayload):
         logger.warning("Received WebView response but no pending task found", conversation_id=conversation_id)
         raise HTTPException(status_code=404, detail="No pending task found for this conversation ID")
 
-@app.post("/consolidate")
+@app.post("/consolidate", dependencies=[Depends(verify_api_key)])
 def trigger_consolidation():
     logger.info("Triggering nightly self-improvement consolidation loop")
     msg = run_self_improvement()
