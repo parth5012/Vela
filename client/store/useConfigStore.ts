@@ -1,0 +1,149 @@
+import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
+
+export interface SuggestionStarter {
+  label: string;
+  text: string;
+  persona: string;
+}
+
+interface ConfigState {
+  apiUrl: string;
+  apiKey: string;
+  isConfigured: boolean;
+  hasHydrated: boolean;
+  setConfig: (url: string, key: string) => void;
+  clearConfig: () => void;
+  setHasHydrated: (val: boolean) => void;
+  theme: 'deep' | 'slate' | 'cyberpunk' | 'nordic' | 'dracula' | 'oled';
+  fontSize: 'small' | 'medium' | 'large';
+  accentColor: 'indigo' | 'emerald' | 'rose' | 'amber' | 'violet' | 'pink' | 'orange' | 'blue';
+  systemPrompt: string;
+  temperature: number;
+  modelName: string;
+  defaultPersona: string;
+  userName: string;
+  suggestionStarters: SuggestionStarter[];
+  setTheme: (theme: 'deep' | 'slate' | 'cyberpunk' | 'nordic' | 'dracula' | 'oled') => void;
+  setFontSize: (size: 'small' | 'medium' | 'large') => void;
+  setAccentColor: (color: 'indigo' | 'emerald' | 'rose' | 'amber' | 'violet' | 'pink' | 'orange' | 'blue') => void;
+  setSystemPrompt: (prompt: string) => void;
+  setTemperature: (temp: number) => void;
+  setModelName: (model: string) => void;
+  setDefaultPersona: (persona: string) => void;
+  setUserName: (name: string) => void;
+  setSuggestionStarters: (starters: SuggestionStarter[]) => void;
+}
+
+const SECURE_KEY = 'vela-api-key';
+
+export const useConfigStore = create<ConfigState>()(
+  persist(
+    (set) => ({
+      apiUrl: '',
+      apiKey: '',
+      isConfigured: false,
+      hasHydrated: false,
+      theme: 'deep',
+      fontSize: 'medium',
+      accentColor: 'indigo',
+      systemPrompt: 'You are an autonomous research agent.',
+      temperature: 0.7,
+      modelName: 'gemini-1.5-pro',
+      defaultPersona: 'personal assistant',
+      userName: 'Parth',
+      suggestionStarters: [
+        { label: '👩🏫 Teach Concept', text: 'Teach me the intuition behind binary search and trace an example', persona: 'teacher' },
+        { label: '📊 Data Analyst', text: 'Analyze the key features of the 2026 FIFA World Cup matches', persona: 'analyst' },
+        { label: '✍️ Prompt Architect', text: 'Help me draft a detailed system prompt for a weather assistant bot', persona: 'prompt builder' }
+      ],
+      setConfig: (url, key) => {
+        set({ apiUrl: url, apiKey: key, isConfigured: true });
+        if (Platform.OS !== 'web') {
+          SecureStore.setItemAsync(SECURE_KEY, key).catch((err) => {
+            console.error('[useConfigStore] Failed to save apiKey to SecureStore:', err);
+          });
+        }
+      },
+      clearConfig: () => {
+        set({
+          apiUrl: '',
+          apiKey: '',
+          isConfigured: false,
+          theme: 'deep',
+          fontSize: 'medium',
+          accentColor: 'indigo',
+          systemPrompt: 'You are an autonomous research agent.',
+          temperature: 0.7,
+          modelName: 'gemini-1.5-pro',
+          defaultPersona: 'personal assistant',
+          userName: 'Parth',
+          suggestionStarters: [
+            { label: '👩🏫 Teach Concept', text: 'Teach me the intuition behind binary search and trace an example', persona: 'teacher' },
+            { label: '📊 Data Analyst', text: 'Analyze the key features of the 2026 FIFA World Cup matches', persona: 'analyst' },
+            { label: '✍️ Prompt Architect', text: 'Help me draft a detailed system prompt for a weather assistant bot', persona: 'prompt builder' }
+          ]
+        });
+        if (Platform.OS !== 'web') {
+          SecureStore.deleteItemAsync(SECURE_KEY).catch((err) => {
+            console.error('[useConfigStore] Failed to delete apiKey from SecureStore:', err);
+          });
+        }
+      },
+      setHasHydrated: (val) => set({ hasHydrated: val }),
+      setTheme: (theme) => set({ theme }),
+      setFontSize: (fontSize) => set({ fontSize }),
+      setAccentColor: (accentColor) => set({ accentColor }),
+      setSystemPrompt: (systemPrompt) => set({ systemPrompt }),
+      setTemperature: (temperature) => set({ temperature }),
+      setModelName: (modelName) => set({ modelName }),
+      setDefaultPersona: (defaultPersona) => set({ defaultPersona }),
+      setUserName: (userName) => set({ userName }),
+      setSuggestionStarters: (suggestionStarters) => set({ suggestionStarters }),
+    }),
+    {
+      name: 'vela-config-storage',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => {
+        // Exclude hasHydrated (session state) and securely store apiKey on native
+        const { hasHydrated, ...rest } = state;
+        if (Platform.OS === 'web') {
+          return rest;
+        }
+        return {
+          ...rest,
+          apiKey: '', // ApiKey is stored in SecureStore on native
+        };
+      },
+      onRehydrateStorage: (state) => {
+        return (hydratedState, error) => {
+          if (error || !hydratedState) {
+            state?.setHasHydrated(true);
+            return;
+          }
+
+          // On Native, load the apiKey from SecureStore after AsyncStorage has rehydrated.
+          if (Platform.OS !== 'web') {
+            SecureStore.getItemAsync(SECURE_KEY)
+              .then((secureKey) => {
+                if (secureKey) {
+                  useConfigStore.setState({ apiKey: secureKey });
+                }
+              })
+              .catch((err) => {
+                console.error('[useConfigStore] SecureStore load error:', err);
+              })
+              .finally(() => {
+                hydratedState.setHasHydrated(true);
+              });
+          } else {
+            hydratedState.setHasHydrated(true);
+          }
+        };
+      },
+    }
+  )
+);

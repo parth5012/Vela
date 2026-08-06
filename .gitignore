@@ -6,7 +6,16 @@ docs/
 GEMINI.md
 .gemini/
 graphify-out/
-*.json
+previous_chats.json
 .worktrees/
 .tmp/
 *.db
+.scratch/
+node_modules
+client/.git/
+client/android/
+client/bundletool-all-1.18.3.jar
+client/graphify-out/
+client/temp.keystore
+client/credentials
+client/credentials.json
