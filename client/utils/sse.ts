@@ -23,21 +23,13 @@ export async function streamAgentResponse(
   signal?: AbortSignal,
   agent?: string,
   onAuthRequired?: (provider: string) => void,
-  timeoutMs: number = DEFAULT_TIMEOUT_MS,
-  onServerWakingUp?: () => void
+  timeoutMs: number = DEFAULT_TIMEOUT_MS
 ): Promise<void> {
   // Create a timeout controller to abort the request if it takes too long
   const timeoutController = new AbortController();
   const timeoutId = setTimeout(() => {
     timeoutController.abort(new Error(`Request timed out after ${timeoutMs / 1000}s. Server may be waking up.`));
   }, timeoutMs);
-
-  // Notify user after 10 seconds that server might be waking up
-  const wakingUpTimeoutId = setTimeout(() => {
-    if (onServerWakingUp) {
-      onServerWakingUp();
-    }
-  }, 10000);
 
   // Combine external signal with timeout controller
   const combinedSignal = signal
@@ -110,9 +102,8 @@ export async function streamAgentResponse(
     while (true) {
       const { value, done } = await reader.read();
       if (done) {
-        // Clear timeouts on successful completion
+        // Clear timeout on successful completion
         clearTimeout(timeoutId);
-        clearTimeout(wakingUpTimeoutId);
         const cleaned = buffer.trim();
         if (cleaned.startsWith('data: ')) {
           const rawData = cleaned.slice(6);
@@ -145,8 +136,6 @@ export async function streamAgentResponse(
       for (const line of lines) {
         const cleaned = line.trim();
         if (cleaned.startsWith('data: ')) {
-          // Clear the "waking up" timeout on first data chunk
-          clearTimeout(wakingUpTimeoutId);
           const rawData = cleaned.slice(6);
           try {
             const parsed = JSON.parse(rawData);
@@ -169,9 +158,8 @@ export async function streamAgentResponse(
       }
     }
   } catch (error: any) {
-    // Clear timeouts
+    // Clear timeout
     clearTimeout(timeoutId);
-    clearTimeout(wakingUpTimeoutId);
     console.error('[streamAgentResponse] Error:', error.message);
     onError(error);
   }

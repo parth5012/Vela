@@ -434,11 +434,6 @@ export default function ChatScreen() {
                 if (provider === 'google' && activeThreadId) {
                   setAuthRequired((prev) => ({ ...prev, [activeThreadId]: true }));
                 }
-              },
-              undefined,
-              () => {
-                // Server might be waking up (Render cold start)
-                appendToken(activeThreadId, '\n\n⏳ Server is waking up, please wait...');
               }
       );
   }, [
@@ -874,11 +869,6 @@ export default function ChatScreen() {
                 if (provider === 'google' && activeThreadId) {
                   setAuthRequired((prev) => ({ ...prev, [activeThreadId]: true }));
                 }
-              },
-              undefined,
-              () => {
-                // Server might be waking up (Render cold start)
-                appendToken(activeThreadId, '\n\n⏳ Server is waking up, please wait...');
               }
       );
 };
@@ -959,11 +949,6 @@ export default function ChatScreen() {
                 if (provider === 'google') {
                   setAuthRequired((prev) => ({ ...prev, [newThreadId]: true }));
                 }
-              },
-              undefined,
-              () => {
-                // Server might be waking up (Render cold start)
-                appendToken(newThreadId, '\n\n⏳ Server is waking up, please wait...');
               }
       );
   }, [
