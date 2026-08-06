@@ -86,7 +86,6 @@ def db_log_step_start(conversation_id: str, action: str, target: str, value: str
         
     return session_id, step_number
 
-@traceable(name="Wait for Client WebView Event", tags=["webview", "network"])
 async def wait_for_client_event(conversation_id: str, action: str, target: str, value: str, task_token: str = None):
     """Blocks execution and awaits the HTTP response from the mobile client WebView."""
     event = asyncio.Event()

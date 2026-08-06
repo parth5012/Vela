@@ -4,6 +4,7 @@ from agent.registry import AGENT_REGISTRY
 from utils.llm import get_llm
 import os
 import asyncio
+import sys
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, Query, responses, Request, BackgroundTasks, Security, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -27,7 +28,17 @@ from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage
 from agent.graph import graph
 from db.models import Conversation, Experience
-from tools.webview_browser import PENDING_TASKS
+
+# Import PENDING_TASKS at runtime to avoid module duplication issues
+# This ensures we always reference the current module's PENDING_TASKS dict
+# rather than a captured reference from import time
+
+def get_pending_tasks():
+    """Get the current PENDING_TASKS dict from the webview_browser module."""
+    module = sys.modules.get("tools.webview_browser")
+    if module is None:
+        raise RuntimeError("tools.webview_browser module not found")
+    return module.PENDING_TASKS
 
 
 
@@ -944,19 +955,20 @@ class WebViewResponsePayload(BaseModel):
 def submit_webview_response(payload: WebViewResponsePayload):
     conversation_id = payload.conversation_id
     key = None
-    if conversation_id in PENDING_TASKS:
+    pending_tasks = get_pending_tasks()
+    if conversation_id in pending_tasks:
         key = conversation_id
     else:
-        for k in PENDING_TASKS.keys():
+        for k in pending_tasks.keys():
             if k.startswith(f"{conversation_id}_"):
                 key = k
                 break
     if key:
-        PENDING_TASKS[key]["response"] = {
+        pending_tasks[key]["response"] = {
             "status": payload.status,
             "result": payload.result
         }
-        PENDING_TASKS[key]["event"].set()
+        pending_tasks[key]["event"].set()
         logger.info("Received WebView response for task", conversation_id=conversation_id, status=payload.status)
         return {"status": "accepted"}
     else:

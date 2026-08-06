@@ -20,6 +20,8 @@ os.environ.setdefault("VELA_API_KEY", "vela5012")
 
 from agent.main import app
 
+VELA_API_KEY = os.environ.get("VELA_API_KEY", "vela5012")
+
 # Import the module object itself (not the @tool-decorated function).
 # `import tools.webview_browser` would resolve to the StructuredTool instance
 # because the @tool decorator replaces the module-level name.
@@ -192,7 +194,7 @@ class TestSubmitWebviewResponseRouting:
                 "status": "success",
                 "result": "exact match result",
             },
-            headers={"Authorization": "Bearer vela5012"},
+            headers={"Authorization": f"Bearer {VELA_API_KEY}"},
         )
         assert resp.status_code == 200
         assert resp.json()["status"] == "accepted"
@@ -216,7 +218,7 @@ class TestSubmitWebviewResponseRouting:
                 "status": "success",
                 "result": "prefix matched result",
             },
-            headers={"Authorization": "Bearer vela5012"},
+            headers={"Authorization": f"Bearer {VELA_API_KEY}"},
         )
         assert resp.status_code == 200
         assert wb.PENDING_TASKS[key]["response"]["result"] == "prefix matched result"
@@ -242,7 +244,7 @@ class TestSubmitWebviewResponseRouting:
                 "status": "success",
                 "result": "one of them",
             },
-            headers={"Authorization": "Bearer vela5012"},
+            headers={"Authorization": f"Bearer {VELA_API_KEY}"},
         )
         assert resp.status_code == 200
 
@@ -262,7 +264,7 @@ class TestSubmitWebviewResponseRouting:
                 "status": "success",
                 "result": "orphan response",
             },
-            headers={"Authorization": "Bearer vela5012"},
+            headers={"Authorization": f"Bearer {VELA_API_KEY}"},
         )
         assert resp.status_code == 404
         assert "No pending task found" in resp.json()["detail"]
