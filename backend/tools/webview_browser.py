@@ -133,7 +133,6 @@ def db_log_step_end(session_id: str, step_number: int, action: str, value: str, 
             db_session.commit()
 
 @tool
-@traceable(name="WebView Action: {action}", tags=["webview", "browser-automation"])
 async def webview_browser(
     conversation_id: str,
     action: str,
