@@ -145,6 +145,8 @@ export async function streamAgentResponse(
       for (const line of lines) {
         const cleaned = line.trim();
         if (cleaned.startsWith('data: ')) {
+          // Clear the "waking up" timeout on first data chunk
+          clearTimeout(wakingUpTimeoutId);
           const rawData = cleaned.slice(6);
           try {
             const parsed = JSON.parse(rawData);
