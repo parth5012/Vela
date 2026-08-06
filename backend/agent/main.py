@@ -238,6 +238,7 @@ class MessagePayload(BaseModel):
     google_access_token: str | None = None
 
 
+from agent.concurrency import get_stream_semaphore
 
 @app.post("/chat/message", dependencies=[Depends(verify_api_key)])
 async def chat_message(payload: MessagePayload):
@@ -249,8 +250,11 @@ async def chat_message(payload: MessagePayload):
         )
 
     async def sse_generator():
+        semaphore = get_stream_semaphore()
+        await semaphore.acquire()
         producer_started = False
         normalized_id = None
+        streaming_complete = False
         try:
             # Retrieve or create thread
             normalized_id = normalize_thread_id(payload.thread_id)
@@ -395,6 +399,9 @@ async def chat_message(payload: MessagePayload):
                 logger.info("SSE generator finished", thread_id=normalized_id)
                 # Release semaphore as soon as streaming is complete so new streams
                 # can start while post-processing (DB writes, title generation) happens.
+                streaming_complete = True
+                semaphore.release()
+                logger.info("Semaphore released after streaming complete", thread_id=normalized_id)
 
             # Update the latest Experience record with full_response if it contains tool calls or thoughts
             if full_response:
@@ -433,6 +440,11 @@ async def chat_message(payload: MessagePayload):
             # Send final completed event
             yield f"data: {json.dumps({'type': 'done', 'thread_title': title_to_send, 'agent': thread_agent})}\n\n"
         except BaseException:
+            # Ensure semaphore is released if streaming failed before explicit release above
+            # (e.g. CancelledError from client disconnect, or any other unexpected error)
+            if not streaming_complete:
+                semaphore.release()
+                logger.info("Semaphore released in sse_generator error handler", thread_id=normalized_id)
             raise
 
     return StreamingResponse(sse_generator(), media_type="text/event-stream")
