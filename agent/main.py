@@ -287,11 +287,7 @@ async def chat_message(payload: MessagePayload):
                 except Exception as e:
                     await queue.put(e)
                 finally:
-                    try:
-                        await queue.put(None)
-                    finally:
-                        semaphore.release()
-                        logger.info("Semaphore released by producer", thread_id=normalized_id)
+                    await queue.put(None)
                     # Check and evaluate any active running webview session for this thread
                     try:
                         from tools.webview_browser import evaluate_webview_session
@@ -386,9 +382,6 @@ async def chat_message(payload: MessagePayload):
                 logger.info("SSE generator cancelled by client disconnect. Agent will continue running in the background.")
                 raise
             finally:
-                if not producer_started:
-                    semaphore.release()
-                    logger.info("Semaphore released because producer failed to start", thread_id=normalized_id)
                 # We let the producer_task continue running to completion in the background
                 # so the agent can finish processing and write the result to the database.
                 logger.info("SSE generator finished", thread_id=normalized_id)
@@ -417,7 +410,7 @@ async def chat_message(payload: MessagePayload):
             # Generate a dynamic title if thread title is 'New Chat'
             if thread_title == "New Chat":
                 # new_title = payload.message[:30] + "..." if len(payload.message) > 30 else payload.message
-                response = get_title(initial_message)
+                response = await asyncio.to_thread(get_title, initial_message)
                 new_title = str(response.content) if hasattr(response, "content") else str(response)
                 with get_db_session() as session:
                     client = DBClient(session)
@@ -430,9 +423,8 @@ async def chat_message(payload: MessagePayload):
             # Send final completed event
             yield f"data: {json.dumps({'type': 'done', 'thread_title': title_to_send, 'agent': thread_agent})}\n\n"
         finally:
-            if not producer_started:
-                semaphore.release()
-                logger.info("Semaphore released in sse_generator finally because producer never started", thread_id=normalized_id)
+            semaphore.release()
+            logger.info("Semaphore released in sse_generator finally", thread_id=normalized_id)
 
     return StreamingResponse(sse_generator(), media_type="text/event-stream")
 
