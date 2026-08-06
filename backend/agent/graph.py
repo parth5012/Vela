@@ -156,9 +156,17 @@ async def chatbot_node(state: AgentState) -> dict:
 
             llm = get_llm().bind_tools(allowed_tools or tools_list)
             system_prompt = await build_system_prompt(state)
-            response_msg = await llm.ainvoke([
-                SystemMessage(content=system_prompt)
-            ] + list(state["messages"]))
+            chunks = []
+            async for chunk in llm.astream(
+                [SystemMessage(content=system_prompt)] + list(state["messages"])
+            ):
+                chunks.append(chunk)
+            if chunks:
+                response_msg = chunks[0]
+                for chunk in chunks[1:]:
+                    response_msg += chunk
+            else:
+                response_msg = AIMessage(content="")
         except Exception as e:
             response_msg = AIMessage(content=f"Error invoking LLM: {str(e)}")
     else:
