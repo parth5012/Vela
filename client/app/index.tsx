@@ -387,6 +387,9 @@ export default function ChatScreen() {
     const controller = new AbortController();
     abortControllersRef.current[activeThreadId] = controller;
 
+    // Get the agent/persona for this thread
+    const regenerateAgent = threads.find((t) => t.id === activeThreadId)?.persona || 'personal assistant';
+
     // Call SSE API again
     await streamAgentResponse(
       apiUrl,
@@ -426,11 +429,16 @@ export default function ChatScreen() {
           );
         },
               controller.signal,
-              undefined,
+              regenerateAgent,
               (provider) => {
                 if (provider === 'google' && activeThreadId) {
                   setAuthRequired((prev) => ({ ...prev, [activeThreadId]: true }));
                 }
+              },
+              undefined,
+              () => {
+                // Server might be waking up (Render cold start)
+                appendToken(activeThreadId, '\n\n⏳ Server is waking up, please wait...');
               }
       );
   }, [
@@ -866,6 +874,11 @@ export default function ChatScreen() {
                 if (provider === 'google' && activeThreadId) {
                   setAuthRequired((prev) => ({ ...prev, [activeThreadId]: true }));
                 }
+              },
+              undefined,
+              () => {
+                // Server might be waking up (Render cold start)
+                appendToken(activeThreadId, '\n\n⏳ Server is waking up, please wait...');
               }
       );
 };
@@ -946,6 +959,11 @@ export default function ChatScreen() {
                 if (provider === 'google') {
                   setAuthRequired((prev) => ({ ...prev, [newThreadId]: true }));
                 }
+              },
+              undefined,
+              () => {
+                // Server might be waking up (Render cold start)
+                appendToken(newThreadId, '\n\n⏳ Server is waking up, please wait...');
               }
       );
   }, [
