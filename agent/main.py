@@ -353,6 +353,13 @@ async def chat_message(payload: MessagePayload):
                     elif kind == "on_tool_start":
                         tool_name = event.get("name")
                         tool_input = event.get("data", {}).get("input", {})
+                        if tool_name == "webview_browser":
+                            import tools.webview_browser
+                            conv_id = tool_input.get("conversation_id")
+                            if conv_id:
+                                task_token = str(uuid.uuid4())
+                                tools.webview_browser.LAST_TOOL_START_TOKENS[conv_id] = task_token
+                                tool_input["conversation_id"] = f"{conv_id}_{task_token}"
                         try:
                             input_str = json.dumps(tool_input)
                         except Exception:
@@ -934,19 +941,27 @@ class WebViewResponsePayload(BaseModel):
 @app.post("/chat/webview/response", dependencies=[Depends(verify_api_key)])
 def submit_webview_response(payload: WebViewResponsePayload):
     conversation_id = payload.conversation_id
+    key = None
     if conversation_id in PENDING_TASKS:
-        PENDING_TASKS[conversation_id]["response"] = {
+        key = conversation_id
+    else:
+        for k in PENDING_TASKS.keys():
+            if k.startswith(f"{conversation_id}_"):
+                key = k
+                break
+    if key:
+        PENDING_TASKS[key]["response"] = {
             "status": payload.status,
             "result": payload.result
         }
-        PENDING_TASKS[conversation_id]["event"].set()
+        PENDING_TASKS[key]["event"].set()
         logger.info("Received WebView response for task", conversation_id=conversation_id, status=payload.status)
         return {"status": "accepted"}
     else:
         logger.warning("Received WebView response but no pending task found", conversation_id=conversation_id)
         raise HTTPException(status_code=404, detail="No pending task found for this conversation ID")
 
-@app.post("/consolidate")
+@app.post("/consolidate", dependencies=[Depends(verify_api_key)])
 def trigger_consolidation():
     logger.info("Triggering nightly self-improvement consolidation loop")
     msg = run_self_improvement()

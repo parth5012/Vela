@@ -8,7 +8,11 @@ from db.models import Experience, SystemPromptFragment, Conversation
 client = TestClient(app)
 
 def test_consolidate_endpoint_mock_mode():
-    response = client.post("/consolidate")
+    resp_no_auth = client.post("/consolidate")
+    assert resp_no_auth.status_code == 403
+    resp_bad_auth = client.post("/consolidate", headers={"Authorization": "Bearer bad-key"})
+    assert resp_bad_auth.status_code == 401
+    response = client.post("/consolidate", headers={"Authorization": "Bearer vela5012"})
     assert response.status_code == 200
     assert response.json()["status"] == "success"
 
@@ -58,7 +62,7 @@ def test_run_self_improvement_flow(mock_llm_func):
                 session.add(exp)
                 session.commit()
 
-            response = client.post("/consolidate")
+            response = client.post("/consolidate", headers={"Authorization": "Bearer vela5012"})
             assert response.status_code == 200
             assert response.json()["status"] == "success"
 

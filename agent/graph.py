@@ -200,8 +200,7 @@ workflow.add_conditional_edges(
         END: END
     }
 )
-# workflow.add_edge("web_search", "chatbot")
-workflow.add_conditional_edges("chatbot", tools_condition, {"tools": "tools", END: END})
+# workflow.add_conditional_edges("chatbot", tools_condition, {"tools": "tools", END: END})
 workflow.add_edge("tools", "chatbot")
 graph = workflow.compile()
 
