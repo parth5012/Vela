@@ -11,7 +11,7 @@ def test_health_endpoint(monkeypatch):
     client = TestClient(app)
     response = client.get("/health", headers={"Authorization": "Bearer super-secret-key"})
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json() == {"status": "ok", "tool_proxy": "available"}
 
 
 def test_endpoints_require_api_key_auth(monkeypatch):
