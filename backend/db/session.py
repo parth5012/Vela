@@ -24,7 +24,8 @@ if not DATABASE_URL:
 
 # Create the engine
 if DATABASE_URL.startswith("sqlite"):
-    engine = create_engine(DATABASE_URL)
+    from sqlalchemy.pool import NullPool
+    engine = create_engine(DATABASE_URL, poolclass=NullPool)
     
     @event.listens_for(engine, "connect")
     def set_sqlite_pragma(dbapi_connection, connection_record):
