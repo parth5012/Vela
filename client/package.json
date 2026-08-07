@@ -5,6 +5,7 @@
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-navigation/drawer": "^7.12.6",
+    "drizzle-orm": "^0.45.2",
     "expo": "~57.0.2",
     "expo-auth-session": "^57.0.5",
     "expo-clipboard": "~57.0.0",
@@ -15,9 +16,10 @@
     "expo-router": "~57.0.3",
     "expo-secure-store": "~57.0.0",
     "expo-sharing": "~57.0.2",
+    "expo-sqlite": "^57.0.1",
     "expo-status-bar": "~57.0.0",
-    "expo-system-ui": "^57.0.0",
-    "expo-web-browser": "^57.0.2",
+    "expo-system-ui": "~57.0.0",
+    "expo-web-browser": "~57.0.2",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.86.0",
@@ -27,21 +29,24 @@
     "react-native-reanimated": "^4.5.1",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "4.25.2",
-    "react-native-web": "^0.21.2",
+    "react-native-web": "~0.21.2",
     "react-native-webview": "13.16.1",
     "react-native-worklets": "^0.10.3",
-    "zustand": "^5.0.14"
+    "zustand": "^5.0.1"
   },
   "devDependencies": {
     "@react-native/jest-preset": "^0.86.0",
     "@types/jest": "^29.5.12",
     "@types/react": "~19.2.2",
+    "babel-plugin-inline-import": "^3.0.0",
+    "babel-preset-expo": "~57.0.6",
+    "drizzle-kit": "^0.31.0",
     "jest": "^29.7.0",
-    "jest-expo": "^57.0.1",
+    "jest-expo": "~57.0.1",
     "patch-package": "^8.0.1",
     "postinstall-postinstall": "^2.1.0",
     "react-test-renderer": "19.2.3",
-    "typescript": "~6.0.3"
+    "typescript": "^6.0.3"
   },
   "scripts": {
     "start": "expo start",

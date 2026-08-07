@@ -72,8 +72,8 @@ describe('streamAgentResponse', () => {
       'key',
       'thread-1',
       'hi',
-      {},
-      {},
+      () => {},
+      () => {},
       (err) => {
         errorOccurred = true;
         errorMessage = err.message;
