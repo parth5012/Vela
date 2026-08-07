@@ -49,7 +49,7 @@ discord_gateway = DiscordGateway(db=db)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Run database migration: rename persona → agent, ensure active_skill exists
+    # Run database migration: rename persona to agent, ensure active_skill exists
     try:
         from db.session import engine
         from sqlalchemy import inspect, text
@@ -547,7 +547,11 @@ def truncate_thread(thread_id: str, payload: TruncatePayload):
                 Experience.conversation_id == normalized_id,
                 Experience.created_at >= target_exp.created_at
             ).delete(synchronize_session=False)
-            
+
+            conv = session.query(Conversation).filter_by(id=normalized_id).first()
+            if conv:
+                conv.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+
             session.commit()
             return {"status": "success"}
     except HTTPException:
