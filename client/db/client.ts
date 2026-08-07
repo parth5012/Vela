@@ -7,7 +7,7 @@ import * as schema from './schema';
 const DATABASE_NAME = 'vela.db';
 
 let expoDbInstance: any = null;
-let dbInstance: ReturnType<typeof drizzle<typeof schema>> | null = null;
+let dbInstance: any = null;
 
 try {
   expoDbInstance = openDatabaseSync(DATABASE_NAME);
@@ -17,7 +17,8 @@ try {
 }
 
 export const expoDb = expoDbInstance;
-export const db = dbInstance as unknown as ReturnType<typeof drizzle<typeof schema>>;
+export const db = dbInstance;
+export default dbInstance;
 
 export async function initializeDatabase() {
   if (!dbInstance) {
