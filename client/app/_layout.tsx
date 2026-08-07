@@ -66,10 +66,12 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (hasHydrated) {
-      // Force user to land on the welcome/new conversation screen on app launch
-      useChatStore.getState().selectThread(null);
-      // Hydrate Google OAuth tokens from SecureStore
-      hydrateGoogleTokens();
+      // Preserve active thread if already selected, otherwise default to welcome/new screen
+      if (!useChatStore.getState().activeThreadId) {
+        useChatStore.getState().selectThread(null);
+      }
+      // Hydrate Google OAuth tokens SecureStore
+      hydrateGoogleTokens()
     }
   }, [hasHydrated]);
 
