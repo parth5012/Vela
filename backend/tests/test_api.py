@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 from unittest.mock import patch, AsyncMock
 from agent.main import app
 
-client = TestClient(app)
+
 
 def test_health_endpoint(monkeypatch):
     monkeypatch.setenv("VELA_API_KEY", "super-secret-key")
@@ -179,7 +179,7 @@ def test_branch_and_truncate_endpoints(monkeypatch):
     resp = client.post(f"/chat/threads/{parent_id}/truncate", json=truncate_payload, headers=bad_headers)
     assert resp.status_code == 401
 
-    # --- Test Branching: 404 for invalid parent thread ---
+    # --- Test Branching: 404 invalid parent thread ---
     invalid_branch_payload = {
         "parent_thread_id": "non-existent-parent",
         "new_thread_id": new_id,
@@ -190,7 +190,7 @@ def test_branch_and_truncate_endpoints(monkeypatch):
     assert resp.status_code == 404
     assert "Parent thread not found" in resp.json()["detail"]
 
-    # --- Test Branching: 404 for non-existent upto_message_id ---
+    # --- Test Branching: 404 non-existent upto_message_id ---
     invalid_msg_branch_payload = {
         "parent_thread_id": parent_id,
         "new_thread_id": new_id,
@@ -206,26 +206,26 @@ def test_branch_and_truncate_endpoints(monkeypatch):
     assert resp.status_code == 200
     assert resp.json() == {"status": "success"}
 
-    # Verify that the new thread has correct persona and history (copied up to message 2)
+    # Verify new thread has correct persona and history (copied up to message 2)
     with get_db_session() as session:
         new_conv = session.query(Conversation).filter_by(id=new_id).first()
         assert new_conv is not None
         assert new_conv.title == "Branched Thread"
-        assert new_conv.agent == "teacher"  # Agent copied
+        assert new_conv.agent == "teacher" # Agent copied
 
         new_exps = session.query(Experience).filter_by(conversation_id=new_id).order_by(Experience.created_at).all()
-        assert len(new_exps) == 2  # exp1 and exp2
+        assert len(new_exps) == 2 # exp1 and exp2
         assert new_exps[0].user_query == "Query 1"
         assert new_exps[1].user_query == "Query 2"
 
-    # --- Test Truncating: 404 for non-existent message ---
+    # --- Test Truncating: 404 non-existent message ---
     invalid_trunc_payload = {"upto_message_id": "usr-non-existent-msg"}
     resp = client.post(f"/chat/threads/{parent_id}/truncate", json=invalid_trunc_payload, headers=headers)
     assert resp.status_code == 404
     assert "Message not found in thread" in resp.json()["detail"]
 
     # --- Test Truncating: Success case ---
-    # We truncate parent_id from exp2 (which removes exp2 and exp3)
+    # truncate parent_id from exp2 (which removes exp2 and exp3)
     resp = client.post(f"/chat/threads/{parent_id}/truncate", json=truncate_payload, headers=headers)
     assert resp.status_code == 200
     assert resp.json() == {"status": "success"}
@@ -236,7 +236,7 @@ def test_branch_and_truncate_endpoints(monkeypatch):
         assert len(remaining_exps) == 1
         assert str(remaining_exps[0].id) == exp_id1
 
-        # Clean up database
+        # Clean database
         session.query(Experience).filter(Experience.conversation_id.in_([parent_id, new_id])).delete(synchronize_session=False)
         session.query(Conversation).filter(Conversation.id.in_([parent_id, new_id])).delete(synchronize_session=False)
         session.commit()
@@ -304,3 +304,105 @@ def test_conversation_pinning_endpoints(monkeypatch):
     patch_resp = client.patch(f"/chat/threads/{thread_id}", json={"is_pinned": False}, headers=headers)
     assert patch_resp.status_code == 200
     assert patch_resp.json()["is_pinned"] is False
+
+
+def test_truncate_thread_updates_updated_at(monkeypatch):
+    import uuid
+    from datetime import datetime, UTC, timedelta
+    from db.session import get_db_session
+    from db.models import Conversation, Experience
+    from fastapi.testclient import TestClient
+    from agent.main import app
+
+    monkeypatch.setenv("VELA_API_KEY", "secret-test-key")
+    headers = {"Authorization": "Bearer secret-test-key"}
+    client = TestClient(app)
+
+    thread_id = str(uuid.uuid4())
+    exp_id1 = str(uuid.uuid4())
+    exp_id2 = str(uuid.uuid4())
+
+    # 1. Set conversation experiences DB
+    with get_db_session() as session:
+        conv = Conversation(id=thread_id, title="Test Truncate Thread", agent="personal assistant")
+        # Set updated_at to past
+        past_time = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1)
+        conv.updated_at = past_time
+        session.add(conv)
+        session.flush()
+
+        exp1 = Experience(
+            id=exp_id1,
+            conversation_id=thread_id,
+            user_query="Q1",
+            agent_response="R1",
+            created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=5)
+        )
+        exp2 = Experience(
+            id=exp_id2,
+            conversation_id=thread_id,
+            user_query="Q2",
+            agent_response="R2",
+            created_at=datetime.now(UTC).replace(tzinfo=None)
+        )
+        session.add_all([exp1, exp2])
+        session.commit()
+
+    # 2. Call endpoint using TestClient
+    payload = {"upto_message_id": f"usr-{exp_id2}"}
+    resp = client.post(f"/chat/threads/{thread_id}/truncate", json=payload, headers=headers)
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "success"}
+
+    # 3. Verify database exp2 deleted, exp1 remains, updated_at updated
+    with get_db_session() as session:
+        remaining = session.query(Experience).filter_by(conversation_id=thread_id).all()
+        assert len(remaining) == 1
+        assert remaining[0].id == exp_id1
+
+        # Check conversation updated_at
+        conv_db = session.query(Conversation).filter_by(id=thread_id).first()
+        assert conv_db.updated_at != past_time
+        assert (datetime.now(UTC).replace(tzinfo=None) - conv_db.updated_at).total_seconds() < 5
+
+    # Clean database
+    with get_db_session() as session:
+        session.query(Experience).filter_by(conversation_id=thread_id).delete(synchronize_session=False)
+        session.query(Conversation).filter_by(id=thread_id).delete(synchronize_session=False)
+        session.commit()
+
+
+def test_truncate_thread_invalid_cases(monkeypatch):
+    import uuid
+    from db.session import get_db_session
+    from db.models import Conversation
+    from fastapi.testclient import TestClient
+    from agent.main import app
+
+    monkeypatch.setenv("VELA_API_KEY", "secret-test-key")
+    headers = {"Authorization": "Bearer secret-test-key"}
+    
+    # 1. Non-existent thread/conversation
+    with TestClient(app) as client:
+        payload = {"upto_message_id": f"usr-{uuid.uuid4()}"}
+        resp = client.post(f"/chat/threads/non-existent-thread-id/truncate", json=payload, headers=headers)
+        assert resp.status_code == 404
+        assert "Message not found in thread" in resp.json()["detail"]
+        
+    # 2. Existing thread but non-existent message ID
+    thread_id = str(uuid.uuid4())
+    with get_db_session() as session:
+        conv = Conversation(id=thread_id, title="Test Truncate Errors", agent="personal assistant")
+        session.add(conv)
+        session.commit()
+        
+    with TestClient(app) as client:
+        payload = {"upto_message_id": f"usr-{uuid.uuid4()}"}
+        resp = client.post(f"/chat/threads/{thread_id}/truncate", json=payload, headers=headers)
+        assert resp.status_code == 404
+        assert "Message not found in thread" in resp.json()["detail"]
+        
+    # Clean up
+    with get_db_session() as session:
+        session.query(Conversation).filter_by(id=thread_id).delete(synchronize_session=False)
+        session.commit()

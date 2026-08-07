@@ -157,3 +157,33 @@ def test_conversation_active_skill_update(db_session):
     updated_conv = client.update_conversation_active_skill(conv.id, None)
     db_session.commit()
     assert updated_conv.active_skill is None
+
+
+def test_save_experience_updates_updated_at(db_session):
+    from datetime import datetime, UTC, timedelta
+    client = DBClient(db_session)
+    conv = client.get_or_create_conversation(77777)
+    
+    # Set updated_at to the past
+    past_time = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1)
+    conv.updated_at = past_time
+    db_session.commit()
+    
+    # Save an experience
+    client.save_experience(conv.id, "hello", "world")
+    
+    # Refresh to see updated values
+    db_session.refresh(conv)
+    
+    assert conv.updated_at > past_time
+    assert (datetime.now(UTC).replace(tzinfo=None) - conv.updated_at).total_seconds() < 5
+
+
+def test_save_experience_invalid_conversation(db_session):
+    from sqlalchemy.exc import IntegrityError
+    client = DBClient(db_session)
+    
+    # Attempting to save experience for non-existent conversation will raise IntegrityError
+    with pytest.raises(IntegrityError):
+        client.save_experience("non-existent-conv-id", "hello", "world")
+        db_session.commit()
