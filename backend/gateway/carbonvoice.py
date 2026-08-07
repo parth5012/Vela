@@ -108,7 +108,7 @@ class CarbonVoiceGateway:
                     client = DBClient(session)
                     conv = session.query(Conversation).filter_by(id=conv_id).first()
                     if not conv:
-                        client.create_client_conversation(agent="personal assistant", conversation_id=conv_id)
+                        client.create_client_conversation(agent="personal assistant", conversation_id=conv_id, source="carbonvoice")
                         session.commit()
                         self.logger.info("Created new conversation thread for Carbon Voice", conv_id=conv_id)
         except Exception as db_err:

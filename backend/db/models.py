@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import JSON, DateTime, Integer, String, Float, Boolean, Column, ForeignKey
+from sqlalchemy import JSON, DateTime, Integer, String, Float, Boolean, Column, ForeignKey, BigInteger
 from sqlalchemy.orm import declarative_base
 from pgvector.sqlalchemy import Vector
 
@@ -18,6 +18,7 @@ class Conversation(Base):
     agent = Column(String(50), default="personal assistant", nullable=False)
     active_skill = Column(String(50), nullable=True, default=None)
     is_pinned = Column(Boolean, default=False, nullable=False)
+    source = Column(String(50), default="telegram", nullable=False)
 
 
 
@@ -89,3 +90,25 @@ class WebViewAutomationStep(Base):
     status = Column(String(20), nullable=False)  # success, error, timeout
     observation = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ToolInvocation(Base):
+    __tablename__ = "tool_invocations"
+
+    request_id = Column(String(50), primary_key=True)
+    tool_name = Column(String(100), nullable=False)
+    status = Column(String(50), nullable=False)
+    result = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class SyncMessage(Base):
+    __tablename__ = "sync_messages"
+
+    id = Column(String(50), primary_key=True)  # ULID
+    conversation_id = Column(String, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+    role = Column(String(50), nullable=False)
+    content = Column(String, nullable=False)
+    provider = Column(String(50), nullable=False)
+    created_at = Column(BigInteger, nullable=False)
+

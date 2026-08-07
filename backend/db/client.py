@@ -30,7 +30,7 @@ class DBClient:
         conv = self.session.query(Conversation).filter_by(telegram_chat_id=telegram_chat_id).first()
         if not conv:
             conv_id = str(uuid.uuid4())
-            conv = Conversation(id=conv_id, telegram_chat_id=telegram_chat_id)
+            conv = Conversation(id=conv_id, telegram_chat_id=telegram_chat_id, source="telegram")
             self.session.add(conv)
             self.session.flush()
         return conv
@@ -47,7 +47,7 @@ class DBClient:
         conv = self.session.query(Conversation).filter_by(discord_channel_id=discord_channel_id).first()
         if not conv:
             conv_id = str(uuid.uuid4())
-            conv = Conversation(id=conv_id, discord_channel_id=discord_channel_id)
+            conv = Conversation(id=conv_id, discord_channel_id=discord_channel_id, source="discord")
             self.session.add(conv)
             self.session.flush()
         return conv
@@ -178,11 +178,11 @@ class DBClient:
             Conversation.discord_channel_id.is_(None)
         ).order_by(Conversation.updated_at.desc()).all()
 
-    def create_client_conversation(self, title: str = "New Chat", agent: str = "personal assistant", conversation_id: str = None) -> Conversation:
+    def create_client_conversation(self, title: str = "New Chat", agent: str = "personal assistant", conversation_id: str = None, source: str = "android_client") -> Conversation:
         """Creates a new client conversation thread."""
         conv_id = conversation_id or str(uuid.uuid4())
         truncated_title = title[:255] if title is not None else None
-        conv = Conversation(id=conv_id, title=truncated_title, agent=agent)
+        conv = Conversation(id=conv_id, title=truncated_title, agent=agent, source=source)
         self.session.add(conv)
         self.session.flush()
         return conv
