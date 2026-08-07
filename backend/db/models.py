@@ -17,6 +17,7 @@ class Conversation(Base):
     title = Column(String(255), default="New Chat")
     agent = Column(String(50), default="personal assistant", nullable=False)
     active_skill = Column(String(50), nullable=True, default=None)
+    is_pinned = Column(Boolean, default=False, nullable=False)
 
 
 

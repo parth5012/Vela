@@ -86,3 +86,16 @@ def test_get_latest_oauth_tokens(mock_get_db):
     result = db.get_latest_oauth_tokens("google")
     assert result == {"access_token": "latest_token"}
 
+
+def test_conversations_table_has_is_pinned_column():
+    from db.session import get_db_session
+    from sqlalchemy import text
+    with get_db_session() as session:
+        dialect_name = session.bind.dialect.name
+        if dialect_name == "sqlite":
+            query = "SELECT name FROM pragma_table_info('conversations') WHERE name='is_pinned';"
+        else:
+            query = "SELECT column_name FROM information_schema.columns WHERE table_name='conversations' AND column_name='is_pinned';"
+        result = session.execute(text(query)).fetchone()
+        assert result is not None, "Conversations table missing 'is_pinned' column"
+

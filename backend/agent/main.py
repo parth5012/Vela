@@ -67,6 +67,10 @@ async def lifespan(app: FastAPI):
             logger.info("Database migration: adding 'active_skill' column to 'conversations' table")
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE conversations ADD COLUMN active_skill VARCHAR(50) DEFAULT NULL"))
+        if 'is_pinned' not in columns:
+            logger.info("Database migration: adding 'is_pinned' column to 'conversations' table")
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE conversations ADD COLUMN is_pinned BOOLEAN DEFAULT FALSE NOT NULL"))
     except Exception as e:
         logger.error("Failed to run database migration", error=str(e))
 
@@ -129,6 +133,7 @@ def list_threads():
                     "id": t.id,
                     "title": t.title,
                     "agent": t.agent,
+                    "is_pinned": t.is_pinned,
                     "created_at": t.created_at.isoformat(),
                     "updated_at": t.updated_at.isoformat()
                 }
@@ -180,6 +185,10 @@ class TitlePayload(BaseModel):
     thread_id : str
     title: str
 
+class UpdateThreadPayload(BaseModel):
+    title: str | None = None
+    is_pinned: bool | None = None
+
 @app.post("/chats/threads", dependencies=[Depends(verify_api_key)])
 @app.post("/chat/threads/", dependencies=[Depends(verify_api_key)])
 def update_thread_title(payload: TitlePayload):
@@ -192,6 +201,28 @@ def update_thread_title(payload: TitlePayload):
                 raise HTTPException(status_code=404, detail="Thread not found")
             session.commit()
             return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.patch("/chat/threads/{thread_id}", dependencies=[Depends(verify_api_key)])
+def update_thread(thread_id: str, payload: UpdateThreadPayload):
+    normalized_id = normalize_thread_id(thread_id)
+    try:
+        with get_db_session() as session:
+            client = DBClient(session)
+            conv = session.query(Conversation).filter_by(id=normalized_id).first()
+            if not conv:
+                raise HTTPException(status_code=404, detail="Thread not found")
+            if payload.title is not None:
+                client.update_conversation_title(normalized_id, payload.title)
+            if payload.is_pinned is not None:
+                conv.is_pinned = payload.is_pinned
+                conv.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            session.commit()
+            return {"status": "success", "title": conv.title, "is_pinned": conv.is_pinned}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

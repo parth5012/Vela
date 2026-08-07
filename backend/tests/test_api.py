@@ -253,5 +253,54 @@ def test_branch_and_truncate_endpoints(monkeypatch):
 #         response = client.get("/health")
 #         assert response.status_code == 200
 #     
-#     mock_start.assert_called_once()
-#     mock_close.assert_called_once()
+#    mock_start.assert_called_once()
+#    mock_close.assert_called_once()
+
+
+def test_conversation_pinning_endpoints(monkeypatch):
+    monkeypatch.setenv("VELA_API_KEY", "secret-test-key")
+    from fastapi.testclient import TestClient
+    from agent.main import app
+    from db.session import get_db_session
+    from db.client import DBClient
+
+    client = TestClient(app)
+    headers = {"Authorization": "Bearer secret-test-key"}
+
+    # 1. Create a thread directly in db first so we have a valid conversation ID to patch
+    with get_db_session() as session:
+        db_client = DBClient(session)
+        conv = db_client.create_client_conversation(title="Test Pinned Thread")
+        thread_id = conv.id
+        session.commit()
+
+    # 2. Check get threads has is_pinned=False
+    resp = client.get("/chat/threads", headers=headers)
+    assert resp.status_code == 200
+    threads = resp.json()
+    my_thread = next((t for t in threads if t["id"] == thread_id), None)
+    assert my_thread is not None
+    assert my_thread["is_pinned"] is False
+
+    # 3. Patch the thread to be pinned
+    patch_resp = client.patch(f"/chat/threads/{thread_id}", json={"is_pinned": True}, headers=headers)
+    assert patch_resp.status_code == 200
+    assert patch_resp.json()["status"] == "success"
+    assert patch_resp.json()["is_pinned"] is True
+
+    # 4. Check get threads has is_pinned=True
+    resp = client.get("/chat/threads", headers=headers)
+    assert resp.status_code == 200
+    threads = resp.json()
+    my_thread = next((t for t in threads if t["id"] == thread_id), None)
+    assert my_thread["is_pinned"] is True
+
+    # 5. Patch title and check
+    patch_resp = client.patch(f"/chat/threads/{thread_id}", json={"title": "Updated Title via Patch"}, headers=headers)
+    assert patch_resp.status_code == 200
+    assert patch_resp.json()["title"] == "Updated Title via Patch"
+
+    # 6. Unpin client-side and check database updates
+    patch_resp = client.patch(f"/chat/threads/{thread_id}", json={"is_pinned": False}, headers=headers)
+    assert patch_resp.status_code == 200
+    assert patch_resp.json()["is_pinned"] is False

@@ -176,9 +176,34 @@ export const useChatStore = create<ChatState>()(
           threads: state.threads.map((t) => t.id === id ? { ...t, title: newTitle } : t)
         }));
       },
-      togglePinThread: (id) => set((state) => ({
-        threads: state.threads.map((t) => t.id === id ? { ...t, is_pinned: !t.is_pinned } : t)
-      })),
+      togglePinThread: async (id) => {
+        const config = useConfigStore.getState();
+        if (config.apiUrl && config.apiKey) {
+          const formattedUrl = normalizeUrl(config.apiUrl);
+          const thread = useChatStore.getState().threads.find((t) => t.id === id);
+          if (thread) {
+            const nextPinnedStatus = !thread.is_pinned;
+            try {
+              const res = await fetch(`${formattedUrl}/chat/threads/${id}`, {
+                method: 'PATCH',
+                headers: {
+                  'Authorization': `Bearer ${config.apiKey.trim()}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ is_pinned: nextPinnedStatus }),
+              });
+              if (!res.ok) {
+                console.warn(`[togglePinThread] Backend pin returned status: ${res.status}`);
+              }
+            } catch (err) {
+              console.warn('[togglePinThread] Failed pin backend:', err);
+            }
+          }
+        }
+        set((state) => ({
+          threads: state.threads.map((t) => t.id === id ? { ...t, is_pinned: !t.is_pinned } : t)
+        }));
+      },
       setThreadPersona: (threadId, persona) => set((state) => ({
         threads: state.threads.map((t) => t.id === threadId ? { ...t, persona } : t)
       })),
