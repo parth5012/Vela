@@ -126,6 +126,10 @@ class DBClient:
         Returns:
             The logged Experience instance.
         """
+        conv = self.session.query(Conversation).filter_by(id=conversation_id).first()
+        if conv:
+            conv.updated_at = datetime.now(UTC).replace(tzinfo=None)
+
         exp_id = str(uuid.uuid4())
         exp = Experience(
             id=exp_id,
