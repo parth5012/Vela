@@ -75,7 +75,7 @@ describe('useConfigStore', () => {
   it('should have default suggestion starters', () => {
     const state = useConfigStore.getState();
     expect(state.suggestionStarters.length).toBe(3);
-    expect(state.suggestionStarters[0].label).toBe('👩‍🏫 Teach Concept');
+    expect(state.suggestionStarters[0].label).toBe('👩🏫 Teach Concept');
   });
 
   it('should update suggestion starters correctly', () => {

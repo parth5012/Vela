@@ -111,6 +111,40 @@ function SourceCard({ src, colors, sizes, accentHex }: { src: SearchSource; colo
   );
 }
 
+function formatMessageTime(dateString?: string): string {
+  if (!dateString) return '';
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return '';
+
+    let hours = date.getHours();
+    const minutes = date.getMinutes();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    const minutesStr = minutes < 10 ? '0' + minutes : minutes;
+    const timeStr = `${hours}:${minutesStr} ${ampm}`;
+
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    const yesterday = new Date();
+    yesterday.setDate(now.getDate() - 1);
+    const isYesterday = date.toDateString() === yesterday.toDateString();
+
+    if (isToday) {
+      return timeStr;
+    } else if (isYesterday) {
+      return `Yesterday, ${timeStr}`;
+    } else {
+      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      return `${monthNames[date.getMonth()]} ${date.getDate()}, ${timeStr}`;
+    }
+  } catch (e) {
+    return '';
+  }
+}
+
+
 export default function ChatScreen() {
   const { apiUrl, apiKey, theme, fontSize, accentColor, modelName, defaultPersona, userName, suggestionStarters } = useConfigStore();
   const colors = THEME_COLORS[theme] || THEME_COLORS.deep;
@@ -631,14 +665,21 @@ export default function ChatScreen() {
               ? { backgroundColor: colors.bubbleUser, borderColor: colors.bubbleUserBorder }
               : { backgroundColor: accentHex + '0a', borderColor: accentHex + '26' }
           ]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-              <Text style={{ fontSize: sizes.sub + 2, marginRight: 6 }}>
-                {isUser ? '👤' : (currentPersona?.icon || '🤖')}
-              </Text>
-              <Text style={[styles.senderLabel, { color: colors.textDark, fontSize: sizes.sub, marginBottom: 0 }]}>
-                {isUser ? 'User' : `Vela Agent (${currentPersona?.name || 'Personal Assistant'})`}
-              </Text>
-            </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, width: '100%' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={{ fontSize: sizes.sub - 2, marginRight: 6 }}>
+              {isUser ? '👤' : (currentPersona?.icon || '🤖')}
+            </Text>
+            <Text style={[styles.senderLabel, { color: colors.textDark, fontSize: sizes.sub, marginBottom: 0 }]}>
+              {isUser ? 'User' : `Vela Agent (${currentPersona?.name || 'Personal Assistant'})`}
+            </Text>
+          </View>
+          {item.created_at && (
+            <Text style={[styles.timestampLabel, { color: colors.textDark, fontSize: sizes.sub - 2, opacity: 0.6 }]}>
+              {formatMessageTime(item.created_at)}
+            </Text>
+          )}
+        </View>
 
             {showRawMap[item.id] ? (
               <ScrollView style={styles.rawScroll} nestedScrollEnabled={true}>
@@ -804,16 +845,19 @@ export default function ChatScreen() {
     const userMsgId = generateId('msg_user');
     const assistantMsgId = generateId('msg_assistant');
 
+    const nowIso = new Date().toISOString();
     addMessage(activeThreadId, {
       id: userMsgId,
       role: 'user',
       content: userText,
+      created_at: nowIso,
     });
 
     addMessage(activeThreadId, {
       id: assistantMsgId,
       role: 'assistant',
       content: '',
+      created_at: nowIso,
     });
 
     setStreamingThread(activeThreadId, true);
@@ -891,16 +935,19 @@ export default function ChatScreen() {
     const userMsgId = generateId('msg_user');
     const assistantMsgId = generateId('msg_assistant');
 
+    const nowIso = new Date().toISOString();
     addMessage(newThreadId, {
       id: userMsgId,
       role: 'user',
       content: textToSend.trim(),
+      created_at: nowIso,
     });
 
     addMessage(newThreadId, {
       id: assistantMsgId,
       role: 'assistant',
       content: '',
+      created_at: nowIso,
     });
 
     setStreamingThread(newThreadId, true);
@@ -1272,6 +1319,10 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 4,
+  },
+  timestampLabel: {
+    fontSize: 10,
+    color: '#71717a',
   },
   loader: {
     marginVertical: 4,
