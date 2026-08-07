@@ -23,11 +23,14 @@ import urllib.parse
 from datetime import datetime, timedelta, timezone
 import httpx
 from httpx import HTTPStatusError
+from typing import Optional
 from pydantic import BaseModel, model_validator, Field, AliasChoices
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage
 from agent.graph import graph
-from db.models import Conversation, Experience
+from db.models import Conversation, Experience, SyncMessage, ToolInvocation, Base
+from fastapi import Response
+from utils.ulid import generate_ulid
 
 # Import PENDING_TASKS at runtime to avoid module duplication issues
 # This ensures we always reference the current module's PENDING_TASKS dict
@@ -71,6 +74,40 @@ async def lifespan(app: FastAPI):
             logger.info("Database migration: adding 'is_pinned' column to 'conversations' table")
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE conversations ADD COLUMN is_pinned BOOLEAN DEFAULT FALSE NOT NULL"))
+        if 'source' not in columns:
+            logger.info("Database migration: adding 'source' column to 'conversations' table")
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE conversations ADD COLUMN source VARCHAR(50) DEFAULT 'telegram' NOT NULL"))
+
+        # Create tool_invocations table if not exists
+        if 'tool_invocations' not in inspector.get_table_names():
+            logger.info("Database migration: creating 'tool_invocations' table")
+            with engine.begin() as conn:
+                conn.execute(text("""
+                    CREATE TABLE tool_invocations (
+                        request_id VARCHAR(50) PRIMARY KEY,
+                        tool_name VARCHAR(100) NOT NULL,
+                        status VARCHAR(50) NOT NULL,
+                        result TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """))
+
+        # Create sync_messages table if not exists
+        if 'sync_messages' not in inspector.get_table_names():
+            logger.info("Database migration: creating 'sync_messages' table")
+            with engine.begin() as conn:
+                conn.execute(text("""
+                    CREATE TABLE sync_messages (
+                        id VARCHAR(50) PRIMARY KEY,
+                        conversation_id VARCHAR(255) NOT NULL,
+                        role VARCHAR(50) NOT NULL,
+                        content TEXT NOT NULL,
+                        provider VARCHAR(50) NOT NULL,
+                        created_at BIGINT NOT NULL,
+                        FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+                    )
+                """))
     except Exception as e:
         logger.error("Failed to run database migration", error=str(e))
 
@@ -119,7 +156,7 @@ def verify_api_key(request: Request, credentials: HTTPAuthorizationCredentials =
 @app.get("/health", dependencies=[Depends(verify_api_key)])
 def health_check():
     logger.info("Health check pinged")
-    return {"status": "ok"}
+    return {"status": "ok", "tool_proxy": "available"}
 
 
 @app.get("/chat/threads", dependencies=[Depends(verify_api_key)])
@@ -451,6 +488,21 @@ async def chat_message(payload: MessagePayload):
                             new_exp = Experience(conversation_id=normalized_id, user_query=initial_message, agent_response=full_response)
                             session.add(new_exp)
                             session.commit()
+                        
+                        # Save to sync_messages for android_client sync
+                        conv = session.query(Conversation).filter_by(id=normalized_id).first()
+                        if conv and conv.source == "android_client":
+                            sync_msg = SyncMessage(
+                                id=generate_ulid(),
+                                conversation_id=normalized_id,
+                                role="assistant",
+                                content=full_response,
+                                provider="cloud",
+                                created_at=int(time.time() * 1000)
+                            )
+                            session.add(sync_msg)
+                            session.commit()
+
                         logger.info("Experience record updated", conversation_id=normalized_id)
                 except Exception as e:
                     logger.error("Failed to update database with full_response", error=str(e))
@@ -1016,3 +1068,307 @@ def trigger_consolidation():
     msg = run_self_improvement()
     logger.info("Consolidation loop completed", result=msg)
     return {"status": "success"}
+
+
+# ---------------------------------------------------------------------------
+# Tool Proxy and Sync Endpoints for Local LLM Integration
+# ---------------------------------------------------------------------------
+
+from collections import defaultdict
+import time
+
+RATE_LIMIT_STORE = defaultdict(list)
+
+def check_rate_limit(api_key: str) -> bool:
+    now = time.time()
+    RATE_LIMIT_STORE[api_key] = [t for t in RATE_LIMIT_STORE[api_key] if now - t < 60]
+    if len(RATE_LIMIT_STORE[api_key]) >= 10:
+        return False
+    RATE_LIMIT_STORE[api_key].append(now)
+    return True
+
+
+@app.get("/api/tools/manifest", dependencies=[Depends(verify_api_key)])
+def get_tools_manifest(
+    response: Response,
+    agent_id: str = Query(..., description="The ID of the Agent"),
+    conversation_id: Optional[str] = Query(None, description="Optional conversation UUID")
+):
+    agent_config = AGENT_REGISTRY.get(agent_id)
+    if not agent_config:
+        raise HTTPException(status_code=400, detail="Unknown agent_id")
+
+    tool_names = agent_config.tool_names[:3]
+
+    manifest_tools = []
+    from tools import tools_list
+    for name in tool_names:
+        t = next((tool for tool in tools_list if tool.name == name), None)
+        if t:
+            manifest_tools.append({
+                "name": t.name,
+                "description": t.description,
+                "parameters": t.args
+            })
+
+    response.headers["Cache-Control"] = "max-age=300"
+    return {
+        "tools": manifest_tools,
+        "max_tools_hint": 3
+    }
+
+
+class ToolInvokePayload(BaseModel):
+    conversation_id: str
+    tool_name: str
+    arguments: dict = Field(default_factory=dict)
+    request_id: str
+
+
+@app.post("/api/tools/invoke")
+async def invoke_tool(
+    payload: ToolInvokePayload,
+    api_key: str = Depends(verify_api_key)
+):
+    if not check_rate_limit(api_key):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Max 10 calls/min.")
+
+    from tools import tools_list
+    t = next((tool for tool in tools_list if tool.name == payload.tool_name), None)
+    if not t:
+        return {
+            "request_id": payload.request_id,
+            "tool_name": payload.tool_name,
+            "status": "error",
+            "error": {
+                "code": "UNKNOWN_TOOL",
+                "message": f"Tool '{payload.tool_name}' not found."
+            }
+        }
+
+    with get_db_session() as session:
+        existing = session.query(ToolInvocation).filter_by(request_id=payload.request_id).first()
+        if existing:
+            if existing.status == "success":
+                return {
+                    "request_id": existing.request_id,
+                    "tool_name": existing.tool_name,
+                    "status": "success",
+                    "result": existing.result
+                }
+            else:
+                return {
+                    "request_id": existing.request_id,
+                    "tool_name": existing.tool_name,
+                    "status": "error",
+                    "error": {
+                        "code": "EXECUTION_ERROR",
+                        "message": existing.result
+                    }
+                }
+
+    with get_db_session() as session:
+        new_inv = ToolInvocation(
+            request_id=payload.request_id,
+            tool_name=payload.tool_name,
+            status="running"
+        )
+        session.add(new_inv)
+        session.commit()
+
+    from fastapi.concurrency import run_in_threadpool
+    import asyncio
+
+    status_res = "success"
+    error_data = None
+    result_str = ""
+
+    try:
+        ans = await asyncio.wait_for(
+            run_in_threadpool(t.invoke, payload.arguments),
+            timeout=60.0
+        )
+        if isinstance(ans, dict) and "error" in ans:
+            status_res = "error"
+            err_val = ans["error"]
+            if isinstance(err_val, Exception):
+                result_str = str(err_val)
+            elif isinstance(err_val, dict) and "message" in err_val:
+                result_str = err_val["message"]
+            else:
+                result_str = str(err_val)
+            error_data = {
+                "code": "EXECUTION_ERROR",
+                "message": result_str
+            }
+        elif isinstance(ans, Exception):
+            status_res = "error"
+            result_str = str(ans)
+            error_data = {
+                "code": "EXECUTION_ERROR",
+                "message": result_str
+            }
+        else:
+            result_str = str(ans)
+    except asyncio.TimeoutError:
+        status_res = "error"
+        result_str = "Timeout: tool execution exceeded 60 seconds."
+        error_data = {
+            "code": "TIMEOUT",
+            "message": result_str
+        }
+    except Exception as e:
+        status_res = "error"
+        result_str = str(e)
+        error_data = {
+            "code": "EXECUTION_ERROR",
+            "message": result_str
+        }
+
+    with get_db_session() as session:
+        inv = session.query(ToolInvocation).filter_by(request_id=payload.request_id).first()
+        if inv:
+            inv.status = status_res
+            inv.result = result_str
+            session.commit()
+
+    with get_db_session() as session:
+        conv = session.query(Conversation).filter_by(id=payload.conversation_id).first()
+        if conv and conv.source == "android_client":
+            sync_msg = SyncMessage(
+                id=generate_ulid(),
+                conversation_id=payload.conversation_id,
+                role="tool",
+                content=result_str,
+                provider="cloud",
+                created_at=int(time.time() * 1000)
+            )
+            session.add(sync_msg)
+            session.commit()
+
+    if status_res == "success":
+        return {
+            "request_id": payload.request_id,
+            "tool_name": payload.tool_name,
+            "status": "success",
+            "result": result_str
+        }
+    else:
+        return {
+            "request_id": payload.request_id,
+            "tool_name": payload.tool_name,
+            "status": "error",
+            "error": error_data
+        }
+
+
+class SyncOperation(BaseModel):
+    id: str  # ULID
+    type: str  # "message"
+    conversation_id: str
+    payload: dict
+
+
+class SyncPushPayload(BaseModel):
+    operations: list[SyncOperation] = Field(default_factory=list)
+
+
+@app.post("/api/sync/push", dependencies=[Depends(verify_api_key)])
+def sync_push(payload: SyncPushPayload):
+    accepted = []
+    rejected = []
+    latest_ulid = None
+
+    with get_db_session() as session:
+        for op in payload.operations:
+            if op.type != "message":
+                rejected.append(op.id)
+                continue
+
+            conv = session.query(Conversation).filter_by(id=op.conversation_id).first()
+            if not conv or conv.source != "android_client":
+                rejected.append(op.id)
+                continue
+
+            existing = session.query(SyncMessage).filter_by(id=op.id).first()
+            if not existing:
+                role = op.payload.get("role", "")
+                content = op.payload.get("content", "")
+                provider = op.payload.get("provider", "")
+                created_at = op.payload.get("created_at")
+
+                if created_at is None:
+                    created_at = int(time.time() * 1000)
+
+                new_msg = SyncMessage(
+                    id=op.id,
+                    conversation_id=op.conversation_id,
+                    role=role,
+                    content=content,
+                    provider=provider,
+                    created_at=int(created_at)
+                )
+                session.add(new_msg)
+                session.commit()
+
+            accepted.append(op.id)
+            latest_ulid = op.id
+
+    return {
+        "accepted": accepted,
+        "rejected": rejected,
+        "server_cursor": latest_ulid
+    }
+
+
+@app.get("/api/sync/pull", dependencies=[Depends(verify_api_key)])
+def sync_pull(
+    cursor: Optional[str] = Query(None, description="The last known server ULID"),
+    limit: int = Query(50, description="The maximum number of items to return")
+):
+    with get_db_session() as session:
+        android_convs = session.query(Conversation).filter_by(source="android_client").all()
+        android_conv_ids = [c.id for c in android_convs]
+
+        if not android_conv_ids:
+            return {
+                "operations": [],
+                "cursor": cursor,
+                "has_more": False
+            }
+
+        query = session.query(SyncMessage).filter(
+            SyncMessage.conversation_id.in_(android_conv_ids),
+            SyncMessage.provider != "android_client"
+        )
+
+        if cursor:
+            query = query.filter(SyncMessage.id > cursor)
+
+        messages = query.order_by(SyncMessage.id.asc()).limit(limit + 1).all()
+
+        has_more = len(messages) > limit
+        if has_more:
+            messages = messages[:limit]
+
+        latest_ulid = messages[-1].id if messages else cursor
+
+        operations = []
+        for msg in messages:
+            operations.append({
+                "id": msg.id,
+                "type": "message",
+                "conversation_id": msg.conversation_id,
+                "payload": {
+                    "role": msg.role,
+                    "content": msg.content,
+                    "provider": msg.provider,
+                    "created_at": msg.created_at
+                }
+            })
+
+        return {
+            "operations": operations,
+            "cursor": latest_ulid,
+            "has_more": has_more
+        }
