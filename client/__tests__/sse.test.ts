@@ -63,6 +63,7 @@ describe('streamAgentResponse', () => {
       return Promise.resolve({
         ok: false,
         status: 500,
+        text: () => Promise.resolve(''),
       });
     });
 
@@ -71,8 +72,8 @@ describe('streamAgentResponse', () => {
       'key',
       'thread-1',
       'hi',
-      () => {},
-      () => {},
+      {},
+      {},
       (err) => {
         errorOccurred = true;
         errorMessage = err.message;
@@ -80,7 +81,7 @@ describe('streamAgentResponse', () => {
     );
 
     expect(errorOccurred).toBe(true);
-    expect(errorMessage).toBe('Server returned HTTP 500');
+    expect(errorMessage).toBe('Server returned HTTP 500: ');
   });
 
   it('should handle body stream reader unavailability', async () => {
