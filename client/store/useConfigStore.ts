@@ -41,9 +41,11 @@ interface ConfigState {
   isLocalMode: boolean;
   localModelDownloadProgress: number | null;
   wifiOnlyDownload: boolean;
+  localModelName: string;
   setIsLocalMode: (val: boolean) => void;
   setLocalModelDownloadProgress: (val: number | null) => void;
   setWifiOnlyDownload: (val: boolean) => void;
+  setLocalModelName: (val: string) => void;
 }
 
 const SECURE_KEY = 'vela-api-key';
@@ -73,6 +75,7 @@ export const useConfigStore = create<ConfigState>()(
       isLocalMode: false,
       localModelDownloadProgress: null,
       wifiOnlyDownload: true,
+      localModelName: 'Gemma 2B',
 
       setConfig: (url, key) => {
         set({ apiUrl: url, apiKey: key, isConfigured: true });
@@ -124,7 +127,8 @@ export const useConfigStore = create<ConfigState>()(
       // Settors for local mode
       setIsLocalMode: (isLocalMode) => set({ isLocalMode }),
       setLocalModelDownloadProgress: (localModelDownloadProgress) => set({ localModelDownloadProgress }),
-      setWifiOnlyDownload: (wifiOnlyDownload) => set({ wifiOnlyDownload })
+      setWifiOnlyDownload: (wifiOnlyDownload) => set({ wifiOnlyDownload }),
+      setLocalModelName: (localModelName) => set({ localModelName })
     }),
     {
       name: 'vela-config-storage',

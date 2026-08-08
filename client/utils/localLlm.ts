@@ -1,20 +1,27 @@
 import { NativeModules } from 'react-native';
+import { useConfigStore } from '../store/useConfigStore';
 
 export let isLocalModelLoaded = false;
 let useFallback = false;
+export let isLocalLlmDown = false;
+
+export function setLocalLlmDown(down: boolean) {
+  isLocalLlmDown = down;
+}
 
 // Determine if native bridge is available.
 const GemmaNative = NativeModules?.GemmaReactNativeModule;
 
 function mockResponseTemplate(prompt: string): string {
+  const localModelName = useConfigStore.getState().localModelName || 'Gemma 2B';
   const lowercasePrompt = prompt.toLowerCase();
   if (lowercasePrompt.includes('weather')) {
-    return "The weather is currently sunny and 72 degrees. The local assistant is working offline.";
+    return `The weather is currently sunny and 72 degrees. Behind the scenes, the local assistant (${localModelName}) is working offline.`;
   }
   if (lowercasePrompt.includes('drizzle') || lowercasePrompt.includes('sqlite')) {
-    return "Local database initialized with Drizzle and SQLite. Synced messages queue structure is active.";
+    return `Local database initialized with Drizzle SQLite. Synced messages queue structure is active with ${localModelName}.`;
   }
-  return "This is a response from Gemma running locally. MediaPipe LLM Inference API is functioning offline.";
+  return `This is a simulated local LLM response. The ${localModelName} model is running in fallback mock mode. MediaPipe LLM Inference API is functioning offline.`;
 }
 
 /**
@@ -22,6 +29,10 @@ function mockResponseTemplate(prompt: string): string {
  * Gracefully falls back to mock initialization in test/preview/non-native environments.
  */
 export async function initializeLocalModel(): Promise<void> {
+  if (isLocalLlmDown) {
+    throw new Error('Local LLM is down/unavailable.');
+  }
+
   if (isLocalModelLoaded) {
     return;
   }
@@ -73,6 +84,10 @@ export async function* streamLocalLlmResponse(
   prompt: string,
   onToken?: (token: string) => void
 ): AsyncGenerator<string, void, unknown> {
+  if (isLocalLlmDown) {
+    throw new Error('Local LLM is down/unavailable.');
+  }
+
   if (!isLocalModelLoaded) {
     throw new Error('Local model not loaded. Call initializeLocalModel() first.');
   }
@@ -107,13 +122,14 @@ export async function* streamLocalLlmResponse(
   }
 
   // Mock generator fallback: simulated text generation delays
-  const responseText = "This is a simulated local LLM response. The Gemma model is running in fallback mock mode.";
+  const responseText = mockResponseTemplate(prompt);
   const words = responseText.split(' ');
 
   for (let i = 0; i < words.length; i++) {
     const token = words[i] + (i === words.length - 1 ? '' : ' ');
     // Realistic delay simulating local inference token emission
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    const delay = process.env.NODE_ENV === 'test' ? 10 : 80;
+    await new Promise((resolve) => setTimeout(resolve, delay));
 
     if (onToken) {
       onToken(token);

@@ -72,6 +72,28 @@ describe('useConfigStore', () => {
     expect(updatedState.modelName).toBe('gemini-1.5-flash');
   });
 
+  it('should initialize default values for local mode config', () => {
+    const state = useConfigStore.getState();
+    expect(state.localModelName).toBe('Gemma 2B');
+    expect(state.isLocalMode).toBe(false);
+    expect(state.localModelDownloadProgress).toBeNull();
+    expect(state.wifiOnlyDownload).toBe(true);
+  });
+
+  it('should allow updating local mode config via setters', () => {
+    const state = useConfigStore.getState();
+    state.setLocalModelName('Phi-3 Mini');
+    state.setIsLocalMode(true);
+    state.setLocalModelDownloadProgress(50);
+    state.setWifiOnlyDownload(false);
+
+    const updatedState = useConfigStore.getState();
+    expect(updatedState.localModelName).toBe('Phi-3 Mini');
+    expect(updatedState.isLocalMode).toBe(true);
+    expect(updatedState.localModelDownloadProgress).toBe(50);
+    expect(updatedState.wifiOnlyDownload).toBe(false);
+  });
+
   it('should have default suggestion starters', () => {
     const state = useConfigStore.getState();
     expect(state.suggestionStarters.length).toBe(3);

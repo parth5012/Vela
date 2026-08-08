@@ -36,7 +36,7 @@ import { useBrowserStore } from '../store/useBrowserStore';
 import { useGoogleAuthStore } from '../store/useGoogleAuthStore';
 
 // Importing local mode modules
-import { initializeLocalModel, isLocalModelLoaded, streamLocalLlmResponse } from '../utils/localLlm';
+import { initializeLocalModel, isLocalModelLoaded, streamLocalLlmResponse, isLocalLlmDown } from '../utils/localLlm';
 import { compileLocalPrompt } from '../utils/promptCompiler';
 import { parseAndExecuteTools } from '../utils/toolProxy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -139,6 +139,7 @@ export default function ChatScreen() {
 
   // Local mode states
   const isLocalMode = useConfigStore((state) => state.isLocalMode);
+  const localModelName = useConfigStore((state) => state.localModelName);
   const localModelDownloadProgress = useConfigStore((state) => state.localModelDownloadProgress);
   const wifiOnlyDownload = useConfigStore((state) => state.wifiOnlyDownload);
   const setIsLocalMode = useConfigStore((state) => state.setIsLocalMode);
@@ -384,9 +385,9 @@ export default function ChatScreen() {
     const charCount = message.content.length;
     Alert.alert(
       'Response Metadata',
-      `Model: ${isLocalMode ? 'Gemma-2B (Local)' : (modelName || 'gemini-1.5-flash')}\nWords: ${wordCount}\nCharacters: ${charCount}`
+      `Model: ${isLocalMode ? `Local (${localModelName})` : (modelName || 'gemini-1.5-flash')}\nWords: ${wordCount}\nCharacters: ${charCount}`
     );
-  }, [modelName, isLocalMode]);
+  }, [modelName, isLocalMode, localModelName]);
 
   const toggleRaw = useCallback((msgId: string) => {
     setShowRawMap(prev => ({
@@ -841,6 +842,10 @@ export default function ChatScreen() {
   const handleToggleLocalMode = async () => {
     const nextMode = !isLocalMode;
     if (nextMode) {
+      if (isLocalLlmDown) {
+        Alert.alert('Local Model Down', 'The local LLM is currently down/unavailable.');
+        return;
+      }
       // Check if model already downloaded
       const isDownloaded = await AsyncStorage.getItem('local_model_downloaded');
       if (isDownloaded === 'true') {

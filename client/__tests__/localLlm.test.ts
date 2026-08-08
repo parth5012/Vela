@@ -6,16 +6,34 @@ jest.mock('react-native', () => {
   actual.NativeModules.GemmaReactNativeModule = {
     initializeLocalModel: jest.fn(),
     unloadLocalModel: jest.fn(),
-    streamLlmResponse: jest.fn(),
+    streamLlmResponse: jest.fn()
   };
   return actual;
 });
+
+jest.mock('@react-native-async-storage/async-storage', () =>
+  require('@react-native-async-storage/async-storage/jest/async-storage-mock')
+);
+
+let mockSecureStore: Record<string, string> = {};
+
+jest.mock('expo-secure-store', () => ({
+  getItemAsync: jest.fn(async (key) => mockSecureStore[key] || null),
+  setItemAsync: jest.fn(async (key, value) => {
+    mockSecureStore[key] = value;
+  }),
+  deleteItemAsync: jest.fn(async (key) => {
+    delete mockSecureStore[key];
+  }),
+}));
 
 import {
   initializeLocalModel,
   unloadLocalModel,
   isLocalModelLoaded,
   streamLocalLlmResponse,
+  isLocalLlmDown,
+  setLocalLlmDown,
 } from '../utils/localLlm';
 
 const GemmaNative = NativeModules.GemmaReactNativeModule;
@@ -35,7 +53,7 @@ describe('localLlm wrapper', () => {
     expect(isLocalModelLoaded).toBe(false);
   });
 
-  it('should throw error when trying stream while unloaded', async () => {
+  it('should throw error when trying to stream while unloaded', async () => {
     await expect(async () => {
       const generator = streamLocalLlmResponse('Hello');
       await generator.next();
@@ -139,5 +157,18 @@ describe('localLlm wrapper', () => {
     const resultText = yielded.join('');
     expect(resultText).toContain('simulated local LLM response');
     expect(resultText).toContain('fallback mock mode');
+  });
+
+  it('should throw error when local LLM set down', async () => {
+    setLocalLlmDown(true);
+    await expect(initializeLocalModel()).rejects.toThrow('Local LLM is down/unavailable.');
+
+    // Test streaming throws when down
+    const generator = streamLocalLlmResponse('weather');
+    await expect(async () => {
+      await generator.next();
+    }).rejects.toThrow('Local LLM is down/unavailable.');
+
+    setLocalLlmDown(false); // reset
   });
 });

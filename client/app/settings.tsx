@@ -43,6 +43,14 @@ export default function SettingsScreen() {
     setUserName,
     suggestionStarters,
     setSuggestionStarters,
+    isLocalMode,
+    setIsLocalMode,
+    localModelDownloadProgress,
+    setLocalModelDownloadProgress,
+    wifiOnlyDownload,
+    setWifiOnlyDownload,
+    localModelName,
+    setLocalModelName,
   } = useConfigStore();
 
   const [newStarterLabel, setNewStarterLabel] = useState('');
@@ -62,6 +70,103 @@ export default function SettingsScreen() {
   const [success, setSuccess] = useState(false);
 
   const isMounted = React.useRef(true);
+  const [downloadedModels, setDownloadedModels] = useState<Record<string, boolean>>({});
+
+  // Check downloaded status of models on focus/load and when localModelName changes
+  React.useEffect(() => {
+    const checkDownloaded = async () => {
+      const gemmaStatus = await AsyncStorage.getItem('local_model_downloaded_Gemma 2B');
+      const phiStatus = await AsyncStorage.getItem('local_model_downloaded_Phi-3 Mini');
+      const llamaStatus = await AsyncStorage.getItem('local_model_downloaded_Llama 3 8B');
+      
+      setDownloadedModels({
+        'Gemma 2B': gemmaStatus === 'true',
+        'Phi-3 Mini': phiStatus === 'true',
+        'Llama 3 8B': llamaStatus === 'true'
+      });
+    };
+    
+    checkDownloaded();
+  }, [localModelName]);
+
+  const handleDownloadModel = async () => {
+    if (isLocalLlmDown) {
+      Alert.alert('Local Model Down', 'The local LLM is currently down/unavailable.');
+      return;
+    }
+
+    // Check space
+    try {
+      const freeBytes = await FileSystem.getFreeDiskStorageAsync();
+      const freeGB = freeBytes / (1024 * 1024 * 1024);
+      
+      let requiredSpace = 2.0; // default for Gemma 2B
+      const nameLower = localModelName.toLowerCase();
+      if (nameLower.includes('phi-3')) requiredSpace = 2.5;
+      if (nameLower.includes('llama')) requiredSpace = 5.0;
+
+      if (freeGB < requiredSpace) {
+        Alert.alert('Low Storage Space', `You need at least ${requiredSpace.toFixed(1)}GB free space to download the ${localModelName} model.`);
+        return;
+      }
+    } catch (err) {
+      console.warn('Failed to verify free space:', err);
+    }
+
+    const downloadModel = async () => {
+      // Start simulated download progress
+      setLocalModelDownloadProgress(1);
+      for (let i = 2; i <= 100; i += 2) {
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        if (isMounted.current) {
+          setLocalModelDownloadProgress(i);
+        }
+      }
+      await AsyncStorage.setItem(`local_model_downloaded_${localModelName}`, 'true');
+      if (isMounted.current) {
+        setDownloadedModels(prev => ({ ...prev, [localModelName]: true }));
+        setLocalModelDownloadProgress(null);
+      }
+      Alert.alert('Download Complete', `${localModelName} model downloaded and ready.`);
+    };
+
+    if (wifiOnlyDownload) {
+      Alert.alert(
+        'Confirm Cellular Download',
+        'You are on a cellular connection. Continuing will download the model. Proceed?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Download', onPress: downloadModel }
+        ]
+      );
+    } else {
+      await downloadModel();
+    }
+  };
+
+  const handleDeleteModel = async () => {
+    Alert.alert(
+      'Delete Model',
+      `Are you sure you want to delete the downloaded ${localModelName} model file?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await AsyncStorage.removeItem(`local_model_downloaded_${localModelName}`);
+            if (isMounted.current) {
+              setDownloadedModels(prev => ({ ...prev, [localModelName]: false }));
+            }
+            Alert.alert('Model Deleted', `${localModelName} has been removed from storage.`);
+            if (isLocalMode) {
+              setIsLocalMode(false);
+            }
+          }
+        }
+      ]
+    );
+  };
   React.useEffect(() => {
     return () => {
       isMounted.current = false;
