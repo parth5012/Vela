@@ -19,7 +19,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Clipboard from 'expo-clipboard';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import MessageOptionsModal from '../components/ui/MessageOptionsModal';
 import { useConfigStore } from '../store/useConfigStore';
@@ -36,7 +36,7 @@ import { useBrowserStore } from '../store/useBrowserStore';
 import { useGoogleAuthStore } from '../store/useGoogleAuthStore';
 
 // Importing local mode modules
-import { initializeLocalModel, isLocalModelLoaded, streamLocalLlmResponse, isLocalLlmDown } from '../utils/localLlm';
+import { initializeLocalModel, isLocalModelLoaded, streamLocalLlmResponse, isLocalLlmDown, localModelStorageKey } from '../utils/localLlm';
 import { compileLocalPrompt } from '../utils/promptCompiler';
 import { parseAndExecuteTools } from '../utils/toolProxy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -405,6 +405,7 @@ export default function ChatScreen() {
       let currentHistory = [...historyList];
       let hasMoreIterations = true;
       let iterationCount = 0;
+      let generatorCompleted = false;
 
       while (hasMoreIterations && iterationCount < 5) {
         iterationCount++;
@@ -430,16 +431,34 @@ export default function ChatScreen() {
         }
 
         // 4. Stream response from local inference engine
+        // Add a safety timeout so streaming always stops even if the generator hangs
+        const STREAM_TIMEOUT_MS = 120000; // 2 minutes max per iteration
+        const streamStartTime = Date.now();
+        generatorCompleted = false;
+
         const generator = streamLocalLlmResponse(compiledPrompt, (token) => {
           pendingTokensMapRef.current[threadId] = (pendingTokensMapRef.current[threadId] || '') + token;
         });
 
-        for await (const _ of generator) {
-          // Tokens are captured inside callback & throttle timer
+        try {
+          for await (const _ of generator) {
+            // Tokens are captured inside callback & throttle timer
+            // Safety check: stop if we've been streaming too long
+            if (Date.now() - streamStartTime > STREAM_TIMEOUT_MS) {
+              console.warn('[streamLocalResponse] Stream timeout reached, forcing stop');
+              break;
+            }
+          }
+          generatorCompleted = true;
+        } catch (genError: any) {
+          console.warn('[streamLocalResponse] Generator error:', genError);
         }
 
         // Clean up throttle and apply healing
         cleanUpThrottleAndHeal(threadId);
+
+        // Mark streaming as complete for this iteration
+        setStreamingThread(threadId, false);
 
         // 5. Check if generated content contains tool invocation requests
         const currentMessagesSnapshot = useChatStore.getState().messages[threadId] || [];
@@ -461,28 +480,40 @@ export default function ChatScreen() {
             // Fetch latest history and loop back for another model reasoning pass
             currentHistory = updatedHistory;
             hasMoreIterations = true;
+
+            // Re-enable streaming state for the next iteration
+            setStreamingThread(threadId, true);
           }
         }
+      }
+
+      // Final cleanup: ensure streaming state is always set to false
+      if (generatorCompleted || !hasMoreIterations) {
+        setStreamingThread(threadId, false);
+        cleanUpThrottleAndHeal(threadId);
       }
     } catch (e: any) {
       console.error("[Local Stream Error]:", e);
       appendToken(threadId, `\n\n⚠️ **Local Inference Error:** ${e?.message || 'Inference engine failed.'}`);
     } finally {
+      // Guaranteed cleanup: always stop streaming and flush remaining tokens
       setStreamingThread(threadId, false);
       cleanUpThrottleAndHeal(threadId);
+      // Ensure any remaining pending tokens are flushed
+      if (pendingTokensMapRef.current[threadId]) {
+        appendToken(threadId, pendingTokensMapRef.current[threadId]);
+        delete pendingTokensMapRef.current[threadId];
+      }
     }
   };
 
   const handleSend = useCallback(async () => {
-    if (!input.trim() || !activeThreadId) return;
-    if (!isLocalMode && (!apiUrl || !apiKey)) {
-      Alert.alert('Configuration Required', 'Please configure API URL and Key in Settings.');
-      return;
-    }
+    if (!activeThreadId) return;
 
-    Keyboard.dismiss();
-
+    // Stop-streaming must be checked BEFORE the empty-input guard: the input is
+    // cleared on send, so requiring text here would make "Stop" unreachable.
     if (isCurrentThreadStreaming) {
+      Keyboard.dismiss();
       if (abortControllersRef.current[activeThreadId]) {
         abortControllersRef.current[activeThreadId].abort();
         delete abortControllersRef.current[activeThreadId];
@@ -491,6 +522,14 @@ export default function ChatScreen() {
       setStreamingThread(activeThreadId, false);
       return;
     }
+
+    if (!input.trim()) return;
+    if (!isLocalMode && (!apiUrl || !apiKey)) {
+      Alert.alert('Configuration Required', 'Please configure API URL and Key in Settings.');
+      return;
+    }
+
+    Keyboard.dismiss();
 
     const userText = input.trim();
     setInput('');
@@ -581,6 +620,7 @@ export default function ChatScreen() {
       appendToken(activeThreadId, `\n\n⚠️ **Network Error:** ${err.message || 'Verification aborted.'}`);
     }
   }, [
+    input,
     isCurrentThreadStreaming,
     activeThreadId,
     messages,
@@ -832,12 +872,36 @@ export default function ChatScreen() {
   ]);
 
   const handleSendPress = () => {
+    // While streaming, the button acts as "Stop" — handleSend owns the abort path.
     if (activeThreadId) {
       handleSend();
-    } else {
-      handleSendWelcome(input);
+      return;
     }
+    if (!input.trim()) return;
+    handleSendWelcome(input);
   };
+
+  // Model download configuration — mirrors LOCAL_MODELS in settings.tsx
+  const LOCAL_MODELS = [
+    {
+      name: 'Gemma 2B',
+      size: '~1.6 GB',
+      downloadUrl: 'https://huggingface.co/bartowski/gemma-2b-it-GGUF/resolve/main/gemma-2b-it-Q4_K_M.gguf',
+      filename: 'gemma-2b-it-Q4_K_M.gguf',
+    },
+    {
+      name: 'Phi-3 Mini',
+      size: '~2.3 GB',
+      downloadUrl: 'https://huggingface.co/bartowski/Phi-3-mini-4k-instruct-GGUF/resolve/main/Phi-3-mini-4k-instruct-Q4_K_M.gguf',
+      filename: 'Phi-3-mini-4k-instruct-Q4_K_M.gguf',
+    },
+    {
+      name: 'Llama 3 8B',
+      size: '~4.9 GB',
+      downloadUrl: 'https://huggingface.co/bartowski/Meta-Llama-3-8B-Instruct-GGUF/resolve/main/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf',
+      filename: 'Meta-Llama-3-8B-Instruct-Q4_K_M.gguf',
+    },
+  ];
 
   const handleToggleLocalMode = async () => {
     const nextMode = !isLocalMode;
@@ -847,9 +911,15 @@ export default function ChatScreen() {
         return;
       }
       // Check if model already downloaded
-      const isDownloaded = await AsyncStorage.getItem('local_model_downloaded');
+      const isDownloaded = await AsyncStorage.getItem(localModelStorageKey(localModelName));
       if (isDownloaded === 'true') {
         setIsLocalMode(true);
+        return;
+      }
+
+      const selectedModel = LOCAL_MODELS.find(m => m.name === localModelName);
+      if (!selectedModel) {
+        Alert.alert('Error', 'Selected model not found.');
         return;
       }
 
@@ -857,8 +927,13 @@ export default function ChatScreen() {
       try {
         const freeBytes = await FileSystem.getFreeDiskStorageAsync();
         const freeGB = freeBytes / (1024 * 1024 * 1024);
-        if (freeGB < 2.0) {
-          Alert.alert('Low StorageSpace', 'You need at least 2.0GB of free space to download the Gemma model.');
+        const sizeMatch = selectedModel.size.match(/([\d.]+)/);
+        const requiredSpace = sizeMatch ? parseFloat(sizeMatch[1]) * 1.2 : 2.0;
+        if (freeGB < requiredSpace) {
+          Alert.alert(
+            'Low Storage Space',
+            `You need at least ${requiredSpace.toFixed(1)}GB of free space to download the ${localModelName} model.`
+          );
           return;
         }
       } catch (err) {
@@ -868,21 +943,50 @@ export default function ChatScreen() {
       // Warn/Prompt about cellular if wifiOnlyDownload is active
       const downloadModel = async () => {
         setIsLocalMode(true);
-        // Start simulated download progress
-        setLocalModelDownloadProgress(1);
-        for (let i = 2; i <= 100; i += 2) {
-          await new Promise(resolve => setTimeout(resolve, 40));
-          setLocalModelDownloadProgress(i);
+        try {
+          const modelDir = `${FileSystem.documentDirectory}models/`;
+          const modelUri = `${modelDir}${selectedModel.filename}`;
+
+          // Ensure models directory exists
+          const dirInfo = await FileSystem.getInfoAsync(modelDir);
+          if (!dirInfo.exists) {
+            await FileSystem.makeDirectoryAsync(modelDir, { intermediates: true });
+          }
+
+          setLocalModelDownloadProgress(0);
+
+          const downloadResumable = FileSystem.createDownloadResumable(
+            selectedModel.downloadUrl,
+            modelUri,
+            {},
+            (downloadProgress) => {
+              const progress = Math.round((downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite) * 100);
+              setLocalModelDownloadProgress(progress);
+            }
+          );
+
+          const result = await downloadResumable.downloadAsync();
+
+          if (result && result.status === 200) {
+            await AsyncStorage.setItem(localModelStorageKey(localModelName), 'true');
+            await AsyncStorage.setItem(`${localModelStorageKey(localModelName)}_path`, modelUri);
+            setLocalModelDownloadProgress(null);
+            Alert.alert('Download Complete', `${localModelName} downloaded and ready.`);
+          } else {
+            throw new Error(`Download failed with status: ${result?.status ?? 'unknown'}`);
+          }
+        } catch (downloadError: any) {
+          console.error('[handleToggleLocalMode] Download failed:', downloadError);
+          setLocalModelDownloadProgress(null);
+          setIsLocalMode(false);
+          Alert.alert('Download Failed', `Failed to download ${localModelName}: ${downloadError.message || 'Network error'}.`);
         }
-        await AsyncStorage.setItem('local_model_downloaded', 'true');
-        setLocalModelDownloadProgress(null);
-        Alert.alert('Download Complete', 'Local LLM model downloaded and ready.');
       };
 
       if (wifiOnlyDownload) {
         Alert.alert(
           'Confirm Cellular Download',
-          'You are on a cellular connection. Continuing will download 1.6GB. Proceed?',
+          `You are on a cellular connection. Continuing will download ${selectedModel.size} (${selectedModel.filename}). Proceed?`,
           [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Download', onPress: downloadModel },
@@ -1180,7 +1284,7 @@ export default function ChatScreen() {
           onPress={handleToggleLocalMode}
         >
           <Text style={[styles.switcherLabel, { color: colors.text }]}>
-            Engine: {isLocalMode ? '🤖 Local (Gemma)' : '☁️ Cloud (Gemini)'}
+            Engine: {isLocalMode ? `🤖 Local (${localModelName})` : '☁️ Cloud (Gemini)'}
           </Text>
         </Pressable>
         {localModelDownloadProgress !== null && (
@@ -1203,14 +1307,18 @@ export default function ChatScreen() {
         <Pressable
           style={({ pressed }) => [
             styles.sendButton,
-            { backgroundColor: accentHex },
-            !input.trim() && { backgroundColor: colors.border },
-            pressed && { backgroundColor: accentHex + 'cc' }
+            { backgroundColor: isCurrentThreadStreaming ? '#ef4444' : accentHex },
+            !isCurrentThreadStreaming && !input.trim() && { backgroundColor: colors.border },
+            pressed && { opacity: 0.8 }
           ]}
           onPress={handleSendPress}
-          disabled={!input.trim()}
+          disabled={!isCurrentThreadStreaming && !input.trim()}
+          accessibilityRole="button"
+          accessibilityLabel={isCurrentThreadStreaming ? 'Stop generating' : 'Send message'}
         >
-          <Text style={[styles.sendButtonText, { fontSize: sizes.text }]}>Send</Text>
+          <Text style={[styles.sendButtonText, { fontSize: sizes.text }]}>
+            {isCurrentThreadStreaming ? 'Stop' : 'Send'}
+          </Text>
         </Pressable>
       </View>
 

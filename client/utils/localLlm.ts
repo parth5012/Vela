@@ -9,6 +9,17 @@ export function setLocalLlmDown(down: boolean) {
   isLocalLlmDown = down;
 }
 
+/**
+ * Single source of truth for the per-model "is downloaded" AsyncStorage key.
+ * Both the chat screen and settings screen must use this so a model downloaded
+ * in one place is visible in the other.
+ */
+export const LOCAL_MODEL_STORAGE_PREFIX = 'local_model_downloaded_';
+
+export function localModelStorageKey(modelName: string): string {
+  return `${LOCAL_MODEL_STORAGE_PREFIX}${modelName}`;
+}
+
 // Determine if native bridge is available.
 const GemmaNative = NativeModules?.GemmaReactNativeModule;
 
@@ -96,6 +107,8 @@ export async function* streamLocalLlmResponse(
   if (!useFallback && GemmaNative && typeof GemmaNative.streamLlmResponse === 'function') {
     try {
       const tokens: string[] = [];
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+      let nativeResolved = false;
       const nativePromise = new Promise<void>((resolve, reject) => {
         GemmaNative.streamLlmResponse(
           prompt,
@@ -105,12 +118,28 @@ export async function* streamLocalLlmResponse(
               onToken(token);
             }
           },
-          () => resolve(),
-          (error: string) => reject(new Error(error))
+          () => {
+            nativeResolved = true;
+            if (timeoutId) clearTimeout(timeoutId);
+            resolve();
+          },
+          (error: string) => {
+            if (timeoutId) clearTimeout(timeoutId);
+            reject(new Error(error));
+          }
         );
       });
 
-      await nativePromise;
+      // Add a timeout so the native module can't hang streaming forever
+      const timeoutPromise = new Promise<void>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          if (!nativeResolved) {
+            reject(new Error('Native streaming timed out after 120s'));
+          }
+        }, 120000);
+      });
+
+      await Promise.race([nativePromise, timeoutPromise]);
 
       for (const token of tokens) {
         yield token;
