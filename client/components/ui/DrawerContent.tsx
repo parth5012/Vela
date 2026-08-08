@@ -5,9 +5,9 @@ import {
   StyleSheet,
   Pressable,
   ScrollView,
-  SafeAreaView,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useNavigation } from 'expo-router';
 import { useConfigStore } from '../../store/useConfigStore';
 import { useChatStore, Thread } from '../../store/useChatStore';

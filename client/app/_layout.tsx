@@ -64,6 +64,12 @@ export default function RootLayout() {
   const navigationState = useRootNavigationState();
   const isRouterReady = navigationState?.key !== undefined;
 
+  // NOTE: all hooks must run unconditionally on every render, before any
+  // early return below. Moving these under a conditional return breaks the
+  // Rules of Hooks and crashes ContextNavigator on remount.
+  const currentUrl = useBrowserStore((s) => s.currentUrl);
+  const isBrowserVisible = useBrowserStore((s) => s.isVisible);
+
   useEffect(() => {
     if (hasHydrated) {
       // Preserve active thread if already selected, otherwise default to welcome/new screen
@@ -104,8 +110,6 @@ export default function RootLayout() {
     return <Slot />;
   }
 
-  const currentUrl = useBrowserStore((s) => s.currentUrl);
-  const isBrowserVisible = useBrowserStore((s) => s.isVisible);
   const isBrowserRoute = segments[0] === 'browser';
   const shouldShowWebview = isBrowserVisible && isBrowserRoute;
 
