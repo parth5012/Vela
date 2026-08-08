@@ -9,15 +9,46 @@ import {
   Keyboard,
   ScrollView,
   Alert,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useConfigStore } from '../store/useConfigStore';
 import { useChatStore } from '../store/useChatStore';
 import { syncHistoryWithBackend } from '../utils/history';
 import { THEME_COLORS, FONT_SIZES, ACCENT_COLORS } from '../utils/theme';
+import { isLocalLlmDown, localModelStorageKey } from '../utils/localLlm';
 import GoogleWorkspaceCard from '../components/ui/GoogleWorkspaceCard';
 
 const PRESET_MODELS = ['gemini-1.5-pro', 'gemini-1.5-flash', 'claude-3-5-sonnet', 'gpt-4o'];
+
+// Keep `name` in sync with the keys read in the downloaded-status effect below
+// and with LOCAL_MODEL_STORAGE_PREFIX.
+// Download URLs point to HuggingFace GGUF quantized models (Q4_K_M) for local inference.
+const LOCAL_MODELS = [
+  {
+    name: 'Gemma 2B',
+    size: '~1.6 GB',
+    description: 'Fastest, lowest memory use',
+    downloadUrl: 'https://huggingface.co/bartowski/gemma-2b-it-GGUF/resolve/main/gemma-2b-it-Q4_K_M.gguf',
+    filename: 'gemma-2b-it-Q4_K_M.gguf',
+  },
+  {
+    name: 'Phi-3 Mini',
+    size: '~2.3 GB',
+    description: 'Balanced quality and speed',
+    downloadUrl: 'https://huggingface.co/bartowski/Phi-3-mini-4k-instruct-GGUF/resolve/main/Phi-3-mini-4k-instruct-Q4_K_M.gguf',
+    filename: 'Phi-3-mini-4k-instruct-Q4_K_M.gguf',
+  },
+  {
+    name: 'Llama 3 8B',
+    size: '~4.9 GB',
+    description: 'Highest quality, needs more space',
+    downloadUrl: 'https://huggingface.co/bartowski/Meta-Llama-3-8B-Instruct-GGUF/resolve/main/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf',
+    filename: 'Meta-Llama-3-8B-Instruct-Q4_K_M.gguf',
+  },
+];
 
 export default function SettingsScreen() {
   const {
@@ -72,21 +103,37 @@ export default function SettingsScreen() {
   const isMounted = React.useRef(true);
   const [downloadedModels, setDownloadedModels] = useState<Record<string, boolean>>({});
 
+  const isDownloading = localModelDownloadProgress !== null;
+  const isActiveModelDownloaded = !!downloadedModels[localModelName];
+
   // Check downloaded status of models on focus/load and when localModelName changes
   React.useEffect(() => {
+    let cancelled = false;
+
     const checkDownloaded = async () => {
-      const gemmaStatus = await AsyncStorage.getItem('local_model_downloaded_Gemma 2B');
-      const phiStatus = await AsyncStorage.getItem('local_model_downloaded_Phi-3 Mini');
-      const llamaStatus = await AsyncStorage.getItem('local_model_downloaded_Llama 3 8B');
-      
-      setDownloadedModels({
-        'Gemma 2B': gemmaStatus === 'true',
-        'Phi-3 Mini': phiStatus === 'true',
-        'Llama 3 8B': llamaStatus === 'true'
-      });
+      try {
+        const statuses = await Promise.all(
+          LOCAL_MODELS.map((m) => AsyncStorage.getItem(localModelStorageKey(m.name)))
+        );
+
+        if (cancelled || !isMounted.current) return;
+
+        setDownloadedModels(
+          LOCAL_MODELS.reduce<Record<string, boolean>>((acc, model, idx) => {
+            acc[model.name] = statuses[idx] === 'true';
+            return acc;
+          }, {})
+        );
+      } catch (err) {
+        console.warn('[settings] Failed to read downloaded model status:', err);
+      }
     };
-    
+
     checkDownloaded();
+
+    return () => {
+      cancelled = true;
+    };
   }, [localModelName]);
 
   const handleDownloadModel = async () => {
@@ -95,15 +142,20 @@ export default function SettingsScreen() {
       return;
     }
 
+    const selectedModel = LOCAL_MODELS.find(m => m.name === localModelName);
+    if (!selectedModel) {
+      Alert.alert('Error', 'Selected model not found.');
+      return;
+    }
+
     // Check space
     try {
       const freeBytes = await FileSystem.getFreeDiskStorageAsync();
       const freeGB = freeBytes / (1024 * 1024 * 1024);
-      
-      let requiredSpace = 2.0; // default for Gemma 2B
-      const nameLower = localModelName.toLowerCase();
-      if (nameLower.includes('phi-3')) requiredSpace = 2.5;
-      if (nameLower.includes('llama')) requiredSpace = 5.0;
+
+      // Parse size from model.size string (e.g., '~1.6 GB')
+      const sizeMatch = selectedModel.size.match(/([\d.]+)/);
+      const requiredSpace = sizeMatch ? parseFloat(sizeMatch[1]) * 1.2 : 2.0; // Add 20% buffer
 
       if (freeGB < requiredSpace) {
         Alert.alert('Low Storage Space', `You need at least ${requiredSpace.toFixed(1)}GB free space to download the ${localModelName} model.`);
@@ -114,26 +166,64 @@ export default function SettingsScreen() {
     }
 
     const downloadModel = async () => {
-      // Start simulated download progress
-      setLocalModelDownloadProgress(1);
-      for (let i = 2; i <= 100; i += 2) {
-        await new Promise((resolve) => setTimeout(resolve, 40));
-        if (isMounted.current) {
-          setLocalModelDownloadProgress(i);
+      // Actual file download using FileSystem.downloadAsync
+      const modelDir = `${FileSystem.documentDirectory}models/`;
+      const modelUri = `${modelDir}${selectedModel.filename}`;
+
+      try {
+        // Ensure models directory exists
+        const dirInfo = await FileSystem.getInfoAsync(modelDir);
+        if (!dirInfo.exists) {
+          await FileSystem.makeDirectoryAsync(modelDir, { intermediates: true });
         }
+
+        // Start download with progress callback
+        setLocalModelDownloadProgress(0);
+
+        const downloadResumable = FileSystem.createDownloadResumable(
+          selectedModel.downloadUrl,
+          modelUri,
+          {},
+          (downloadProgress) => {
+            const progress = Math.round((downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite) * 100);
+            if (isMounted.current) {
+              setLocalModelDownloadProgress(progress);
+            }
+          }
+        );
+
+        const result = await downloadResumable.downloadAsync();
+
+        if (result && result.status === 200) {
+          // Mark as downloaded in AsyncStorage
+          await AsyncStorage.setItem(localModelStorageKey(localModelName), 'true');
+          // Store the local file path for the native module to use
+          await AsyncStorage.setItem(`${localModelStorageKey(localModelName)}_path`, modelUri);
+
+          if (isMounted.current) {
+            setDownloadedModels(prev => ({ ...prev, [localModelName]: true }));
+            setLocalModelDownloadProgress(null);
+          }
+          Alert.alert('Download Complete', `${localModelName} model downloaded and ready for offline inference.`);
+        } else {
+          throw new Error(`Download failed with status: ${result?.status ?? 'unknown'}`);
+        }
+      } catch (downloadError: any) {
+        console.error('[handleDownloadModel] Download failed:', downloadError);
+        if (isMounted.current) {
+          setLocalModelDownloadProgress(null);
+        }
+        Alert.alert(
+          'Download Failed',
+          `Failed to download ${localModelName}: ${downloadError.message || 'Network error'}. Please check your connection and try again.`
+        );
       }
-      await AsyncStorage.setItem(`local_model_downloaded_${localModelName}`, 'true');
-      if (isMounted.current) {
-        setDownloadedModels(prev => ({ ...prev, [localModelName]: true }));
-        setLocalModelDownloadProgress(null);
-      }
-      Alert.alert('Download Complete', `${localModelName} model downloaded and ready.`);
     };
 
     if (wifiOnlyDownload) {
       Alert.alert(
         'Confirm Cellular Download',
-        'You are on a cellular connection. Continuing will download the model. Proceed?',
+        `You are on a cellular connection. Continuing will download ${selectedModel.size} (${selectedModel.filename}). Proceed?`,
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Download', onPress: downloadModel }
@@ -154,7 +244,23 @@ export default function SettingsScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            await AsyncStorage.removeItem(`local_model_downloaded_${localModelName}`);
+            try {
+              // Delete the actual model file
+              const selectedModel = LOCAL_MODELS.find(m => m.name === localModelName);
+              if (selectedModel) {
+                const modelDir = `${FileSystem.documentDirectory}models/`;
+                const modelUri = `${modelDir}${selectedModel.filename}`;
+                const fileInfo = await FileSystem.getInfoAsync(modelUri);
+                if (fileInfo.exists) {
+                  await FileSystem.deleteAsync(modelUri);
+                }
+              }
+              // Clear AsyncStorage entries
+              await AsyncStorage.removeItem(localModelStorageKey(localModelName));
+              await AsyncStorage.removeItem(`${localModelStorageKey(localModelName)}_path`);
+            } catch (err) {
+              console.warn('[handleDeleteModel] Failed to delete model file:', err);
+            }
             if (isMounted.current) {
               setDownloadedModels(prev => ({ ...prev, [localModelName]: false }));
             }
@@ -168,6 +274,7 @@ export default function SettingsScreen() {
     );
   };
   React.useEffect(() => {
+    isMounted.current = true;
     return () => {
       isMounted.current = false;
     };
@@ -687,6 +794,145 @@ export default function SettingsScreen() {
             </View>
           </View>
 
+      {/* Local Model Section */}
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.text, fontSize: sizes.title }]}>Local Model</Text>
+        <Text style={[styles.sectionSubtitle, { color: colors.textMuted, fontSize: sizes.text - 1 }]}>
+          Download an on-device model to run Vela offline. Downloaded models are stored locally and can be removed at any time.
+        </Text>
+
+        <View style={[styles.formContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          {/* Model picker */}
+          <View style={styles.controlGroup}>
+            <Text style={[styles.label, { color: colors.textMuted, fontSize: sizes.sub }]}>Model</Text>
+            <View style={{ gap: 8, marginTop: 8 }}>
+               {LOCAL_MODELS.map((model) => {
+                 const isSelected = localModelName === model.name;
+                 const isDownloaded = downloadedModels[model.name];
+                 return (
+                   <Pressable
+                     key={model.name}
+                     onPress={() => setLocalModelName(model.name)}
+                     disabled={isDownloading}
+                     style={[
+                       styles.modelRow,
+                       { backgroundColor: colors.background, borderColor: isSelected ? accentHex : colors.border },
+                       isDownloading && { opacity: 0.6 },
+                     ]}
+                   >
+                     <View style={{ flex: 1, marginRight: 8 }}>
+                       <Text style={{ color: colors.text, fontSize: sizes.text - 1, fontWeight: '600' }}>
+                         {model.name}
+                       </Text>
+                       <Text style={{ color: colors.textMuted, fontSize: sizes.sub, marginTop: 2 }}>
+                         {model.size} · {model.description}
+                       </Text>
+                       <Text style={{ color: colors.textDark, fontSize: sizes.sub - 1, marginTop: 2, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }}>
+                         {model.filename}
+                       </Text>
+                     </View>
+                     <Text
+                       style={{
+                         color: isDownloaded ? '#34d399' : colors.textDark,
+                         fontSize: sizes.sub,
+                         fontWeight: '600',
+                       }}
+                     >
+                       {isDownloaded ? '✓ Downloaded' : 'Not downloaded'}
+                     </Text>
+                   </Pressable>
+                 );
+               })}
+             </View>
+          </View>
+
+          {/* Wi-Fi only toggle */}
+          <View style={styles.controlGroup}>
+            <Text style={[styles.label, { color: colors.textMuted, fontSize: sizes.sub }]}>Download Over Wi-Fi Only</Text>
+            <View style={styles.row}>
+              {[
+                { label: 'Wi-Fi Only', value: true },
+                { label: 'Any Network', value: false },
+              ].map((opt) => {
+                const isSelected = wifiOnlyDownload === opt.value;
+                return (
+                  <Pressable
+                    key={opt.label}
+                    style={[
+                      styles.pillButton,
+                      { backgroundColor: colors.background, borderColor: colors.border },
+                      isSelected && { borderColor: accentHex },
+                      isSelected && styles.pillButtonActive,
+                    ]}
+                    onPress={() => setWifiOnlyDownload(opt.value)}
+                  >
+                    <Text
+                      style={[
+                        styles.pillButtonText,
+                        { color: colors.textMuted, fontSize: sizes.text - 1 },
+                        isSelected && styles.pillButtonTextActive,
+                        isSelected && { color: colors.text },
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Download progress */}
+          {isDownloading && (
+            <View style={styles.controlGroup}>
+              <Text style={[styles.label, { color: colors.textMuted, fontSize: sizes.sub }]}>
+                Downloading {localModelName} — {localModelDownloadProgress}%
+              </Text>
+              <View style={[styles.tempTrackBg, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                <View
+                  style={[
+                    styles.tempTrackFill,
+                    { width: `${localModelDownloadProgress ?? 0}%`, backgroundColor: accentHex },
+                  ]}
+                />
+              </View>
+            </View>
+          )}
+
+          {/* Actions */}
+          <View style={[styles.controlGroup, { marginBottom: 0 }]}>
+            {isActiveModelDownloaded ? (
+              <Pressable
+                style={({ pressed }) => [styles.resetButton, pressed && styles.resetButtonPressed]}
+                onPress={handleDeleteModel}
+                disabled={isDownloading}
+              >
+                <Text style={styles.resetButtonText}>Delete {localModelName}</Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.saveButton,
+                  { backgroundColor: accentHex },
+                  pressed && { opacity: 0.8 },
+                  isDownloading && styles.saveButtonDisabled,
+                ]}
+                onPress={handleDownloadModel}
+                disabled={isDownloading}
+              >
+                {isDownloading ? (
+                  <ActivityIndicator color="#ffffff" size="small" />
+                ) : (
+                  <Text style={[styles.saveButtonText, { fontSize: sizes.text }]}>
+                    Download {localModelName}
+                  </Text>
+                )}
+              </Pressable>
+            )}
+          </View>
+        </View>
+      </View>
+
       {/* Google Workspace Integration Section */}
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: colors.text, fontSize: sizes.title }]}>Google Workspace Integration</Text>
@@ -822,6 +1068,14 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '600',
+  },
+  modelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
   },
   resetButton: {
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
