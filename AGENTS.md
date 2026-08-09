@@ -8,6 +8,14 @@ Rules:
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
 
+## Physical device policy
+
+The ADB-connected Android device is the user's personal phone. Ask for approval
+and wait for an explicit yes before installing any package other than the app
+itself (notably instrumentation / `androidTest` APKs), uninstalling anything, or
+deleting device files. Read-only inspection (`logcat`, `pm list`, `run-as ls`)
+needs no approval. Full details in `client/AGENTS.md`.
+
 ## Agent skills
 
 ### Issue tracker
