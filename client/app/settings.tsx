@@ -18,37 +18,13 @@ import { useConfigStore } from '../store/useConfigStore';
 import { useChatStore } from '../store/useChatStore';
 import { syncHistoryWithBackend } from '../utils/history';
 import { THEME_COLORS, FONT_SIZES, ACCENT_COLORS } from '../utils/theme';
-import { isLocalLlmDown, localModelStorageKey } from '../utils/localLlm';
+import { isLocalLlmDown, localModelStorageKey, LOCAL_MODELS } from '../utils/localLlm';
 import GoogleWorkspaceCard from '../components/ui/GoogleWorkspaceCard';
 
 const PRESET_MODELS = ['gemini-1.5-pro', 'gemini-1.5-flash', 'claude-3-5-sonnet', 'gpt-4o'];
 
-// Keep `name` in sync with the keys read in the downloaded-status effect below
-// and with LOCAL_MODEL_STORAGE_PREFIX.
-// Download URLs point to HuggingFace GGUF quantized models (Q4_K_M) for local inference.
-const LOCAL_MODELS = [
-  {
-    name: 'Gemma 2B',
-    size: '~1.6 GB',
-    description: 'Fastest, lowest memory use',
-    downloadUrl: 'https://huggingface.co/bartowski/gemma-2b-it-GGUF/resolve/main/gemma-2b-it-Q4_K_M.gguf',
-    filename: 'gemma-2b-it-Q4_K_M.gguf',
-  },
-  {
-    name: 'Phi-3 Mini',
-    size: '~2.3 GB',
-    description: 'Balanced quality and speed',
-    downloadUrl: 'https://huggingface.co/bartowski/Phi-3-mini-4k-instruct-GGUF/resolve/main/Phi-3-mini-4k-instruct-Q4_K_M.gguf',
-    filename: 'Phi-3-mini-4k-instruct-Q4_K_M.gguf',
-  },
-  {
-    name: 'Llama 3 8B',
-    size: '~4.9 GB',
-    description: 'Highest quality, needs more space',
-    downloadUrl: 'https://huggingface.co/bartowski/Meta-Llama-3-8B-Instruct-GGUF/resolve/main/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf',
-    filename: 'Meta-Llama-3-8B-Instruct-Q4_K_M.gguf',
-  },
-];
+// LOCAL_MODELS is defined once in utils/localLlm.ts so this screen and the chat
+// screen can never drift apart (they previously pointed at different URLs).
 
 export default function SettingsScreen() {
   const {
@@ -183,18 +159,35 @@ export default function SettingsScreen() {
         const downloadResumable = FileSystem.createDownloadResumable(
           selectedModel.downloadUrl,
           modelUri,
-          {},
+          { headers: { Accept: 'application/octet-stream' } },
           (downloadProgress) => {
-            const progress = Math.round((downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite) * 100);
-            if (isMounted.current) {
-              setLocalModelDownloadProgress(progress);
-            }
+            const { totalBytesWritten, totalBytesExpectedToWrite } = downloadProgress;
+            if (!isMounted.current || totalBytesExpectedToWrite <= 0) return;
+            const progress = Math.min(
+              100,
+              Math.round((totalBytesWritten / totalBytesExpectedToWrite) * 100)
+            );
+            setLocalModelDownloadProgress(progress);
           }
         );
 
         const result = await downloadResumable.downloadAsync();
 
         if (result && result.status === 200) {
+          // A 200 can still be a tiny HTML/JSON error body (e.g. HuggingFace
+          // returning "Invalid username or password." for a gated repo). Reject
+          // anything far smaller than a real model so we never record a broken
+          // file as "downloaded".
+          const info = await FileSystem.getInfoAsync(modelUri);
+          const bytes = info.exists && 'size' in info ? (info.size as number) : 0;
+          const MIN_MODEL_BYTES = 10 * 1024 * 1024; // 10 MB
+          if (bytes < MIN_MODEL_BYTES) {
+            await FileSystem.deleteAsync(modelUri, { idempotent: true });
+            throw new Error(
+              `The server returned ${bytes} bytes instead of a model file. The repository may require authentication.`
+            );
+          }
+
           // Mark as downloaded in AsyncStorage
           await AsyncStorage.setItem(localModelStorageKey(localModelName), 'true');
           // Store the local file path for the native module to use
@@ -206,10 +199,28 @@ export default function SettingsScreen() {
           }
           Alert.alert('Download Complete', `${localModelName} model downloaded and ready for offline inference.`);
         } else {
-          throw new Error(`Download failed with status: ${result?.status ?? 'unknown'}`);
+          const status = result?.status ?? 'unknown';
+          const reason =
+            status === 401 || status === 403
+              ? 'the model repository requires authentication or accepting a license'
+              : status === 404
+              ? 'the model file no longer exists at that URL'
+              : `the server responded with status ${status}`;
+          throw new Error(`Download refused because ${reason}.`);
         }
       } catch (downloadError: any) {
         console.error('[handleDownloadModel] Download failed:', downloadError);
+
+        // Remove any partial/aborted file so a retry starts clean
+        try {
+          const partial = await FileSystem.getInfoAsync(modelUri);
+          if (partial.exists) {
+            await FileSystem.deleteAsync(modelUri, { idempotent: true });
+          }
+        } catch (cleanupError) {
+          console.warn('[handleDownloadModel] Failed to clean up partial file:', cleanupError);
+        }
+
         if (isMounted.current) {
           setLocalModelDownloadProgress(null);
         }
