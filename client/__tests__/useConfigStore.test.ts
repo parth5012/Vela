@@ -74,7 +74,7 @@ describe('useConfigStore', () => {
 
   it('should initialize default values for local mode config', () => {
     const state = useConfigStore.getState();
-    expect(state.localModelName).toBe('Gemma 2B');
+    expect(state.localModelName).toBe('Qwen2.5 0.5B');
     expect(state.isLocalMode).toBe(false);
     expect(state.localModelDownloadProgress).toBeNull();
     expect(state.wifiOnlyDownload).toBe(true);

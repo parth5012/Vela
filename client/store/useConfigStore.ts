@@ -75,7 +75,8 @@ export const useConfigStore = create<ConfigState>()(
       isLocalMode: false,
       localModelDownloadProgress: null,
       wifiOnlyDownload: true,
-      localModelName: 'Gemma 2B',
+      // Must match a `name` in LOCAL_MODELS (utils/localLlm.ts)
+      localModelName: 'Qwen2.5 0.5B',
 
       setConfig: (url, key) => {
         set({ apiUrl: url, apiKey: key, isConfigured: true });
@@ -133,6 +134,21 @@ export const useConfigStore = create<ConfigState>()(
     {
       name: 'vela-config-storage',
       storage: createJSONStorage(() => AsyncStorage),
+      // v1: the GGUF model list was replaced with LiteRT `.task` models, so any
+      // persisted `localModelName` pointing at a removed model must be reset —
+      // otherwise the stale name never matches LOCAL_MODELS and local mode
+      // silently falls back to mock responses.
+      version: 1,
+      migrate: (persistedState: any, fromVersion: number) => {
+        if (fromVersion < 1 && persistedState) {
+          const retired = ['Gemma 2B', 'Phi-3 Mini', 'Llama 3 8B'];
+          if (retired.includes(persistedState.localModelName)) {
+            persistedState.localModelName = 'Qwen2.5 0.5B';
+            persistedState.isLocalMode = false;
+          }
+        }
+        return persistedState;
+      },
       partialize: (state) => {
         // Exclude hasHydrated (session state). securely store apiKey on native
         const { hasHydrated, ...rest } = state;
