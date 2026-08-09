@@ -8,7 +8,7 @@ describe('promptCompiler utility', () => {
     query: 'What is 2+2?',
   };
 
-  it('should format simple prompts without tools or history correctly', () => {
+  it('should format simple prompts without tools history correctly', () => {
     const result = compileLocalPrompt(defaultParams);
 
     expect(result).toContain('<system>\nSystem instructions.\n</system>');
@@ -17,7 +17,7 @@ describe('promptCompiler utility', () => {
     expect(result).toContain('<user>\nWhat is 2+2?\n</user>');
   });
 
-  it('should include compact instructions and tools when provided', () => {
+  it('should include compact instructions tools when provided', () => {
     const params = {
       ...defaultParams,
       compactInstructions: 'Be extremely concise.',
@@ -30,7 +30,7 @@ describe('promptCompiler utility', () => {
     expect(result).toContain('<tools>\ntool_foo\ntool_bar\n</tools>');
   });
 
-  it('should enforce limits on system content and tools', () => {
+  it('should enforce limits system content tools', () => {
     const superLongSystem = 'A'.repeat(2000);
     const superLongTools = ['B'.repeat(1000)];
 
@@ -42,11 +42,11 @@ describe('promptCompiler utility', () => {
 
     const result = compileLocalPrompt(params);
 
-    // Verify system content truncated to 1200
+    //Verify system content truncated 1200
     const systemBlock = /<system>\n([\s\S]*?)\n<\/system>/.exec(result)?.[1] || '';
     expect(systemBlock.length).toBe(1200);
 
-    // Verify tools block truncated to 800
+    //Verify tools block truncated 800
     const toolsBlock = /<tools>\n([\s\S]*?)\n<\/tools>/.exec(result)?.[1] || '';
     expect(toolsBlock.length).toBe(800);
   });
@@ -69,16 +69,16 @@ describe('promptCompiler utility', () => {
     expect(result).toContain('<message role="assistant">Hi there!</message>');
   });
 
-  it('should prune history message-by-message, starting from oldest, to fit total limit', () => {
-    // Total character limit is 8000.
-    // Query is 10 chars. System is ~20 chars.
-    // We construct history so that msg_1 and msg_2 MUST be pruned to fit under 8000.
+  it('should prune history message-by-message, starting oldest, fit total limit', () => {
+    //Total character limit 8000.
+    //Query 10 chars. System ~20 chars.
+    //construct history msg_1 msg_2 MUST pruned fit under 8000.
     const history: Message[] = [
-      { id: 'msg_1', role: 'user' as const, content: 'A'.repeat(2000) },       // Oldest: should be pruned
-      { id: 'msg_2', role: 'assistant' as const, content: 'B'.repeat(2000) },  // Should be pruned
-      { id: 'msg_3', role: 'user' as const, content: 'C'.repeat(3500) },       // Preserved
-      { id: 'msg_4', role: 'assistant' as const, content: 'D'.repeat(3500) },  // Preserved
-      { id: 'msg_5', role: 'user' as const, content: 'E'.repeat(100) },        // Preserved
+      { id: 'msg_1', role: 'user' as const, content: 'A'.repeat(2000) }, //Oldest: pruned
+      { id: 'msg_2', role: 'assistant' as const, content: 'B'.repeat(2000) }, //pruned
+      { id: 'msg_3', role: 'user' as const, content: 'C'.repeat(3500) }, //Preserved
+      { id: 'msg_4', role: 'assistant' as const, content: 'D'.repeat(3500) }, //Preserved
+      { id: 'msg_5', role: 'user' as const, content: 'E'.repeat(100) }, //Preserved
     ];
 
     const params = {
@@ -89,12 +89,44 @@ describe('promptCompiler utility', () => {
     const result = compileLocalPrompt(params);
 
     expect(result.length).toBeLessThanOrEqual(8000);
-    // Verifies oldest ones are pruned
+    //Verifies oldest ones pruned
     expect(result).not.toContain('A'.repeat(2000));
     expect(result).not.toContain('B'.repeat(2000));
-    // Verifies newer ones are preserved
+    //Verifies newer ones preserved
     expect(result).toContain('C'.repeat(3500));
     expect(result).toContain('D'.repeat(3500));
     expect(result).toContain('E'.repeat(100));
+  });
+
+  it('should format ChatML correctly (for Qwen2.5 / SmolLM / fallback)', () => {
+    const params = {
+      ...defaultParams,
+      compactInstructions: 'Be extremely concise.',
+      toolDeclarations: ['tool_foo'],
+      modelName: 'Qwen2.5 0.5B',
+    };
+
+    const result = compileLocalPrompt(params);
+
+    expect(result).toContain('<|im_start|>system\nSystem instructions.\nBe extremely concise.');
+    expect(result).toContain('Available tools:\ntool_foo');
+    expect(result).toContain('<|im_end|>');
+    expect(result).toContain('<|im_start|>user\nWhat is 2+2?<|im_end|>\n<|im_start|>assistant\n');
+  });
+
+  it('should format TinyLlama template correctly', () => {
+    const params = {
+      ...defaultParams,
+      compactInstructions: 'Be extremely concise.',
+      toolDeclarations: ['tool_foo'],
+      modelName: 'TinyLlama 1.1B',
+    };
+
+    const result = compileLocalPrompt(params);
+
+    expect(result).toContain('<|system|>\nSystem instructions.\nBe extremely concise.');
+    expect(result).toContain('Available tools:\ntool_foo');
+    expect(result).toContain('</s>\n');
+    expect(result).toContain('<|user|>\nWhat is 2+2?</s>\n<|assistant|>\n');
   });
 });
