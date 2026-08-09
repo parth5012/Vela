@@ -16,6 +16,7 @@ PUBLIC_LIST: list[dict[str, str]] = [
         "id": config.identifier,
         "name": config.display_name,
         "description": config.description,
+        "compact_prompt_instructions": config.compact_prompt_instructions,
     }
     for config in AGENT_REGISTRY.list_agents()
 ]
