@@ -20,6 +20,26 @@ npx expo prebuild --clean  # regenerate native dirs
 
 No lint or format scripts are configured.
 
+## Physical device policy
+
+The Android device connected over ADB is the user's personal phone, not a
+disposable emulator. Ask for approval BEFORE any of the following, and wait for
+an explicit yes:
+
+- Installing any package other than the app itself — especially instrumentation
+  / `androidTest` APKs (`com.parth5012.client.dev.test`), which `connectedAndroidTest`
+  installs as a separate companion app
+- Uninstalling or clearing data for any package
+- Deleting files from device storage (e.g. downloaded models under `files/models/`)
+
+Reading state is fine without asking: `adb devices`, `logcat`, `pm list packages`,
+`run-as ... ls`, pulling files for inspection.
+
+When on-device verification is needed, propose the plan and what it will install,
+then let the user decide. Prefer having the user drive the UI over installing
+extra tooling. MIUI blocks `adb shell input` (SecurityException: INJECT_EVENTS),
+so UI automation is not an option on this device anyway.
+
 ## See also
 
 - `client/AGENTS.md` for app-specific guidance
