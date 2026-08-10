@@ -4,10 +4,10 @@ import asyncio
 from langchain_core.messages import HumanMessage
 from agent.graph import graph
 from utils.logger import StructuredLogger
-from db.supabase import SupabaseDB
+from db.database import PostgresDB
 
 class DiscordGateway:
-    def __init__(self, db: SupabaseDB):
+    def __init__(self, db: PostgresDB):
         self.logger = StructuredLogger("DiscordGateway")
         self.db = db
         intents = discord.Intents.default()

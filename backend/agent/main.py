@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, Query, responses, Request, BackgroundTasks, Security, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from google_auth_oauthlib.flow import Flow
-from db.supabase import SupabaseDB
+from db.database import PostgresDB
 from gateway.telegram import TelegramGateway
 from gateway.discord import DiscordGateway
 from cron.consolidate import run_self_improvement
@@ -46,7 +46,7 @@ def get_pending_tasks():
 
 
 logger = StructuredLogger("VelaServer")
-db = SupabaseDB()
+db = PostgresDB()
 telegram_gateway = TelegramGateway(db=db)
 discord_gateway = DiscordGateway(db=db)
 

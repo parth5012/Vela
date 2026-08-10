@@ -4,7 +4,7 @@ from collections import deque
 from langchain_core.messages import HumanMessage, AIMessage, ToolCall
 from agent.graph import graph
 from utils.logger import StructuredLogger
-from db.supabase import SupabaseDB
+from db.database import PostgresDB
 import os
 import asyncio
 
@@ -26,7 +26,7 @@ def _get_message_text(content) -> str:
         return str(content)
 
 class TelegramGateway:
-    def __init__(self, db: SupabaseDB):
+    def __init__(self, db: PostgresDB):
         self.logger = StructuredLogger("TelegramGateway")
         self.db = db
         token = os.getenv("TELEGRAM_BOT_TOKEN", "mock_token")

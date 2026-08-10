@@ -138,9 +138,9 @@ def get_authenticated_service(
         ``(service, None)`` on success, or ``(None, error_string)`` when
         authentication is required.
     """
-    from db.supabase import SupabaseDB
+    from db.database import PostgresDB
 
-    db = SupabaseDB()
+    db = PostgresDB()
     creds = ensure_google_auth(conversation_id, db)
     if creds is AUTH_REQUIRED:
         return None, _AUTH_MSG

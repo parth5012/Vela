@@ -6,7 +6,7 @@ from datetime import datetime
 from langchain_core.messages import HumanMessage
 from agent.graph import graph
 from utils.logger import StructuredLogger
-from db.supabase import SupabaseDB
+from db.database import PostgresDB
 from utils.google_drive import get_google_credentials, upload_to_google_drive
 
 class CarbonVoiceGateway:
@@ -14,7 +14,7 @@ class CarbonVoiceGateway:
     Gateway to handle incoming voice transcription messages from Carbon Voice,
     save the audio-text pairs to the user's Google Drive, and run the LangGraph supervisor.
     """
-    def __init__(self, db: SupabaseDB):
+    def __init__(self, db: PostgresDB):
         self.logger = StructuredLogger("CarbonVoiceGateway")
         self.db = db
 

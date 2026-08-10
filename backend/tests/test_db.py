@@ -1,39 +1,41 @@
 from unittest.mock import MagicMock, patch
-from db.supabase import SupabaseDB
+from db.database import PostgresDB
 
-@patch("db.supabase.DBClient")
-@patch("db.supabase.get_db_session")
+@patch("db.database.DBClient")
+@patch("db.database.get_db_session")
 def test_get_or_create_conversation(mock_get_db, mock_db_client_class):
     mock_session = MagicMock()
     mock_get_db.return_value.__enter__.return_value = mock_session
-    
+
     mock_client = MagicMock()
     mock_conv = MagicMock()
     mock_conv.id = "existing-uuid"
     mock_client.get_or_create_conversation.return_value = mock_conv
     mock_db_client_class.return_value = mock_client
-    
-    db = SupabaseDB()
+
+    db = PostgresDB()
     conv_id = db.get_or_create_conversation(12345)
     assert conv_id == "existing-uuid"
     mock_client.get_or_create_conversation.assert_called_with(12345)
 
-@patch("db.supabase.DBClient")
-@patch("db.supabase.get_db_session")
+
+@patch("db.database.DBClient")
+@patch("db.database.get_db_session")
 def test_get_or_create_discord_conversation(mock_get_db, mock_db_client_class):
     mock_session = MagicMock()
     mock_get_db.return_value.__enter__.return_value = mock_session
-    
+
     mock_client = MagicMock()
     mock_conv = MagicMock()
     mock_conv.id = "existing-discord-uuid"
     mock_client.get_or_create_discord_conversation.return_value = mock_conv
     mock_db_client_class.return_value = mock_client
-    
-    db = SupabaseDB()
+
+    db = PostgresDB()
     conv_id = db.get_or_create_discord_conversation(987654321)
     assert conv_id == "existing-discord-uuid"
     mock_client.get_or_create_discord_conversation.assert_called_with(987654321)
+
 
 def test_conversations_table_has_title_column():
     from db.session import get_db_session
@@ -45,21 +47,21 @@ def test_conversations_table_has_title_column():
         else:
             query = "SELECT column_name FROM information_schema.columns WHERE table_name='conversations' AND column_name='title';"
         result = session.execute(text(query)).fetchone()
-        assert result is not None, "Conversations table is missing 'title' column"
+        assert result is not None, "Conversations table missing 'title' column"
 
 
-@patch("db.supabase.DBClient")
-@patch("db.supabase.get_db_session")
+@patch("db.database.DBClient")
+@patch("db.database.get_db_session")
 def test_update_conversation_active_skill(mock_get_db, mock_db_client_class):
     mock_session = MagicMock()
     mock_get_db.return_value.__enter__.return_value = mock_session
-    
+
     mock_client = MagicMock()
     mock_conv = MagicMock()
     mock_client.update_conversation_active_skill.return_value = mock_conv
     mock_db_client_class.return_value = mock_client
-    
-    db = SupabaseDB()
+
+    db = PostgresDB()
     result = db.update_conversation_active_skill("conv-uuid", "google_calendar")
     assert result is True
     mock_client.update_conversation_active_skill.assert_called_with("conv-uuid", "google_calendar")
@@ -68,21 +70,22 @@ def test_update_conversation_active_skill(mock_get_db, mock_db_client_class):
     result = db.update_conversation_active_skill("conv-uuid", None)
     assert result is False
 
-@patch("db.supabase.get_db_session")
+
+@patch("db.database.get_db_session")
 def test_get_latest_oauth_tokens(mock_get_db):
     mock_session = MagicMock()
     mock_get_db.return_value.__enter__.return_value = mock_session
 
     mock_token = MagicMock()
     mock_token.token = {"access_token": "latest_token"}
-    
+
     mock_query = MagicMock()
     mock_session.query.return_value = mock_query
     mock_query.filter_by.return_value = mock_query
     mock_query.order_by.return_value = mock_query
     mock_query.first.return_value = mock_token
 
-    db = SupabaseDB()
+    db = PostgresDB()
     result = db.get_latest_oauth_tokens("google")
     assert result == {"access_token": "latest_token"}
 
@@ -98,4 +101,3 @@ def test_conversations_table_has_is_pinned_column():
             query = "SELECT column_name FROM information_schema.columns WHERE table_name='conversations' AND column_name='is_pinned';"
         result = session.execute(text(query)).fetchone()
         assert result is not None, "Conversations table missing 'is_pinned' column"
-

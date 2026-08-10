@@ -36,11 +36,11 @@ import json
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from db.session import get_db_session
-from db.supabase import SupabaseDB
+from db.database import PostgresDB
 from db.client import DBClient
 
 def import_history(telegram_chat_id: int, history_filepath: str):
-    db = SupabaseDB()
+    db = PostgresDB()
     
     # 1. Resolve the database conversation ID
     conv_id = db.get_or_create_conversation(telegram_chat_id)
