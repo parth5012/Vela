@@ -1,0 +1,48 @@
+services:
+  - type: web
+    name: vela-backend
+    runtime: python
+    plan: starter
+    region: oregon
+    buildCommand: cd backend && uv sync --frozen
+    startCommand: cd backend && uv run uvicorn agent.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: VELA_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: E2B_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: COHERE_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: DISCORD_BOT_TOKEN
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        value: https://vela-backend.onrender.com/oauth/callback
+      - key: VOYAGE_API_KEY
+        sync: false
+      - key: JINA_API_KEY
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false

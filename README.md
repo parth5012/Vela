@@ -254,3 +254,12 @@ Run the test suite with:
 ```bash
 uv run python -m pytest -v
 ```
+
+---
+
+## 🛠️ Contributing & Self-Hosting
+
+- **[Backend CONTRIBUTING.md](backend/CONTRIBUTING.md)** — step-by-step guide to deploy on Render, connect the Android client, and start contributing
+- **[Setup Check Script](backend/scripts/setup_check.py)** — run `uv run python scripts/setup_check.py` after local setup to verify your environment
+- **[render.yaml](render.yaml)** — Render Blueprint for one-click deployment
+- **[ADR Documentation](docs/ADR/)** — architectural decision records explaining key design choices
