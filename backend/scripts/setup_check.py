@@ -28,8 +28,6 @@ def check_env_file():
     required = {
         "GOOGLE_API_KEY": "Gemini API key (https://aistudio.google.com/apikey)",
         "VELA_API_KEY": "Client auth token (generate with: openssl rand -hex 32)",
-        "SUPABASE_URL": "Supabase project URL (https://supabase.com)",
-        "SUPABASE_SERVICE_ROLE_KEY": "Supabase service_role key",
         "DATABASE_URL": "PostgreSQL connection string",
     }
 
@@ -77,7 +75,7 @@ def check_database_connection():
         }
         missing_tables = required_tables - existing_tables
         if missing_tables:
-            return False, f"Missing tables: {', '.join(missing_tables)}. Run schema.sql in Supabase SQL Editor."
+            return False, f"Missing tables: {', '.join(missing_tables)}. Run schema.sql in your PostgreSQL database (e.g., Supabase SQL Editor, Neon Console, or psql)."
     except Exception as e:
         return False, f"Error inspecting tables: {e}"
 

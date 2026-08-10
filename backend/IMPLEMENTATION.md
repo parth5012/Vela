@@ -49,13 +49,13 @@ Supervisor Agent (LangGraph)
     │     └── (pluggable — add more as .py files)
     ├── Memory Manager
     │     ├── Short-term (in-request context)
-    │     ├── Long-term (Supabase pgvector)
+    │     ├── Long-term (PostgreSQL pgvector (Neon, Supabase))
     │     └── Experience log (self-improvement feed)
     └── Self-Improvement Loop
           ├── Eval step (post-interaction)
           └── Consolidation cron (nightly)
 
-Supabase PostgreSQL
+PostgreSQL (Neon, Supabase)
     ├── conversations
     ├── memory_vectors (pgvector)
     ├── experiences
