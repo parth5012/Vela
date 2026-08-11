@@ -2,7 +2,6 @@
 .venv
 __pycache__/
 .pytest_cache
-docs/
 GEMINI.md
 .gemini/
 graphify-out/
