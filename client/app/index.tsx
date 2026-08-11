@@ -18,13 +18,14 @@ import {
   Linking,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import MessageOptionsModal from '../components/ui/MessageOptionsModal';
 import { useConfigStore } from '../store/useConfigStore';
 import { useChatStore, Message, Thread } from '../store/useChatStore';
-import { THEME_COLORS, FONT_SIZES, ACCENT_COLORS } from '../utils/theme';
+import { useAurora } from '../hooks/useAurora';
 import RichText from '../components/chat/RichText';
 import { streamAgentResponse } from '../utils/sse';
 import CollapsibleBlock from '../components/chat/CollapsibleBlock';
@@ -109,7 +110,7 @@ function SourceCard({ src, colors, sizes, accentHex }: { src: SearchSource; colo
     <Pressable
       style={({ pressed }) => [
         styles.sourceCard,
-        { backgroundColor: colors.card, borderColor: colors.border },
+        { backgroundColor: 'rgba(0,0,0,0.25)', borderColor: colors.glassBorder },
         pressed && { opacity: 0.8 }
       ]}
       onPress={handlePress}
@@ -124,7 +125,7 @@ function SourceCard({ src, colors, sizes, accentHex }: { src: SearchSource; colo
         ) : (
           <View style={[styles.sourceIconFallback, { backgroundColor: accentHex + '20' }]}>
             <Text style={[styles.sourceIconFallbackText, { color: accentHex }]}>
-              {getInitials(src.siteName)}
+              {getInitials(src.siteName || src.domain)}
             </Text>
           </View>
         )}
@@ -132,7 +133,7 @@ function SourceCard({ src, colors, sizes, accentHex }: { src: SearchSource; colo
           {src.siteName || 'Web Page'}
         </Text>
       </View>
-      <Text style={[styles.sourceTitle, { color: colors.text, fontSize: sizes.text }]} numberOfLines={2}>
+      <Text style={[styles.sourceTitle, { color: colors.textMuted, fontSize: sizes.text }]} numberOfLines={2}>
         {src.title}
       </Text>
     </Pressable>
@@ -141,13 +142,11 @@ function SourceCard({ src, colors, sizes, accentHex }: { src: SearchSource; colo
 
 export default function ChatScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   // Config State
   const apiUrl = useConfigStore((state) => state.apiUrl);
   const apiKey = useConfigStore((state) => state.apiKey);
-  const theme = useConfigStore((state) => state.theme);
-  const fontSize = useConfigStore((state) => state.fontSize);
-  const accentColor = useConfigStore((state) => state.accentColor);
   const modelName = useConfigStore((state) => state.modelName);
   const defaultPersona = useConfigStore((state) => state.defaultPersona);
   const userName = useConfigStore((state) => state.userName);
@@ -191,10 +190,9 @@ export default function ChatScreen() {
   const [activeMenuMessage, setActiveMenuMessage] = useState<Message | null>(null);
   const [authRequired, setAuthRequired] = useState<Record<string, boolean>>({});
 
-  // Theme values
-  const colors = THEME_COLORS[theme] || THEME_COLORS.deep;
-  const sizes = FONT_SIZES[fontSize] || FONT_SIZES.medium;
-  const accentHex = ACCENT_COLORS[accentColor] || ACCENT_COLORS.indigo;
+  // Theme values — Aurora: theme = atmosphere (colors), accent = energy (aurora)
+  const { colors, sizes, aurora } = useAurora();
+  const accentHex = aurora.acc1;
 
   // Refs
   const flatListRef = React.useRef<FlatList | null>(null);
@@ -1051,16 +1049,28 @@ export default function ChatScreen() {
   };
 
   return (
+    <LinearGradient
+      colors={[colors.skyTop, colors.skyBottom]}
+      style={styles.container}
+    >
+      <View pointerEvents="none" style={styles.auroraGlow}>
+        <LinearGradient
+          colors={[aurora.glow, 'transparent']}
+          style={StyleSheet.absoluteFill}
+          start={{ x: 0.2, y: 0 }}
+          end={{ x: 0.8, y: 0.6 }}
+        />
+      </View>
     <KeyboardAvoidingView
       behavior="padding"
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 80}
-      style={[styles.container, { backgroundColor: colors.background }]}
+      style={styles.screen}
     >
       {activeThreadId ? (
         <View style={styles.chatArea}>
           {/* Horizontal Persona Selector Bar */}
           <Animated.View style={{ height: personaBarHeight, overflow: 'hidden' }}>
-            <View style={[styles.personaBar, { borderBottomColor: colors.border, backgroundColor: colors.background, height: '100%', justifyContent: 'center' }]}>
+            <View style={[styles.personaBar, { borderBottomColor: colors.glassBorder, backgroundColor: colors.glass }]}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.personaBarScroll}>
                 {personas.map((p) => {
                   const isSelected = selectedAgent === p.id;
@@ -1069,15 +1079,15 @@ export default function ChatScreen() {
                       key={p.id}
                       style={[
                         styles.personaBarCell,
-                        { borderColor: colors.border, backgroundColor: colors.card },
-                        isSelected && { borderColor: accentHex, backgroundColor: accentHex + '15' }
+                        { borderColor: colors.glassBorder, backgroundColor: 'rgba(0,0,0,0.25)' },
+                        isSelected && { borderColor: aurora.acc1, backgroundColor: aurora.acc1 + '1f' }
                       ]}
                       onPress={() => {
                         setSelectedAgent(p.id);
                         setThreadPersona(activeThreadId, p.id);
                       }}
                     >
-                      <Text style={[styles.personaBarText, { color: isSelected ? accentHex : colors.textMuted, fontSize: sizes.sub }]}>
+                      <Text style={[styles.personaBarText, { color: isSelected ? aurora.acc1 : colors.textMuted, fontSize: sizes.sub }]}>
                         {p.icon} {p.name}
                       </Text>
                     </Pressable>
@@ -1121,20 +1131,22 @@ export default function ChatScreen() {
 
                       <Pressable
                         onLongPress={() => !isCurrentThreadStreaming && setActiveMenuMessage(item)}
-                        style={[
+                        style={({ pressed }) => [
                           styles.bubble,
                           isUser ? styles.userBubble : styles.assistantBubble,
-                          !isUser && { backgroundColor: colors.bubbleBack || 'rgba(99, 102, 241, 0.03)' }
+                          pressed && { opacity: 0.85 },
+                          !isUser && { backgroundColor: colors.glass, borderColor: colors.glassBorder },
+                          isUser && { backgroundColor: aurora.acc1, borderColor: aurora.acc2 },
                         ]}
                       >
                         {!isUser && (
-                          <Text style={[styles.senderLabel, { color: colors.textDark }]}>
+                          <Text style={[styles.senderLabel, { color: aurora.acc1 }]}>
                             {isLocalMode ? 'Gemma (Local)' : (personas.find(p => p.id === selectedAgent)?.name || 'Vela')}
                           </Text>
                         )}
 
                         {isUser ? (
-                          <Text style={[styles.messageText, { color: colors.text, fontSize: sizes.text }]}>
+                          <Text style={[styles.messageText, { color: aurora.onAccent, fontSize: sizes.text }]}>
                             {item.content}
                           </Text>
                         ) : showRawMap[item.id] ? (
@@ -1148,7 +1160,7 @@ export default function ChatScreen() {
                                 return (
                                   <RichText
                                     key={idx}
-                                    content={segment.content}
+                                    content={segment.content || ''}
                                     colors={colors}
                                     sizes={sizes}
                                     accentHex={accentHex}
@@ -1190,8 +1202,8 @@ export default function ChatScreen() {
 
                     {!isUser && isCurrentThreadStreaming && activeMessages[activeMessages.length - 1]?.id === item.id && (
                       <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12, gap: 4 }}>
-                        <ActivityIndicator size="small" color={accentHex} />
-                        <Text style={{ color: colors.textDark, fontSize: sizes.sub - 1, fontWeight: 'bold' }}>
+                        <ActivityIndicator size="small" color={aurora.acc1} />
+                        <Text style={{ color: aurora.acc2, fontSize: sizes.sub - 1, fontWeight: 'bold' }}>
                           {isLocalMode ? 'LOCAL MODEL COMPILING...' : 'VELA COMPILING...'}
                         </Text>
                       </View>
@@ -1200,29 +1212,29 @@ export default function ChatScreen() {
                     {showActionBar && (
                       <View style={styles.actionBar}>
                         <Pressable style={styles.actionBtn} onPress={() => handleCopyText(item.content)}>
-                          <Text style={[styles.actionBtnText, { color: colors.textDark, fontSize: sizes.sub }]}>Copy</Text>
+                          <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Copy</Text>
                         </Pressable>
                         {!isUser && (
                           <>
                             <Pressable style={styles.actionBtn} onPress={() => handleCopyCodeBlocks(item.content)}>
-                              <Text style={[styles.actionBtnText, { color: colors.textDark, fontSize: sizes.sub }]}>Code</Text>
+                              <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Code</Text>
                             </Pressable>
                             <Pressable style={styles.actionBtn} onPress={() => handleRegenerate(item)}>
-                              <Text style={[styles.actionBtnText, { color: colors.textDark, fontSize: sizes.sub }]}>Retry</Text>
+                              <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Retry</Text>
                             </Pressable>
                             <Pressable style={styles.actionBtn} onPress={() => toggleRaw(item.id)}>
-                              <Text style={[styles.actionBtnText, { color: colors.textDark, fontSize: sizes.sub }]}>Raw</Text>
+                              <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Raw</Text>
                             </Pressable>
                           </>
                         )}
                         <Pressable style={styles.actionBtn} onPress={() => handleBranch(item)}>
-                          <Text style={[styles.actionBtnText, { color: colors.textDark, fontSize: sizes.sub }]}>Branch</Text>
+                          <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Branch</Text>
                         </Pressable>
                         <Pressable style={styles.actionBtn} onPress={() => handleDownloadMd(item)}>
-                          <Text style={[styles.actionBtnText, { color: colors.textDark, fontSize: sizes.sub }]}>Download</Text>
+                          <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Download</Text>
                         </Pressable>
                         <Pressable style={styles.actionBtn} onPress={() => handleShowInfo(item)}>
-                          <Text style={[styles.actionBtnText, { color: colors.textDark, fontSize: sizes.sub }]}>Info</Text>
+                          <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Info</Text>
                         </Pressable>
                       </View>
                     )}
@@ -1235,7 +1247,7 @@ export default function ChatScreen() {
       ) : (
         <ScrollView contentContainerStyle={styles.welcomeScroll} keyboardShouldPersistTaps="handled">
           <View style={styles.welcomeContainer}>
-            <Text style={styles.welcomeLogo}>VELA</Text>
+            <Text style={[styles.welcomeLogo, { color: aurora.acc1 }]}>VELA</Text>
 
             <Text style={[styles.welcomeTitle, { color: colors.text }]}>
               {welcomeGreeting}, {userName}
@@ -1245,9 +1257,9 @@ export default function ChatScreen() {
             </Text>
 
             {/* Random Quote */}
-            <View style={[styles.quoteContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.quoteContainer, { backgroundColor: colors.glass, borderColor: colors.glassBorder }]}>
               <Text style={[styles.quoteText, { color: colors.text }]}>“{welcomeQuote.text}”</Text>
-              <Text style={[styles.quoteAuthor, { color: colors.textMuted }]}>— {welcomeQuote.author}</Text>
+              <Text style={[styles.quoteAuthor, { color: aurora.acc2 }]}>— {welcomeQuote.author}</Text>
             </View>
 
             {/* Suggestion Starter Cards */}
@@ -1258,13 +1270,14 @@ export default function ChatScreen() {
                   key={idx}
                   style={({ pressed }) => [
                     styles.suggestionCard,
-                    { backgroundColor: colors.card, borderColor: colors.border },
-                    pressed && { opacity: 0.8 }
+                    { backgroundColor: colors.glass, borderColor: colors.glassBorder },
+                    pressed && { borderColor: aurora.acc1, opacity: 0.85 }
                   ]}
                   onPress={() => handleSendWelcome(item.text, item.persona)}
                 >
                   <Text style={[styles.suggestionText, { color: colors.text, fontSize: sizes.text - 1 }]}>
-                    {item.label}: <Text style={{ color: colors.textMuted }}>"{item.text}"</Text>
+                    <Text style={{ color: aurora.acc1, fontWeight: '700' }}>{item.label}</Text>
+                    {': '}<Text style={{ color: colors.textMuted }}>"{item.text}"</Text>
                   </Text>
                 </Pressable>
               ))}
@@ -1280,14 +1293,15 @@ export default function ChatScreen() {
                 return (
                   <Pressable
                     key={p.id}
-                    style={[
+                    style={({ pressed }) => [
                       styles.personaPill,
-                      { backgroundColor: colors.card, borderColor: colors.border },
-                      isSelected && { backgroundColor: accentHex, borderColor: accentHex }
+                      { backgroundColor: 'rgba(0,0,0,0.25)', borderColor: colors.glassBorder },
+                      isSelected && { backgroundColor: aurora.acc1, borderColor: aurora.acc1 },
+                      pressed && { opacity: 0.8 }
                     ]}
                     onPress={() => setSelectedAgent(p.id)}
                   >
-                    <Text style={[styles.personaPillText, { color: isSelected ? '#ffffff' : colors.textMuted, fontSize: sizes.sub }]}>
+                    <Text style={[styles.personaPillText, { color: isSelected ? aurora.onAccent : colors.textMuted, fontSize: sizes.sub }]}>
                       {p.icon} {p.name}
                     </Text>
                   </Pressable>
@@ -1299,26 +1313,31 @@ export default function ChatScreen() {
       )}
 
       {/* Model Mode Selector */}
-      <View style={[styles.modelSwitcherContainer, { backgroundColor: colors.background }]}>
+      <View style={[styles.modelSwitcherContainer, { backgroundColor: colors.glass, borderTopColor: colors.glassBorder }]}>
         <Pressable
-          style={[styles.switcherButton, { borderColor: colors.border, backgroundColor: colors.card }]}
+          style={[styles.switcherButton, { borderColor: colors.glassBorder, backgroundColor: 'rgba(0,0,0,0.25)' }]}
           onPress={handleToggleLocalMode}
         >
           <Text style={[styles.switcherLabel, { color: colors.text }]}>
-            Engine: {isLocalMode ? `🤖 Local (${localModelName})` : '☁️ Cloud (Gemini)'}
+            Engine: {isLocalMode ? `🤖 Local (${localModelName})` : `☁️ Cloud (${modelName || 'Gemini'})`}
           </Text>
         </Pressable>
         {localModelDownloadProgress !== null && (
-          <Text style={[styles.downloadProgressText, { color: colors.textMuted }]}>
+          <Text style={[styles.downloadProgressText, { color: aurora.acc2 }]}>
             Downloading model: {localModelDownloadProgress}%
           </Text>
         )}
       </View>
 
       {/* Unifying Input container at bottom */}
-      <View style={[styles.inputContainer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+      <View
+        style={[
+          styles.inputContainer,
+          { backgroundColor: colors.glass, borderTopColor: colors.glassBorder, paddingBottom: Math.max(12, insets.bottom) }
+        ]}
+      >
         <TextInput
-          style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text, fontSize: sizes.text }]}
+          style={[styles.input, { backgroundColor: 'rgba(0,0,0,0.25)', borderColor: colors.glassBorder, color: colors.text, fontSize: sizes.text }]}
           placeholder={activeThreadId ? "Ask a question or request a task..." : "Ask Vela anything..."}
           placeholderTextColor={colors.textDark}
           value={input}
@@ -1328,8 +1347,8 @@ export default function ChatScreen() {
         <Pressable
           style={({ pressed }) => [
             styles.sendButton,
-            { backgroundColor: isCurrentThreadStreaming ? '#ef4444' : accentHex },
-            !isCurrentThreadStreaming && !input.trim() && { backgroundColor: colors.border },
+            { backgroundColor: isCurrentThreadStreaming ? '#ef4444' : aurora.acc1, shadowColor: aurora.acc1 },
+            !isCurrentThreadStreaming && !input.trim() && { backgroundColor: colors.textDark, shadowOpacity: 0 },
             pressed && { opacity: 0.8 }
           ]}
           onPress={handleSendPress}
@@ -1343,9 +1362,10 @@ export default function ChatScreen() {
         </Pressable>
       </View>
 
-      <MessageOptionsModal
-        visible={activeMenuMessage !== null}
-        onClose={() => setActiveMenuMessage(null)}
+        <MessageOptionsModal
+          visible={activeMenuMessage !== null}
+          isRaw={activeMenuMessage ? !!showRawMap[activeMenuMessage.id] : false}
+          onClose={() => setActiveMenuMessage(null)}
         onDownloadMd={() => activeMenuMessage && handleDownloadMd(activeMenuMessage)}
         onRegenerate={() => activeMenuMessage && handleRegenerate(activeMenuMessage)}
         onToggleRaw={() => activeMenuMessage && toggleRaw(activeMenuMessage.id)}
@@ -1357,12 +1377,24 @@ export default function ChatScreen() {
         themeColors={colors}
       />
     </KeyboardAvoidingView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  screen: {
+    flex: 1,
+  },
+  auroraGlow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 0,
   },
   chatArea: {
     flex: 1,
@@ -1416,8 +1448,6 @@ const styles = StyleSheet.create({
     maxWidth: '85%',
   },
   userBubble: {
-    backgroundColor: '#818cf8',
-    borderColor: '#6366f1',
     borderTopRightRadius: 4,
   },
   assistantBubble: {
@@ -1455,7 +1485,7 @@ const styles = StyleSheet.create({
   },
   sourceCard: {
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: 10,
     padding: 8,
     width: 140,
   },
@@ -1498,10 +1528,10 @@ const styles = StyleSheet.create({
   actionBtn: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 4,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#e4e4e7',
-    backgroundColor: '#f4f4f5',
+    borderColor: 'rgba(255, 255, 255, 0.13)',
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
   },
   actionBtnText: {
     fontSize: 11,
@@ -1518,7 +1548,6 @@ const styles = StyleSheet.create({
   welcomeLogo: {
     fontSize: 36,
     fontWeight: '900',
-    color: '#6366f1',
     letterSpacing: 8,
     marginBottom: 16,
   },
@@ -1588,6 +1617,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
+    borderTopWidth: 1,
   },
   switcherButton: {
     borderWidth: 1,
@@ -1624,6 +1654,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowOpacity: 0.45,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
   },
   sendButtonText: {
     color: '#ffffff',

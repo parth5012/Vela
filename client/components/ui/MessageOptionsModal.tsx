@@ -7,6 +7,7 @@ import {
   Pressable,
   Platform,
 } from 'react-native';
+import { ThemeColors } from '../../utils/theme';
 
 interface MessageOptionsModalProps {
   visible: boolean;
@@ -15,8 +16,11 @@ interface MessageOptionsModalProps {
   onRegenerate: () => void;
   onToggleRaw: () => void;
   onBranch: () => void;
-  onCopyCodeBlocks: () => void;
+  onCopyText: () => void;
+  onCopyCode: () => void;
+  onShare: () => void;
   onShowInfo: () => void;
+  themeColors: ThemeColors;
   isRaw: boolean;
   isUser?: boolean;
 }
@@ -28,8 +32,11 @@ export default function MessageOptionsModal({
   onRegenerate,
   onToggleRaw,
   onBranch,
-  onCopyCodeBlocks,
+  onCopyText,
+  onCopyCode,
+  onShare,
   onShowInfo,
+  themeColors,
   isRaw,
   isUser,
 }: MessageOptionsModalProps) {
@@ -41,31 +48,39 @@ export default function MessageOptionsModal({
       onRequestClose={onClose}
     >
       <Pressable style={styles.overlay} onPress={onClose}>
-        <Pressable style={styles.modalContent} onPress={() => {}}>
-          <View style={styles.dragHandle} />
-          <Text style={styles.title}>Message Options</Text>
+        <Pressable
+          style={[
+            styles.modalContent,
+            { backgroundColor: themeColors.background, borderColor: themeColors.border },
+          ]}
+          onPress={() => {}}
+        >
+          <View style={[styles.dragHandle, { backgroundColor: themeColors.textDark }]} />
+          <Text style={[styles.title, { color: themeColors.text }]}>Message Options</Text>
 
           <Pressable
             style={({ pressed }) => [
               styles.optionButton,
+              { backgroundColor: themeColors.card, borderColor: themeColors.border },
               pressed && styles.optionButtonPressed,
             ]}
             onPress={() => { onDownloadMd(); onClose(); }}
           >
             <Text style={styles.optionIcon}>📄</Text>
-            <Text style={styles.optionButtonText}>Download as MD</Text>
+            <Text style={[styles.optionButtonText, { color: themeColors.text }]}>Download as MD</Text>
           </Pressable>
 
           {!isUser && (
 <Pressable
             style={({ pressed }) => [
               styles.optionButton,
+              { backgroundColor: themeColors.card, borderColor: themeColors.border },
               pressed && styles.optionButtonPressed,
             ]}
             onPress={() => { onRegenerate(); onClose(); }}
           >
             <Text style={styles.optionIcon}>🔄</Text>
-            <Text style={styles.optionButtonText}>Regenerate Response</Text>
+            <Text style={[styles.optionButtonText, { color: themeColors.text }]}>Regenerate Response</Text>
           </Pressable>
           )}
 
@@ -73,12 +88,13 @@ export default function MessageOptionsModal({
 <Pressable
             style={({ pressed }) => [
               styles.optionButton,
+              { backgroundColor: themeColors.card, borderColor: themeColors.border },
               pressed && styles.optionButtonPressed,
             ]}
             onPress={() => { onToggleRaw(); onClose(); }}
           >
             <Text style={styles.optionIcon}>👁️</Text>
-            <Text style={styles.optionButtonText}>
+            <Text style={[styles.optionButtonText, { color: themeColors.text }]}>
               {isRaw ? 'Show Rendered Markdown' : 'Show Raw Markdown'}
             </Text>
           </Pressable>
@@ -87,35 +103,64 @@ export default function MessageOptionsModal({
           <Pressable
             style={({ pressed }) => [
               styles.optionButton,
+              { backgroundColor: themeColors.card, borderColor: themeColors.border },
               pressed && styles.optionButtonPressed,
             ]}
             onPress={() => { onBranch(); onClose(); }}
           >
             <Text style={styles.optionIcon}>🌿</Text>
-            <Text style={styles.optionButtonText}>Branch Conversation</Text>
+            <Text style={[styles.optionButtonText, { color: themeColors.text }]}>Branch Conversation</Text>
           </Pressable>
 
           <Pressable
             style={({ pressed }) => [
               styles.optionButton,
+              { backgroundColor: themeColors.card, borderColor: themeColors.border },
               pressed && styles.optionButtonPressed,
             ]}
-            onPress={() => { onCopyCodeBlocks(); onClose(); }}
+            onPress={() => { onCopyText(); onClose(); }}
+          >
+            <Text style={styles.optionIcon}>📋</Text>
+            <Text style={[styles.optionButtonText, { color: themeColors.text }]}>Copy Message</Text>
+          </Pressable>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.optionButton,
+              { backgroundColor: themeColors.card, borderColor: themeColors.border },
+              pressed && styles.optionButtonPressed,
+            ]}
+            onPress={() => { onCopyCode(); onClose(); }}
           >
             <Text style={styles.optionIcon}>💻</Text>
-            <Text style={styles.optionButtonText}>Copy Code Blocks Only</Text>
+            <Text style={[styles.optionButtonText, { color: themeColors.text }]}>Copy Code Blocks Only</Text>
           </Pressable>
 
           {!isUser && (
 <Pressable
             style={({ pressed }) => [
               styles.optionButton,
+              { backgroundColor: themeColors.card, borderColor: themeColors.border },
+              pressed && styles.optionButtonPressed,
+            ]}
+            onPress={() => { onShare(); onClose(); }}
+          >
+            <Text style={styles.optionIcon}>📤</Text>
+            <Text style={[styles.optionButtonText, { color: themeColors.text }]}>Share</Text>
+          </Pressable>
+          )}
+
+          {!isUser && (
+<Pressable
+            style={({ pressed }) => [
+              styles.optionButton,
+              { backgroundColor: themeColors.card, borderColor: themeColors.border },
               pressed && styles.optionButtonPressed,
             ]}
             onPress={() => { onShowInfo(); onClose(); }}
           >
             <Text style={styles.optionIcon}>ℹ️</Text>
-            <Text style={styles.optionButtonText}>Response Info</Text>
+            <Text style={[styles.optionButtonText, { color: themeColors.text }]}>Response Info</Text>
           </Pressable>
           )}
 
@@ -172,19 +217,16 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 16,
     borderRadius: 10,
-    backgroundColor: '#111a36',
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#1e294b',
   },
   optionButtonPressed: {
-    backgroundColor: '#1b254b',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
   },
   optionIcon: {
     fontSize: 18,
   },
   optionButtonText: {
-    color: '#cbd5e1',
     fontSize: 15,
     fontWeight: '600',
     marginLeft: 12,

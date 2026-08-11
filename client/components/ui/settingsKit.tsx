@@ -14,21 +14,14 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useConfigStore } from '../../store/useConfigStore';
-import { THEME_COLORS, FONT_SIZES, ACCENT_COLORS, getAurora } from '../../utils/theme';
+import { ACCENT_COLORS } from '../../utils/theme';
+import { useAurora } from '../../hooks/useAurora';
+
+export { useAurora };
 
 // Shared Aurora design system for the Settings stack (and future screens).
 // Theme = atmosphere (sky/glass/text from THEME_COLORS), accent = energy
 // (aurora gradient resolving the send buttons, active states, glow).
-
-export function useAurora() {
-  const theme = useConfigStore((s) => s.theme);
-  const fontSize = useConfigStore((s) => s.fontSize);
-  const accentColor = useConfigStore((s) => s.accentColor);
-  const colors = THEME_COLORS[theme] || THEME_COLORS.deep;
-  const sizes = FONT_SIZES[fontSize] || FONT_SIZES.medium;
-  const aurora = getAurora(accentColor, theme);
-  return { colors, sizes, aurora };
-}
 
 export function AuroraScreen({
   title,

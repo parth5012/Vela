@@ -12,6 +12,10 @@ interface RichTextProps {
   theme?: 'deep' | 'slate' | 'cyberpunk' | 'nordic' | 'dracula' | 'oled';
   fontSize?: 'small' | 'medium' | 'large';
   accentColor?: 'indigo' | 'emerald' | 'rose' | 'amber' | 'violet' | 'pink' | 'orange' | 'blue';
+  colors?: typeof THEME_COLORS[keyof typeof THEME_COLORS];
+  sizes?: typeof FONT_SIZES[keyof typeof FONT_SIZES];
+  accentHex?: string;
+  onCopyText?: (text: string) => void;
 }
 
 export default function RichText({
@@ -19,11 +23,15 @@ export default function RichText({
   theme = 'deep',
   fontSize = 'medium',
   accentColor = 'indigo',
+  colors: colorsOverride,
+  sizes: sizesOverride,
+  accentHex: accentHexOverride,
+  onCopyText,
 }: RichTextProps) {
   const segments = parseContent(content);
-  const colors = THEME_COLORS[theme] || THEME_COLORS.deep;
-  const sizes = FONT_SIZES[fontSize] || FONT_SIZES.medium;
-  const accentHex = ACCENT_COLORS[accentColor] || ACCENT_COLORS.indigo;
+  const colors = colorsOverride || THEME_COLORS[theme] || THEME_COLORS.deep;
+  const sizes = sizesOverride || FONT_SIZES[fontSize] || FONT_SIZES.medium;
+  const accentHex = accentHexOverride || ACCENT_COLORS[accentColor] || ACCENT_COLORS.indigo;
 
   const rules = useMemo(() => ({
     fence: (node: any) => {
