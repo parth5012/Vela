@@ -63,7 +63,7 @@ export const useChatStore = create<ChatState>()(
       selectThread: (id) => set({ activeThreadId: id }),
       deleteThread: (id) => {
         const config = useConfigStore.getState();
-        if (config.apiUrl && config.apiKey) {
+        if (!config.isLocalMode && config.apiUrl && config.apiKey) {
           const formattedUrl = normalizeUrl(config.apiUrl);
           fetch(`${formattedUrl}/chat/threads/${id}`, {
             method: 'DELETE',
@@ -120,7 +120,7 @@ export const useChatStore = create<ChatState>()(
       }),
     renameThread: async (id, newTitle) => {
       const config = useConfigStore.getState();
-      if (config.apiUrl && config.apiKey) {
+      if (!config.isLocalMode && config.apiUrl && config.apiKey) {
         const formattedUrl = normalizeUrl(config.apiUrl);
         try {
           let res = await fetch(`${formattedUrl}/chat/threads/${id}`, {
@@ -178,7 +178,7 @@ export const useChatStore = create<ChatState>()(
       },
       togglePinThread: async (id) => {
         const config = useConfigStore.getState();
-        if (config.apiUrl && config.apiKey) {
+        if (!config.isLocalMode && config.apiUrl && config.apiKey) {
           const formattedUrl = normalizeUrl(config.apiUrl);
           const thread = useChatStore.getState().threads.find((t) => t.id === id);
           if (thread) {
@@ -224,7 +224,7 @@ export const useChatStore = create<ChatState>()(
       clearStore: () => set({ threads: [], activeThreadId: null, messages: {}, streamingThreadIds: new Set() }),
       branchThread: async (parentThreadId, uptoMessageId, newThreadId, title) => {
         const config = useConfigStore.getState();
-        if (config.apiUrl && config.apiKey) {
+        if (!config.isLocalMode && config.apiUrl && config.apiKey) {
           const formattedUrl = normalizeUrl(config.apiUrl);
           try {
             const res = await fetch(`${formattedUrl}/chat/threads/branch`, {
@@ -272,7 +272,7 @@ export const useChatStore = create<ChatState>()(
 
       truncateThreadHistory: async (threadId, uptoMessageId) => {
         const config = useConfigStore.getState();
-        if (config.apiUrl && config.apiKey) {
+        if (!config.isLocalMode && config.apiUrl && config.apiKey) {
           const formattedUrl = normalizeUrl(config.apiUrl);
           try {
             const res = await fetch(`${formattedUrl}/chat/threads/${threadId}/truncate`, {
