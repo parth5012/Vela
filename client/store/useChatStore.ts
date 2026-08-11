@@ -1,7 +1,34 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import type { StateStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useConfigStore } from './useConfigStore';
+
+// zustand's persist middleware writes the full partialized state to storage on
+// EVERY set(), even before the initial hydration read has completed. On app
+// launch the startup effects in _layout.tsx / index.tsx call set() while the
+// store is still in its empty initial state, which would overwrite the
+// persisted chats with `{threads: [], activeThreadId: null, messages: {}}`.
+// Guard the storage so writes are dropped until the first successful read.
+let storageHydratedOnce = false;
+
+const guardedAsyncStorage: StateStorage = {
+  getItem: async (name) => {
+    try {
+      return await AsyncStorage.getItem(name);
+    } finally {
+      storageHydratedOnce = true;
+    }
+  },
+  setItem: async (name, value) => {
+    if (!storageHydratedOnce) return;
+    await AsyncStorage.setItem(name, value);
+  },
+  removeItem: async (name) => {
+    if (!storageHydratedOnce) return;
+    await AsyncStorage.removeItem(name);
+  },
+};
 
 const normalizeUrl = (url: string): string => {
   let formattedUrl = url.trim();
@@ -31,6 +58,7 @@ interface ChatState {
   activeThreadId: string | null;
   messages: Record<string, Message[]>;
   streamingThreadIds: Set<string>;
+  hasHydrated: boolean;
   createThread: (title: string, id: string, persona?: string) => void;
   selectThread: (id: string | null) => void;
   deleteThread: (id: string) => void;
@@ -44,6 +72,7 @@ interface ChatState {
   setStreamingThread: (threadId: string, isStreaming: boolean) => void;
   isThreadStreaming: (threadId: string) => boolean;
   clearStore: () => void;
+  setHasHydrated: (hasHydrated: boolean) => void;
   branchThread: (parentThreadId: string, uptoMessageId: string, newThreadId: string, title: string) => Promise<void>;
   truncateThreadHistory: (threadId: string, uptoMessageId: string) => Promise<void>;
 }
@@ -55,6 +84,7 @@ export const useChatStore = create<ChatState>()(
       activeThreadId: null,
       messages: {},
       streamingThreadIds: new Set(),
+      hasHydrated: false,
       createThread: (title, id, persona = 'personal assistant') => set((state) => ({
         threads: [{ id, title, persona, updated_at: new Date().toISOString() }, ...state.threads],
         activeThreadId: id,
@@ -222,6 +252,7 @@ export const useChatStore = create<ChatState>()(
       }),
       isThreadStreaming: (threadId) => get().streamingThreadIds.has(threadId),
       clearStore: () => set({ threads: [], activeThreadId: null, messages: {}, streamingThreadIds: new Set() }),
+      setHasHydrated: (hasHydrated) => set({ hasHydrated }),
       branchThread: async (parentThreadId, uptoMessageId, newThreadId, title) => {
         const config = useConfigStore.getState();
         if (!config.isLocalMode && config.apiUrl && config.apiKey) {
@@ -309,12 +340,15 @@ export const useChatStore = create<ChatState>()(
     }),
     {
       name: 'vela-chat-storage',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => guardedAsyncStorage),
       partialize: (state) => ({
         threads: state.threads,
         activeThreadId: state.activeThreadId,
         messages: state.messages,
       }),
+      onRehydrateStorage: (state) => () => {
+        state?.setHasHydrated(true);
+      },
     }
   )
 );

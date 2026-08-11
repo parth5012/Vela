@@ -58,6 +58,7 @@ function HeaderRightActions() {
 export default function RootLayout() {
   const isConfigured = useConfigStore((state) => state.isConfigured);
   const hasHydrated = useConfigStore((state) => state.hasHydrated);
+  const chatHasHydrated = useChatStore((state) => state.hasHydrated);
 
   const segments = useSegments();
   const router = useRouter();
@@ -71,11 +72,16 @@ export default function RootLayout() {
   const isBrowserVisible = useBrowserStore((s) => s.isVisible);
 
   useEffect(() => {
-    if (hasHydrated) {
+    if (hasHydrated && chatHasHydrated) {
       // Preserve active thread if already selected, otherwise default to welcome/new screen
       if (!useChatStore.getState().activeThreadId) {
         useChatStore.getState().selectThread(null);
       }
+    }
+  }, [hasHydrated, chatHasHydrated]);
+
+  useEffect(() => {
+    if (hasHydrated) {
       // Hydrate Google OAuth tokens SecureStore
       hydrateGoogleTokens()
     }
@@ -97,7 +103,7 @@ export default function RootLayout() {
 
   const inSetupGroup = segments[0] === 'setup';
 
-  if (!hasHydrated || !isRouterReady || (!isConfigured && !inSetupGroup) || (isConfigured && inSetupGroup)) {
+  if (!hasHydrated || !chatHasHydrated || !isRouterReady || (!isConfigured && !inSetupGroup) || (isConfigured && inSetupGroup)) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#818cf8" />
