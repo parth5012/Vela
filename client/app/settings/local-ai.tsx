@@ -7,6 +7,10 @@ import {
   isLocalLlmDown,
   localModelStorageKey,
   LOCAL_MODELS,
+  getLoadedModelName,
+  subscribeLocalModelLoadedState,
+  initializeLocalModel,
+  unloadLocalModel,
 } from '../../utils/localLlm';
 import {
   AuroraScreen,
@@ -40,12 +44,25 @@ export default function LocalAiScreen() {
   const { colors, sizes, aurora } = useAurora();
   const isMounted = useRef(true);
   const [downloadedModels, setDownloadedModels] = useState<Record<string, boolean>>({});
+  const [loadedModelName, setLoadedModelName] = useState<string | null>(getLoadedModelName());
+  const [modelBusy, setModelBusy] = useState(false);
 
   useEffect(() => {
     isMounted.current = true;
     return () => {
       isMounted.current = false;
     };
+  }, []);
+
+  // Keep the "loaded in RAM" badge in sync with the engine's actual state.
+  useEffect(() => {
+    const unsubscribe = subscribeLocalModelLoadedState(() => {
+      if (isMounted.current) {
+        setLoadedModelName(getLoadedModelName());
+      }
+    });
+    setLoadedModelName(getLoadedModelName());
+    return unsubscribe;
   }, []);
 
   // Check downloaded status of models on focus/load and when localModelName changes
@@ -78,6 +95,39 @@ export default function LocalAiScreen() {
 
   const isDownloading = localModelDownloadProgress !== null;
   const isActiveModelDownloaded = !!downloadedModels[localModelName];
+  const isActiveModelLoaded = loadedModelName === localModelName;
+
+  const handleLoadIntoRam = async () => {
+    if (isLocalLlmDown) {
+      Alert.alert('Local Model Down', 'The local LLM is currently down/unavailable.');
+      return;
+    }
+    if (!isActiveModelDownloaded) {
+      Alert.alert('Not Downloaded', `Download ${localModelName} first before loading it into RAM.`);
+      return;
+    }
+    if (modelBusy) return;
+    setModelBusy(true);
+    try {
+      await initializeLocalModel();
+    } catch (err: any) {
+      Alert.alert('Load Failed', err?.message || 'The model could not be loaded.');
+    } finally {
+      if (isMounted.current) setModelBusy(false);
+    }
+  };
+
+  const handleUnloadFromRam = async () => {
+    if (modelBusy) return;
+    setModelBusy(true);
+    try {
+      await unloadLocalModel();
+    } catch (err: any) {
+      Alert.alert('Unload Failed', err?.message || 'The model could not be unloaded.');
+    } finally {
+      if (isMounted.current) setModelBusy(false);
+    }
+  };
 
   const handleDownloadModel = async () => {
     if (isLocalLlmDown) {
@@ -241,7 +291,7 @@ export default function LocalAiScreen() {
   return (
     <AuroraScreen
       title="Local AI"
-      subtitle="Run Vela on-device with a downloaded LiteRT model, or fall back to your cloud backend."
+      subtitle="Run Vela on-device with a LiteRT or GGUF model, or fall back to your cloud backend. Manage RAM with Load/Unload."
     >
       <Card>
         <Label>Engine</Label>
@@ -299,6 +349,46 @@ export default function LocalAiScreen() {
         />
       </Card>
 
+      <Card>
+        <Label>RAM</Label>
+        <Text style={{ color: colors.textMuted, fontSize: sizes.sub, lineHeight: 16 }}>
+          {isActiveModelLoaded
+            ? `${localModelName} is loaded in RAM and ready for instant responses.`
+            : 'No model loaded in RAM. Load the selected model now, or let the app load it on your first local message.'}
+        </Text>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          {!isActiveModelLoaded ? (
+            <Pressable
+              onPress={handleLoadIntoRam}
+              disabled={modelBusy || isDownloading || !isActiveModelDownloaded}
+              style={({ pressed }) => [
+                styles.ramButton,
+                { backgroundColor: aurora.acc1, shadowColor: aurora.acc1, shadowOpacity: 0.35, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 6 },
+                (pressed || modelBusy || isDownloading || !isActiveModelDownloaded) && { opacity: 0.6 },
+              ]}
+            >
+              <Text style={{ color: aurora.onAccent, fontSize: sizes.text, fontWeight: '600' }}>
+                {modelBusy ? 'Working…' : `Load ${localModelName} into RAM`}
+              </Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={handleUnloadFromRam}
+              disabled={modelBusy}
+              style={({ pressed }) => [
+                styles.ramButton,
+                { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.35)' },
+                (pressed || modelBusy) && { opacity: 0.6 },
+              ]}
+            >
+              <Text style={{ color: '#f87171', fontSize: sizes.text, fontWeight: '600' }}>
+                {modelBusy ? 'Working…' : `Unload ${localModelName} from RAM`}
+              </Text>
+            </Pressable>
+          )}
+        </View>
+      </Card>
+
       {isDownloading ? (
         <Card>
           <Label>Downloading {localModelName} — {localModelDownloadProgress}%</Label>
@@ -337,5 +427,12 @@ const styles = StyleSheet.create({
   progressFill: {
     height: '100%',
     borderRadius: 4,
+  },
+  ramButton: {
+    flex: 1,
+    borderRadius: 10,
+    paddingVertical: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

@@ -1,6 +1,17 @@
 import { NativeModules } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+let mockLlamaContext = {
+  completion: jest.fn(),
+  release: jest.fn(async () => {}),
+};
+jest.mock('llama.rn', () => ({
+  initLlama: jest.fn(async () => mockLlamaContext),
+  LlamaContext: jest.fn(),
+}));
+
+import { initLlama } from 'llama.rn';
+
 // Mock react-native NativeModules
 // Streaming is event-based (see utils/localLlm.ts): the native module emits
 // `GemmaLlmStream` events rather than invoking one-shot bridge Callbacks.
@@ -193,22 +204,76 @@ describe('localLlm wrapper', () => {
     expect(resultText).toContain('init error');
   });
 
-  it('should refuse a GGUF model path and report why it fell back', async () => {
+  it('should route a GGUF model to the llama.rn engine, not MediaPipe', async () => {
+    await AsyncStorage.setItem(
+      'local_model_downloaded_Qwen2.5 0.5B_path',
+      'file:///test/path/to/model.gguf'
+    );
+
+    mockLlamaContext.completion.mockImplementationOnce(
+      async (
+        params: { prompt: string },
+        callback?: (data: { token?: string }) => void
+      ) => {
+        await new Promise((resolve) =>
+          setTimeout(() => {
+            callback?.({ token: 'GGUF ' });
+            callback?.({ token: 'response' });
+            resolve(null);
+          }, 0)
+        );
+        return {};
+      }
+    );
+
+    await initializeLocalModel();
+
+    // The GGUF path must go to llama.rn, never to the MediaPipe native module.
+    expect(GemmaNative.initializeLocalModel).not.toHaveBeenCalled();
+    expect(initLlama).toHaveBeenCalledTimes(1);
+    expect(initLlama).toHaveBeenCalledWith(
+      expect.objectContaining({ model: '/test/path/to/model.gguf' }),
+      expect.any(Function)
+    );
+
+    const yielded: string[] = [];
+    for await (const chunk of streamLocalLlmResponse('hello')) {
+      yielded.push(chunk);
+    }
+    expect(yielded.join('')).toBe('GGUF response');
+  });
+
+  it('should release the llama.rn context on unload', async () => {
     await AsyncStorage.setItem(
       'local_model_downloaded_Qwen2.5 0.5B_path',
       'file:///test/path/to/model.gguf'
     );
 
     await initializeLocalModel();
+    expect(isLocalModelLoaded).toBe(true);
 
-    // Native init must never be attempted with a GGUF file.
-    expect(GemmaNative.initializeLocalModel).not.toHaveBeenCalled();
+    await unloadLocalModel();
+    expect(mockLlamaContext.release).toHaveBeenCalledTimes(1);
+    expect(isLocalModelLoaded).toBe(false);
+  });
+
+  it('should fall back to mock when llama.rn init fails', async () => {
+    await AsyncStorage.setItem(
+      'local_model_downloaded_Qwen2.5 0.5B_path',
+      'file:///test/path/to/model.gguf'
+    );
+    (initLlama as jest.Mock).mockRejectedValueOnce(new Error('gguf init failed'));
+
+    await initializeLocalModel();
+    expect(isLocalModelLoaded).toBe(true);
 
     const yielded: string[] = [];
     for await (const chunk of streamLocalLlmResponse('hello')) {
       yielded.push(chunk);
     }
-    expect(yielded.join('')).toContain('not a LiteRT .task bundle');
+    const resultText = yielded.join('');
+    expect(resultText).toContain('Mock mode');
+    expect(resultText).toContain('gguf init failed');
   });
 
   it('should throw error when local LLM set down', async () => {

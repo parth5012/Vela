@@ -77,6 +77,50 @@ export function compileLocalPrompt(params: CompileLocalPromptParams): string {
 
       prompt += `<|user|>\n${userContent}</s>\n<|assistant|>\n`;
       return prompt;
+    } else if (modelName === 'Llama 3.2 1B (GGUF)') {
+      // Llama 3.x chat template (used by the "Llama 3.2 1B (GGUF)" model)
+      let prompt = `<|start_header_id|>system<|end_header_id|>\n\n${systemContent}`;
+      if (toolsContent) {
+        prompt += `\n\nAvailable tools:\n${toolsContent}`;
+      }
+      prompt += '<|eot_id|>\n';
+
+      for (const msg of historySlice) {
+        const role = msg.role === 'user' ? 'user' : 'assistant';
+        prompt += `<|start_header_id|>${role}<|end_header_id|>\n\n${msg.content}<|eot_id|>\n`;
+      }
+
+      prompt += `<|start_header_id|>user<|end_header_id|>\n\n${userContent}<|eot_id|>\n<|start_header_id|>assistant<|end_header_id|>\n\n`;
+      return prompt;
+    } else if (modelName === 'Phi-4 Mini (GGUF)') {
+      // Phi-4 chat template (used by the "Phi-4 Mini (GGUF)" model)
+      let prompt = `<|system|>\n${systemContent}`;
+      if (toolsContent) {
+        prompt += `\n\nAvailable tools:\n${toolsContent}`;
+      }
+      prompt += '<|end|>\n';
+
+      for (const msg of historySlice) {
+        const role = msg.role === 'user' ? 'user' : 'assistant';
+        prompt += `<|${role}|>\n${msg.content}<|end|>\n`;
+      }
+
+      prompt += `<|user|>\n${userContent}<|end|>\n<|assistant|>\n`;
+      return prompt;
+    } else if (modelName === 'DeepSeek-R1 1.5B (GGUF)') {
+      // DeepSeek-R1 chat template (used by "DeepSeek-R1 1.5B (GGUF)")
+      let prompt = `${systemContent}\n\n`;
+      if (toolsContent) {
+        prompt += `Available tools:\n${toolsContent}\n\n`;
+      }
+
+      for (const msg of historySlice) {
+        const role = msg.role === 'user' ? 'User' : 'Assistant';
+        prompt += `<｜${role}｜>\n${msg.content}\n`;
+      }
+
+      prompt += `<｜User｜>\n${userContent}\n<｜Assistant｜>\n`;
+      return prompt;
     } else {
       // Default: ChatML for Qwen2.5 0.5B, SmolLM 135M & default fallback
       let prompt = `<|im_start|>system\n${systemContent}`;
