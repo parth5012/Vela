@@ -1,5 +1,5 @@
 import { db } from '../db/client';
-import { operationLog, threads, messages } from '../db/schema';
+import { operationLog, threads, messages, OperationLogEntity } from '../db/schema';
 import { eq, inArray } from 'drizzle-orm';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -13,7 +13,7 @@ export async function syncDatabase(apiUrl: string, apiKey: string): Promise<void
   const pendingOps = await db.select().from(operationLog);
 
   if (pendingOps.length > 0) {
-    const mappedOps = pendingOps.map(op => ({
+    const mappedOps = pendingOps.map((op: OperationLogEntity) => ({
       id: op.id,
       type: op.type,
       conversation_id: op.conversation_id,

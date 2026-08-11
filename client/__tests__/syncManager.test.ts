@@ -57,12 +57,12 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 import { syncDatabase } from '../utils/syncManager';
 import { db } from '../db/client';
 
-global.fetch = jest.fn();
+globalThis.fetch = jest.fn();
 
 describe('syncDatabase engine', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    (global.fetch as jest.Mock).mockReset();
+    (globalThis.fetch as jest.Mock).mockReset();
     AsyncStorage.clear();
   });
 
@@ -73,7 +73,7 @@ describe('syncDatabase engine', () => {
       })),
     }));
 
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (globalThis.fetch as jest.Mock).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ operations: [], cursor: 'cursor_123', has_more: false }),
     });
@@ -81,7 +81,7 @@ describe('syncDatabase engine', () => {
     await syncDatabase('https://api.vela.run', 'test_key');
 
     expect(db.select).toHaveBeenCalledTimes(1);
-    expect(global.fetch).toHaveBeenCalledTimes(1); // just one pull
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1); // just one pull
   });
 
   it('should push pending operations and delete them on success', async () => {
@@ -96,20 +96,20 @@ describe('syncDatabase engine', () => {
     }));
 
     // Post to push
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (globalThis.fetch as jest.Mock).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ accepted: ['op_1'], rejected: [] }),
     });
 
     // Get for pull
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (globalThis.fetch as jest.Mock).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ operations: [], cursor: 'cursor_123', has_more: false }),
     });
 
     await syncDatabase('https://api.vela.run', 'test_key');
 
-    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
     expect(db.delete).toHaveBeenCalledTimes(1);
   });
 });

@@ -5,6 +5,8 @@ export interface SearchSource {
   url: string;
   domain: string;
   snippet?: string;
+  favicon?: string;
+  siteName?: string;
 }
 
 // Module-level regex declarations for performance and cleanup
@@ -78,11 +80,15 @@ export function parseSearchContent(rawContent: string): SearchSource[] {
           const title = typeof item.title === 'string' ? item.title.trim() : (typeof item.name === 'string' ? item.name.trim() : '');
           const snippet = typeof item.snippet === 'string' ? item.snippet.trim() : (typeof item.content === 'string' ? item.content.trim() : undefined);
           const domain = extractDomain(url);
+          const favicon = typeof item.favicon === 'string' && item.favicon.trim() ? item.favicon.trim() : undefined;
+          const siteName = typeof item.siteName === 'string' ? item.siteName.trim() : (typeof item.source === 'string' ? item.source.trim() : undefined);
           sources.push({
             title: title || domain,
             url: url.trim(),
             domain,
             snippet,
+            favicon,
+            siteName,
           });
         }
       }

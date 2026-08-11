@@ -1,11 +1,11 @@
 import { parseAndExecuteTools } from '../utils/toolProxy';
 
-global.fetch = jest.fn();
+globalThis.fetch = jest.fn();
 
 describe('toolProxy parser', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    (global.fetch as jest.Mock).mockReset();
+    (globalThis.fetch as jest.Mock).mockReset();
   });
 
   it('should pass through normal text with hasInvocations false', async () => {
@@ -14,13 +14,13 @@ describe('toolProxy parser', () => {
 
     expect(result.hasInvocations).toBe(false);
     expect(result.updatedContent).toBe(content);
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
   it('should parse call block, invoke fetch, and append response block on success', async () => {
     const content = 'Let me look that up: <call name="google_search">{"query": "Vela assistant"}</call> and write it.';
     
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (globalThis.fetch as jest.Mock).mockResolvedValueOnce({
       ok: true,
       json: async () => ({
         status: 'success',
@@ -31,8 +31,8 @@ describe('toolProxy parser', () => {
     const result = await parseAndExecuteTools(content, 'thread_123', 'https://api.run', 'api_key');
 
     expect(result.hasInvocations).toBe(true);
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    expect(global.fetch).toHaveBeenCalledWith('https://api.run/api/tools/invoke', {
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(globalThis.fetch).toHaveBeenCalledWith('https://api.run/api/tools/invoke', {
       method: 'POST',
       headers: {
         'Authorization': 'Bearer api_key',
@@ -50,7 +50,7 @@ describe('toolProxy parser', () => {
   it('should handle tool invocation backend error payload', async () => {
     const content = '<call name="get_weather">{"city": "Paris"}</call>';
 
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (globalThis.fetch as jest.Mock).mockResolvedValueOnce({
       ok: true,
       json: async () => ({
         status: 'error',
@@ -69,7 +69,7 @@ describe('toolProxy parser', () => {
   it('should handle fetch request execution failure or network error', async () => {
     const content = '<call name="send_email">{"to": "test@test.local"}</call>';
 
-    (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('Fatal connection issue'));
+    (globalThis.fetch as jest.Mock).mockRejectedValueOnce(new Error('Fatal connection issue'));
 
     const result = await parseAndExecuteTools(content, 'thread_123', 'https://api.run', 'api_key');
 
