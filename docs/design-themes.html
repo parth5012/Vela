@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vela Aurora — Theme System &amp; Settings IA</title>
+<style>
+  :root{
+    --page-bg:#0c0d11;
+    --page-text:#e8e6ee;
+    --page-muted:#8f8da0;
+    --page-line:#1f2129;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+    background:var(--page-bg);color:var(--page-text);line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1320px;margin:0 auto;padding:48px 40px 80px}
+  .kicker{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--page-muted);margin-bottom:12px}
+  h1{font-size:32px;font-weight:700;letter-spacing:-.02em}
+  .lead p{color:var(--page-muted);max-width:820px;margin-top:10px;font-size:14px}
+  .model{margin:28px 0 6px;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:820px){.model{grid-template-columns:1fr}}
+  .model .m-card{background:#11131a;border:1px solid var(--page-line);border-radius:14px;padding:14px 16px;font-size:13px}
+  .model .m-card b{color:#f0eff6}
+  .model .m-card span{display:block;color:var(--page-muted);font-size:11px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:4px}
+  h2.sec{font-size:19px;font-weight:700;margin:44px 0 4px;letter-spacing:-.01em}
+  .sec-sub{color:var(--page-muted);font-size:13px;margin-bottom:20px;max-width:780px}
+
+  /* ---------- theme cards ---------- */
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+  @media(max-width:1100px){.grid{grid-template-columns:1fr}}
+  .tcard{background:#11131a;border:1px solid var(--page-line);border-radius:18px;padding:18px 18px 20px;display:flex;flex-direction:column;gap:14px}
+  .t-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+  .t-head h3{font-size:16px;font-weight:700}
+  .t-head .id{font-size:11px;color:var(--page-muted);font-family:ui-monospace,monospace}
+  .mood{font-size:12.5px;color:#c9c7d4}
+  .t-tokens{display:flex;flex-wrap:wrap;gap:6px}
+  .tk{font-size:10px;font-family:ui-monospace,monospace;padding:3px 8px;border-radius:6px;border:1px solid var(--page-line);color:#b9b7c8;background:rgba(255,255,255,.03)}
+  .t-tokens .tk.sw{color:rgba(0,0,0,.72);font-weight:700;border:none}
+
+  /* ---------- mini phone preview ---------- */
+  .phone{width:100%;max-width:310px;aspect-ratio:9/19.5;margin:2px auto 0;border-radius:30px;position:relative;overflow:hidden;
+    border:1px solid rgba(255,255,255,.16);box-shadow:0 18px 44px rgba(0,0,0,.5)}
+  .screen{position:absolute;inset:0;display:flex;flex-direction:column;overflow:hidden;
+    background:var(--sky-bg,linear-gradient(160deg,#0b0b1a,#14142c 55%,#0b0b1a));color:var(--txt,#e9e7f8)}
+  .sky{position:absolute;inset:0;pointer-events:none}
+  .sky::before{content:'';position:absolute;left:-10%;right:-10%;top:-70px;height:260px;
+    background:linear-gradient(160deg,var(--aurora1,rgba(139,124,246,.34)),var(--aurora2,rgba(125,211,252,.14)) 55%,transparent 82%);
+    filter:blur(16px)}
+  .sky::after{content:'';position:absolute;inset:0;opacity:.5;
+    background-image:radial-gradient(rgba(255,255,255,.13) 1px,transparent 1.4px);background-size:26px 26px}
+  .screen>*{position:relative;z-index:1}
+  .sb{height:26px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 18px 3px;font-size:11px;color:var(--mut,#a9a6c8);flex:none}
+  .appbar{height:46px;flex:none;display:flex;align-items:center;padding:0 12px;gap:9px;border-bottom:1px solid var(--brd,rgba(255,255,255,.10))}
+  .appbar .menu{font-size:16px;opacity:.9}
+  .appbar .title{flex:1;font-family:Georgia,serif;font-size:15px}
+  .appbar .health{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--status,#7dd3fc)}
+  .stripe{height:2px;flex:none;background:linear-gradient(90deg,var(--acc1,#8b7cf6),var(--acc2,#7dd3fc));opacity:.85}
+  .body{flex:1;overflow:hidden;padding:9px 12px;display:flex;flex-direction:column;gap:9px;font-size:11.5px}
+  .blk{background:var(--glass,rgba(255,255,255,.055));border:1px solid var(--brd,rgba(255,255,255,.13));border-radius:12px;padding:6px 10px}
+  .blk .h{display:flex;gap:6px;align-items:center;font-size:10.5px;color:var(--txt2,#cfc8f4);font-weight:600}
+  .blk .b{margin-top:4px;font-size:10.5px;line-height:1.5;color:var(--mut2,#b9b6d4);border-top:1px solid var(--brd,rgba(255,255,255,.12));padding-top:4px}
+  .bub{max-width:92%;padding:8px 11px;font-size:11.5px;line-height:1.5;border:1px solid;white-space:pre-line}
+  .bub.user{align-self:flex-end;background:var(--user-grad,linear-gradient(135deg,rgba(139,124,246,.55),rgba(125,211,252,.3)));
+    border-color:var(--user-brd,rgba(169,155,255,.55));color:#f4f2ff;border-radius:13px;border-top-right-radius:5px}
+  .bub.assist{align-self:flex-start;background:var(--glass,rgba(255,255,255,.05));border-color:var(--brd,rgba(255,255,255,.13));
+    color:var(--txt,#e9e7f8);border-radius:13px;border-top-left-radius:5px}
+  .bub .who{display:block;font-size:9px;font-weight:600;color:var(--mut,#a9a6c8);margin-bottom:3px}
+  .code{margin-top:6px;font-family:ui-monospace,Consolas,monospace;font-size:9.5px;background:var(--code-bg,rgba(6,6,18,.5));
+    border:1px solid var(--brd,rgba(255,255,255,.12));border-radius:7px;padding:6px 8px;color:var(--code-fg,#cfd8ff);overflow:hidden}
+  .typing{display:flex;align-items:center;gap:6px;font-size:9px;letter-spacing:.16em;font-weight:700;color:var(--acc1,#8b7cf6);padding:2px 2px 0}
+  .typing i{width:5px;height:5px;border-radius:50%;background:linear-gradient(135deg,var(--acc1,#8b7cf6),var(--acc2,#7dd3fc));animation:b 1.2s infinite}
+  .typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+  @keyframes b{0%,100%{opacity:.5;transform:translateY(0)}50%{opacity:1;transform:translateY(-2px)}}
+  .inputbar{flex:none;display:flex;align-items:center;gap:6px;padding:8px 11px 10px;border-top:1px solid var(--brd,rgba(255,255,255,.1))}
+  .field{flex:1;display:flex;align-items:center;padding:8px 11px;border:1px solid var(--brd,rgba(255,255,255,.13));border-radius:18px;background:var(--glass,rgba(255,255,255,.04));color:var(--mut,#a9a6c8);font-size:10.5px}
+  .send{width:30px;height:30px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:12px;
+    background:linear-gradient(135deg,var(--acc1,#8b7cf6),var(--acc2,#7dd3fc));color:#0b0b1a;box-shadow:0 4px 14px var(--glow,rgba(139,124,246,.45))}
+
+  /* -------- per-theme palettes -------- */
+  [data-th="aurora"]{--sky-bg:linear-gradient(165deg,#0b0b1a,#14142c 55%,#0b0b1a);--aurora1:rgba(139,124,246,.34);--aurora2:rgba(125,211,252,.14);
+    --glass:rgba(255,255,255,.055);--brd:rgba(255,255,255,.13);--txt:#e9e7f8;--txt2:#cfc8f4;--mut:#a9a6c8;--mut2:#b9b6d4;
+    --acc1:#8b7cf6;--acc2:#7dd3fc;--glow:rgba(139,124,246,.45);--status:#7dd3fc;
+    --user-grad:linear-gradient(135deg,rgba(139,124,246,.55),rgba(125,211,252,.30));--user-brd:rgba(169,155,255,.55);
+    --code-bg:rgba(6,6,18,.5);--code-fg:#cfd8ff}
+  [data-th="slate"]{--sky-bg:linear-gradient(165deg,#0a101c,#101a2b 55%,#0a101c);--aurora1:rgba(100,140,190,.32);--aurora2:rgba(150,190,225,.14);
+    --glass:rgba(190,215,245,.05);--brd:rgba(190,215,245,.12);--txt:#e9f0fb;--txt2:#cdd9ec;--mut:#a5b3c8;--mut2:#b9c6da;
+    --acc1:#5f8fd6;--acc2:#9cc7ee;--glow:rgba(95,143,214,.4);--status:#9cc7ee;
+    --user-grad:linear-gradient(135deg,rgba(95,143,214,.5),rgba(156,199,238,.28));--user-brd:rgba(156,199,238,.5);
+    --code-bg:rgba(6,12,24,.5);--code-fg:#c3d4ea}
+  [data-th="neon"]{--sky-bg:linear-gradient(165deg,#080010,#19032e 55%,#080010);--aurora1:rgba(255,0,255,.30);--aurora2:rgba(0,255,204,.16);
+    --glass:rgba(255,120,255,.05);--brd:rgba(255,90,255,.15);--txt:#f2ecff;--txt2:#e4d6ff;--mut:#c4b3e8;--mut2:#cdbcf2;
+    --acc1:#ff2bd6;--acc2:#00ffcc;--glow:rgba(255,43,214,.5);--status:#00ffcc;
+    --user-grad:linear-gradient(135deg,rgba(255,43,214,.55),rgba(0,255,204,.28));--user-brd:rgba(255,120,235,.55);
+    --code-bg:rgba(10,0,24,.6);--code-fg:#e8d9ff}
+  [data-th="void"]{--sky-bg:#000;--aurora1:rgba(120,110,230,.20);--aurora2:rgba(120,200,230,.08);
+    --glass:rgba(255,255,255,.04);--brd:rgba(255,255,255,.10);--txt:#f4f4f8;--txt2:#d8d6e2;--mut:#b0b0c0;--mut2:#c2c0d0;
+    --acc1:#9b8cf6;--acc2:#9fd8f0;--glow:rgba(155,140,246,.35);--status:#9fd8f0;
+    --user-grad:linear-gradient(135deg,rgba(155,140,246,.45),rgba(159,216,240,.22));--user-brd:rgba(170,160,240,.45);
+    --code-bg:rgba(0,0,0,.6);--code-fg:#d6dcf2}
+  [data-th="dusk"]{--sky-bg:linear-gradient(165deg,#100d1d,#1c1230 55%,#100d1d);--aurora1:rgba(189,147,249,.32);--aurora2:rgba(255,121,198,.16);
+    --glass:rgba(240,220,255,.05);--brd:rgba(220,190,255,.13);--txt:#f3ecf8;--txt2:#ddd0ec;--mut:#c2b0d6;--mut2:#cdbee0;
+    --acc1:#bd93f9;--acc2:#ff79c6;--glow:rgba(189,147,249,.45);--status:#ff79c6;
+    --user-grad:linear-gradient(135deg,rgba(189,147,249,.55),rgba(255,121,198,.30));--user-brd:rgba(220,170,250,.55);
+    --code-bg:rgba(14,8,26,.55);--code-fg:#dcc8f2}
+  [data-th="frost"]{--sky-bg:linear-gradient(165deg,#0a141c,#0e1c28 55%,#0a141c);--aurora1:rgba(129,201,208,.30);--aurora2:rgba(159,216,240,.16);
+    --glass:rgba(200,240,245,.05);--brd:rgba(170,220,230,.12);--txt:#e8f4f6;--txt2:#cddfe6;--mut:#9fc3cc;--mut2:#b3ced6;
+    --acc1:#6fc4cd;--acc2:#9fd8f0;--glow:rgba(111,196,205,.42);--status:#9fd8f0;
+    --user-grad:linear-gradient(135deg,rgba(111,196,205,.5),rgba(159,216,240,.26));--user-brd:rgba(150,215,225,.5);
+    --code-bg:rgba(6,16,24,.55);--code-fg:#c0dbe4}
+
+  /* -------- accents -------- */
+  .acc-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px}
+  .acc{width:150px;background:#11131a;border:1px solid var(--page-line);border-radius:12px;padding:10px 12px;font-size:12px}
+  .acc .dot{width:22px;height:22px;border-radius:50%;border:1px solid rgba(255,255,255,.2);display:inline-block;vertical-align:middle;margin-right:8px}
+  .acc b{display:block;font-size:11px;margin-top:2px}
+  .acc .pair{font-size:9.5px;color:var(--page-muted);font-family:ui-monospace,monospace}
+  .acc .applies{font-size:10.5px;color:#b9b7c8;margin-top:3px;display:block}
+
+  /* -------- settings IA -------- */
+  .ia-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:26px;align-items:start}
+  @media(max-width:960px){.ia-grid{grid-template-columns:1fr}}
+  .group{background:#11131a;border:1px solid var(--page-line);border-radius:14px;margin-bottom:14px;overflow:hidden}
+  .group h4{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--page-muted);padding:10px 14px 4px}
+  .row{display:flex;align-items:center;gap:11px;padding:11px 14px;border-top:1px solid var(--page-line);font-size:13px;cursor:default}
+  .row .ic{width:28px;height:28px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:14px;
+    background:linear-gradient(135deg,rgba(139,124,246,.28),rgba(125,211,252,.16));flex:none}
+  .row .lb{flex:1}
+  .row .lb small{display:block;color:var(--page-muted);font-size:11px;margin-top:1px}
+  .row .chv{color:#5f5d70;font-size:12px}
+  .phone-ia{max-width:300px;margin:8px auto 0}
+  .phone-ia .screen{background:linear-gradient(165deg,#0b0b1a,#14142c 60%,#0b0b1a)}
+  .notes{background:#11131a;border:1px solid var(--page-line);border-radius:14px;padding:16px 18px;font-size:12.5px;color:#c9c7d4;line-height:1.7}
+  .notes code{font-family:ui-monospace,Consolas,monospace;font-size:11px;background:rgba(255,255,255,.06);padding:1px 5px;border-radius:5px;color:#cfd8ff}
+  .notes b{color:#f0eff6}
+  footer.page{margin-top:48px;border-top:1px solid var(--page-line);padding-top:16px;font-size:12px;color:#6f6d80}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="kicker">Vela · Aurora · committed direction</div>
+  <h1>The Aurora theme system &amp; settings architecture</h1>
+  <div class="lead">
+    <p>One glass world, six atmospheres, eight energies. In Aurora, the <b>theme</b> sets the sky, the glass, and the text; the <b>accent</b> sets the aurora — the gradient that tints the send button, the streaming stripe, the user bubble, and the glow. Theme and accent compose: any of the 8 accents can live on any of the 6 themes.</p>
+  </div>
+
+  <div class="model">
+    <div class="m-card"><span>Theme = atmosphere</span>Background sky, glass opacity, border tone, text scale, and the <i>default</i> aurora pair. Six of them, one language — the six existing theme IDs keep their names so saved settings survive the redesign.</div>
+    <div class="m-card"><span>Accent = energy</span>The aurora gradient, user bubble, primary action, glow, and active state. Eight selectable energies (the existing 8 accent IDs). One picker, applied everywhere the aurora flows.</div>
+  </div>
+
+  <h2 class="sec">The six themes</h2>
+  <div class="sec-sub">All six render the same chat surface. Every text color sits well above WCAG&nbsp;AA on its sky; muted text is checked separately on the tinted glass it lands on.</div>
+
+  <div class="grid">
+
+    <div class="tcard" data-th="aurora">
+      <div class="t-head"><h3>Aurora</h3><span class="id">theme: deep · default</span></div>
+      <div class="phone"><div class="screen">
+        <div class="sky"></div>
+        <div class="sb"><span>9:41</span><span>▂▄▆ ▛▘ ▰</span></div>
+        <div class="appbar"><span class="menu">☰</span><span class="title">Vela</span><span class="health">● Connected</span></div>
+        <div class="stripe"></div>
+        <div class="body">
+          <div class="blk"><div class="h">🧠 Thought Process</div><div class="b">Classify → analyst; route to web_search for standings.</div></div>
+          <div class="bub assist"><span class="who">📊 Vela Agent · Analyst</span>Here's the breakdown of the 2026 World Cup:
+• 48 teams in 12 groups of four
+• 104 matches · 16 host cities
+• Opening match, June 11 2026
+<span class="code">groups = 12
+teams = 48</span></div>
+          <div class="bub user">Analyze the key features of the 2026 FIFA World Cup matches.</div>
+          <div class="typing"><i></i><i></i><i></i> VELA IS COMPILING…</div>
+        </div>
+        <div class="inputbar"><div class="field">Ask Vela anything…</div><div class="send">➤</div></div>
+      </div></div>
+      <div class="mood">The signature night sky: indigo→violet glass, violet→cyan aurora. The default that everything else tunes.</div>
+      <div class="t-tokens"><span class="tk sw" style="background:#0b0b1a">sky</span><span class="tk sw" style="background:#8b7cf6;color:#0b0b1a">vio</span><span class="tk sw" style="background:#7dd3fc;color:#0b0b1a">cyn</span><span class="tk">txt 14.1:1</span><span class="tk">glass .055</span></div>
+    </div>
+
+    <div class="tcard" data-th="slate">
+      <div class="t-head"><h3>Slate</h3><span class="id">theme: slate</span></div>
+      <div class="phone"><div class="screen">
+        <div class="sky"></div>
+        <div class="sb"><span>9:41</span><span>▂▄▆ ▛▘ ▰</span></div>
+        <div class="appbar"><span class="menu">☰</span><span class="title">Vela</span><span class="health">● Connected</span></div>
+        <div class="stripe"></div>
+        <div class="body">
+          <div class="blk"><div class="h">🧠 Thought Process</div><div class="b">Classify → analyst; route to web_search for standings.</div></div>
+          <div class="bub assist"><span class="who">📊 Vela Agent · Analyst</span>Here's the breakdown of the 2026 World Cup:
+• 48 teams in 12 groups of four
+• 104 matches · 16 host cities
+• Opening match, June 11 2026
+<span class="code">groups = 12
+teams = 48</span></div>
+          <div class="bub user">Analyze the key features of the 2026 FIFA World Cup matches.</div>
+          <div class="typing"><i></i><i></i><i></i> VELA IS COMPILING…</div>
+        </div>
+        <div class="inputbar"><div class="field">Ask Vela anything…</div><div class="send">➤</div></div>
+      </div></div>
+      <div class="mood">A cold, desaturated night. The quiet mode for long sessions — same glass, no color pressure.</div>
+      <div class="t-tokens"><span class="tk sw" style="background:#0a101c">sky</span><span class="tk sw" style="background:#5f8fd6;color:#0a101c">steel</span><span class="tk sw" style="background:#9cc7ee;color:#0a101c">ice</span><span class="tk">txt 15.2:1</span><span class="tk">glass .05</span></div>
+    </div>
+
+    <div class="tcard" data-th="neon">
+      <div class="t-head"><h3>Neon</h3><span class="id">theme: cyberpunk</span></div>
+      <div class="phone"><div class="screen">
+        <div class="sky"></div>
+        <div class="sb"><span>9:41</span><span>▂▄▆ ▛▘ ▰</span></div>
+        <div class="appbar"><span class="menu">☰</span><span class="title">Vela</span><span class="health">● Connected</span></div>
+        <div class="stripe"></div>
+        <div class="body">
+          <div class="blk"><div class="h">🧠 Thought Process</div><div class="b">Classify → analyst; route to web_search for standings.</div></div>
+          <div class="bub assist"><span class="who">📊 Vela Agent · Analyst</span>Here's the breakdown of the 2026 World Cup:
+• 48 teams in 12 groups of four
+• 104 matches · 16 host cities
+• Opening match, June 11 2026
+<span class="code">groups = 12
+teams = 48</span></div>
+          <div class="bub user">Analyze the key features of the 2026 FIFA World Cup matches.</div>
+          <div class="typing"><i></i><i></i><i></i> VELA IS COMPILING…</div>
+        </div>
+        <div class="inputbar"><div class="field">Ask Vela anything…</div><div class="send">➤</div></div>
+      </div></div>
+      <div class="mood">Full-volume electric: magenta→cyan on near-black. The "I built this server" flex. Reads like the tool is alive.</div>
+      <div class="t-tokens"><span class="tk sw" style="background:#080010">sky</span><span class="tk sw" style="background:#ff2bd6;color:#080010">mg</span><span class="tk sw" style="background:#00ffcc;color:#080010">cyn</span><span class="tk">txt 13.8:1</span><span class="tk">glass .05</span></div>
+    </div>
+
+    <div class="tcard" data-th="void">
+      <div class="t-head"><h3>Void</h3><span class="id">theme: oled</span></div>
+      <div class="phone"><div class="screen">
+        <div class="sky"></div>
+        <div class="sb"><span>9:41</span><span>▂▄▆ ▛▘ ▰</span></div>
+        <div class="appbar"><span class="menu">☰</span><span class="title">Vela</span><span class="health">● Connected</span></div>
+        <div class="stripe"></div>
+        <div class="body">
+          <div class="blk"><div class="h">🧠 Thought Process</div><div class="b">Classify → analyst; route to web_search for standings.</div></div>
+          <div class="bub assist"><span class="who">📊 Vela Agent · Analyst</span>Here's the breakdown of the 2026 World Cup:
+• 48 teams in 12 groups of four
+• 104 matches · 16 host cities
+• Opening match, June 11 2026
+<span class="code">groups = 12
+teams = 48</span></div>
+          <div class="bub user">Analyze the key features of the 2026 FIFA World Cup matches.</div>
+          <div class="typing"><i></i><i></i><i></i> VELA IS COMPILING…</div>
+        </div>
+        <div class="inputbar"><div class="field">Ask Vela anything…</div><div class="send">➤</div></div>
+      </div></div>
+      <div class="mood">Pure black, faintest glass, dim aurora. OLED friendliness and the longest battery. The aurora is a whisper, not a show.</div>
+      <div class="t-tokens"><span class="tk sw" style="background:#000">sky</span><span class="tk sw" style="background:#9b8cf6;color:#000">vio</span><span class="tk sw" style="background:#9fd8f0;color:#000">ice</span><span class="tk">txt 16.4:1</span><span class="tk">glass .04</span></div>
+    </div>
+
+    <div class="tcard" data-th="dusk">
+      <div class="t-head"><h3>Dusk</h3><span class="id">theme: dracula</span></div>
+      <div class="phone"><div class="screen">
+        <div class="sky"></div>
+        <div class="sb"><span>9:41</span><span>▂▄▆ ▛▘ ▰</span></div>
+        <div class="appbar"><span class="menu">☰</span><span class="title">Vela</span><span class="health">● Connected</span></div>
+        <div class="stripe"></div>
+        <div class="body">
+          <div class="blk"><div class="h">🧠 Thought Process</div><div class="b">Classify → analyst; route to web_search for standings.</div></div>
+          <div class="bub assist"><span class="who">📊 Vela Agent · Analyst</span>Here's the breakdown of the 2026 World Cup:
+• 48 teams in 12 groups of four
+• 104 matches · 16 host cities
+• Opening match, June 11 2026
+<span class="code">groups = 12
+teams = 48</span></div>
+          <div class="bub user">Analyze the key features of the 2026 FIFA World Cup matches.</div>
+          <div class="typing"><i></i><i></i><i></i> VELA IS COMPILING…</div>
+        </div>
+        <div class="inputbar"><div class="field">Ask Vela anything…</div><div class="send">➤</div></div>
+      </div></div>
+      <div class="mood">Plum night, violet→pink aurora. Warmer than Aurora, more romantic — the Dracula spirit, rebuilt in glass.</div>
+      <div class="t-tokens"><span class="tk sw" style="background:#100d1d">sky</span><span class="tk sw" style="background:#bd93f9;color:#100d1d">vlt</span><span class="tk sw" style="background:#ff79c6;color:#100d1d">pnk</span><span class="tk">txt 13.6:1</span><span class="tk">glass .05</span></div>
+    </div>
+
+    <div class="tcard" data-th="frost">
+      <div class="t-head"><h3>Frost</h3><span class="id">theme: nordic</span></div>
+      <div class="phone"><div class="screen">
+        <div class="sky"></div>
+        <div class="sb"><span>9:41</span><span>▂▄▆ ▛▘ ▰</span></div>
+        <div class="appbar"><span class="menu">☰</span><span class="title">Vela</span><span class="health">● Connected</span></div>
+        <div class="stripe"></div>
+        <div class="body">
+          <div class="blk"><div class="h">🧠 Thought Process</div><div class="b">Classify → analyst; route to web_search for standings.</div></div>
+          <div class="bub assist"><span class="who">📊 Vela Agent · Analyst</span>Here's the breakdown of the 2026 World Cup:
+• 48 teams in 12 groups of four
+• 104 matches · 16 host cities
+• Opening match, June 11 2026
+<span class="code">groups = 12
+teams = 48</span></div>
+          <div class="bub user">Analyze the key features of the 2026 FIFA World Cup matches.</div>
+          <div class="typing"><i></i><i></i><i></i> VELA IS COMPILING…</div>
+        </div>
+        <div class="inputbar"><div class="field">Ask Vela anything…</div><div class="send">➤</div></div>
+      </div></div>
+      <div class="mood">Arctic teal→icy blue. The northern lights stripped of warmth — crisp, winter-calm, Scandinavian-clean.</div>
+      <div class="t-tokens"><span class="tk sw" style="background:#0a141c">sky</span><span class="tk sw" style="background:#6fc4cd;color:#0a141c">teal</span><span class="tk sw" style="background:#9fd8f0;color:#0a141c">ice</span><span class="tk">txt 15.0:1</span><span class="tk">glass .05</span></div>
+    </div>
+
+  </div>
+
+  <h2 class="sec">The eight energies (accents)</h2>
+  <div class="sec-sub">Each accent re-tints the aurora: send button, streaming stripe, user bubble gradient, glow, links, active state. Same 8 IDs as today, so saved settings keep working.</div>
+  <div class="acc-row">
+    <div class="acc"><span class="dot" style="background:#6366f1"></span><b>Indigo</b><span class="pair">#6366f1 → #a5b4fc</span></div>
+    <div class="acc"><span class="dot" style="background:#8b5cf6"></span><b>Violet</b><span class="pair">#8b5cf6 → #c4b5fd</span></div>
+    <div class="acc"><span class="dot" style="background:#3b82f6"></span><b>Blue</b><span class="pair">#3b82f6 → #60a5fa</span></div>
+    <div class="acc"><span class="dot" style="background:#10b981"></span><b>Emerald</b><span class="pair">#10b981 → #6ee7b7</span></div>
+    <div class="acc"><span class="dot" style="background:#f43f5e"></span><b>Rose</b><span class="pair">#f43f5e → #fda4af</span></div>
+    <div class="acc"><span class="dot" style="background:#ec4899"></span><b>Pink</b><span class="pair">#ec4899 → #f9a8d4</span></div>
+    <div class="acc"><span class="dot" style="background:#f59e0b"></span><b>Amber</b><span class="pair">#f59e0b → #fcd34d</span></div>
+    <div class="acc"><span class="dot" style="background:#f97316"></span><b>Orange</b><span class="pair">#f97316 → #fdba74</span></div>
+  </div>
+
+  <h2 class="sec">Settings, divided into subcategories</h2>
+  <div class="sec-sub">One scrolling wall becomes a Material&nbsp;3 settings stack: an index of grouped categories, each row opening its own screen. Seven groups, zero information buried.</div>
+
+  <div class="ia-grid">
+    <div>
+      <div class="group">
+        <h4>Connection &amp; Accounts</h4>
+        <div class="row"><span class="ic">⚡</span><span class="lb">Server &amp; API Key<small>URL, key, test connection · status</small></span><span class="chv">›</span></div>
+        <div class="row"><span class="ic">🔑</span><span class="lb">Google Workspace<small>Gmail · Calendar · connected</small></span><span class="chv">›</span></div>
+      </div>
+      <div class="group">
+        <h4>Appearance</h4>
+        <div class="row"><span class="ic">🎨</span><span class="lb">Theme<small>Aurora · 6 atmospheres</small></span><span class="chv">›</span></div>
+        <div class="row"><span class="ic">✨</span><span class="lb">Accent<small>Indigo · 8 energies</small></span><span class="chv">›</span></div>
+        <div class="row"><span class="ic">🔤</span><span class="lb">Font Size<small>Small · Medium · Large</small></span><span class="chv">›</span></div>
+      </div>
+      <div class="group">
+        <h4>Agent</h4>
+        <div class="row"><span class="ic">🤖</span><span class="lb">Default Persona<small>Personal Assistant</small></span><span class="chv">›</span></div>
+        <div class="row"><span class="ic">👤</span><span class="lb">Name &amp; Prompt<small>User name, model, temperature, system prompt</small></span><span class="chv">›</span></div>
+      </div>
+      <div class="group">
+        <h4>Local AI</h4>
+        <div class="row"><span class="ic">📱</span><span class="lb">Local Mode<small>Off · cloud</small></span><span class="chv">›</span></div>
+        <div class="row"><span class="ic">⬇️</span><span class="lb">Models &amp; Downloads<small>Qwen2.5 0.5B · wifi-only</small></span><span class="chv">›</span></div>
+      </div>
+      <div class="group">
+        <h4>Messaging &amp; Data</h4>
+        <div class="row"><span class="ic">💬</span><span class="lb">Suggestion Starters<small>3 starters</small></span><span class="chv">›</span></div>
+        <div class="row"><span class="ic">🔔</span><span class="lb">Notifications<small>Categories · quiet hours</small></span><span class="chv">›</span></div>
+        <div class="row"><span class="ic">🧹</span><span class="lb">Data &amp; Sync<small>Clear local data · sync status</small></span><span class="chv">›</span></div>
+      </div>
+      <div class="group">
+        <h4>About &amp; Danger</h4>
+        <div class="row"><span class="ic">ℹ️</span><span class="lb">About<small>Version</small></span><span class="chv">›</span></div>
+        <div class="row"><span class="ic">⚠️</span><span class="lb">Danger Zone<small>Reset connection</small></span><span class="chv">›</span></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="phone phone-ia">
+        <div class="screen">
+          <div class="sky"></div>
+          <div class="sb"><span>9:41</span><span>▂▄▆ ▛▘ ▰</span></div>
+          <div class="appbar"><span class="menu">‹</span><span class="title" style="font-family:inherit;font-size:14px;font-weight:600">Settings</span></div>
+          <div style="flex:1;overflow:hidden;padding:6px 12px 12px">
+            <div class="group" style="margin-bottom:10px">
+              <h4>Connection &amp; Accounts</h4>
+              <div class="row" style="padding:8px 10px;font-size:12px"><span class="ic" style="width:22px;height:22px;font-size:11px">⚡</span><span class="lb">Server &amp; API Key<small>Connected</small></span><span class="chv">›</span></div>
+              <div class="row" style="padding:8px 10px;font-size:12px"><span class="ic" style="width:22px;height:22px;font-size:11px">🔑</span><span class="lb">Google Workspace<small>Gmail · Calendar</small></span><span class="chv">›</span></div>
+            </div>
+            <div class="group" style="margin-bottom:10px">
+              <h4>Appearance</h4>
+              <div class="row" style="padding:8px 10px;font-size:12px"><span class="ic" style="width:22px;height:22px;font-size:11px">🎨</span><span class="lb">Theme<small>Aurora</small></span><span class="chv">›</span></div>
+              <div class="row" style="padding:8px 10px;font-size:12px"><span class="ic" style="width:22px;height:22px;font-size:11px">✨</span><span class="lb">Accent<small>Indigo</small></span><span class="chv">›</span></div>
+            </div>
+            <div class="group" style="margin-bottom:10px">
+              <h4>Agent</h4>
+              <div class="row" style="padding:8px 10px;font-size:12px"><span class="ic" style="width:22px;height:22px;font-size:11px">🤖</span><span class="lb">Default Persona<small>Personal Assistant</small></span><span class="chv">›</span></div>
+            </div>
+            <div class="group">
+              <h4>About &amp; Danger</h4>
+              <div class="row" style="padding:8px 10px;font-size:12px"><span class="ic" style="width:22px;height:22px;font-size:11px">⚠️</span><span class="lb">Danger Zone<small>Reset connection</small></span><span class="chv">›</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="sec" style="margin-top:44px">Implementation notes (expo-router)</h2>
+  <div class="notes">
+    <p><b>1 · Settings becomes a stack.</b> Replace the single <code>app/settings.tsx</code> with a folder and a native stack: <code>app/settings/index.tsx</code> (the category index above) plus one screen per group — <code>connection.tsx</code>, <code>appearance.tsx</code>, <code>agent.tsx</code>, <code>local-ai.tsx</code>, <code>messaging.tsx</code>, <code>about.tsx</code>. Rows in the index push with <code>router.push('/settings/connection')</code>; system Back returns to the index, so no nested drawer needed.</p>
+    <p><b>2 · Theme composition.</b> <code>utils/theme.ts</code> currently returns one flat color object per theme. Extend each entry with the Aurora token set: <code>sky</code>, <code>glass</code>, <code>glassBorder</code>, <code>text/muted/dim</code>, plus <code>aurora: [acc1, acc2]</code> resolved from the active accent. Keep the 6 theme and 8 accent IDs untouched so persisted settings and tests keep passing.</p>
+    <p><b>3 · Where each token lands.</b> The send button, streaming stripe, user-bubble gradient, glow and active states all consume <code>aurora</code>; every card, sheet and block consumes <code>glass</code>/<code>glassBorder</code>. One place changes an energy, everywhere follows.</p>
+    <p><b>4 · Keep the old surface as fallback.</b> Until every screen is ported, keep the legacy color keys alongside the new ones so partial migration never renders unreadable text.</p>
+  </div>
+
+  <footer class="page">Aurora committed. Next: I can implement the theme token layer and the settings stack in the client, or refine any of these six atmospheres first.</footer>
+</div>
+</body>
+</html>
