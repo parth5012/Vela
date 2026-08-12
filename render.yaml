@@ -39,7 +39,7 @@ services:
       - key: GOOGLE_CLIENT_SECRET
         sync: false
       - key: GOOGLE_REDIRECT_URI
-        value: https://vela-backend.onrender.com/oauth/callback
+        value: https://vela-ivnn.onrender.com/oauth/callback
       - key: VOYAGE_API_KEY
         sync: false
       - key: JINA_API_KEY
