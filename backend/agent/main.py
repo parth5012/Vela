@@ -46,6 +46,9 @@ def get_pending_tasks():
 
 
 logger = StructuredLogger("VelaServer")
+
+GLOBAL_OAUTH_CONVERSATION_ID = "00000000-0000-0000-0000-000000000001"
+
 db = PostgresDB()
 telegram_gateway = TelegramGateway(db=db)
 discord_gateway = DiscordGateway(db=db)
@@ -693,7 +696,7 @@ def get_oauth_status(conversation_id: str = Query(default=None)):
         with get_db_session() as session:
             dbc = DBClient(session)
 
-            token_record = dbc.get_oauth_token("global", "google")
+            token_record = dbc.get_oauth_token(GLOBAL_OAUTH_CONVERSATION_ID, "google")
 
             if not token_record:
                 return {"connected": False}
@@ -744,7 +747,7 @@ def oauth_google_authorize(
         raise HTTPException(status_code=401, detail="Invalid API key")
 
     # Use global conversation ID for OAuth flow instead of creating throwaway ones
-    conversation_id = "global"
+    conversation_id = GLOBAL_OAUTH_CONVERSATION_ID
     logger.info("Using global conversation for OAuth flow", conversation_id=conversation_id)
 
     # Encode state: conversation_id + client redirect_uri
@@ -944,8 +947,8 @@ def oauth_callback(code: str, state: str):
         "user_info": user_info,
     }
 
-    db.store_oauth_tokens("global", "google", token_record)
-    logger.info("OAuth tokens stored", conversation_id="global")
+    db.store_oauth_tokens(GLOBAL_OAUTH_CONVERSATION_ID, "google", token_record)
+    logger.info("OAuth tokens stored", conversation_id=GLOBAL_OAUTH_CONVERSATION_ID)
 
     # ── Redirect back to client (mobile flow) ──
     if redirect_uri:
