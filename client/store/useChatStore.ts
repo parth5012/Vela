@@ -67,6 +67,7 @@ interface ChatState {
   setThreadPersona: (threadId: string, persona: string) => void;
   addMessage: (threadId: string, message: Message) => void;
   appendToken: (threadId: string, token: string) => void;
+  removeLastEmptyAssistant: (threadId: string) => void;
   setThreads: (threads: Thread[]) => void;
   setHistory: (threadId: string, history: Message[]) => void;
   setStreamingThread: (threadId: string, isStreaming: boolean) => void;
@@ -148,6 +149,14 @@ export const useChatStore = create<ChatState>()(
           }
         };
       }),
+  removeLastEmptyAssistant: (threadId) =>
+    set((state) => {
+      const current = state.messages[threadId] || [];
+      if (current.length === 0) return {};
+      const last = current[current.length - 1];
+      if (last.role !== 'assistant' || (last.content || '').trim() !== '') return {};
+      return { messages: { ...state.messages, [threadId]: current.slice(0, -1) } };
+    }),
     renameThread: async (id, newTitle) => {
       const config = useConfigStore.getState();
       if (!config.isLocalMode && config.apiUrl && config.apiKey) {

@@ -485,6 +485,7 @@ export default function ChatScreen() {
 
         // Clean up throttle and apply healing
         cleanUpThrottleAndHeal(threadId);
+    useChatStore.getState().removeLastEmptyAssistant(threadId);
 
         // Mark streaming as complete for this iteration
         setStreamingThread(threadId, false);
@@ -520,6 +521,7 @@ export default function ChatScreen() {
       if (generatorCompleted || !hasMoreIterations) {
         setStreamingThread(threadId, false);
         cleanUpThrottleAndHeal(threadId);
+    useChatStore.getState().removeLastEmptyAssistant(threadId);
       }
     } catch (e: any) {
       console.error("[Local Stream Error]:", e);
@@ -528,6 +530,7 @@ export default function ChatScreen() {
       // Guaranteed cleanup: always stop streaming and flush remaining tokens
       setStreamingThread(threadId, false);
       cleanUpThrottleAndHeal(threadId);
+    useChatStore.getState().removeLastEmptyAssistant(threadId);
       // Ensure any remaining pending tokens are flushed
       if (pendingTokensMapRef.current[threadId]) {
         appendToken(threadId, pendingTokensMapRef.current[threadId]);
@@ -548,6 +551,7 @@ export default function ChatScreen() {
         delete abortControllersRef.current[activeThreadId];
       }
       cleanUpThrottleAndHeal(activeThreadId);
+    useChatStore.getState().removeLastEmptyAssistant(activeThreadId);
       setStreamingThread(activeThreadId, false);
       return;
     }
@@ -617,6 +621,7 @@ export default function ChatScreen() {
           setStreamingThread(activeThreadId, false);
           delete abortControllersRef.current[activeThreadId];
           cleanUpThrottleAndHeal(activeThreadId);
+    useChatStore.getState().removeLastEmptyAssistant(activeThreadId);
           if (newTitle) {
             const updatedThreads = threads.map((t) => {
               if (t.id === activeThreadId) {
@@ -632,6 +637,7 @@ export default function ChatScreen() {
           setStreamingThread(activeThreadId, false);
           delete abortControllersRef.current[activeThreadId];
           cleanUpThrottleAndHeal(activeThreadId);
+    useChatStore.getState().removeLastEmptyAssistant(activeThreadId);
           const errMsg = error?.message || (typeof error === 'string' ? error : '') || 'Failed to stream response.';
           appendToken(activeThreadId, `\n\n⚠️ **Error:** ${errMsg}`);
         },
@@ -646,6 +652,7 @@ export default function ChatScreen() {
     } catch (err: any) {
       setStreamingThread(activeThreadId, false);
       cleanUpThrottleAndHeal(activeThreadId);
+    useChatStore.getState().removeLastEmptyAssistant(activeThreadId);
       appendToken(activeThreadId, `\n\n⚠️ **Network Error:** ${err.message || 'Verification aborted.'}`);
     }
   }, [
@@ -734,6 +741,7 @@ export default function ChatScreen() {
           setStreamingThread(activeThreadId, false);
           delete abortControllersRef.current[activeThreadId];
           cleanUpThrottleAndHeal(activeThreadId);
+    useChatStore.getState().removeLastEmptyAssistant(activeThreadId);
           if (newTitle) {
             const updatedThreads = threads.map((t) => {
               if (t.id === activeThreadId) {
@@ -749,6 +757,7 @@ export default function ChatScreen() {
           setStreamingThread(activeThreadId, false);
           delete abortControllersRef.current[activeThreadId];
           cleanUpThrottleAndHeal(activeThreadId);
+    useChatStore.getState().removeLastEmptyAssistant(activeThreadId);
           const errMsg = error?.message || (typeof error === 'string' ? error : '') || 'Failed to stream response.';
           appendToken(activeThreadId, `\n\n⚠️ **Error:** ${errMsg}`);
         },
@@ -763,6 +772,7 @@ export default function ChatScreen() {
     } catch (err: any) {
       setStreamingThread(activeThreadId, false);
       cleanUpThrottleAndHeal(activeThreadId);
+    useChatStore.getState().removeLastEmptyAssistant(activeThreadId);
       appendToken(activeThreadId, `\n\n⚠️ **Network Error:** ${err.message || 'Verification aborted.'}`);
     }
   }, [
@@ -864,6 +874,7 @@ export default function ChatScreen() {
           setStreamingThread(newThreadId, false);
           delete abortControllersRef.current[newThreadId];
           cleanUpThrottleAndHeal(newThreadId);
+    useChatStore.getState().removeLastEmptyAssistant(newThreadId);
           if (newTitle) {
             useChatStore.getState().renameThread(newThreadId, newTitle);
           }
@@ -872,6 +883,7 @@ export default function ChatScreen() {
           setStreamingThread(newThreadId, false);
           delete abortControllersRef.current[newThreadId];
           cleanUpThrottleAndHeal(newThreadId);
+    useChatStore.getState().removeLastEmptyAssistant(newThreadId);
           const errMsg = error?.message || (typeof error === 'string' ? error : '') || 'Failed to stream response.';
           appendToken(newThreadId, `\n\n⚠️ **Error:** ${errMsg}`);
         },
@@ -886,6 +898,7 @@ export default function ChatScreen() {
     } catch (err: any) {
       setStreamingThread(newThreadId, false);
       cleanUpThrottleAndHeal(newThreadId);
+    useChatStore.getState().removeLastEmptyAssistant(newThreadId);
       appendToken(newThreadId, `\n\n⚠️ **Network Error:** ${err.message || 'Verification aborted.'}`);
     }
   }, [
