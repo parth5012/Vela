@@ -33,6 +33,7 @@ export default {
     "plugins": [
       "expo-router",
       "expo-sharing"
+    "./plugins/withAbiSplits"
     ],
     "extra": {
       "router": {},
