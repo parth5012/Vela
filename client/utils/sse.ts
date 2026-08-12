@@ -26,8 +26,9 @@ export async function streamAgentResponse(
   timeoutMs: number = DEFAULT_TIMEOUT_MS
 ): Promise<void> {
   // Create a timeout controller to abort the request if it takes too long
+  let resetTimeout: () => void = () => {};
   const timeoutController = new AbortController();
-  const timeoutId = setTimeout(() => {
+  let timeoutId: ReturnType<typeof setTimeout> = setTimeout(() => {
     timeoutController.abort(new Error(`Request timed out after ${timeoutMs / 1000}s. Server may be waking up.`));
   }, timeoutMs);
 
@@ -63,6 +64,12 @@ export async function streamAgentResponse(
       message,
       agent: requestAgent,
     });
+  resetTimeout = () => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => {
+      timeoutController.abort(new Error(`Response idle for ${timeoutMs / 1000}s. Server may be stuck.`));
+    }, timeoutMs);
+  };
 
     const fetchOptions: any = {
       method: 'POST',
@@ -99,7 +106,8 @@ export async function streamAgentResponse(
 
     let buffer = '';
     let chunkCount = 0;
-    while (true) {
+    resetTimeout();
+  while (true) {
       const { value, done } = await reader.read();
       if (done) {
         // Clear timeout on successful completion
