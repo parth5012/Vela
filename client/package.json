@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "dependencies": {
+    "stable-diffusion": "./modules/stable-diffusion",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-navigation/drawer": "^7.12.6",
     "drizzle-orm": "^0.45.2",

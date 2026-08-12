@@ -1,0 +1,10 @@
+{
+  "name": "stable-diffusion",
+  "version": "1.0.0",
+  "description": "Local on-device Stable Diffusion image generation module using stable-diffusion.cpp",
+  "main": "index.ts",
+  "types": "index.d.ts",
+  "peerDependencies": {
+    "expo": "*"
+  }
+}
