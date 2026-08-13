@@ -262,12 +262,13 @@ export default function TasksScreen() {
         .where(eq(tasks.id, task.id));
 
     } catch (err: any) {
+      Alert.alert('Task failed', err.name === 'TypeError' ? 'Network unavailable' : (err.message || 'Execution failed'));
       if (db) {
         await db.update(taskRuns)
           .set({
             status: 'failed',
             completed_at: Date.now(),
-            output: err.message || 'Execution failed',
+            output: err.name === 'TypeError' ? 'Network unavailable' : (err.message || 'Execution failed'),
           })
           .where(eq(taskRuns.id, runId));
       }

@@ -60,7 +60,7 @@ TaskManager.defineTask(VELA_BACKGROUND_TASK, async (body: any) => {
       return BackgroundTask.BackgroundTaskResult.Success;
     }
 
-    for (const task of activeTasks) {
+    for (const task of activeTasks.slice(0, 1)) {
       const runId = generateId();
       const startedAt = Date.now();
 
@@ -107,7 +107,7 @@ TaskManager.defineTask(VELA_BACKGROUND_TASK, async (body: any) => {
           .set({
             status: 'failed',
             completed_at: Date.now(),
-            output: err.message || 'Execution failed',
+            output: err.name === 'TypeError' ? 'Network unavailable' : (err.message || 'Execution failed'),
           })
           .where(eq(taskRuns.id, runId));
       }

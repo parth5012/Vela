@@ -1380,7 +1380,7 @@ class TaskRunPayload(BaseModel):
     task_id: str
     title: str
     prompt: str
-    agent: str = Field(default="personal assistant", validation_alias=AliasChoices("agent", "persona"))
+    agent: str = Field(default="personal assistant")
 
 @app.post("/api/tasks/run", dependencies=[Depends(verify_api_key)])
 async def execute_task_run(payload: TaskRunPayload):
