@@ -14,14 +14,16 @@ jest.mock('drizzle-orm/expo-sqlite/migrator', () => ({
   migrate: jest.fn(async () => Promise.resolve()),
 }));
 
-import { threads, messages, operationLog } from '../db/schema';
-import { db, initializeDatabase } from '../db/client';
+import { threads, messages, operationLog, tasks, taskRuns } from '../db/schema';
+import db, { initializeDatabase } from '../db/client';
 
-describe('Database client and schema', () => {
-  it('should define the correct tables in the schema', () => {
+describe('Database client schema', () => {
+  it('should define correct tables schema', () => {
     expect(threads).toBeDefined();
     expect(messages).toBeDefined();
     expect(operationLog).toBeDefined();
+    expect(tasks).toBeDefined();
+    expect(taskRuns).toBeDefined();
   });
 
   it('should have correct columns defined in threads table', () => {

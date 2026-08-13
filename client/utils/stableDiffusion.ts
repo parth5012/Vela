@@ -1,6 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
-import useConfigStore from '../store/useConfigStore';
 
 let SDModule: any = null;
 try {
@@ -12,6 +11,12 @@ try {
 export let isSdModelLoaded = false;
 export let useSdFallback = false;
 export let sdFallbackReason: string | null = null;
+
+export function resetSdState() {
+  isSdModelLoaded = false;
+  useSdFallback = false;
+  sdFallbackReason = null;
+}
 
 export const SD_MODEL_STORAGE_PREFIX = 'sd_model_downloaded_';
 export const SD_DEFAULT_MODEL_NAME = 'SD 1.5 LCM Q4_0';

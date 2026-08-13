@@ -1,14 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
-import { initializeSDModel, generateSDImage, isSdModelLoaded, useSdFallback } from '../utils/stableDiffusion';
+import { initializeSDModel, generateSDImage, isSdModelLoaded, useSdFallback, resetSdState } from '../utils/stableDiffusion';
 
-const mockSDModule = {
-  initializeModel: jest.fn(),
-  generateImage: jest.fn(),
-};
+let mockSDModule: any;
 
 jest.mock('stable-diffusion', () => ({
-  default: mockSDModule,
+  default: {
+    initializeModel: jest.fn(),
+    generateImage: jest.fn(),
+  },
 }));
 
 jest.mock('react-native', () => {
@@ -25,11 +25,13 @@ jest.mock('expo-file-system', () => ({
   getInfoAsync: jest.fn().mockResolvedValue({ exists: true }),
   makeDirectoryAsync: jest.fn().mockResolvedValue(true),
   writeAsStringAsync: jest.fn().mockResolvedValue(true),
+  EncodingType: { UTF8: 'utf8' },
 }));
 
 describe('stableDiffusion utility', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.clearAllMocks(); resetSdState();
+    mockSDModule = (require('stable-diffusion') as any).default;;
   });
 
   it('performs mock fallback when native module throws or fails', async () => {

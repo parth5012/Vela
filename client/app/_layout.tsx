@@ -14,6 +14,7 @@ import {
   handleWebViewMessage,
 } from '../store/useBrowserStore';
 import { hydrateGoogleTokens } from '../store/useGoogleAuthStore';
+import { registerVelaBackgroundTask } from '../utils/backgroundTasks';
 
 
 function HeaderRightActions() {
@@ -80,12 +81,13 @@ export default function RootLayout() {
     }
   }, [hasHydrated, chatHasHydrated]);
 
-  useEffect(() => {
-    if (hasHydrated) {
-      // Hydrate Google OAuth tokens SecureStore
-      hydrateGoogleTokens()
-    }
-  }, [hasHydrated]);
+useEffect(() => {
+if (hasHydrated) {
+// Hydrate Google OAuth tokens SecureStore
+hydrateGoogleTokens();
+registerVelaBackgroundTask();
+}
+}, [hasHydrated]);
 
   useEffect(() => {
     if (!hasHydrated || !isRouterReady) return;
@@ -166,17 +168,28 @@ export default function RootLayout() {
             },
           }}
         />
-        <Drawer.Screen
-          name="browser"
-          options={{
-            headerTitle: 'Browser',
-            headerTitleStyle: {
-              fontWeight: '600',
-              color: '#e4e4e7',
-              fontSize: 16,
-            },
-          }}
-        />
+<Drawer.Screen
+name="browser"
+options={{
+headerTitle: 'Browser',
+headerTitleStyle: {
+fontWeight: '600',
+color: '#e4e4e7',
+fontSize: 16,
+}
+}}
+/>
+<Drawer.Screen
+name="tasks"
+options={{
+headerTitle: 'Tasks',
+headerTitleStyle: {
+fontWeight: '600',
+color: '#e4e4e7',
+fontSize: 16,
+}
+}}
+/>
       </Drawer>
 
       {/* Persistent WebView — always mounted, visibility toggled */}
