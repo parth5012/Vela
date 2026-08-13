@@ -1370,8 +1370,59 @@ def sync_pull(
                 }
             })
 
-        return {
-            "operations": operations,
-            "cursor": latest_ulid,
-            "has_more": has_more
-        }
+    return {
+        "operations": operations,
+        "cursor": latest_ulid,
+        "has_more": has_more
+    }
+
+class TaskRunPayload(BaseModel):
+    task_id: str
+    title: str
+    prompt: str
+    agent: str = Field(default="personal assistant", validation_alias=AliasChoices("agent", "persona"))
+
+@app.post("/api/tasks/run", dependencies=[Depends(verify_api_key)])
+async def execute_task_run(payload: TaskRunPayload):
+    allowed_agents = [config.identifier for config in AGENT_REGISTRY.list_agents()]
+    if payload.agent not in allowed_agents:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported agent: '{payload.agent}'. Supported agents are: {allowed_agents}"
+        )
+    
+    initial_state = {
+        "messages": [HumanMessage(content=payload.prompt)],
+        "next_node": "supervisor",
+        "agent": payload.agent
+    }
+    
+    full_text = ""
+    try:
+        async for event in graph.astream_events(initial_state, version="v2"):
+            kind = event.get("event")
+            if kind == "on_chat_model_stream":
+                chunk = event.get("data", {}).get("chunk")
+                if chunk and chunk.content:
+                    content = chunk.content
+                    content_str = ""
+                    if isinstance(content, list):
+                        for item in content:
+                            if isinstance(item, str):
+                                content_str += item
+                            elif isinstance(item, dict):
+                                content_str += item.get("text", "")
+                            elif hasattr(item, "text"):
+                                content_str += item.text
+                    elif isinstance(content, str):
+                        content_str = content
+                    else:
+                        content_str = str(content)
+                    
+                    if content_str:
+                        full_text += content_str
+        
+        return {"status": "success", "output": full_text}
+    except Exception as e:
+        logger.error("Error executing background task flow", error=str(e))
+        return {"status": "failed", "output": str(e)}

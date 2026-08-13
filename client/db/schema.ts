@@ -35,3 +35,34 @@ export type InsertMessageEntity = typeof messages.$inferInsert;
 
 export type OperationLogEntity = typeof operationLog.$inferSelect;
 export type InsertOperationLogEntity = typeof operationLog.$inferInsert;
+
+export const tasks = sqliteTable('tasks', {
+  id: text('id').primaryKey(),
+  title: text('title').notNull(),
+  description: text('description'),
+  status: text('status').$type<'active' | 'paused'>().default('active').notNull(),
+  recurrence_rule: text('recurrence_rule').notNull(),
+  linked_agent: text('linked_agent'),
+  task_prompt: text('task_prompt').notNull(),
+  last_run: integer('last_run'),
+  next_run: integer('next_run'),
+  created_at: integer('created_at').notNull(),
+  updated_at: integer('updated_at').notNull(),
+});
+
+export const taskRuns = sqliteTable('task_runs', {
+  id: text('id').primaryKey(),
+  task_id: text('task_id')
+    .notNull()
+    .references(() => tasks.id, { onDelete: 'cascade' }),
+  status: text('status').$type<'running' | 'completed' | 'failed'>().notNull(),
+  started_at: integer('started_at').notNull(),
+  completed_at: integer('completed_at'),
+  output: text('output'),
+});
+
+export type TaskEntity = typeof tasks.$inferSelect;
+export type InsertTaskEntity = typeof tasks.$inferInsert;
+
+export type TaskRunEntity = typeof taskRuns.$inferSelect;
+export type InsertTaskRunEntity = typeof taskRuns.$inferInsert;
