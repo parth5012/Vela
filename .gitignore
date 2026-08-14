@@ -20,3 +20,5 @@ client/credentials
 client/credentials.json
 .pipeline/
 *.log
+client/modules/**/build/
+client/modules/**/.cxx/
