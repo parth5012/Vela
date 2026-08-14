@@ -19,3 +19,4 @@ client/temp.keystore
 client/credentials
 client/credentials.json
 .pipeline/
+*.log
