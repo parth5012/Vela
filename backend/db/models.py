@@ -105,10 +105,18 @@ class ToolInvocation(Base):
 class SyncMessage(Base):
     __tablename__ = "sync_messages"
 
-    id = Column(String(50), primary_key=True)  # ULID
+    id = Column(String(50), primary_key=True) # ULID
     conversation_id = Column(String, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
     role = Column(String(50), nullable=False)
     content = Column(String, nullable=False)
     provider = Column(String(50), nullable=False)
     created_at = Column(BigInteger, nullable=False)
+
+
+class SystemSetting(Base):
+    __tablename__ = "system_settings"
+
+    key = Column(String(100), primary_key=True)
+    value = Column(String, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

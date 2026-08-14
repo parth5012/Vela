@@ -83,3 +83,18 @@ ALTER TABLE conversations ADD COLUMN IF NOT EXISTS title VARCHAR(255) DEFAULT 'N
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS persona VARCHAR(50) DEFAULT 'personal assistant' NOT NULL;
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS active_skill VARCHAR(50) DEFAULT NULL;
 
+CREATE TABLE IF NOT EXISTS sync_messages (
+    id VARCHAR(50) PRIMARY KEY,
+    conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE,
+    role VARCHAR(50) NOT NULL,
+    content TEXT NOT NULL,
+    provider VARCHAR(50) NOT NULL,
+    created_at BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS system_settings (
+    key VARCHAR(100) PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+

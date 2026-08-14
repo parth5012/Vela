@@ -36,7 +36,7 @@ if DATABASE_URL.startswith("sqlite"):
     from db.models import Base
     sqlite_tables = [
         Base.metadata.tables[name]
-        for name in ["conversations", "oauth_tokens", "experiences", "system_prompt_fragments", "skills_registry", "tool_invocations", "sync_messages"]
+        for name in ["conversations", "oauth_tokens", "experiences", "system_prompt_fragments", "skills_registry", "tool_invocations", "sync_messages", "system_settings"]
     ]
     Base.metadata.create_all(bind=engine, tables=sqlite_tables)
 else:

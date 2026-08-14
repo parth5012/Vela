@@ -47,7 +47,7 @@ class PostgresDB:
             return None
 
     def get_latest_oauth_tokens(self, provider: str) -> dict | None:
-        self.logger.info("Retrieving latest OAuth tokens via SQLAlchemy", provider=provider)
+        self.logger.info("Retrieving latest OAuth tokens SQLAlchemy", provider=provider)
         try:
             from db.models import OAuthToken
             with get_db_session() as session:
@@ -58,6 +58,28 @@ class PostgresDB:
         except Exception as e:
             self.logger.error("Failed to retrieve latest OAuth tokens", error=str(e), provider=provider)
             return None
+
+    def get_system_setting(self, key: str) -> str | None:
+        self.logger.info("Retrieving system setting", key=key)
+        try:
+            with get_db_session() as session:
+                client = DBClient(session)
+                return client.get_system_setting(key)
+        except Exception as e:
+            self.logger.error("Failed to retrieve system setting", error=str(e), key=key)
+            return None
+
+    def set_system_setting(self, key: str, value: str) -> bool:
+        self.logger.info("Updating system setting", key=key)
+        try:
+            with get_db_session() as session:
+                client = DBClient(session)
+                client.set_system_setting(key, value)
+                session.commit()
+                return True
+        except Exception as e:
+            self.logger.error("Failed to update system setting", error=str(e), key=key)
+            return False
 
     def get_or_create_discord_conversation(self, discord_channel_id: int) -> str:
         self.logger.info("Fetching Discord conversation via SQLAlchemy", discord_channel_id=discord_channel_id)

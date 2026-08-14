@@ -1,6 +1,6 @@
 import uuid
 from sqlalchemy.orm import Session
-from db.models import Conversation, OAuthToken, MemoryVector, Experience, SystemPromptFragment, SkillsRegistry
+from db.models import Conversation, OAuthToken, MemoryVector, Experience, SystemPromptFragment, SkillsRegistry, SystemSetting
 from datetime import datetime, UTC
 
 class DBClient:
@@ -197,13 +197,30 @@ class DBClient:
         return conv
 
     def update_conversation_active_skill(self, conversation_id: str, active_skill: str | None) -> Conversation | None:
-        """Updates the active skill of a specific conversation."""
+        """Updates active skill for a specific conversation."""
         conv = self.session.query(Conversation).filter_by(id=conversation_id).first()
         if conv:
-            conv.active_skill = active_skill[:50] if active_skill is not None else None
+            conv.active_skill = active_skill[:50] if active_skill else None
             conv.updated_at = datetime.now(UTC).replace(tzinfo=None)
             self.session.flush()
         return conv
+
+    def get_system_setting(self, key: str) -> str | None:
+        """Retrieves a system setting value by key."""
+        setting = self.session.query(SystemSetting).filter_by(key=key).first()
+        return setting.value if setting else None
+
+    def set_system_setting(self, key: str, value: str) -> SystemSetting:
+        """Creates or updates a system setting value."""
+        setting = self.session.query(SystemSetting).filter_by(key=key).first()
+        if setting:
+            setting.value = value
+            setting.updated_at = datetime.now(UTC).replace(tzinfo=None)
+        else:
+            setting = SystemSetting(key=key, value=value)
+            self.session.add(setting)
+        self.session.flush()
+        return setting
 
     def delete_conversation(self, conversation_id: str) -> bool:
         """Deletes a conversation. Cascades to experiences and oauth_tokens automatically."""
