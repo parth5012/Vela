@@ -23,7 +23,7 @@ const generateId = () => {
   });
 };
 
-export default function DrawerContent() {
+export default function DrawerContent(_props?: any) {
   const threads = useChatStore((state) => state.threads);
   const activeThreadId = useChatStore((state) => state.activeThreadId);
   const createThread = useChatStore((state) => state.createThread);
@@ -102,11 +102,12 @@ const handleTasks = () => {
 };
 
   const sortedThreads = React.useMemo(() => {
-    return [...threads].sort((a, b) => {
-      if (a.is_pinned && !b.is_pinned) return -1;
-      if (!a.is_pinned && b.is_pinned) return 1;
-      const timeA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
-      const timeB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+    const list = Array.isArray(threads) ? threads : [];
+    return [...list].sort((a, b) => {
+      if (a?.is_pinned && !b?.is_pinned) return -1;
+      if (!a?.is_pinned && b?.is_pinned) return 1;
+      const timeA = a?.updated_at ? new Date(a.updated_at).getTime() : 0;
+      const timeB = b?.updated_at ? new Date(b.updated_at).getTime() : 0;
       // Fallback to 0 if date is invalid (isNaN)
       const valA = isNaN(timeA) ? 0 : timeA;
       const valB = isNaN(timeB) ? 0 : timeB;
@@ -120,14 +121,14 @@ const handleTasks = () => {
         style={[styles.header, { borderBottomColor: colors.border }]}
         onPress={() => {
           router.navigate('/');
-          if (typeof navigation.closeDrawer === 'function') {
+          if (typeof navigation?.closeDrawer === 'function') {
             navigation.closeDrawer();
           }
         }}
       >
         <Text style={[styles.logo, { color: accentHex }]}>VELA</Text>
         <Text style={[styles.nodeStatus, { color: colors.textDark }]} numberOfLines={1}>
-          Node: {apiUrl.replace(/^https?:\/\//, '')}
+          Node: {(apiUrl || '').replace(/^https?:\/\//, '')}
         </Text>
       </Pressable>
 

@@ -15,7 +15,7 @@ import {
 } from '../store/useBrowserStore';
 import { hydrateGoogleTokens } from '../store/useGoogleAuthStore';
 import { registerVelaBackgroundTask } from '../utils/backgroundTasks';
-
+import { initializeDatabase } from '../db/client';
 
 function HeaderRightActions() {
   const router = useRouter();
@@ -38,17 +38,17 @@ function HeaderRightActions() {
           flexDirection: 'row',
           alignItems: 'center',
           backgroundColor: isBrowserRoute ? '#312e81' : '#1e1b4b',
+          borderColor: isBrowserRoute ? '#818cf8' : '#3730a3',
+          borderWidth: 1,
+          borderRadius: 6,
           paddingHorizontal: 8,
           paddingVertical: 4,
-          borderRadius: 6,
-          marginRight: 8,
-          borderWidth: 1,
-          borderColor: isBrowserRoute ? '#818cf8' : '#4f46e5',
+          marginRight: 10,
           opacity: pressed ? 0.7 : 1,
         })}
       >
-        <Text style={{ color: '#e0e7ff', fontSize: 12, fontWeight: 'bold' }}>
-          {isBrowserRoute ? '💬 Chat' : '🌐 Webview'}
+        <Text style={{ color: '#c7d2fe', fontSize: 12, fontWeight: '600' }}>
+          🌐 Webview
         </Text>
       </Pressable>
       <HealthIndicator />
@@ -57,37 +57,26 @@ function HeaderRightActions() {
 }
 
 export default function RootLayout() {
-  const isConfigured = useConfigStore((state) => state.isConfigured);
-  const hasHydrated = useConfigStore((state) => state.hasHydrated);
-  const chatHasHydrated = useChatStore((state) => state.hasHydrated);
-
+  const isConfigured = useConfigStore((s) => s.isConfigured);
+  const hasHydrated = useConfigStore((s) => s.hasHydrated);
+  const chatHasHydrated = useChatStore((s) => s.hasHydrated);
   const segments = useSegments();
   const router = useRouter();
   const navigationState = useRootNavigationState();
-  const isRouterReady = navigationState?.key !== undefined;
-
-  // NOTE: all hooks must run unconditionally on every render, before any
-  // early return below. Moving these under a conditional return breaks the
-  // Rules of Hooks and crashes ContextNavigator on remount.
-  const currentUrl = useBrowserStore((s) => s.currentUrl);
   const isBrowserVisible = useBrowserStore((s) => s.isVisible);
+  const currentUrl = useBrowserStore((s) => s.currentUrl);
+
+  const isRouterReady = navigationState?.key != null;
 
   useEffect(() => {
-    if (hasHydrated && chatHasHydrated) {
-      // Preserve active thread if already selected, otherwise default to welcome/new screen
-      if (!useChatStore.getState().activeThreadId) {
-        useChatStore.getState().selectThread(null);
-      }
+    if (hasHydrated) {
+      hydrateGoogleTokens();
+      registerVelaBackgroundTask();
+      initializeDatabase().catch((err) => {
+        console.warn('[RootLayout] DB initialization error:', err);
+      });
     }
-  }, [hasHydrated, chatHasHydrated]);
-
-useEffect(() => {
-if (hasHydrated) {
-// Hydrate Google OAuth tokens SecureStore
-hydrateGoogleTokens();
-registerVelaBackgroundTask();
-}
-}, [hasHydrated]);
+  }, [hasHydrated]);
 
   useEffect(() => {
     if (!hasHydrated || !isRouterReady) return;
@@ -95,25 +84,22 @@ registerVelaBackgroundTask();
     const inSetupGroup = segments[0] === 'setup';
 
     if (!isConfigured && !inSetupGroup) {
-      // User is not configured and not on setup, redirect to /setup
       router.replace('/setup');
     } else if (isConfigured && inSetupGroup) {
-      // User is configured but on setup, redirect back to home /
       router.replace('/');
     }
   }, [isConfigured, hasHydrated, isRouterReady, segments]);
 
-  const inSetupGroup = segments[0] === 'setup';
-
-  if (!hasHydrated || !chatHasHydrated || !isRouterReady || (!isConfigured && !inSetupGroup) || (isConfigured && inSetupGroup)) {
+  if (!hasHydrated || !chatHasHydrated) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#818cf8" />
+        <ActivityIndicator size="large" color="#6366f1" />
       </View>
     );
   }
 
-  // If we are in the setup screen, render it directly without the Drawer UI
+  const inSetupGroup = segments[0] === 'setup';
+
   if (inSetupGroup) {
     return <Slot />;
   }
@@ -124,7 +110,7 @@ registerVelaBackgroundTask();
   return (
     <View style={{ flex: 1 }}>
       <Drawer
-        drawerContent={() => <DrawerContent />}
+        drawerContent={(props: any) => <DrawerContent {...props} />}
         screenOptions={{
           drawerType: 'front',
           headerStyle: {
@@ -137,9 +123,9 @@ registerVelaBackgroundTask();
             color: '#818cf8',
             fontSize: 16,
           },
-        headerTintColor: '#e4e4e7',
-        headerRight: () => <HeaderRightActions />,
-        drawerStyle: {
+          headerTintColor: '#e4e4e7',
+          headerRight: () => <HeaderRightActions />,
+          drawerStyle: {
             backgroundColor: '#09090b',
             width: 280,
           },
@@ -168,35 +154,35 @@ registerVelaBackgroundTask();
             },
           }}
         />
-<Drawer.Screen
-name="browser"
-options={{
-headerTitle: 'Browser',
-headerTitleStyle: {
-fontWeight: '600',
-color: '#e4e4e7',
-fontSize: 16,
-}
-}}
-/>
-<Drawer.Screen
-name="tasks"
-options={{
-headerTitle: 'Tasks',
-headerTitleStyle: {
-fontWeight: '600',
-color: '#e4e4e7',
-fontSize: 16,
-}
-}}
-/>
+        <Drawer.Screen
+          name="browser"
+          options={{
+            headerTitle: 'Browser',
+            headerTitleStyle: {
+              fontWeight: '600',
+              color: '#e4e4e7',
+              fontSize: 16,
+            },
+          }}
+        />
+        <Drawer.Screen
+          name="tasks"
+          options={{
+            headerTitle: 'Tasks',
+            headerTitleStyle: {
+              fontWeight: '600',
+              color: '#e4e4e7',
+              fontSize: 16,
+            },
+          }}
+        />
       </Drawer>
 
-      {/* Persistent WebView — always mounted, visibility toggled */}
+      {/* Persistent WebView — always mounted, visibility toggled with offscreen positioning */}
       <View
         style={[
           styles.persistentWebview,
-          { display: shouldShowWebview ? 'flex' : 'none' },
+          !shouldShowWebview && styles.persistentWebviewHidden,
         ]}
         pointerEvents={shouldShowWebview ? 'auto' : 'none'}
       >
@@ -235,8 +221,14 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    // Leave space for header (~56px on Android, ~96px on iOS)
-    // plus URL bar (~54px) and toolbar (~38px)
-    top: Platform.OS === 'ios' ? 190 : 148,
+    top: Platform.OS === 'ios' ? 190 : 155,
+  },
+  persistentWebviewHidden: {
+    position: 'absolute',
+    top: -99999,
+    left: -99999,
+    width: 1,
+    height: 1,
+    opacity: 0,
   },
 });

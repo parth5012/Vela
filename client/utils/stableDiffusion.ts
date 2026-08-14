@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 
 let SDModule: any = null;
 try {
@@ -131,6 +131,6 @@ export async function generateSDImage(
   // Create a placeholder local image
   const svgPlaceholder = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="%232c3e50"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%23ecf0f1" font-size="24">${encodeURIComponent(prompt.slice(0, 30))}</text></svg>`;
   
-  await FileSystem.writeAsStringAsync(fileUri, svgPlaceholder, { encoding: FileSystem.EncodingType.UTF8 });
+  await FileSystem.writeAsStringAsync(fileUri, svgPlaceholder, { encoding: (FileSystem.EncodingType?.UTF8 || 'utf8') as any });
   return fileUri;
 }
