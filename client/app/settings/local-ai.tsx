@@ -109,7 +109,7 @@ export default function LocalAiScreen() {
     if (modelBusy) return;
     setModelBusy(true);
     try {
-      await initializeLocalModel();
+      await initializeLocalModel(true);;
     } catch (err: any) {
       Alert.alert('Load Failed', err?.message || 'The model could not be loaded.');
     } finally {
@@ -291,7 +291,7 @@ export default function LocalAiScreen() {
   return (
     <AuroraScreen
       title="Local AI"
-      subtitle="Run Vela on-device with a LiteRT or GGUF model, or fall back to your cloud backend. Manage RAM with Load/Unload."
+      subtitle="Run Vela on-device GGUF models (via llama.cpp), or fall back to your cloud backend. Manage RAM with Load/Unload."
     >
       <Card>
         <Label>Engine</Label>
@@ -322,9 +322,15 @@ export default function LocalAiScreen() {
               ]}
             >
               <View style={{ flex: 1, marginRight: 8 }}>
-                <Text style={{ color: colors.text, fontSize: sizes.text, fontWeight: '600' }}>
-                  {model.name}
-                </Text>
+        <Text style={{ color: colors.text, fontSize: sizes.text, fontWeight: '600' }}>
+          {model.name}
+          {model.format === 'task' && (
+            <Text style={{ color: '#fb923c', fontSize: sizes.sub - 1, fontWeight: 'normal' }}>
+              {' '}
+              (Simulated/Mock Only)
+            </Text>
+          )}
+        </Text>
                 <Text style={{ color: colors.textMuted, fontSize: sizes.sub, marginTop: 2 }}>
                   {model.size} · {model.description}
                 </Text>
