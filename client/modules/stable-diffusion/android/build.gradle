@@ -43,5 +43,4 @@ android {
 dependencies {
   implementation "com.facebook.react:react-android:+"
   implementation "org.jetbrains.kotlin:kotlin-stdlib:2.1.0"
-  implementation "expo.modules:expo-modules-core:0.11.0"
 }
