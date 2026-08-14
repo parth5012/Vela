@@ -15,6 +15,53 @@ import {
 } from '../store/useBrowserStore';
 import { hydrateGoogleTokens } from '../store/useGoogleAuthStore';
 import { registerVelaBackgroundTask } from '../utils/backgroundTasks';
+import * as Notifications from 'expo-notifications';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+
+async function registerForPushNotificationsAsync() {
+  let token;
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync('vela_task_completion', {
+      name: 'Vela Task Completion',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#FF231F71',
+    });
+    await Notifications.setNotificationChannelAsync('vela_calendar_reminders', {
+      name: 'Vela Calendar Reminders',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#FF231F71',
+    });
+  }
+
+  const { status: existingStatus } = await Notifications.getPermissionsAsync();
+  let finalStatus = existingStatus;
+  if (existingStatus !== 'granted') {
+    const { status } = await Notifications.requestPermissionsAsync();
+    finalStatus = status;
+  }
+  if (finalStatus !== 'granted') {
+    console.log('Failed to get push token for push notification!');
+    return;
+  }
+
+  try {
+    token = (await Notifications.getDevicePushTokenAsync()).data;
+    console.log('[FCM Token]:', token);
+  } catch (error) {
+    console.error('Error getting device push token:', error);
+  }
+
+  return token;
+}
 
 
 function HeaderRightActions() {
@@ -86,6 +133,7 @@ if (hasHydrated) {
 // Hydrate Google OAuth tokens SecureStore
 hydrateGoogleTokens();
 registerVelaBackgroundTask();
+      registerForPushNotificationsAsync();
 }
 }, [hasHydrated]);
 

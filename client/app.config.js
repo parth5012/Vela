@@ -25,6 +25,7 @@ export default {
       },
       "predictiveBackGestureEnabled": false,
       "package": IS_PROD ? "com.parth5012.client" : "com.parth5012.client.dev",
+      "googleServicesFile": "./google-services.json",
       "softwareKeyboardLayoutMode": "adjustResize"
     },
     "web": {
@@ -32,8 +33,15 @@ export default {
     },
     "plugins": [
       "expo-router",
-    "expo-sharing",
-    "./plugins/withAbiSplits"
+      "expo-sharing",
+      "./plugins/withAbiSplits",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/splash-icon.png",
+          "color": "#ffffff"
+        }
+      ]
     ],
     "extra": {
       "router": {},

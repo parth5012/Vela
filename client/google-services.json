@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "246872091279",
+    "project_id": "vela-22789",
+    "storage_bucket": "vela-22789.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:246872091279:android:426a9a56d4a04bbcd21efa",
+        "android_client_info": {
+          "package_name": "com.parth5012.client"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAsg2pTK_QXeV4N7KbaVx1h-Lt3vslHhl4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:246872091279:android:61b85da0b3b8590ed21efa",
+        "android_client_info": {
+          "package_name": "com.parth5012.client.dev"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAsg2pTK_QXeV4N7KbaVx1h-Lt3vslHhl4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
