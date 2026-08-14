@@ -406,3 +406,20 @@ def test_truncate_thread_invalid_cases(monkeypatch):
     with get_db_session() as session:
         session.query(Conversation).filter_by(id=thread_id).delete(synchronize_session=False)
         session.commit()
+
+
+def test_register_device_token_endpoint(monkeypatch):
+    monkeypatch.setenv("VELA_API_KEY", "secret-test-key")
+    headers = {"Authorization": "Bearer secret-test-key"}
+    client = TestClient(app)
+
+    payload = {"token": "fcm-test-token-123456"}
+    resp = client.post("/api/config/device-token", json=payload, headers=headers)
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "success", "message": "FCM device token registered"}
+
+    # Verify storage in DB
+    from db.database import PostgresDB
+    db_client = PostgresDB()
+    stored_token = db_client.get_system_setting("fcm_device_token")
+    assert stored_token == "fcm-test-token-123456"

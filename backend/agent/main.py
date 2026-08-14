@@ -111,6 +111,24 @@ async def lifespan(app: FastAPI):
                         FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
                     )
                 """))
+
+        # Create system_settings table if not exists
+        if 'system_settings' not in inspector.get_table_names():
+            logger.info("Database migration: creating 'system_settings' table")
+            with engine.begin() as conn:
+                conn.execute(text("""
+                    CREATE TABLE system_settings (
+                        key VARCHAR(100) PRIMARY KEY,
+                        value TEXT NOT NULL,
+                        updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+                    )
+                """))
+        else:
+            columns = [col['name'] for col in inspector.get_columns('system_settings')]
+            if 'updated_at' not in columns:
+                logger.info("Database migration: adding 'updated_at' column to 'system_settings' table")
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE system_settings ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL"))
     except Exception as e:
         logger.error("Failed to run database migration", error=str(e))
 
@@ -264,6 +282,21 @@ def update_thread(thread_id: str, payload: UpdateThreadPayload):
     except HTTPException:
         raise
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class DeviceTokenPayload(BaseModel):
+    token: str
+
+
+@app.post("/api/config/device-token", dependencies=[Depends(verify_api_key)])
+async def register_device_token(payload: DeviceTokenPayload):
+    try:
+        db.set_system_setting("fcm_device_token", payload.token)
+        logger.info("Successfully registered/updated FCM device token", token_prefix=payload.token[:12])
+        return {"status": "success", "message": "FCM device token registered"}
+    except Exception as e:
+        logger.error("Failed to register FCM device token", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 
