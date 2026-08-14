@@ -212,7 +212,7 @@ function mockResponseTemplate(prompt: string): string {
  *  - `.gguf` models use llama.cpp via `llama.rn` (requires New Architecture).
  * Gracefully falls back to mock initialization in test/preview/non-native environments.
  */
-export async function initializeLocalModel(): Promise<void> {
+export async function initializeLocalModel(throwOnFallback: boolean = false): Promise<void> {
   if (isLocalLlmDown) {
     throw new Error('Local LLM is down/unavailable.');
   }
@@ -270,12 +270,18 @@ export async function initializeLocalModel(): Promise<void> {
         useFallback = true;
         localLlmFallbackReason = reason;
         await new Promise((resolve) => setTimeout(resolve, 50));
+        if (throwOnFallback) {
+          throw new Error('llama.rn initialization failed: ' + reason);
+        }
       }
     } else {
       useFallback = true;
       localLlmFallbackReason =
         'llama.rn unavailable in this build. Use a development build with the New Architecture.';
       await new Promise((resolve) => setTimeout(resolve, 50));
+      if (throwOnFallback) {
+        throw new Error(localLlmFallbackReason);
+      }
     }
   } else if (GemmaNative && typeof GemmaNative.initializeLocalModel === 'function') {
     // ---- MediaPipe engine (.task) ----
@@ -302,12 +308,18 @@ export async function initializeLocalModel(): Promise<void> {
       useFallback = true;
       localLlmFallbackReason = reason;
       await new Promise((resolve) => setTimeout(resolve, 50));
+      if (throwOnFallback) {
+        throw new Error(reason);
+      }
     }
   } else {
     useFallback = true;
     localLlmFallbackReason =
       'Native local-inference module unavailable in this build (Expo Go or web). Use a development build.';
     await new Promise((resolve) => setTimeout(resolve, 50));
+    if (throwOnFallback) {
+      throw new Error(localLlmFallbackReason);
+    }
   }
 
   isLocalModelLoaded = true;
