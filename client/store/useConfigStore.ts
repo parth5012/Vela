@@ -42,10 +42,18 @@ interface ConfigState {
   localModelDownloadProgress: number | null;
   wifiOnlyDownload: boolean;
   localModelName: string;
+  localContextSize: number;
+  localMaxTokens: number;
+  localConfigAutoApplied: boolean;
+  detectedRamBytes: number | null;
   setIsLocalMode: (val: boolean) => void;
   setLocalModelDownloadProgress: (val: number | null) => void;
   setWifiOnlyDownload: (val: boolean) => void;
   setLocalModelName: (val: string) => void;
+  setLocalContextSize: (val: number) => void;
+  setLocalMaxTokens: (val: number) => void;
+  setLocalConfigAutoApplied: (val: boolean) => void;
+  setDetectedRamBytes: (val: number | null) => void;
 }
 
 const SECURE_KEY = 'vela-api-key';
@@ -77,6 +85,10 @@ export const useConfigStore = create<ConfigState>()(
       wifiOnlyDownload: true,
       // Must match a `name` in LOCAL_MODELS (utils/localLlm.ts)
       localModelName: 'DeepSeek-R1 1.5B (GGUF)',
+    localContextSize: 2048,
+    localMaxTokens: 512,
+    localConfigAutoApplied: false,
+    detectedRamBytes: null,
 
       setConfig: (url, key) => {
         set({ apiUrl: url, apiKey: key, isConfigured: true });
@@ -129,7 +141,11 @@ export const useConfigStore = create<ConfigState>()(
       setIsLocalMode: (isLocalMode) => set({ isLocalMode }),
       setLocalModelDownloadProgress: (localModelDownloadProgress) => set({ localModelDownloadProgress }),
       setWifiOnlyDownload: (wifiOnlyDownload) => set({ wifiOnlyDownload }),
-      setLocalModelName: (localModelName) => set({ localModelName })
+      setLocalModelName: (localModelName) => set({ localModelName }),
+    setLocalContextSize: (localContextSize) => set({ localContextSize }),
+    setLocalMaxTokens: (localMaxTokens) => set({ localMaxTokens }),
+    setLocalConfigAutoApplied: (localConfigAutoApplied) => set({ localConfigAutoApplied }),
+    setDetectedRamBytes: (detectedRamBytes) => set({ detectedRamBytes })
     }),
     {
       name: 'vela-config-storage',

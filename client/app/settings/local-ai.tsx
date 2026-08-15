@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, Alert, StyleSheet } from 'react-native';
+import { View, Text, Pressable, Alert, StyleSheet, TextInput } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useConfigStore } from '../../store/useConfigStore';
@@ -12,6 +12,11 @@ import {
   initializeLocalModel,
   unloadLocalModel,
 } from '../../utils/localLlm';
+import {
+  detectRamBytes,
+  getModelStatusForRam,
+  getOptimalSettingsForRam
+} from '../../utils/ramDetection';
 import {
   AuroraScreen,
   Card,
@@ -44,6 +49,64 @@ export default function LocalAiScreen() {
   const { colors, sizes, aurora } = useAurora();
   const isMounted = useRef(true);
   const [downloadedModels, setDownloadedModels] = useState<Record<string, boolean>>({});
+
+  const detectedRamBytes = useConfigStore((s) => s.detectedRamBytes);
+  const setDetectedRamBytes = useConfigStore((s) => s.setDetectedRamBytes);
+  const localConfigAutoApplied = useConfigStore((s) => s.localConfigAutoApplied);
+  const setLocalConfigAutoApplied = useConfigStore((s) => s.setLocalConfigAutoApplied);
+  const localContextSize = useConfigStore((s) => s.localContextSize);
+  const setLocalContextSize = useConfigStore((s) => s.setLocalContextSize);
+  const localMaxTokens = useConfigStore((s) => s.localMaxTokens);
+  const setLocalMaxTokens = useConfigStore((s) => s.setLocalMaxTokens);
+
+  const [showUnsupportedModels, setShowUnsupportedModels] = useState(false);
+
+  useEffect(() => {
+    if (detectedRamBytes === null) {
+      detectRamBytes().then((bytes) => {
+        if (isMounted.current) {
+          setDetectedRamBytes(bytes);
+        }
+      });
+    }
+  }, [detectedRamBytes]);
+
+  const handleApplyRecommendation = () => {
+    if (detectedRamBytes) {
+      const rec = getOptimalSettingsForRam(detectedRamBytes);
+      setLocalModelName(rec.modelName);
+      setLocalContextSize(rec.contextSize);
+      setLocalMaxTokens(rec.maxTokens);
+      setLocalConfigAutoApplied(true);
+      Alert.alert('Recommendation Applied', `Recommended settings applied successfully.`);
+    }
+  };
+
+  const handleSelectModel = (modelName: string) => {
+    const ram = detectedRamBytes || 6 * 1024 * 1024 * 1024;
+    const status = getModelStatusForRam(modelName, ram);
+    if (status === 'borderline') {
+      Alert.alert(
+        'Borderline Model',
+        'Warning: This model requires more memory than recommended for your device and may run slowly.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Select', onPress: () => setLocalModelName(modelName) }
+        ]
+      );
+    } else if (status === 'unsupported') {
+      Alert.alert(
+        'High OOM Risk',
+        'Warning: High OOM Risk. This model requires significantly more RAM than your device has. It is likely to crash. Do you want to select it anyway?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Select Anyway', onPress: () => setLocalModelName(modelName) }
+        ]
+      );
+    } else {
+      setLocalModelName(modelName);
+    }
+  };
   const [loadedModelName, setLoadedModelName] = useState<string | null>(getLoadedModelName());
   const [modelBusy, setModelBusy] = useState(false);
 
@@ -305,45 +368,147 @@ export default function LocalAiScreen() {
         </Text>
       </Card>
 
-      <Card>
-        <Label>Model</Label>
-        {LOCAL_MODELS.map((model) => {
+      {detectedRamBytes !== null && !localConfigAutoApplied && (
+        <Card>
+          <Label>RAM Auto-Configuration</Label>
+          <Text style={{ color: colors.text, fontSize: sizes.text, fontWeight: '600', marginBottom: 4 }}>
+            System detected {(detectedRamBytes / (1024 ** 3)).toFixed(1)} GB of physical memory.
+          </Text>
+          <Text style={{ color: colors.textMuted, fontSize: sizes.sub, lineHeight: 16, marginBottom: 12 }}>
+            Recommended configuration:
+            {"\n"}• Model: {getOptimalSettingsForRam(detectedRamBytes).modelName}
+            {"\n"}• Context window: {getOptimalSettingsForRam(detectedRamBytes).contextSize} tokens
+            {"\n"}• Max outputs: {getOptimalSettingsForRam(detectedRamBytes).maxTokens} tokens
+          </Text>
+          <PrimaryButton
+            label="Apply Recommended Settings"
+            onPress={handleApplyRecommendation}
+          />
+        </Card>
+      )}
+
+            <Card>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <Label>Model</Label>
+          <Pressable
+            onPress={() => setShowUnsupportedModels(!showUnsupportedModels)}
+            style={{
+              backgroundColor: 'rgba(255, 255, 255, 0.08)',
+              borderColor: colors.glassBorder,
+              borderWidth: 1,
+              paddingHorizontal: 10,
+              paddingVertical: 4,
+              borderRadius: 6
+            }}
+          >
+            <Text style={{ color: showUnsupportedModels ? colors.text : colors.textMuted, fontSize: sizes.sub, fontWeight: '600' }}>
+              {showUnsupportedModels ? 'Show Unsupported: ON' : 'Show Unsupported: OFF'}
+            </Text>
+          </Pressable>
+        </View>
+        {LOCAL_MODELS.filter((model) => {
+          if (showUnsupportedModels) return true;
+          const status = getModelStatusForRam(model.name, detectedRamBytes || 6 * 1024 * 1024 * 1024);
+          return status !== 'unsupported';
+        }).map((model) => {
           const isSelected = localModelName === model.name;
           const isDownloaded = downloadedModels[model.name];
+          const status = getModelStatusForRam(model.name, detectedRamBytes || 6 * 1024 * 1024 * 1024);
+          const statusColor = status === 'recommended' ? '#10b981' : (status === 'borderline' ? '#fb923c' : '#ef4444');
+          const statusText = status.charAt(0).toUpperCase() + status.slice(1);
           return (
             <Pressable
               key={model.name}
-              onPress={() => setLocalModelName(model.name)}
+              onPress={() => handleSelectModel(model.name)}
               disabled={isDownloading}
               style={[
                 styles.modelRow,
-                { borderColor: isSelected ? aurora.acc1 : colors.glassBorder, backgroundColor: 'rgba(0,0,0,0.25)' },
+                {
+                  borderColor: isSelected ? aurora.acc1 : colors.glassBorder,
+                  backgroundColor: 'rgba(0,0,0,0.25)',
+                  marginBottom: 8
+                },
                 isDownloading && { opacity: 0.6 },
               ]}
             >
               <View style={{ flex: 1, marginRight: 8 }}>
-        <Text style={{ color: colors.text, fontSize: sizes.text, fontWeight: '600' }}>
-          {model.name}
-          {model.format === 'task' && (
-            <Text style={{ color: '#fb923c', fontSize: sizes.sub - 1, fontWeight: 'normal' }}>
-              {' '}
-              (Simulated/Mock Only)
-            </Text>
-          )}
-        </Text>
-                <Text style={{ color: colors.textMuted, fontSize: sizes.sub, marginTop: 2 }}>
-                  {model.size} · {model.description}
+                <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                  <Text style={{ color: colors.text, fontSize: sizes.text, fontWeight: '600' }}>
+                    {model.name}
+                  </Text>
+                  <View style={{ backgroundColor: 'rgba(0,0,0,0.3)', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, borderWidth: 1, borderColor: statusColor }}>
+                    <Text style={{ color: statusColor, fontSize: sizes.sub - 2, fontWeight: '700' }}>
+                      {statusText}
+                    </Text>
+                  </View>
+                </View>
+                {model.format === 'task' ? (
+                  <Text style={{ color: '#fb923c', fontSize: sizes.sub - 1, fontWeight: 'normal' }}>
+                    {'\n'}(Simulated/Mock Only)
+                  </Text>
+                ) : null}
+                <Text style={{ color: colors.textMuted, fontSize: sizes.sub, marginTop: 4 }}>
+                  {model.size} • {model.description}
                 </Text>
-                <Text style={{ color: colors.textDark, fontSize: sizes.sub - 1, marginTop: 2, fontFamily: 'monospace' }}>
+                <Text style={{ color: colors.textDark, fontSize: sizes.sub - 1, marginTop: 4, fontFamily: 'monospace' }}>
                   {model.filename}
                 </Text>
               </View>
               <Text style={{ color: isDownloaded ? '#34d399' : colors.textDark, fontSize: sizes.sub, fontWeight: '600' }}>
-                {isDownloaded ? '✓ Downloaded' : 'Not downloaded'}
+                {isDownloaded ? 'Downloaded' : 'Not downloaded'}
               </Text>
             </Pressable>
           );
         })}
+      </Card>
+
+      <Card>
+        <Label>Context Limit Settings</Label>
+        <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: colors.textMuted, fontSize: sizes.sub, marginBottom: 4 }}>Context Size (Tokens)</Text>
+            <TextInput
+              style={{
+                backgroundColor: 'rgba(0,0,0,0.25)',
+                color: colors.text,
+                borderWidth: 1,
+                borderColor: colors.glassBorder,
+                borderRadius: 8,
+                padding: 8,
+                fontSize: sizes.text
+              }}
+              keyboardType="numeric"
+              value={String(localContextSize || 2048)}
+              onChangeText={(val) => {
+                const num = parseInt(val, 10);
+                if (!isNaN(num)) setLocalContextSize(num);
+              }}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: colors.textMuted, fontSize: sizes.sub, marginBottom: 4 }}>Max Output Tokens</Text>
+            <TextInput
+              style={{
+                backgroundColor: 'rgba(0,0,0,0.25)',
+                color: colors.text,
+                borderWidth: 1,
+                borderColor: colors.glassBorder,
+                borderRadius: 8,
+                padding: 8,
+                fontSize: sizes.text
+              }}
+              keyboardType="numeric"
+              value={String(localMaxTokens || 512)}
+              onChangeText={(val) => {
+                const num = parseInt(val, 10);
+                if (!isNaN(num)) setLocalMaxTokens(num);
+              }}
+            />
+          </View>
+        </View>
+        <Text style={{ color: colors.textDark, fontSize: sizes.sub - 1, marginTop: 6, lineHeight: 14 }}>
+          Allocating larger context size uses more memory and can cause model loaded in RAM to OOM crash.
+        </Text>
       </Card>
 
       <Card>
@@ -357,6 +522,11 @@ export default function LocalAiScreen() {
 
       <Card>
         <Label>RAM</Label>
+        {detectedRamBytes !== null && (
+          <Text style={{ color: colors.text, fontSize: sizes.sub, fontWeight: '700', marginBottom: 6 }}>
+            Device RAM: {(detectedRamBytes / (1024 ** 3)).toFixed(1)} GB
+          </Text>
+        )}
         <Text style={{ color: colors.textMuted, fontSize: sizes.sub, lineHeight: 16 }}>
           {isActiveModelLoaded
             ? `${localModelName} is loaded in RAM and ready for instant responses.`

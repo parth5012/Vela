@@ -248,7 +248,7 @@ export async function initializeLocalModel(throwOnFallback: boolean = false): Pr
         llamaContext = await initLlama(
           {
             model: cleanPath,
-            n_ctx: 4096,
+            n_ctx: useConfigStore.getState().localContextSize || 2048,
             n_threads: 4,
             use_mmap: true,
             use_mlock: false,
@@ -389,7 +389,7 @@ export async function* streamLocalLlmResponse(
       const completionPromise = llamaContext.completion(
         {
           prompt,
-          n_predict: 512,
+          n_predict: useConfigStore.getState().localMaxTokens || 512,
           temperature: 0.7,
           top_k: 40,
           top_p: 0.95,

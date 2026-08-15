@@ -78,6 +78,10 @@ describe('useConfigStore', () => {
     expect(state.isLocalMode).toBe(false);
     expect(state.localModelDownloadProgress).toBeNull();
     expect(state.wifiOnlyDownload).toBe(true);
+    expect(state.localContextSize).toBe(2048);
+    expect(state.localMaxTokens).toBe(512);
+    expect(state.localConfigAutoApplied).toBe(false);
+    expect(state.detectedRamBytes).toBeNull();
   });
 
   it('should allow updating local mode config via setters', () => {
@@ -86,12 +90,20 @@ describe('useConfigStore', () => {
     state.setIsLocalMode(true);
     state.setLocalModelDownloadProgress(50);
     state.setWifiOnlyDownload(false);
+    state.setLocalContextSize(1024);
+    state.setLocalMaxTokens(256);
+    state.setLocalConfigAutoApplied(true);
+    state.setDetectedRamBytes(4000000000);
 
     const updatedState = useConfigStore.getState();
     expect(updatedState.localModelName).toBe('Phi-3 Mini');
     expect(updatedState.isLocalMode).toBe(true);
     expect(updatedState.localModelDownloadProgress).toBe(50);
     expect(updatedState.wifiOnlyDownload).toBe(false);
+    expect(updatedState.localContextSize).toBe(1024);
+    expect(updatedState.localMaxTokens).toBe(256);
+    expect(updatedState.localConfigAutoApplied).toBe(true);
+    expect(updatedState.detectedRamBytes).toBe(4000000000);
   });
 
   it('should have default suggestion starters', () => {
