@@ -1,10 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, Pressable, StyleSheet, LayoutAnimation, Platform, UIManager } from 'react-native';
-
-// Enable LayoutAnimation for Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, Pressable, StyleSheet, Animated, Platform } from 'react-native';
 
 interface CollapsibleBlockProps {
   type: 'thought' | 'tool_call' | 'intent' | 'skill';
@@ -15,6 +10,7 @@ interface CollapsibleBlockProps {
   themeSizes: any;
   accentHex: string;
   children: React.ReactNode;
+  onToggle?: (collapsed: boolean) => void;
 }
 
 export default function CollapsibleBlock({
@@ -25,24 +21,62 @@ export default function CollapsibleBlock({
   themeColors,
   themeSizes,
   accentHex,
-  children
+  children,
+  onToggle
 }: CollapsibleBlockProps) {
-  // If streaming (unclosed), default to expanded. Once closed, collapse it.
+  // If streaming (unclosed) default expanded. Once closed, collapse it.
   const [collapsed, setCollapsed] = useState(isClosed);
+  const [measuredHeight, setMeasuredHeight] = useState(0);
+  const animatedValue = useRef(new Animated.Value(isClosed ? 0 : 1)).current;
 
   useEffect(() => {
-    // If it transitions from streaming to closed, collapse it automatically
+    // transitions when streaming closed, collapse automatically
     if (isClosed) {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setCollapsed(true);
+      Animated.timing(animatedValue, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: false,
+      }).start(() => {
+        setCollapsed(true);
+      });
     } else {
       setCollapsed(false);
+      Animated.timing(animatedValue, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: false,
+      }).start();
     }
   }, [isClosed]);
 
   const toggleCollapse = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setCollapsed(!collapsed);
+    const nextCollapsed = !collapsed;
+    if (onToggle) {
+      onToggle(nextCollapsed);
+    }
+    if (nextCollapsed) {
+      Animated.timing(animatedValue, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: false,
+      }).start(() => {
+        setCollapsed(true);
+      });
+    } else {
+      setCollapsed(false);
+      Animated.timing(animatedValue, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: false,
+      }).start();
+    }
+  };
+
+  const onLayout = (event: any) => {
+    const { height } = event.nativeEvent.layout;
+    if (height > 0 && height !== measuredHeight) {
+      setMeasuredHeight(height);
+    }
   };
 
   const isThought = type === 'thought';
@@ -50,7 +84,7 @@ export default function CollapsibleBlock({
   const isSkill = type === 'skill';
 
   let icon = '⚙️';
-  let title = 'Executed: ' + (name || 'Tool');
+  let title = `Executed: ${name || 'Tool'}`;
 
   if (isThought) {
     icon = '🧠';
@@ -60,37 +94,50 @@ export default function CollapsibleBlock({
     title = 'Intent';
   } else if (isSkill) {
     icon = '🧩';
-    title = 'Executed Skill: ' + (name || 'Skill');
+    title = `Executing: ${name || 'Skill'}`;
   }
 
   const isThoughtOrIntent = isThought || isIntent;
 
+  // Interpolate height and opacity
+  const contentHeight = animatedValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, measuredHeight],
+  });
+
+  const contentOpacity = animatedValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+
   return (
     <View style={[
-      styles.container, 
-      { 
-        backgroundColor: isThoughtOrIntent ? 'rgba(255, 255, 255, 0.03)' : themeColors.card, 
+      styles.container,
+      {
+        backgroundColor: isThoughtOrIntent ? 'rgba(255, 255, 255, 0.03)' : themeColors.card,
         borderColor: isThoughtOrIntent ? themeColors.border : accentHex + '33',
         borderStyle: 'solid',
       }
     ]}>
       {/* Header Pressable */}
-      <Pressable 
-        style={styles.header} 
+      <Pressable
+        style={styles.header}
         onPress={toggleCollapse}
+        accessibilityRole="button"
+        accessibilityLabel={(collapsed ? 'Expand ' : 'Collapse ') + title}
       >
         <View style={styles.headerTextContainer}>
           <Text style={[styles.icon, { fontSize: themeSizes.text }]}>{icon}</Text>
           <View style={{ flex: 1 }}>
             <Text style={[
-              styles.title, 
-              { color: themeColors.text, fontSize: themeSizes.text - 1 }
+              styles.title,
+              { color: themeColors.text, fontSize: themeSizes.text + 1 }
             ]}>
               {title}
             </Text>
             {input ? (
-              <Text 
-                numberOfLines={1} 
+              <Text
+                numberOfLines={1}
                 style={[styles.inputLabel, { color: themeColors.textDark, fontSize: themeSizes.sub }]}
               >
                 Args: {input}
@@ -104,17 +151,26 @@ export default function CollapsibleBlock({
       </Pressable>
 
       {/* Collapsible Content */}
-      {!collapsed && (
-        <View style={[
-          styles.content, 
-          { 
-            borderTopColor: themeColors.border,
-            backgroundColor: isThoughtOrIntent ? 'transparent' : 'rgba(0, 0, 0, 0.15)'
-          }
-        ]}>
+      <Animated.View
+        style={{
+          height: contentHeight,
+          opacity: contentOpacity,
+          overflow: 'hidden',
+        }}
+      >
+        <View
+          onLayout={onLayout}
+          style={[
+            styles.content,
+            {
+              borderTopColor: themeColors.border,
+              backgroundColor: isThoughtOrIntent ? 'transparent' : 'rgba(0, 0, 0, 0.15)',
+            }
+          ]}
+        >
           {children}
         </View>
-      )}
+      </Animated.View>
     </View>
   );
 }
@@ -162,5 +218,3 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
 });
-
-
