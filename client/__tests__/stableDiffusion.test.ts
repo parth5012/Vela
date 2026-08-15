@@ -28,6 +28,8 @@ jest.mock('expo-file-system', () => ({
   EncodingType: { UTF8: 'utf8' },
 }));
 
+jest.mock('expo-file-system/legacy', () => require('expo-file-system'));
+
 describe('stableDiffusion utility', () => {
   beforeEach(() => {
     jest.clearAllMocks(); resetSdState();

@@ -74,7 +74,7 @@ describe('useConfigStore', () => {
 
   it('should initialize default values for local mode config', () => {
     const state = useConfigStore.getState();
-    expect(state.localModelName).toBe('Qwen2.5 0.5B');
+    expect(state.localModelName).toBe('DeepSeek-R1 1.5B (GGUF)');
     expect(state.isLocalMode).toBe(false);
     expect(state.localModelDownloadProgress).toBeNull();
     expect(state.wifiOnlyDownload).toBe(true);

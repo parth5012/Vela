@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Modal, Switch, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import db from '../db/client';
+import db, { initializeDatabase } from '../db/client';
 import { tasks, taskRuns, TaskEntity, TaskRunEntity } from '../db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { useConfigStore } from '../store/useConfigStore';
@@ -50,6 +50,7 @@ export default function TasksScreen() {
     try {
       setLoading(true);
       if (db) {
+        await initializeDatabase().catch(() => {});
         const result = await db.select().from(tasks);
         setTaskList(result);
       }
@@ -96,7 +97,7 @@ export default function TasksScreen() {
 
   const handleSaveTask = async () => {
     if (!formTitle.trim()) {
-      Alert.alert('Validation Error', 'Title is description required.');
+      Alert.alert('Validation Error', 'Title is required.');
       return;
     }
     if (!formPrompt.trim()) {
@@ -106,6 +107,7 @@ export default function TasksScreen() {
 
     try {
       if (!db) return;
+      await initializeDatabase().catch(() => {});
 
       const now = Date.now();
       if (editingTask) {
@@ -125,26 +127,27 @@ export default function TasksScreen() {
           })
           .where(eq(tasks.id, editingTask.id));
       } else {
-        const taskId = generateId();
-        const nextRunTime = calculateNextRun(formRecurrence, now);
-
-        await db.insert(tasks).values({
-          id: taskId,
+        const newTask: TaskEntity = {
+          id: generateId(),
           title: formTitle.trim(),
           description: formDescription.trim(),
-          status: 'active',
           recurrence_rule: formRecurrence,
-          linked_agent: formAgent.trim(),
           task_prompt: formPrompt.trim(),
-          next_run: nextRunTime,
+          linked_agent: formAgent.trim(),
+          status: 'active',
+          last_run: null,
+          next_run: calculateNextRun(formRecurrence, now),
           created_at: now,
           updated_at: now,
-        });
+        };
+
+        await db.insert(tasks).values(newTask);
       }
 
       setIsFormModalVisible(false);
-      loadTasks();
-    } catch (err) {
+      await loadTasks();
+    } catch (error) {
+      console.error('Failed to save task:', error);
       Alert.alert('Error', 'Failed to save task.');
     }
   };

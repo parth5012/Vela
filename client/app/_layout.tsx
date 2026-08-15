@@ -64,6 +64,8 @@ async function registerForPushNotificationsAsync() {
 }
 
 
+import { initializeDatabase } from '../db/client';
+
 function HeaderRightActions() {
   const router = useRouter();
   const segments = useSegments();
@@ -133,7 +135,6 @@ if (hasHydrated) {
 // Hydrate Google OAuth tokens SecureStore
 hydrateGoogleTokens();
 registerVelaBackgroundTask();
-      registerForPushNotificationsAsync();
 }
 }, [hasHydrated]);
 

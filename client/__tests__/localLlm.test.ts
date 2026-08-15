@@ -82,7 +82,7 @@ describe('localLlm wrapper', () => {
     // Must match the default `localModelName` in useConfigStore and use the
     // LiteRT `.task` extension that initializeLocalModel now requires.
     await AsyncStorage.setItem(
-      'local_model_downloaded_Qwen2.5 0.5B_path',
+      'local_model_downloaded_DeepSeek-R1 1.5B (GGUF)_path',
       'file:///test/path/to/model.task'
     );
   });
@@ -206,7 +206,7 @@ describe('localLlm wrapper', () => {
 
   it('should route a GGUF model to the llama.rn engine, not MediaPipe', async () => {
     await AsyncStorage.setItem(
-      'local_model_downloaded_Qwen2.5 0.5B_path',
+      'local_model_downloaded_DeepSeek-R1 1.5B (GGUF)_path',
       'file:///test/path/to/model.gguf'
     );
 
@@ -245,7 +245,7 @@ describe('localLlm wrapper', () => {
 
   it('should release the llama.rn context on unload', async () => {
     await AsyncStorage.setItem(
-      'local_model_downloaded_Qwen2.5 0.5B_path',
+      'local_model_downloaded_DeepSeek-R1 1.5B (GGUF)_path',
       'file:///test/path/to/model.gguf'
     );
 
@@ -259,7 +259,7 @@ describe('localLlm wrapper', () => {
 
   it('should fall back to mock when llama.rn init fails', async () => {
     await AsyncStorage.setItem(
-      'local_model_downloaded_Qwen2.5 0.5B_path',
+      'local_model_downloaded_DeepSeek-R1 1.5B (GGUF)_path',
       'file:///test/path/to/model.gguf'
     );
     (initLlama as jest.Mock).mockRejectedValueOnce(new Error('gguf init failed'));

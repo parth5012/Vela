@@ -76,7 +76,7 @@ export const useConfigStore = create<ConfigState>()(
       localModelDownloadProgress: null,
       wifiOnlyDownload: true,
       // Must match a `name` in LOCAL_MODELS (utils/localLlm.ts)
-      localModelName: 'Qwen2.5 0.5B',
+      localModelName: 'DeepSeek-R1 1.5B (GGUF)',
 
       setConfig: (url, key) => {
         set({ apiUrl: url, apiKey: key, isConfigured: true });
@@ -143,7 +143,7 @@ export const useConfigStore = create<ConfigState>()(
         if (fromVersion < 1 && persistedState) {
           const retired = ['Gemma 2B', 'Phi-3 Mini', 'Llama 3 8B'];
           if (retired.includes(persistedState.localModelName)) {
-            persistedState.localModelName = 'Qwen2.5 0.5B';
+            persistedState.localModelName = 'DeepSeek-R1 1.5B (GGUF)';
             persistedState.isLocalMode = false;
           }
         }
