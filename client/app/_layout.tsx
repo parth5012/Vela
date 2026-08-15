@@ -142,19 +142,21 @@ registerVelaBackgroundTask();
     if (!hasHydrated || !isRouterReady) return;
 
     const inSetupGroup = segments[0] === 'setup';
+    const isOAuthCallback = segments[0] === 'oauth-callback';
 
-    if (!isConfigured && !inSetupGroup) {
-      // User is not configured and not on setup, redirect to /setup
+    if (!isConfigured && !inSetupGroup && !isOAuthCallback) {
+      // User not configured and not in setup/oauth-callback, redirect to /setup
       router.replace('/setup');
     } else if (isConfigured && inSetupGroup) {
-      // User is configured but on setup, redirect back to home /
+      // User configured and in setup, redirect back home /
       router.replace('/');
     }
   }, [isConfigured, hasHydrated, isRouterReady, segments]);
 
   const inSetupGroup = segments[0] === 'setup';
+  const isOAuthCallback = segments[0] === 'oauth-callback';
 
-  if (!hasHydrated || !chatHasHydrated || !isRouterReady || (!isConfigured && !inSetupGroup) || (isConfigured && inSetupGroup)) {
+  if (!hasHydrated || !chatHasHydrated || !isRouterReady || (!isConfigured && !inSetupGroup && !isOAuthCallback) || (isConfigured && inSetupGroup)) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#818cf8" />
@@ -163,7 +165,7 @@ registerVelaBackgroundTask();
   }
 
   // If we are in the setup screen, render it directly without the Drawer UI
-  if (inSetupGroup) {
+  if (inSetupGroup || isOAuthCallback) {
     return <Slot />;
   }
 

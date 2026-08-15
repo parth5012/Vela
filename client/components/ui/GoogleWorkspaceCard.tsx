@@ -138,8 +138,11 @@ export default function GoogleWorkspaceCard({
     setError(null);
 
     try {
+      const redirectUri = Platform.OS === 'web'
+        ? (typeof window !== 'undefined' ? `${window.location.origin}/oauth-callback` : '')
+        : OAUTH_REDIRECT_URI;
       const authUrl = apiUrl(
-        `/oauth/google/authorize?redirect_uri=${encodeURIComponent(OAUTH_REDIRECT_URI)}`,
+        `/oauth/google/authorize?redirect_uri=${encodeURIComponent(redirectUri)}`,
         apiUrlRaw
       );
 
@@ -148,7 +151,7 @@ export default function GoogleWorkspaceCard({
       // We pass it as a query param since WebBrowser can't set custom headers.
       const result = await WebBrowser.openAuthSessionAsync(
         `${authUrl}&api_key=${encodeURIComponent(apiKey || '')}`,
-        OAUTH_REDIRECT_URI
+        redirectUri
       );
 
       if (result.type === 'success') {
