@@ -15,6 +15,13 @@
       "when": 1786633450456,
       "tag": "0001_violet_sentinel",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786896852910,
+      "tag": "0002_offline_chat_sync_metadata",
+      "breakpoints": true
     }
   ]
 }

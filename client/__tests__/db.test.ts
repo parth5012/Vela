@@ -41,6 +41,15 @@ describe('Database client schema', () => {
     expect(messages.content).toBeDefined();
     expect(messages.provider).toBeDefined();
     expect(messages.created_at).toBeDefined();
+    expect(messages.pending).toBeDefined();
+    expect(messages.server_id).toBeDefined();
+  });
+
+  it('should default pending to false and allow nullable server_id', () => {
+    // Drizzle column builders expose default/sqlType metadata; assert defaults.
+    expect(messages.pending.default).toBe(false);
+    expect(messages.server_id.notNull).toBe(false);
+    expect(messages.pending.notNull).toBe(true);
   });
 
   it('should have correct columns defined in operationLog table', () => {

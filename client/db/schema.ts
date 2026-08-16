@@ -17,6 +17,8 @@ export const messages = sqliteTable('messages', {
   content: text('content').notNull(),
   provider: text('provider').notNull(),
   created_at: integer('created_at').notNull(), // Epoch timestamp in ms or unix timestamp
+  pending: integer('pending', { mode: 'boolean' }).default(false).notNull(), // Local-first sync flag: true until acknowledged by backend
+  server_id: text('server_id'), // Backend message id once synced (null while pending)
 });
 
 export const operationLog = sqliteTable('operation_log', {
