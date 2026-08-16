@@ -1316,13 +1316,25 @@ def sync_push(payload: SyncPushPayload):
     latest_ulid = None
 
     with get_db_session() as session:
+        client = DBClient(session)
         for op in payload.operations:
             if op.type != "message":
                 rejected.append(op.id)
                 continue
 
             conv = session.query(Conversation).filter_by(id=op.conversation_id).first()
-            if not conv or conv.source != "android_client":
+            if not conv:
+                # Auto-create the conversation for local-first offline sync:
+                # a thread created entirely on the device has no backend
+                # counterpart until its first flush.
+                conv = client.create_client_conversation(
+                    title="Synced Conversation",
+                    agent="personal assistant",
+                    conversation_id=op.conversation_id,
+                    source="android_client"
+                )
+                session.commit()
+            if conv.source != "android_client":
                 rejected.append(op.id)
                 continue
 

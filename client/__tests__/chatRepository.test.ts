@@ -4,12 +4,14 @@ jest.mock('../db/client', () => {
   const mockSelect = jest.fn();
   const mockInsert = jest.fn();
   const mockDelete = jest.fn();
+  const mockUpdate = jest.fn();
 
   return {
     db: {
       select: mockSelect,
       insert: mockInsert,
       delete: mockDelete,
+      update: mockUpdate,
     },
     initializeDatabase: jest.fn(),
     expoDb: {},
@@ -17,6 +19,7 @@ jest.mock('../db/client', () => {
       select: mockSelect,
       insert: mockInsert,
       delete: mockDelete,
+      update: mockUpdate,
     },
   };
 });
@@ -38,6 +41,8 @@ import {
   loadMessages,
   clearChatLocal,
   isLocalDbAvailable,
+  queueMessageForSync,
+  markMessageSynced,
 } from '../db/chatRepository';
 
 describe('chatRepository (local-first chat persistence)', () => {
@@ -111,6 +116,61 @@ describe('chatRepository (local-first chat persistence)', () => {
       expect(row.pending).toBe(false);
       expect(row.server_id).toBeNull();
       expect(row.created_at).toBe(Date.parse('2026-08-16T10:00:00.000Z'));
+    });
+  });
+
+  describe('queueMessageForSync', () => {
+    it('should persist message as pending and write an operation_log entry', async () => {
+      const valuesMocks: jest.Mock[] = [];
+      (db.insert as jest.Mock).mockImplementation(() => ({
+        values: (() => {
+          const fn = jest.fn(() => ({
+            onConflictDoUpdate: jest.fn(async () => undefined),
+            onConflictDoNothing: jest.fn(async () => undefined),
+          }));
+          valuesMocks.push(fn);
+          return fn;
+        })(),
+      }));
+
+      await queueMessageForSync('thread-1', {
+        id: 'msg-1',
+        role: 'user',
+        content: 'offline hello',
+        created_at: '2026-08-16T10:00:00.000Z',
+      });
+
+      expect(db.insert).toHaveBeenCalledTimes(2);
+      expect(valuesMocks.length).toBe(2);
+
+      // First insert: messages table with pending=true
+      const messageRow = valuesMocks[0].mock.calls[0][0];
+      expect(messageRow.pending).toBe(true);
+      expect(messageRow.conversation_id).toBe('thread-1');
+
+      // Second insert: operation_log with android_client provider payload
+      const opRow = valuesMocks[1].mock.calls[0][0];
+      expect(opRow.type).toBe('message');
+      expect(opRow.conversation_id).toBe('thread-1');
+      const payload = JSON.parse(opRow.payload);
+      expect(payload.provider).toBe('android_client');
+      expect(payload.role).toBe('user');
+      expect(payload.content).toBe('offline hello');
+    });
+  });
+
+  describe('markMessageSynced', () => {
+    it('should clear pending and set server_id for the message', async () => {
+      const whereFn = jest.fn(async () => undefined);
+      const setFn = jest.fn(() => ({ where: whereFn }));
+      (db.update as jest.Mock).mockReturnValueOnce({ set: setFn });
+
+      await markMessageSynced('msg-1', 'server-1');
+
+      expect(db.update).toHaveBeenCalledTimes(1);
+      const setArg = setFn.mock.calls[0][0];
+      expect(setArg.pending).toBe(false);
+      expect(setArg.server_id).toBe('server-1');
     });
   });
 

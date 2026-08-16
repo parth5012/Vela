@@ -2,6 +2,7 @@ import { db } from '../db/client';
 import { operationLog, threads, messages, OperationLogEntity } from '../db/schema';
 import { eq, inArray } from 'drizzle-orm';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { markMessageSynced } from '../db/chatRepository';
 
 export async function syncDatabase(apiUrl: string, apiKey: string): Promise<void> {
   if (!db) {
@@ -39,6 +40,11 @@ export async function syncDatabase(apiUrl: string, apiKey: string): Promise<void
 
     if (accepted.length > 0) {
       await db.delete(operationLog).where(inArray(operationLog.id, accepted));
+      // Flip the local messages from pending to synced so the next offline
+      // flush does not re-push them, and record the server id.
+      for (const opId of accepted) {
+        await markMessageSynced(opId, opId);
+      }
     }
   }
 
@@ -87,7 +93,9 @@ export async function syncDatabase(apiUrl: string, apiKey: string): Promise<void
           });
         }
 
-        // Insert or update message in local SQLite messages
+        // Insert or update message in local SQLite messages. Messages pulled
+        // from the backend are already acknowledged, so pending=false and
+        // server_id=op.id.
         const existingMessages = await db.select().from(messages).where(eq(messages.id, op.id));
         if (existingMessages.length === 0) {
           await db.insert(messages).values({
@@ -97,6 +105,8 @@ export async function syncDatabase(apiUrl: string, apiKey: string): Promise<void
             content: msgPayload.content,
             provider: msgPayload.provider || 'remote',
             created_at: Number(msgPayload.created_at) || Date.now(),
+            pending: false,
+            server_id: op.id,
           });
         } else {
           await db.update(messages)
@@ -105,6 +115,8 @@ export async function syncDatabase(apiUrl: string, apiKey: string): Promise<void
               role: msgPayload.role,
               provider: msgPayload.provider || 'remote',
               created_at: Number(msgPayload.created_at) || Date.now(),
+              pending: false,
+              server_id: op.id,
             })
             .where(eq(messages.id, op.id));
         }

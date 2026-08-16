@@ -65,6 +65,7 @@ async function registerForPushNotificationsAsync() {
 
 
 import { initializeDatabase } from '../db/client';
+import { wireOfflineSync, flushPendingMessages } from '../utils/offlineSync';
 
 function HeaderRightActions() {
   const router = useRouter();
@@ -127,6 +128,10 @@ export default function RootLayout() {
       if (!useChatStore.getState().activeThreadId) {
         useChatStore.getState().selectThread(null);
       }
+      // Local-first offline sync: flush any pending offline messages once the
+      // store is hydrated, and listen for app foreground to flush again.
+      wireOfflineSync();
+      flushPendingMessages();
     }
   }, [hasHydrated, chatHasHydrated]);
 

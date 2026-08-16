@@ -98,6 +98,50 @@ def test_sync_push_success_and_deduplication(client, headers):
     assert ulid1 in data_dup["accepted"]
     assert ulid2 in data_dup["rejected"]
 
+def test_sync_push_auto_creates_missing_android_conversation(client, headers):
+    """A local-first offline thread (no backend conversation yet) is
+    auto-created as an android_client conversation on first push."""
+    local_thread_id = "11111111-2222-4333-8444-555555555555"
+    ulid1 = generate_ulid()
+
+    payload = {
+        "operations": [
+            {
+                "id": ulid1,
+                "type": "message",
+                "conversation_id": local_thread_id,
+                "payload": {
+                    "role": "user",
+                    "content": "Offline message from device",
+                    "provider": "android_client",
+                    "created_at": int(time.time() * 1000)
+                }
+            }
+        ]
+    }
+
+    resp = client.post("/api/sync/push", json=payload, headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert ulid1 in data["accepted"]
+
+    with get_db_session() as session:
+        conv = session.query(Conversation).filter_by(id=local_thread_id).first()
+        assert conv is not None
+        assert conv.source == "android_client"
+
+        # The pushed message must be stored and not echo back on pull
+        # (provider == android_client is excluded by the pull filter).
+        msg = session.query(SyncMessage).filter_by(id=ulid1).first()
+        assert msg is not None
+        assert msg.role == "user"
+        assert msg.content == "Offline message from device"
+
+    pull_resp = client.get("/api/sync/pull", headers=headers)
+    assert pull_resp.status_code == 200
+    assert pull_resp.json()["operations"] == []
+
+
 def test_sync_pull_scenarios(client, headers):
     with get_db_session() as session:
         db_client = DBClient(session)

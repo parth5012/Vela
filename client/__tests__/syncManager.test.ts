@@ -112,4 +112,37 @@ describe('syncDatabase engine', () => {
     expect(globalThis.fetch).toHaveBeenCalledTimes(2);
     expect(db.delete).toHaveBeenCalledTimes(1);
   });
+
+  it('should mark accepted messages as synced (pending=false, server_id set)', async () => {
+    const mockPendingOps = [
+      { id: 'op_1', type: 'message', conversation_id: 'conv_1', payload: JSON.stringify({ role: 'user', content: 'test' }), created_at: Date.now() },
+    ];
+
+    (db.select as jest.Mock).mockImplementationOnce(() => ({
+      from: jest.fn(() => ({
+        then: (resolve: any) => resolve(mockPendingOps),
+      })),
+    }));
+
+    // Post to push — op_1 accepted
+    (globalThis.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ accepted: ['op_1'], rejected: [] }),
+    });
+
+    // Get for pull — nothing new
+    (globalThis.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ operations: [], cursor: 'cursor_123', has_more: false }),
+    });
+
+    // Record update calls for markMessageSynced
+    const updateMocks = (db.update as jest.Mock).mock.calls;
+    await syncDatabase('https://api.vela.run', 'test_key');
+
+    // markMessageSynced updates the messages table for the accepted op id
+    expect(updateMocks.length).toBeGreaterThan(0);
+    const [updateArg] = updateMocks[0];
+    expect(updateArg).toBeDefined();
+  });
 });

@@ -1,5 +1,5 @@
 import { db } from './client';
-import { threads, messages } from './schema';
+import { threads, messages, operationLog } from './schema';
 import { eq, asc, desc } from 'drizzle-orm';
 import { useChatStore, Thread, Message } from '../store/useChatStore';
 
@@ -115,6 +115,56 @@ export async function saveMessage(conversationId: string, message: Message): Pro
         created_at: row.created_at,
       },
     });
+}
+
+/**
+ * Queues a locally-created message for append-only sync: marks the message
+ * row as pending and records an operation in `operation_log` so the next
+ * flush pushes it to `/api/sync/push`. Idempotent per message id.
+ */
+export async function queueMessageForSync(conversationId: string, message: Message): Promise<void> {
+  if (!db) return;
+  const row = toMessageRow(conversationId, message);
+
+  await db
+    .insert(messages)
+    .values({ ...row, pending: true })
+    .onConflictDoUpdate({
+      target: messages.id,
+      set: {
+        content: row.content,
+        role: row.role,
+        created_at: row.created_at,
+        pending: true,
+      },
+    });
+
+  await db.insert(operationLog).values({
+    id: message.id,
+    type: 'message',
+    conversation_id: conversationId,
+    // Provider must be 'android_client' so the backend's pull filter
+    // (provider != android_client) does not echo the message back.
+    payload: JSON.stringify({
+      role: row.role,
+      content: row.content,
+      provider: 'android_client',
+      created_at: row.created_at,
+    }),
+    created_at: row.created_at,
+  }).onConflictDoNothing();
+}
+
+/**
+ * Marks a queued message as acknowledged by the backend after a successful
+ * push: clears `pending` and records the server-side id.
+ */
+export async function markMessageSynced(messageId: string, serverId: string): Promise<void> {
+  if (!db) return;
+  await db
+    .update(messages)
+    .set({ pending: false, server_id: serverId })
+    .where(eq(messages.id, messageId));
 }
 
 export async function saveMessages(conversationId: string, messageList: Message[]): Promise<void> {

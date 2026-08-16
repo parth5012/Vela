@@ -28,6 +28,7 @@ import { useChatStore, Message, Thread } from '../store/useChatStore';
 import { useAurora } from '../hooks/useAurora';
 import RichText from '../components/chat/RichText';
 import { streamAgentResponse } from '../utils/sse';
+import { queueMessageForSync } from '../db/chatRepository';
 import CollapsibleBlock from '../components/chat/CollapsibleBlock';
 import { parseMessage } from '../utils/messageParser';
 import { parseSearchContent, SearchSource } from '../utils/sourceParser';
@@ -640,6 +641,12 @@ export default function ChatScreen() {
     useChatStore.getState().removeLastEmptyAssistant(activeThreadId);
           const errMsg = error?.message || (typeof error === 'string' ? error : '') || 'Failed to stream response.';
           appendToken(activeThreadId, `\n\n⚠️ **Error:** ${errMsg}`);
+          queueMessageForSync(activeThreadId, {
+            id: userMsgId,
+            role: 'user',
+            content: userText,
+            created_at: nowIso,
+          }).catch(() => {});
         },
         controller.signal,
         selectedAgent,
@@ -654,6 +661,12 @@ export default function ChatScreen() {
       cleanUpThrottleAndHeal(activeThreadId);
     useChatStore.getState().removeLastEmptyAssistant(activeThreadId);
       appendToken(activeThreadId, `\n\n⚠️ **Network Error:** ${err.message || 'Verification aborted.'}`);
+      queueMessageForSync(activeThreadId, {
+        id: userMsgId,
+        role: 'user',
+        content: userText,
+        created_at: nowIso,
+      }).catch(() => {});
     }
   }, [
     input,
@@ -760,6 +773,12 @@ export default function ChatScreen() {
     useChatStore.getState().removeLastEmptyAssistant(activeThreadId);
           const errMsg = error?.message || (typeof error === 'string' ? error : '') || 'Failed to stream response.';
           appendToken(activeThreadId, `\n\n⚠️ **Error:** ${errMsg}`);
+          queueMessageForSync(activeThreadId, {
+            id: threadMsgs[userIndex]?.id || generateId('msg_user'),
+            role: 'user',
+            content: userPrompt,
+            created_at: threadMsgs[userIndex]?.created_at,
+          }).catch(() => {});
         },
         controller.signal,
         regenerateAgent,
@@ -774,6 +793,12 @@ export default function ChatScreen() {
       cleanUpThrottleAndHeal(activeThreadId);
     useChatStore.getState().removeLastEmptyAssistant(activeThreadId);
       appendToken(activeThreadId, `\n\n⚠️ **Network Error:** ${err.message || 'Verification aborted.'}`);
+      queueMessageForSync(activeThreadId, {
+        id: threadMsgs[userIndex]?.id || generateId('msg_user'),
+        role: 'user',
+        content: userPrompt,
+        created_at: threadMsgs[userIndex]?.created_at,
+      }).catch(() => {});
     }
   }, [
     isCurrentThreadStreaming,
@@ -886,6 +911,12 @@ export default function ChatScreen() {
     useChatStore.getState().removeLastEmptyAssistant(newThreadId);
           const errMsg = error?.message || (typeof error === 'string' ? error : '') || 'Failed to stream response.';
           appendToken(newThreadId, `\n\n⚠️ **Error:** ${errMsg}`);
+          queueMessageForSync(newThreadId, {
+            id: userMsgId,
+            role: 'user',
+            content: textToSend.trim(),
+            created_at: nowIso,
+          }).catch(() => {});
         },
         controller.signal,
         agent,
@@ -900,6 +931,12 @@ export default function ChatScreen() {
       cleanUpThrottleAndHeal(newThreadId);
     useChatStore.getState().removeLastEmptyAssistant(newThreadId);
       appendToken(newThreadId, `\n\n⚠️ **Network Error:** ${err.message || 'Verification aborted.'}`);
+      queueMessageForSync(newThreadId, {
+        id: userMsgId,
+        role: 'user',
+        content: textToSend.trim(),
+        created_at: nowIso,
+      }).catch(() => {});
     }
   }, [
     apiUrl,
