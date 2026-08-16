@@ -3,6 +3,42 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { StateStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useConfigStore } from './useConfigStore';
+import { initializeDatabase } from '../db/client';
+import {
+  saveThread,
+  saveThreads,
+  saveMessage,
+  saveMessages,
+  deleteThreadLocal,
+  deleteMessageLocal,
+  replaceThreadMessages,
+  hydrateChatFromLocalDb,
+  clearChatLocal,
+  isLocalDbAvailable,
+} from '../db/chatRepository';
+
+// Trailing debounce (ms) for persisting streaming assistant content: tokens
+// arrive frequently during a stream, so we only write the final content once
+// the stream settles. Timers are only scheduled when SQLite is available,
+// so tests never accumulate dangling timers.
+const PERSIST_DEBOUNCE_MS = 800;
+const persistDebounceTimers: Record<string, ReturnType<typeof setTimeout>> = {};
+
+function scheduleMessagePersist(threadId: string) {
+  if (!isLocalDbAvailable()) return;
+  if (persistDebounceTimers[threadId]) {
+    clearTimeout(persistDebounceTimers[threadId]);
+  }
+  persistDebounceTimers[threadId] = setTimeout(() => {
+    delete persistDebounceTimers[threadId];
+    const state = useChatStore.getState();
+    const list = state.messages[threadId] || [];
+    const last = list[list.length - 1];
+    if (last) {
+      saveMessage(threadId, last).catch(() => {});
+    }
+  }, PERSIST_DEBOUNCE_MS);
+}
 
 // zustand's persist middleware writes the full partialized state to storage on
 // EVERY set(), even before the initial hydration read has completed. On app
@@ -86,11 +122,16 @@ export const useChatStore = create<ChatState>()(
       messages: {},
       streamingThreadIds: new Set(),
       hasHydrated: false,
-      createThread: (title, id, persona = 'personal assistant') => set((state) => ({
-        threads: [{ id, title, persona, updated_at: new Date().toISOString() }, ...state.threads],
-        activeThreadId: id,
-        messages: { ...state.messages, [id]: [] }
-      })),
+      createThread: (title, id, persona = 'personal assistant') => {
+        const now = new Date().toISOString();
+        const newThread: Thread = { id, title, persona, updated_at: now, is_pinned: false };
+        set((state) => ({
+          threads: [newThread, ...state.threads],
+          activeThreadId: id,
+          messages: { ...state.messages, [id]: [] }
+        }));
+        saveThread(newThread).catch(() => {});
+      },
       selectThread: (id) => set({ activeThreadId: id }),
       deleteThread: (id) => {
         const config = useConfigStore.getState();
@@ -117,44 +158,53 @@ export const useChatStore = create<ChatState>()(
           delete nextMessages[id];
           return { threads: nextThreads, activeThreadId: nextActive, messages: nextMessages };
         });
+        deleteThreadLocal(id).catch(() => {});
       },
-  addMessage: (threadId, message) => set((state) => {
-    const current = state.messages[threadId] || [];
-    const threadIndex = state.threads.findIndex(t => t.id === threadId);
-    let updatedThreads = [...state.threads];
-    if (threadIndex !== -1) {
-      const updatedThread = {
-        ...updatedThreads[threadIndex],
-        updated_at: new Date().toISOString()
-      };
-      updatedThreads.splice(threadIndex, 1);
-      updatedThreads = [updatedThread, ...updatedThreads];
-    }
-    return {
-      messages: { ...state.messages, [threadId]: [...current, message] },
-      threads: updatedThreads
-    };
-  }),
-      appendToken: (threadId, token) => set((state) => {
-        const current = state.messages[threadId] || [];
-        if (current.length === 0) return {};
-        const last = current[current.length - 1];
-        if (last.role !== 'assistant') return {};
-        
-        const updatedLast = { ...last, content: last.content + token };
-        return {
-          messages: {
-            ...state.messages,
-            [threadId]: [...current.slice(0, -1), updatedLast]
-          }
+  addMessage: (threadId, message) => {
+    const now = new Date().toISOString();
+    set((state) => {
+      const current = state.messages[threadId] || [];
+      const threadIndex = state.threads.findIndex(t => t.id === threadId);
+      let updatedThreads = [...state.threads];
+      if (threadIndex !== -1) {
+        const updatedThread = {
+          ...updatedThreads[threadIndex],
+          updated_at: now
         };
-      }),
+        updatedThreads.splice(threadIndex, 1);
+        updatedThreads = [updatedThread, ...updatedThreads];
+      }
+      return {
+        messages: { ...state.messages, [threadId]: [...current, message] },
+        threads: updatedThreads
+      };
+    });
+    saveMessage(threadId, message).catch(() => {});
+  },
+      appendToken: (threadId, token) => {
+        set((state) => {
+          const current = state.messages[threadId] || [];
+          if (current.length === 0) return {};
+          const last = current[current.length - 1];
+          if (last.role !== 'assistant') return {};
+          
+          const updatedLast = { ...last, content: last.content + token };
+          return {
+            messages: {
+              ...state.messages,
+              [threadId]: [...current.slice(0, -1), updatedLast]
+            }
+          };
+        });
+        scheduleMessagePersist(threadId);
+      },
   removeLastEmptyAssistant: (threadId) =>
     set((state) => {
       const current = state.messages[threadId] || [];
       if (current.length === 0) return {};
       const last = current[current.length - 1];
       if (last.role !== 'assistant' || (last.content || '').trim() !== '') return {};
+      deleteMessageLocal(last.id).catch(() => {});
       return { messages: { ...state.messages, [threadId]: current.slice(0, -1) } };
     }),
     renameThread: async (id, newTitle) => {
@@ -214,6 +264,8 @@ export const useChatStore = create<ChatState>()(
     set((state) => ({
           threads: state.threads.map((t) => t.id === id ? { ...t, title: newTitle } : t)
         }));
+      const renamed = useChatStore.getState().threads.find((t) => t.id === id);
+      if (renamed) saveThread(renamed).catch(() => {});
       },
       togglePinThread: async (id) => {
         const config = useConfigStore.getState();
@@ -242,14 +294,26 @@ export const useChatStore = create<ChatState>()(
         set((state) => ({
           threads: state.threads.map((t) => t.id === id ? { ...t, is_pinned: !t.is_pinned } : t)
         }));
+        const pinned = useChatStore.getState().threads.find((t) => t.id === id);
+        if (pinned) saveThread(pinned).catch(() => {});
       },
-      setThreadPersona: (threadId, persona) => set((state) => ({
-        threads: state.threads.map((t) => t.id === threadId ? { ...t, persona } : t)
-      })),
-      setThreads: (threads) => set({ threads }),
-      setHistory: (threadId, history) => set((state) => ({
-        messages: { ...state.messages, [threadId]: history }
-      })),
+      setThreadPersona: (threadId, persona) => {
+        set((state) => ({
+          threads: state.threads.map((t) => t.id === threadId ? { ...t, persona } : t)
+        }));
+        const updated = useChatStore.getState().threads.find((t) => t.id === threadId);
+        if (updated) saveThread(updated).catch(() => {});
+      },
+      setThreads: (threads) => {
+        set({ threads });
+        saveThreads(threads).catch(() => {});
+      },
+      setHistory: (threadId, history) => {
+        set((state) => ({
+          messages: { ...state.messages, [threadId]: history }
+        }));
+        saveMessages(threadId, history).catch(() => {});
+      },
       setStreamingThread: (threadId, isStreaming) => set((state) => {
         const next = new Set(state.streamingThreadIds);
         if (isStreaming) {
@@ -260,7 +324,10 @@ export const useChatStore = create<ChatState>()(
         return { streamingThreadIds: next };
       }),
       isThreadStreaming: (threadId) => get().streamingThreadIds.has(threadId),
-      clearStore: () => set({ threads: [], activeThreadId: null, messages: {}, streamingThreadIds: new Set() }),
+      clearStore: () => {
+        set({ threads: [], activeThreadId: null, messages: {}, streamingThreadIds: new Set() });
+        clearChatLocal().catch(() => {});
+      },
       setHasHydrated: (hasHydrated) => set({ hasHydrated }),
       branchThread: async (parentThreadId, uptoMessageId, newThreadId, title) => {
         const config = useConfigStore.getState();
@@ -308,6 +375,10 @@ export const useChatStore = create<ChatState>()(
             },
           };
         });
+
+        const branched = useChatStore.getState().messages[newThreadId] || [];
+        saveThread({ id: newThreadId, title, updated_at: new Date().toISOString(), is_pinned: false }).catch(() => {});
+        saveMessages(newThreadId, branched).catch(() => {});
       },
 
       truncateThreadHistory: async (threadId, uptoMessageId) => {
@@ -345,6 +416,9 @@ export const useChatStore = create<ChatState>()(
             },
           };
         });
+
+        const truncated = useChatStore.getState().messages[threadId] || [];
+        replaceThreadMessages(threadId, truncated).catch(() => {});
       },
     }),
     {
@@ -356,7 +430,20 @@ export const useChatStore = create<ChatState>()(
         messages: state.messages,
       }),
       onRehydrateStorage: (state) => () => {
-        state?.setHasHydrated(true);
+        // Ensure migrations run before reading from SQLite, then hydrate the
+        // store from the local database (source of truth) so the UI can render
+        // history without a backend. If SQLite is unavailable/empty, fall back
+        // to the AsyncStorage cache (already merged by the persist middleware).
+        (async () => {
+          try {
+            await initializeDatabase().catch(() => {});
+            await hydrateChatFromLocalDb();
+          } catch (error) {
+            console.error('[useChatStore] Local hydration failed:', error);
+          } finally {
+            state?.setHasHydrated(true);
+          }
+        })();
       },
     }
   )
