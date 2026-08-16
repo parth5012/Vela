@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, Alert, StyleSheet, TextInput } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as DocumentPicker from 'expo-document-picker';
+import * as Sharing from 'expo-sharing';
 import { useConfigStore } from '../../store/useConfigStore';
 import {
   isLocalLlmDown,
@@ -23,6 +25,7 @@ import {
   Label,
   PillGroup,
   PrimaryButton,
+  DangerButton,
   useAurora,
 } from '../../components/ui/settingsKit';
 
@@ -351,6 +354,139 @@ export default function LocalAiScreen() {
     );
   };
 
+  const handleExportModel = async () => {
+    const selectedModel = LOCAL_MODELS.find((m) => m.name === localModelName);
+    if (!selectedModel) {
+      Alert.alert('Error', 'Selected model not found.');
+      return;
+    }
+
+    const modelDir = `${FileSystem.documentDirectory}models/`;
+    const modelUri = `${modelDir}${selectedModel.filename}`;
+
+    try {
+      const fileInfo = await FileSystem.getInfoAsync(modelUri);
+      if (!fileInfo.exists) {
+        Alert.alert('File Not Found', 'The model file could not be found in internal storage.');
+        return;
+      }
+
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        Alert.alert('Export Not Supported', 'Sharing is not available on this device.');
+        return;
+      }
+
+      await Sharing.shareAsync(modelUri, {
+        dialogTitle: `Export ${selectedModel.name}`,
+        mimeType: 'application/octet-stream',
+      });
+    } catch (err: any) {
+      console.error('Export failed:', err);
+      Alert.alert('Export Failed', err?.message || 'Failed to export model.');
+    }
+  };
+
+  const handleImportModel = async () => {
+    if (isLocalLlmDown) {
+      Alert.alert('Local Model Down', 'The local LLM is currently down/unavailable.');
+      return;
+    }
+
+    const selectedModel = LOCAL_MODELS.find((m) => m.name === localModelName);
+    if (!selectedModel) {
+      Alert.alert('Error', 'Selected model not found.');
+      return;
+    }
+
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets || result.assets.length === 0) {
+        return;
+      }
+
+      const asset = result.assets[0];
+      const pickedUri = asset.uri;
+      const pickedName = asset.name;
+
+      const isTask = selectedModel.format === 'task';
+      const isValidExtension = isTask
+        ? pickedName.toLowerCase().endsWith('.task')
+        : pickedName.toLowerCase().endsWith('.gguf');
+
+      if (!isValidExtension) {
+        Alert.alert(
+          'Invalid File Format',
+          `The selected file "${pickedName}" does not match the expected format for "${selectedModel.name}" (needs to be a .${selectedModel.format} file).`
+        );
+        return;
+      }
+
+      if (pickedName.toLowerCase() !== selectedModel.filename.toLowerCase()) {
+        Alert.alert(
+          'Filename Mismatch',
+          `The file is named "${pickedName}", but the app expects "${selectedModel.filename}". The file will be imported and renamed to match the expected name to prevent configuration errors. Proceed?`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Import',
+              onPress: () => copyAndSaveImport(pickedUri, selectedModel),
+            },
+          ]
+        );
+      } else {
+        await copyAndSaveImport(pickedUri, selectedModel);
+      }
+    } catch (err: any) {
+      console.error('Import failed:', err);
+      Alert.alert('Import Failed', err?.message || 'Failed to import model.');
+    }
+  };
+
+  const copyAndSaveImport = async (pickedUri: string, selectedModel: typeof LOCAL_MODELS[0]) => {
+    const modelDir = `${FileSystem.documentDirectory}models/`;
+    const modelUri = `${modelDir}${selectedModel.filename}`;
+
+    try {
+      setModelBusy(true);
+
+      const dirInfo = await FileSystem.getInfoAsync(modelDir);
+      if (!dirInfo.exists) {
+        await FileSystem.makeDirectoryAsync(modelDir, { intermediates: true });
+      }
+
+      await FileSystem.copyAsync({
+        from: pickedUri,
+        to: modelUri,
+      });
+
+      const fileInfo = await FileSystem.getInfoAsync(modelUri);
+      if (!fileInfo.exists) {
+        throw new Error('Copied file could not be verified on disk.');
+      }
+
+      await AsyncStorage.setItem(localModelStorageKey(selectedModel.name), 'true');
+      await AsyncStorage.setItem(`${localModelStorageKey(selectedModel.name)}_path`, modelUri);
+
+      if (isMounted.current) {
+        setDownloadedModels((prev) => ({ ...prev, [selectedModel.name]: true }));
+      }
+
+      Alert.alert('Import Complete', `"${selectedModel.name}" has been successfully imported and is ready to use!`);
+    } catch (err: any) {
+      console.error('Copy failed:', err);
+      Alert.alert('Import Failed', `Failed to copy model file: ${err.message}`);
+    } finally {
+      if (isMounted.current) {
+        setModelBusy(false);
+      }
+    }
+  };
+
   return (
     <AuroraScreen
       title="Local AI"
@@ -576,11 +712,49 @@ export default function LocalAiScreen() {
         </Card>
       ) : null}
 
-      <PrimaryButton
-        label={isActiveModelDownloaded ? `Delete ${localModelName}` : `Download ${localModelName}`}
-        onPress={isActiveModelDownloaded ? handleDeleteModel : handleDownloadModel}
-        disabled={isDownloading}
-      />
+      <View style={{ gap: 8, marginTop: 12 }}>
+        {isActiveModelDownloaded ? (
+          <>
+            <PrimaryButton
+              label={`Export ${localModelName}`}
+              onPress={handleExportModel}
+              disabled={isDownloading}
+            />
+            <DangerButton
+              label={`Delete ${localModelName}`}
+              onPress={handleDeleteModel}
+            />
+          </>
+        ) : (
+          <>
+            <PrimaryButton
+              label={`Download ${localModelName}`}
+              onPress={handleDownloadModel}
+              disabled={isDownloading}
+            />
+            <Pressable
+              onPress={handleImportModel}
+              disabled={isDownloading}
+              style={({ pressed }) => [
+                {
+                  backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                  borderColor: colors.glassBorder,
+                  borderWidth: 1,
+                  borderRadius: 12,
+                  paddingVertical: 13,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                },
+                (pressed || isDownloading) && { opacity: 0.6 }
+              ]}
+            >
+              <Text style={{ color: colors.text, fontSize: sizes.text, fontWeight: '600' }}>
+                Import {localModelName} File
+              </Text>
+            </Pressable>
+          </>
+        )}
+      </View>
     </AuroraScreen>
   );
 }
