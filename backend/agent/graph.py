@@ -152,6 +152,30 @@ async def chatbot_node(state: AgentState) -> dict:
             agent_id = state.get("agent") or "personal assistant"
             agent_config = AGENT_REGISTRY.get(agent_id)
             allowed_tool_names = agent_config.tool_names if agent_config else []
+            
+            # If agent_id is device_agent, check if get_llm() is vision capable
+            # If so, append device_screenshot to allowed_tool_names
+            if agent_id == "device_agent":
+                try:
+                    llm_obj = get_llm()
+                    # Resolve to primary model if it's a RunnableWithFallbacks
+                    primary_model = llm_obj
+                    if hasattr(llm_obj, "first"):
+                        primary_model = llm_obj.first
+                    
+                    # Extract model name and check vision capability
+                    model_name = getattr(primary_model, "model", getattr(primary_model, "model_name", ""))
+                    if not model_name:
+                        model_name = str(primary_model)
+                    
+                    mn = model_name.lower()
+                    # If it's a known vision-capable model (like gemini, claude, gpt) or by default
+                    if not ("nemotron" in mn or "mixtral" in mn or "llama" in mn):
+                        allowed_tool_names = list(allowed_tool_names) + ["device_screenshot"]
+                except Exception:
+                    # In case of any introspection issues, default to binding it just in case
+                    allowed_tool_names = list(allowed_tool_names) + ["device_screenshot"]
+
             allowed_tools = [t for t in tools_list if t.name in allowed_tool_names]
 
             llm = get_llm().bind_tools(allowed_tools or tools_list)

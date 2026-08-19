@@ -37,11 +37,9 @@ from utils.ulid import generate_ulid
 # rather than a captured reference from import time
 
 def get_pending_tasks():
-    """Get the current PENDING_TASKS dict from the webview_browser module."""
-    module = sys.modules.get("tools.webview_browser")
-    if module is None:
-        raise RuntimeError("tools.webview_browser module not found")
-    return module.PENDING_TASKS
+    """Get the current PENDING_TASKS dict from the pending_tasks module."""
+    import tools.pending_tasks
+    return tools.pending_tasks.PENDING_TASKS
 
 
 
@@ -465,12 +463,12 @@ async def chat_message(payload: MessagePayload):
                     elif kind == "on_tool_start":
                         tool_name = event.get("name")
                         tool_input = event.get("data", {}).get("input", {})
-                        if tool_name == "webview_browser":
-                            import tools.webview_browser
+                        if tool_name == "webview_browser" or tool_name.startswith("device_"):
+                            import tools.pending_tasks
                             conv_id = tool_input.get("conversation_id")
                             if conv_id:
                                 task_token = str(uuid.uuid4())
-                                tools.webview_browser.LAST_TOOL_START_TOKENS[conv_id] = task_token
+                                tools.pending_tasks.LAST_TOOL_START_TOKENS[conv_id] = task_token
                                 tool_input["conversation_id"] = f"{conv_id}_{task_token}"
                         try:
                             input_str = json.dumps(tool_input)
@@ -1096,6 +1094,41 @@ def submit_webview_response(payload: WebViewResponsePayload):
         return {"status": "accepted"}
     else:
         logger.warning("Received WebView response but no pending task found", conversation_id=conversation_id)
+        raise HTTPException(status_code=404, detail="No pending task found for this conversation ID")
+
+class DeviceResponsePayload(BaseModel):
+    conversation_id: str
+    status: str
+    result: str
+    task_token: Optional[str] = None
+
+@app.post("/chat/device/response", dependencies=[Depends(verify_api_key)])
+def submit_device_response(payload: DeviceResponsePayload):
+    conversation_id = payload.conversation_id
+    task_token = payload.task_token
+    pending_tasks = get_pending_tasks()
+    key = None
+    if task_token:
+        possible_key = f"{conversation_id}_{task_token}"
+        if possible_key in pending_tasks:
+            key = possible_key
+    if not key and conversation_id in pending_tasks:
+        key = conversation_id
+    if not key:
+        for k in pending_tasks.keys():
+            if k.startswith(f"{conversation_id}_"):
+                key = k
+                break
+    if key:
+        pending_tasks[key]["response"] = {
+            "status": payload.status,
+            "result": payload.result
+        }
+        pending_tasks[key]["event"].set()
+        logger.info("Received Device response for task", conversation_id=conversation_id, status=payload.status)
+        return {"status": "accepted"}
+    else:
+        logger.warning("Received Device response but no pending task found", conversation_id=conversation_id)
         raise HTTPException(status_code=404, detail="No pending task found for this conversation ID")
 
 @app.post("/consolidate", dependencies=[Depends(verify_api_key)])

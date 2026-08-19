@@ -282,6 +282,105 @@ class TestSubmitWebviewResponseRouting:
         assert resp.status_code == 403
 
 
+class TestSubmitDeviceResponseRouting:
+    """Test /chat/device/response routes correct pending task."""
+
+    def test_exact_match_still_works(self):
+        """When conversation_id matches exactly, response routed directly."""
+        conv_id = str(uuid.uuid4())
+        wb.PENDING_TASKS[conv_id] = {
+            "event": MagicMock(),
+            "response": None,
+        }
+
+        resp = client.post(
+            "/chat/device/response",
+            json={
+                "conversation_id": conv_id,
+                "status": "success",
+                "result": "exact match result",
+            },
+            headers={"Authorization": f"Bearer {VELA_API_KEY}"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "accepted"
+        assert wb.PENDING_TASKS[conv_id]["response"]["result"] == "exact match result"
+
+    def test_exact_match_with_task_token(self):
+        """When task_token is provided, exact match routes to task."""
+        conv_id = str(uuid.uuid4())
+        token = str(uuid.uuid4())
+        key = f"{conv_id}_{token}"
+        wb.PENDING_TASKS[key] = {
+            "event": MagicMock(),
+            "response": None,
+        }
+
+        resp = client.post(
+            "/chat/device/response",
+            json={
+                "conversation_id": conv_id,
+                "status": "success",
+                "result": "token matched result",
+                "task_token": token,
+            },
+            headers={"Authorization": f"Bearer {VELA_API_KEY}"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "accepted"
+        assert wb.PENDING_TASKS[key]["response"]["result"] == "token matched result"
+
+    def test_prefix_match_routes_to_correct_task(self):
+        """When exact match fails, prefix-match '{conversation_id}_' finds right task."""
+        conv_id = str(uuid.uuid4())
+        token = str(uuid.uuid4())
+        key = f"{conv_id}_{token}"
+
+        wb.PENDING_TASKS[key] = {
+            "event": MagicMock(),
+            "response": None,
+        }
+
+        # Send response containing base conversation_id (without token suffix)
+        resp = client.post(
+            "/chat/device/response",
+            json={
+                "conversation_id": conv_id,
+                "status": "success",
+                "result": "prefix matched result",
+            },
+            headers={"Authorization": f"Bearer {VELA_API_KEY}"},
+        )
+        assert resp.status_code == 200
+        assert wb.PENDING_TASKS[key]["response"]["result"] == "prefix matched result"
+
+    def test_no_match_returns_404(self):
+        """When no pending task matches, return 404."""
+        resp = client.post(
+            "/chat/device/response",
+            json={
+                "conversation_id": "nonexistent-id",
+                "status": "success",
+                "result": "orphan response",
+            },
+            headers={"Authorization": f"Bearer {VELA_API_KEY}"},
+        )
+        assert resp.status_code == 404
+        assert "No pending task found" in resp.json()["detail"]
+
+    def test_response_requires_auth(self):
+        """The /chat/device/response endpoint requires API key auth."""
+        resp = client.post(
+            "/chat/device/response",
+            json={
+                "conversation_id": "test-id",
+                "status": "success",
+                "result": "test",
+            },
+        )
+        assert resp.status_code == 403
+
+
 class TestLastToolStartTokens:
     """Test the LAST_TOOL_START_TOKENS registry behavior."""
 

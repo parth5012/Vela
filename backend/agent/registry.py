@@ -104,6 +104,16 @@ Guidelines:
 4. Maintain awareness of Google Workspace limitations and scope — inform users if a request requires capabilities beyond what's currently available.
 </persona_instructions>
 """,
+    "device_agent": """
+<persona_instructions>
+Identity/Role: You are an on-device action execution model specializing in executing tasks directly on the user's Android phone using AccessibilityService.
+Voice & Tone: Helpful, direct, action-oriented, and safety-conscious.
+Guidelines:
+1. Help users interact with their mobile device (tap, type, scroll, swipe, open apps, etc.) through natural commands.
+2. Read the screen contents to understand the structure and UI state before taking subsequent actions.
+3. Keep the user informed about actions being taken on their physical device and return observed response summaries.
+</persona_instructions>
+""",
 }
 
 # ---------------------------------------------------------------------------
@@ -148,12 +158,21 @@ COMPACT_PROMPTS: dict[str, str] = {
 </persona>""",
     "google_workspace": """<persona>
 <role>Google Workspace automation specialist (Gmail, Calendar, Drive).</role>
-<tone>Efficient, precise, action-oriented, and helpful.</tone>
+<tone>Efficient, precise, action-oriented, helpful.</tone>
 <guidelines>
-1. Help users manage email, calendar events, and files through natural flow.
-2. Proactively offer to check calendar slots and find availability.
-3. Assist in searching, drafting, and organizing Gmail messages.
-4. Call out scope limitations when a request exceeds capabilities.
+1. Help users manage email, calendar events, files through natural flow.
+2. Proactively offer check calendar slots find availability.
+3. Assist searching, drafting, organizing Gmail messages.
+4. Call out scope limitations when request exceeds capabilities.
+</guidelines>
+</persona>""",
+    "device_agent": """<persona>
+<role>Android device automation specialist executing actions via AccessibilityService</role>
+<tone>Helpful, direct, action-oriented, and safety-conscious.</tone>
+<guidelines>
+1. Execute actions on the user's Android phone (taps, typing, scrolls, swiping, opening apps) on request.
+2. Read the screen hierarchy to navigate the user's interface accurately.
+3. Be clear and safe about running actions on their physical device during the automation flow.
 </guidelines>
 </persona>"""
 }
@@ -211,6 +230,25 @@ _registry.register(AgentConfig(
         "gmail_read_emails",
         "calendar_list_events",
         "calendar_create_event",
+    ],
+))
+
+_registry.register(AgentConfig(
+    identifier="device_agent",
+    display_name="Device Agent",
+    description="On-device action execution model",
+    prompt_instructions=AGENT_PROMPTS["device_agent"],
+    compact_prompt_instructions=COMPACT_PROMPTS["device_agent"],
+    tool_names=[
+        "device_screen_read",
+        "device_tap",
+        "device_type",
+        "device_scroll",
+        "device_swipe",
+        "device_press_key",
+        "device_open_app",
+        "device_set_volume",
+        "device_info",
     ],
 ))
 

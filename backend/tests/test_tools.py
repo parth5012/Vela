@@ -99,4 +99,75 @@ def test_send_status_message_tool(mock_post):
         mock_post.assert_called_once()
 
 
+from unittest.mock import AsyncMock
+import pytest
+from tools.device_agent import (
+    device_screen_read,
+    device_tap,
+    device_type,
+    device_scroll,
+    device_swipe,
+    device_press_key,
+    device_open_app,
+    device_set_volume,
+    device_screenshot,
+    device_info
+)
+
+@pytest.mark.asyncio
+@patch("tools.device_agent.wait_for_client_event", new_callable=AsyncMock)
+async def test_device_agent_tools_success(mock_wait):
+    mock_wait.return_value = ("success", "Operation completed successfully")
+    conv_id = "test-conv-123"
+    
+    res = await device_screen_read.coroutine(conv_id)
+    assert res == "Operation completed successfully"
+    mock_wait.assert_called_with(conversation_id=conv_id, action="screen_read", target=None, value=None)
+    
+    res = await device_tap.coroutine(conv_id, "button1")
+    assert res == "Operation completed successfully"
+    mock_wait.assert_called_with(conversation_id=conv_id, action="tap", target="button1", value=None)
+    
+    res = await device_type.coroutine(conv_id, "input1", "hello")
+    assert res == "Operation completed successfully"
+    mock_wait.assert_called_with(conversation_id=conv_id, action="type", target="input1", value="hello")
+    
+    res = await device_scroll.coroutine(conv_id, "down")
+    assert res == "Operation completed successfully"
+    mock_wait.assert_called_with(conversation_id=conv_id, action="scroll", target="down", value=None)
+    
+    res = await device_swipe.coroutine(conv_id, "left")
+    assert res == "Operation completed successfully"
+    mock_wait.assert_called_with(conversation_id=conv_id, action="swipe", target="left", value=None)
+    
+    res = await device_press_key.coroutine(conv_id, "BACK")
+    assert res == "Operation completed successfully"
+    mock_wait.assert_called_with(conversation_id=conv_id, action="press_key", target="BACK", value=None)
+    
+    res = await device_open_app.coroutine(conv_id, "com.android.settings")
+    assert res == "Operation completed successfully"
+    mock_wait.assert_called_with(conversation_id=conv_id, action="open_app", target="com.android.settings", value=None)
+    
+    res = await device_set_volume.coroutine(conv_id, 80)
+    assert res == "Operation completed successfully"
+    mock_wait.assert_called_with(conversation_id=conv_id, action="set_volume", target="80", value=None)
+    
+    res = await device_screenshot.coroutine(conv_id)
+    assert res == "Operation completed successfully"
+    mock_wait.assert_called_with(conversation_id=conv_id, action="screenshot", target=None, value=None)
+    
+    res = await device_info.coroutine(conv_id)
+    assert res == "Operation completed successfully"
+    mock_wait.assert_called_with(conversation_id=conv_id, action="info", target=None, value=None)
+
+@pytest.mark.asyncio
+@patch("tools.device_agent.wait_for_client_event", new_callable=AsyncMock)
+async def test_device_agent_tools_failure(mock_wait):
+    mock_wait.return_value = ("error", "Device not responsive")
+    conv_id = "test-conv-123"
+    
+    res = await device_tap.coroutine(conv_id, "button1")
+    assert res == "Error executing device action: Device not responsive"
+
+
 

@@ -13,8 +13,7 @@ logger = StructuredLogger("WebViewBrowserTool")
 # Registry to hold event and response for active webview automation calls
 # Key: conversation_id (string)
 # Value: dict with "event": asyncio.Event, "response": dict
-PENDING_TASKS = {}
-LAST_TOOL_START_TOKENS = {}
+from tools.pending_tasks import PENDING_TASKS, LAST_TOOL_START_TOKENS, wait_for_client_event
 
 @traceable(name="DB: Initialize Automation Step", tags=["webview", "database"])
 def db_log_step_start(conversation_id: str, action: str, target: str, value: str, thoughts: str, current_url: str, minified_dom: str):
@@ -85,35 +84,6 @@ def db_log_step_start(conversation_id: str, action: str, target: str, value: str
         db_session.commit()
         
     return session_id, step_number
-
-async def wait_for_client_event(conversation_id: str, action: str, target: str, value: str, task_token: str = None):
-    """Blocks execution and awaits the HTTP response from the mobile client WebView."""
-    event = asyncio.Event()
-    key = f"{conversation_id}_{task_token}" if task_token else conversation_id
-    PENDING_TASKS[key] = {
-        "event": event,
-        "response": None
-    }
-    
-    status = "error"
-    result = ""
-    try:
-        # Wait up to 60 seconds for the mobile client to process and post the response
-        await asyncio.wait_for(event.wait(), timeout=60.0)
-        task_data = PENDING_TASKS.get(key)
-        if task_data and task_data["response"]:
-            resp = task_data["response"]
-            status = resp.get("status", "error")
-            result = resp.get("result", "")
-        else:
-            result = "No response received from the client WebView."
-    except asyncio.TimeoutError:
-        status = "timeout"
-        result = "Timeout waiting for client WebView response. Make sure the Vela app has the browser tab open."
-    finally:
-        PENDING_TASKS.pop(key, None)
-        
-    return status, result
 
 @traceable(name="DB: Save Step Results", tags=["webview", "database"])
 def db_log_step_end(session_id: str, step_number: int, action: str, value: str, status: str, result: str):
