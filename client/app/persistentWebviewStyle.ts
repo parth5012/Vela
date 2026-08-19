@@ -6,13 +6,16 @@
 // reliably (see ticket #145 test notes). This module is the dependency-free
 // boundary that BOTH drives the real layout AND carries the regression test.
 
-import { ViewStyle } from 'react-native';
+import { Platform, ViewStyle } from 'react-native';
 
 export const PERSISTENT_WEBVIEW_BASE: ViewStyle = {
   position: 'absolute',
   left: 0,
   right: 0,
   bottom: 0,
+  // Keep the WebView below the app header + browser URL bar + toolbar
+  // when visible (~148px Android / ~190px iOS) - same as the original layout.
+  top: Platform.OS === 'ios' ? 190 : 148,
 };
 
 export const PERSISTENT_WEBVIEW_HIDDEN: ViewStyle = {
@@ -25,7 +28,6 @@ export const PERSISTENT_WEBVIEW_HIDDEN: ViewStyle = {
 };
 
 export const PERSISTENT_WEBVIEW_VISIBLE: ViewStyle = {
-  top: 0,
   left: 0,
   opacity: 1,
   width: '100%',

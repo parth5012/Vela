@@ -1,12 +1,11 @@
-// Test: persistent WebView container is pushed offscreen when hidden instead
-// of display:'none', because Android does not release the WebView's
+// Wayfinder #145: the persistent WebView container is pushed offscreen when hidden
+// instead of display: 'none', because Android does not release the WebView's
 // hardware-accelerated surface while it is mounted but display:none.
 //
-// Constraint (documented): the full Expo Router Drawer layout is impractical
-// to mount in jest (see persistentWebviewStyle.ts header). This test drives
-// the same dependency-free module that _layout.tsx uses, so the assertion
-// covers the exact style boundary the ticket changes.
-
+// Constraint (documented): mounting the full Expo Router Drawer layout in jest is
+// impractical (see persistentWebviewStyle.ts header). This test drives the same
+// dependency-free style module that _layout.tsx uses, so it covers the exact style
+// boundary this ticket changes.
 import {
   PERSISTENT_WEBVIEW_BASE,
   PERSISTENT_WEBVIEW_HIDDEN,
@@ -16,13 +15,13 @@ import {
 } from '../app/persistentWebviewStyle';
 
 describe('persistentWebview positioning', () => {
-  it('keeps WebView mounted and positions it offscreen when hidden', () => {
+  it('keeps WebView mounted but positions it offscreen when hidden', () => {
     const style = persistentWebviewContainerStyle(false);
 
-    // Base anchor is always applied (WebView stays mounted in the tree).
+    // Base anchor is applied (WebView stays mounted in the tree).
     expect(style).toContainEqual(PERSISTENT_WEBVIEW_BASE);
 
-    // Hidden state: pushed offscreen, transparent, 1x1 — NOT display:none.
+    // Hidden state: pushed offscreen, transparent, 1x1 - not display:none.
     const hidden = style[1];
     expect(hidden.display).toBeUndefined();
     expect(hidden.position).toBe('absolute');
@@ -40,10 +39,14 @@ describe('persistentWebview positioning', () => {
 
     expect(style).toContainEqual(PERSISTENT_WEBVIEW_BASE);
 
+    // Chrome offset (below header + URL bar + toolbar) is carried by the base
+    // style so the visible WebView keeps its original position.
+    expect(PERSISTENT_WEBVIEW_BASE.top).toBeGreaterThan(0);
+
     const visible = style[1];
     expect(visible.display).toBeUndefined();
     expect(visible.opacity).toBe(1);
-    expect(visible.top).toBe(0);
+    expect(visible.top).toBeUndefined();
     expect(visible.left).toBe(0);
     expect(visible.width).toBe('100%');
     expect(visible.height).toBe('100%');
@@ -51,7 +54,7 @@ describe('persistentWebview positioning', () => {
     expect(persistentWebviewPointerEvents(true)).toBe('auto');
   });
 
-  it('container carries no display toggle in either state', () => {
+  it('never applies display:none in either state', () => {
     for (const visible of [false, true]) {
       const style = persistentWebviewContainerStyle(visible);
       for (const entry of style) {
