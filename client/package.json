@@ -39,6 +39,7 @@
     "react-native-webview": "13.16.1",
     "react-native-worklets": "^0.10.3",
     "stable-diffusion": "./modules/stable-diffusion",
+    "device-agent": "file:./modules/device-agent",
     "zustand": "^5.0.1"
   },
   "devDependencies": {

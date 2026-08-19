@@ -1,0 +1,22 @@
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+
+android {
+    namespace "com.vela.client.deviceagent"
+    compileSdkVersion 34
+
+    defaultConfig {
+        minSdkVersion 24
+        targetSdkVersion 34
+    }
+
+    lintOptions {
+        abortOnError false
+    }
+}
+
+dependencies {
+    implementation "com.facebook.react:react-android:+"
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:2.1.0"
+    implementation project(':expo-modules-core')
+}

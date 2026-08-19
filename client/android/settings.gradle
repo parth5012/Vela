@@ -36,6 +36,8 @@ rootProject.name = 'Vela (Dev)'
 expoAutolinking.useExpoVersionCatalog()
 
 include ':app'
+include ':device-agent'
+project(':device-agent').projectDir = new File(settingsDir, '../modules/device-agent/android')
 include ':stable-diffusion'
 project(':stable-diffusion').projectDir = new File(rootProject.projectDir, '../modules/stable-diffusion/android')
 includeBuild(expoAutolinking.reactNativeGradlePlugin)
