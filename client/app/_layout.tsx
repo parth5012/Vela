@@ -17,6 +17,7 @@ import { hydrateGoogleTokens } from '../store/useGoogleAuthStore';
 import { registerVelaBackgroundTask } from '../utils/backgroundTasks';
 import * as Notifications from 'expo-notifications';
 import { SafetyDialog } from '../components/ui/SafetyDialog';
+import { persistentWebviewContainerStyle, persistentWebviewPointerEvents } from './persistentWebviewStyle';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -249,13 +250,10 @@ fontSize: 16,
 />
       </Drawer>
 
-      {/* Persistent WebView — always mounted, visibility toggled */}
+      {/* Persistent WebView — always mounted, visibility toggled by offscreen positioning */}
       <View
-        style={[
-          styles.persistentWebview,
-          { display: shouldShowWebview ? 'flex' : 'none' },
-        ]}
-        pointerEvents={shouldShowWebview ? 'auto' : 'none'}
+        style={persistentWebviewContainerStyle(shouldShowWebview)}
+        pointerEvents={persistentWebviewPointerEvents(shouldShowWebview)}
       >
         <WebView
           ref={webViewRef}
@@ -293,8 +291,5 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    // Leave space for header (~56px on Android, ~96px on iOS)
-    // plus URL bar (~54px) and toolbar (~38px)
-    top: Platform.OS === 'ios' ? 190 : 148,
   },
 });
