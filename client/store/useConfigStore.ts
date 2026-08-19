@@ -10,6 +10,31 @@ export interface SuggestionStarter {
   persona: string;
 }
 
+export type PermissionTier = 'auto' | 'confirm' | 'deny';
+
+export interface DeviceAgentPermissions {
+  screen_read: PermissionTier;
+  info: PermissionTier;
+  screenshot: PermissionTier;
+  open_app: PermissionTier;
+  scroll: PermissionTier;
+  swipe: PermissionTier;
+  press_key: PermissionTier;
+  set_volume: PermissionTier;
+  type: PermissionTier;
+  tap: PermissionTier;
+  send_communication: PermissionTier;
+  calls: PermissionTier;
+  purchases: PermissionTier;
+  deletions: PermissionTier;
+  settings_changes: PermissionTier;
+  play_installs: PermissionTier;
+  passwords_otps: PermissionTier;
+  sideloads: PermissionTier;
+  permission_toggles: PermissionTier;
+  root_shizuku: PermissionTier;
+}
+
 interface ConfigState {
   apiUrl: string;
   apiKey: string;
@@ -36,6 +61,8 @@ interface ConfigState {
   setDefaultPersona: (persona: string) => void;
   setUserName: (name: string) => void;
   setSuggestionStarters: (starters: SuggestionStarter[]) => void;
+  deviceAgentPermissions: DeviceAgentPermissions;
+  setDeviceAgentPermission: (action: keyof DeviceAgentPermissions, tier: PermissionTier) => void;
   
   // Local mode configuration settings
   isLocalMode: boolean;
@@ -73,11 +100,33 @@ export const useConfigStore = create<ConfigState>()(
       modelName: 'gemini-1.5-pro',
       defaultPersona: 'personal assistant',
       userName: 'Parth',
-      suggestionStarters: [
-        { label: '👩🏫 Teach Concept', text: 'Teach intuition behind binary search trace example', persona: 'teacher' },
-        { label: '📊 Data Analyst', text: 'Analyze key features 2026 FIFA World Cup matches', persona: 'analyst' },
-        { label: '✍️ Prompt Architect', text: 'Help draft detailed system prompt weather assistant bot', persona: 'prompt builder' }
-      ],
+    suggestionStarters: [
+      { label: '👩🏫 Teach Concept', text: 'Teach intuition behind binary search with trace example', persona: 'teacher' },
+      { label: '📊 Data Analyst', text: 'Analyze key features of 2026 FIFA World Cup matches', persona: 'analyst' },
+      { label: '✍️ Prompt Architect', text: 'Help draft detailed system prompt for weather assistant bot', persona: 'prompt builder' }
+    ],
+    deviceAgentPermissions: {
+      screen_read: 'auto',
+      info: 'auto',
+      screenshot: 'auto',
+      open_app: 'auto',
+      scroll: 'auto',
+      swipe: 'auto',
+      press_key: 'auto',
+      set_volume: 'auto',
+      type: 'auto',
+      tap: 'auto',
+      send_communication: 'confirm',
+      calls: 'confirm',
+      purchases: 'confirm',
+      deletions: 'confirm',
+      settings_changes: 'confirm',
+      play_installs: 'confirm',
+      passwords_otps: 'deny',
+      sideloads: 'deny',
+      permission_toggles: 'deny',
+      root_shizuku: 'deny',
+    },
       
       // Defaults for local mode
       isLocalMode: false,
@@ -136,6 +185,13 @@ export const useConfigStore = create<ConfigState>()(
       setDefaultPersona: (defaultPersona) => set({ defaultPersona }),
       setUserName: (userName) => set({ userName }),
       setSuggestionStarters: (suggestionStarters) => set({ suggestionStarters }),
+  setDeviceAgentPermission: (action, tier) =>
+    set((state) => ({
+      deviceAgentPermissions: {
+        ...state.deviceAgentPermissions,
+        [action]: tier,
+      },
+    })),
       
       // Settors for local mode
       setIsLocalMode: (isLocalMode) => set({ isLocalMode }),

@@ -16,6 +16,7 @@ import {
 import { hydrateGoogleTokens } from '../store/useGoogleAuthStore';
 import { registerVelaBackgroundTask } from '../utils/backgroundTasks';
 import * as Notifications from 'expo-notifications';
+import { SafetyDialog } from '../components/ui/SafetyDialog';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -275,6 +276,7 @@ fontSize: 16,
           startInLoadingState
         />
       </View>
+      <SafetyDialog />
     </View>
   );
 }
