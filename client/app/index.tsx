@@ -42,6 +42,8 @@ import { initializeLocalModel, isLocalModelLoaded, streamLocalLlmResponse, isLoc
 import { compileLocalPrompt } from '../utils/promptCompiler';
 import { parseAndExecuteTools } from '../utils/toolProxy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { evaluateSafety } from '../utils/safetyManager';
+import { executeDeviceAction, sendDeviceResponse } from '../utils/deviceActionExecutor';
 
 const generateUUID = () => {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -143,6 +145,7 @@ function SourceCard({ src, colors, sizes, accentHex }: { src: SearchSource; colo
 
 export default function ChatScreen() {
   const router = useRouter();
+  const executedDeviceToolsRef = React.useRef(new Set());
   const insets = useSafeAreaInsets();
 
   // Config State
@@ -348,6 +351,68 @@ export default function ChatScreen() {
       }
     }
   }, [lastMsg?.content, activeThreadId, router]);
+
+  React.useEffect(() => {
+    if (!lastMsg || lastMsg.role !== 'assistant' || !activeThreadId) return;
+
+    const deviceRegex = /<call:(device_[a-z_]+)\s+input="((?:[^"\\\\]|\\\\.)*)"\s*>/g;
+    let match;
+    const matches: { toolName: string; rawInput: string; index: number }[] = [];
+
+    while ((match = deviceRegex.exec(lastMsg.content)) !== null) {
+      matches.push({
+        toolName: match[1],
+        rawInput: match[2],
+        index: match.index,
+      });
+    }
+
+    for (const item of matches) {
+      const executionId = `${lastMsg.id}_${item.index}`;
+      if (!executedDeviceToolsRef.current.has(executionId)) {
+        executedDeviceToolsRef.current.add(executionId);
+
+        (async () => {
+          try {
+            const unescapedVal = item.rawInput.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+            const parsedInput = JSON.parse(unescapedVal);
+
+            // Extract conversation ID and task token
+            const fullConvId = parsedInput.conversation_id || '';
+            const lastUnderscore = fullConvId.lastIndexOf('_');
+            const conversationId = lastUnderscore !== -1 ? fullConvId.slice(0, lastUnderscore) : fullConvId;
+            const taskToken = lastUnderscore !== -1 ? fullConvId.slice(lastUnderscore + 1) : undefined;
+
+            // Run safety check
+            const safetyResult = await evaluateSafety(
+              item.toolName,
+              parsedInput.target,
+              parsedInput.value,
+              parsedInput.thoughts,
+              conversationId,
+              taskToken
+            );
+
+            let status = safetyResult.status;
+            let result = safetyResult.result;
+
+            if (status === 'success') {
+              try {
+                result = await executeDeviceAction(item.toolName, parsedInput.target, parsedInput.value);
+              } catch (e: any) {
+                status = 'error';
+                result = `Execution exception: ${e?.message || e}`;
+              }
+            }
+
+            await sendDeviceResponse(conversationId, taskToken, status, result);
+          } catch (err) {
+            console.error('Failed to execute safety or device action:', err);
+          }
+        })();
+      }
+    }
+  }, [lastMsg?.content, activeThreadId]);
 
   const reversedMessages = useMemo(() => {
     return [...activeMessages].reverse();
