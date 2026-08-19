@@ -1227,6 +1227,11 @@ export default function ChatScreen() {
               scrollEventThrottle={16}
               contentContainerStyle={styles.messagesList}
               keyExtractor={(item) => item.id}
+              removeClippedSubviews={true}
+              windowSize={11}
+              maxToRenderPerBatch={10}
+              updateCellsBatchingPeriod={50}
+              initialNumToRender={15}
               renderItem={({ item }) => {
                 const isUser = item.role === 'user';
                 const showActionBar = activeMenuMessage?.id === item.id;
