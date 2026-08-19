@@ -35,6 +35,7 @@ export default {
       "expo-router",
       "expo-sharing",
       "./plugins/withAbiSplits",
+      "./plugins/withVelaAccessibilityService",
       [
         "expo-notifications",
         {
