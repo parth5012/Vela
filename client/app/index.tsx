@@ -1231,9 +1231,10 @@ export default function ChatScreen() {
                 const isUser = item.role === 'user';
                 const showActionBar = activeMenuMessage?.id === item.id;
 
-                const segments = isUser ? [] : parseMessage(item.content);
-                const headerSegments = segments.filter(s => s.type === 'thought' || s.type === 'intent');
-                const bubbleContent = segments.filter(s => s.type !== 'thought' && s.type !== 'intent');
+                const segments = useMemo(() => (isUser ? [] : parseMessage(item.content)), [item.content, isUser]);
+                const headerSegments = useMemo(() => segments.filter(s => s.type === 'thought' || s.type === 'intent'), [segments]);
+                const bubbleContent = useMemo(() => segments.filter(s => s.type !== 'thought' && s.type !== 'intent'), [segments]);
+                const sources = useMemo(() => (!isUser ? parseSearchContent(item.content) : []), [item.content, isUser]);
 
                 return (
                   <View style={[styles.messageRow, isUser ? styles.userRow : styles.assistantRow]}>
@@ -1291,7 +1292,7 @@ export default function ChatScreen() {
 
                       {!isUser && (
                         (() => {
-                          const sources = parseSearchContent(item.content);
+                          
                           if (sources.length === 0) return null;
                           return (
                             <View style={{ marginTop: 8, width: '100%' }}>
