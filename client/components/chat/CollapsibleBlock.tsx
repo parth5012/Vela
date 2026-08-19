@@ -28,24 +28,39 @@ export default function CollapsibleBlock({
   const [collapsed, setCollapsed] = useState(isClosed);
   const [measuredHeight, setMeasuredHeight] = useState(0);
   const animatedValue = useRef(new Animated.Value(isClosed ? 0 : 1)).current;
+  const contentOpacity = useRef(new Animated.Value(isClosed ? 0 : 1)).current;
 
   useEffect(() => {
     // transitions when streaming closed, collapse automatically
     if (isClosed) {
-      Animated.timing(animatedValue, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: false,
-      }).start(() => {
+      Animated.parallel([
+        Animated.timing(animatedValue, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: false, // height is a layout prop; keep on JS driver
+        }),
+        Animated.timing(contentOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true, // opacity can run on the native driver
+        }),
+      ]).start(() => {
         setCollapsed(true);
       });
     } else {
       setCollapsed(false);
-      Animated.timing(animatedValue, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: false,
-      }).start();
+      Animated.parallel([
+        Animated.timing(animatedValue, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: false, // height is a layout prop; keep on JS driver
+        }),
+        Animated.timing(contentOpacity, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true, // opacity can run on the native driver
+        }),
+      ]).start();
     }
   }, [isClosed]);
 
@@ -55,20 +70,34 @@ export default function CollapsibleBlock({
       onToggle(nextCollapsed);
     }
     if (nextCollapsed) {
-      Animated.timing(animatedValue, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: false,
-      }).start(() => {
+      Animated.parallel([
+        Animated.timing(animatedValue, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: false, // height is a layout prop; keep on JS driver
+        }),
+        Animated.timing(contentOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true, // opacity can run on the native driver
+        }),
+      ]).start(() => {
         setCollapsed(true);
       });
     } else {
       setCollapsed(false);
-      Animated.timing(animatedValue, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: false,
-      }).start();
+      Animated.parallel([
+        Animated.timing(animatedValue, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: false, // height is a layout prop; keep on JS driver
+        }),
+        Animated.timing(contentOpacity, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true, // opacity can run on the native driver
+        }),
+      ]).start();
     }
   };
 
@@ -99,15 +128,11 @@ export default function CollapsibleBlock({
 
   const isThoughtOrIntent = isThought || isIntent;
 
-  // Interpolate height and opacity
+  // Interpolate height on the JS driver (height is a layout prop).
+  // Opacity is its own Animated.Value driven by the native driver (see above).
   const contentHeight = animatedValue.interpolate({
     inputRange: [0, 1],
     outputRange: [0, measuredHeight],
-  });
-
-  const contentOpacity = animatedValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 1],
   });
 
   return (
@@ -151,25 +176,29 @@ export default function CollapsibleBlock({
       </Pressable>
 
       {/* Collapsible Content */}
-      <Animated.View
-        style={{
-          height: contentHeight,
-          opacity: contentOpacity,
-          overflow: 'hidden',
-        }}
-      >
-        <View
-          onLayout={onLayout}
-          style={[
-            styles.content,
-            {
-              borderTopColor: themeColors.border,
-              backgroundColor: isThoughtOrIntent ? 'transparent' : 'rgba(0, 0, 0, 0.15)',
-            }
-          ]}
+      {/* Collapsible Content: opacity on its own Animated.View (native driver);
+          height stays on the inner Animated.View (JS driver - layout prop).
+          RN native validation rejects layout props inside native-driven styles. */}
+      <Animated.View style={{ opacity: contentOpacity }}>
+        <Animated.View
+          style={{
+            height: contentHeight,
+            overflow: 'hidden',
+          }}
         >
-          {children}
-        </View>
+          <View
+            onLayout={onLayout}
+            style={[
+              styles.content,
+              {
+                borderTopColor: themeColors.border,
+                backgroundColor: isThoughtOrIntent ? 'transparent' : 'rgba(0, 0, 0, 0.15)',
+              },
+            ]}
+          >
+            {children}
+          </View>
+        </Animated.View>
       </Animated.View>
     </View>
   );
