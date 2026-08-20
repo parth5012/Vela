@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 function withVelaAccessibilityService(config) {
-  // 1. Modify AndroidManifest.xml: inject BIND_ACCESSIBILITY_SERVICE permission + service declaration
+  // 1. Modify AndroidManifest.xml: inject BIND_ACCESSIBILITY_SERVICE permission and service declaration
   config = withAndroidManifest(config, async (config) => {
     const androidManifest = config.modResults;
     const mainManifest = androidManifest.manifest;
@@ -40,10 +40,16 @@ function withVelaAccessibilityService(config) {
       }
     }
 
-    // Add VelaAccessibilityService declaration
-    const serviceExists = mainManifest['application']?.some(
-      (app) => app.$?.['android:name'] === '.VelaAccessibilityService'
+    // Add VelaAccessibilityService declaration to the application tag (as a service element)
+    const appElement = mainManifest['application']?.[0] || {};
+    if (!appElement['service']) {
+      appElement['service'] = [];
+    }
+
+    const serviceExists = appElement['service'].some(
+      (srv) => srv.$?.['android:name'] === '.VelaAccessibilityService'
     );
+
     if (!serviceExists) {
       const serviceTag = {
         $: {
@@ -51,15 +57,19 @@ function withVelaAccessibilityService(config) {
           'android:exported': 'true',
           'android:permission': 'android.permission.BIND_ACCESSIBILITY_SERVICE',
         },
-        intentFilter: [
+        'intent-filter': [
           {
             action: [
-              { $: { 'android:name': 'android.accessibilityservice.AccessibilityService' } },
+              {
+                $: {
+                  'android:name': 'android.accessibilityservice.AccessibilityService',
+                },
+              },
             ],
           },
         ],
       };
-      mainManifest['application'].push(serviceTag);
+      appElement['service'].push(serviceTag);
     }
 
     return config;
