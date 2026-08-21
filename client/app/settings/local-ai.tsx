@@ -39,6 +39,13 @@ const NETWORK_OPTIONS = [
   { value: 'any' as const, label: 'Any Network' },
 ];
 
+/**
+ * Wayfinder #173 Audit — Local AI Rows
+ * Model rows: LOCAL_MODELS filtered by getModelStatusForRam (recommended/borderline/unsupported) — filtered when showUnsupportedModels=false.
+ * Download state: useConfigStore localModelDownloadProgress nullable; isDownloading = progress!==null; isActiveDownloading = isSelected && progress!==null.
+ * Progress lives inline under filename when isActiveDownloading (View h8 radius4 bg rgba(255,255,255,0.08) + fill aurora.acc1 width `${progress}%`) plus global Card fallback when isDownloading.
+ * Spec #174: per-row inline bar + 'Downloading {name} {progress}%' textMuted sub-1 600 + right-aligned '{progress}%' aurora.acc1 700; row Pressable minHeight 48, accessibilityLabel 'Downloading {model} {progress}%' vs '{name} {status}, Downloaded/Not downloaded', no native ProgressBar, 48dp targets, AA contrast.
+ */
 export default function LocalAiScreen() {
   const isLocalMode = useConfigStore((s) => s.isLocalMode);
   const setIsLocalMode = useConfigStore((s) => s.setIsLocalMode);
