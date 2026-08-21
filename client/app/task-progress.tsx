@@ -1,3 +1,16 @@
+/**
+ * Wayfinder #170 Audit — Task Progress Wiring
+ * Params: useLocalSearchParams<{taskId, execution_id, executionId}> -> effectiveId = taskId || execution_id || store.execution_id
+ *   canonical: taskId; backward compat: execution_id / executionId; store fallback: useForegroundTaskStore.execution_id
+ * Data: drizzle-orm expo-sqlite db/client (taskExecutions / taskStepExecutions / tasks) + Zustand useForegroundTaskStore
+ *   (storeExecutionId, currentStep, isRunning, isPaused, isCancelled, lastAction, task_plan)
+ * Flow: param -> effectiveId -> DB direct eq(taskExecutions.id, effectiveId) -> task_id fallback sorted by started_at desc
+ *   -> store fallback pseudo-steps from task_plan when store has task_plan but DB row missing -> setLoadState(active)
+ * Deeplink: vela-client://task-progress via expo-router useLocalSearchParams
+ * Anti-pattern (screenshots/13_task_progress.png): legacy blue ActivityIndicator on View bg #F2F2F7 light gray, no AuroraScreen/THEME_COLORS, no skeleton
+ *   Fixed (172): AuroraScreen dark gradient (skyTop/skyBottom, glass/glassBorder, aurora.acc1) + 3x SkeletonCard + progress bar fill aurora.acc1
+ * States (#171): LoadState='loading'|'empty'|'active'|'error'; success maps to active (no separate success screen per 11_tasks.png tone)
+ */
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
