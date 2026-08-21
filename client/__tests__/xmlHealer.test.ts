@@ -1,4 +1,5 @@
 import { healXmlTags } from '../utils/xmlHealer';
+import { parseMessage, MessageSegment } from '../utils/messageParser';
 
 describe('healXmlTags', () => {
   it('should return empty string for empty input', () => {
@@ -113,5 +114,51 @@ describe('healXmlTags', () => {
 
   it('should heal generic unclosed skill tags', () => {
     expect(healXmlTags('<skill>text')).toBe('<skill>text</skill>');
+  });
+});
+
+describe('healer + parser round-trip (#150 phantom guard)', () => {
+  const MOCK_RESPONSE =
+    '<thought>User asked: what is the capital of France. I should answer directly.</thought>[PERSONA] The capital of France is Paris.';
+
+  function countType(segments: MessageSegment[], type: MessageSegment['type']): number {
+    return segments.reduce(
+      (n, s) => n + (s.type === type ? 1 : 0) + countType(s.children || [], type),
+      0
+    );
+  }
+
+  it('produces zero tool_call segments and at most one open thought for every stream prefix', () => {
+    for (let end = 0; end <= MOCK_RESPONSE.length; end++) {
+      const prefix = MOCK_RESPONSE.slice(0, end);
+      const healed = healXmlTags(prefix);
+      const segments = parseMessage(healed);
+
+      expect(countType(segments, 'tool_call')).toBe(0);
+      expect(countType(segments, 'skill')).toBe(0);
+
+      const openThoughts = segments.reduce(
+        (n, s) => n + (s.type === 'thought' && !s.isClosed ? 1 : 0),
+        0
+      );
+      expect(openThoughts).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('heals crossed tags into well-formed nesting with a named tool_call child', () => {
+    const healed = healXmlTags('<thought>A <call:x> B </thought>');
+    expect(healed).toBe('<thought>A <call:x> B </call:x></thought>');
+
+    const segments = parseMessage(healed);
+    expect(segments).toEqual([
+      {
+        type: 'thought',
+        isClosed: true,
+        children: [
+          { type: 'text', content: 'A ', isClosed: true },
+          { type: 'tool_call', name: 'x', isClosed: true, children: [{ type: 'text', content: ' B ', isClosed: true }] }
+        ]
+      }
+    ]);
   });
 });

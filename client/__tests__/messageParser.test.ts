@@ -1,4 +1,4 @@
-import { parseMessage } from '../utils/messageParser';
+import { parseMessage, hasRenderableContent, MessageSegment } from '../utils/messageParser';
 
 describe('messageParser', () => {
   it('should parse standard text without any tags', () => {
@@ -284,6 +284,168 @@ describe('messageParser', () => {
         children: [{ type: 'text', content: 'done', isClosed: true }]
       }
     ]);
+  });
+});
+
+describe('messageParser phantom tool_call guard (#150)', () => {
+  it('parses the mock-server thought response to exactly [thought, text] with zero tool_call segments', () => {
+    const text = '<thought>User asked: what is the capital of France. I should answer directly.</thought>[PERSONA] The capital of France is Paris.';
+    const result = parseMessage(text);
+    expect(result).toHaveLength(2);
+    expect(result[0].type).toBe('thought');
+    expect(result[0].isClosed).toBe(true);
+    expect(result[1]).toEqual({
+      type: 'text',
+      content: '[PERSONA] The capital of France is Paris.',
+      isClosed: true
+    });
+    expect(result.some((s) => s.type === 'tool_call')).toBe(false);
+    // No nested tool_call anywhere in the tree either.
+    const countToolCalls = (segments: MessageSegment[]): number =>
+      segments.reduce(
+        (n, s) => n + (s.type === 'tool_call' ? 1 : 0) + countToolCalls(s.children || []),
+        0
+      );
+    expect(countToolCalls(result)).toBe(0);
+  });
+
+  it('emits a bare mid-string <call:> fragment as literal text, not a tool_call node', () => {
+    const result = parseMessage('before <call:> after');
+    expect(result).toEqual([
+      { type: 'text', content: 'before <call:> after', isClosed: true }
+    ]);
+  });
+
+  it('emits a bare end-of-stream <call: fragment as literal text', () => {
+    const result = parseMessage('thinking about calling <call:');
+    expect(result).toEqual([
+      { type: 'text', content: 'thinking about calling <call:', isClosed: true }
+    ]);
+  });
+
+  it('emits a bare mid-string <skill:> fragment as literal text, not a skill node', () => {
+    const result = parseMessage('before <skill:> after');
+    expect(result).toEqual([
+      { type: 'text', content: 'before <skill:> after', isClosed: true }
+    ]);
+  });
+
+  it('emits a bare end-of-stream <skill: fragment as literal text', () => {
+    const result = parseMessage('about to invoke <skill:');
+    expect(result).toEqual([
+      { type: 'text', content: 'about to invoke <skill:', isClosed: true }
+    ]);
+  });
+
+  it('never fabricates a nameless "Tool"/"Skill" node for malformed fragments', () => {
+    const inputs = [
+      '<call:',
+      '<call:>',
+      'x <call: y',
+      '<skill:',
+      '<skill:>',
+      'x <skill: y',
+    ];
+    for (const text of inputs) {
+      const result = parseMessage(text);
+      const flat = JSON.stringify(result);
+      expect(flat).not.toContain('"name":"Tool"');
+      expect(flat).not.toContain('"name":"Skill"');
+      expect(flat).not.toContain('"type":"tool_call"');
+      expect(flat).not.toContain('"type":"skill"');
+    }
+  });
+
+  it('keeps a legitimately named tool_call nested inside a closed thought', () => {
+    const text = '<thought>a <call:webview_browser input="{}"></call:webview_browser></thought>';
+    const result = parseMessage(text);
+    expect(result).toEqual([
+      {
+        type: 'thought',
+        isClosed: true,
+        children: [
+          { type: 'text', content: 'a ', isClosed: true },
+          {
+            type: 'tool_call',
+            name: 'webview_browser',
+            input: '{}',
+            isClosed: true,
+            children: []
+          }
+        ]
+      }
+    ]);
+  });
+
+  it('keeps parsing after a bare fragment - a later legit call is unaffected', () => {
+    const text = '<call:> then <call:web_search></call:web_search>';
+    const result = parseMessage(text);
+    expect(result).toEqual([
+      { type: 'text', content: '<call:> then ', isClosed: true },
+      { type: 'tool_call', name: 'web_search', isClosed: true, children: [] }
+    ]);
+  });
+
+  it('keeps a bare fragment as literal text inside a thought', () => {
+    const result = parseMessage('<thought>hmm <call:> weird</thought>');
+    expect(result).toEqual([
+      {
+        type: 'thought',
+        isClosed: true,
+        children: [
+          { type: 'text', content: 'hmm <call:> weird', isClosed: true }
+        ]
+      }
+    ]);
+  });
+
+  it('keeps a streaming (open) skill awaiting content - sweep only drops CLOSED blocks', () => {
+    const result = parseMessage('<skill:code_review');
+    expect(result).toEqual([
+      { type: 'skill', name: 'code_review', isClosed: false, children: [] }
+    ]);
+  });
+
+  it('keeps a streaming (open) tool_call awaiting content - no over-filtering', () => {
+    const text = '<call:default_api:run_command input="{\\"Command';
+    const result = parseMessage(text);
+    expect(result).toEqual([
+      {
+        type: 'tool_call',
+        name: 'default_api:run_command',
+        input: '{\\"Command',
+        isClosed: false,
+        children: []
+      }
+    ]);
+  });
+
+  describe('hasRenderableContent', () => {
+    const base = { isClosed: true } as const;
+
+    it('returns false for empty tool_call/skill segments', () => {
+      expect(hasRenderableContent({ type: 'tool_call', ...base })).toBe(false);
+      expect(hasRenderableContent({ type: 'skill', ...base })).toBe(false);
+    });
+
+    it('returns true when a tool_call/skill has a name, input, or children', () => {
+      expect(hasRenderableContent({ type: 'tool_call', name: 'x', ...base })).toBe(true);
+      expect(hasRenderableContent({ type: 'tool_call', input: '{}', ...base })).toBe(true);
+      expect(
+        hasRenderableContent({
+          type: 'tool_call',
+          ...base,
+          children: [{ type: 'text', content: 'out', isClosed: true }]
+        })
+      ).toBe(true);
+      expect(hasRenderableContent({ type: 'skill', name: 's', ...base })).toBe(true);
+    });
+
+    it('returns true for non-block segment types regardless of payload', () => {
+      expect(hasRenderableContent({ type: 'text', content: '', ...base })).toBe(true);
+      expect(hasRenderableContent({ type: 'thought', ...base })).toBe(true);
+      expect(hasRenderableContent({ type: 'intent', ...base })).toBe(true);
+    });
   });
 });
 

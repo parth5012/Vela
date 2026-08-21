@@ -7,6 +7,39 @@ export interface MessageSegment {
   children?: MessageSegment[];
 }
 
+/**
+ * Whether a segment carries enough information to be worth rendering.
+ *
+ * Only tool_call/skill segments can be "empty" (no name, no input, no content,
+ * no children); those render as phantom "Executed: Tool" / "Executing: Skill"
+ * collapsibles (#150). Every other segment type is always renderable.
+ */
+export function hasRenderableContent(segment: MessageSegment): boolean {
+  if (segment.type !== 'tool_call' && segment.type !== 'skill') return true;
+  if (segment.name || segment.input || segment.content) return true;
+  return Array.isArray(segment.children) && segment.children.length > 0;
+}
+
+/**
+ * Post-parse sweep: drop CLOSED tool_call/skill segments that carry no data.
+ * Open (mid-stream) segments are always kept - they are awaiting content.
+ */
+function pruneEmptyClosedSegments(segments: MessageSegment[]): MessageSegment[] {
+  const pruned: MessageSegment[] = [];
+  for (const segment of segments) {
+    const isEmptyClosedBlock =
+      (segment.type === 'tool_call' || segment.type === 'skill') &&
+      segment.isClosed &&
+      !hasRenderableContent(segment);
+    if (isEmptyClosedBlock) continue;
+    if (segment.children && segment.children.length > 0) {
+      segment.children = pruneEmptyClosedSegments(segment.children);
+    }
+    pruned.push(segment);
+  }
+  return pruned;
+}
+
 export function parseMessage(content: string): MessageSegment[] {
   const root: MessageSegment = {
     type: 'text',
@@ -118,8 +151,17 @@ export function parseMessage(content: string): MessageSegment[] {
 
       if (!openTagMatch) {
         const nameMatch = callRemaining.match(/^<call:([a-zA-Z0-9_:]*)/);
-        const name = nameMatch && nameMatch[1] ? nameMatch[1] : 'Tool';
-        
+        const name = nameMatch ? nameMatch[1] : '';
+
+        if (!name) {
+          // Bare '<call:' fragment (e.g. '<call:>' or a stray marker in prose).
+          // Emit it as literal text instead of fabricating a nameless tool_call
+          // node that renders a phantom "Executed: Tool" block (#150).
+          addText('<call:');
+          index += 6; // '<call:'.length
+          continue;
+        }
+
         let input: string | undefined = undefined;
         const inputMatch = callRemaining.match(/input=(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')/);
         if (inputMatch) {
@@ -184,8 +226,16 @@ export function parseMessage(content: string): MessageSegment[] {
 
       if (!openTagMatch) {
         const nameMatch = skillRemaining.match(/^<skill:([a-zA-Z0-9_:]*)/);
-        const name = nameMatch && nameMatch[1] ? nameMatch[1] : 'Skill';
-        
+        const name = nameMatch ? nameMatch[1] : '';
+
+        if (!name) {
+          // Bare '<skill:' fragment: emit literal text, never a nameless
+          // "Executing: Skill" phantom block (#150).
+          addText('<skill:');
+          index += 7; // '<skill:'.length
+          continue;
+        }
+
         let input: string | undefined = undefined;
         const inputMatch = skillRemaining.match(/input=(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')/);
         if (inputMatch) {
@@ -245,5 +295,7 @@ export function parseMessage(content: string): MessageSegment[] {
     }
   }
 
-  return root.children || [];
+  // Post-parse sweep (#150): never let a closed, data-less tool_call/skill
+  // segment reach the UI. Open segments awaiting stream content are kept.
+  return pruneEmptyClosedSegments(root.children || []);
 }

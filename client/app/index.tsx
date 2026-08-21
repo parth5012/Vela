@@ -30,7 +30,7 @@ import RichText from '../components/chat/RichText';
 import { streamAgentResponse } from '../utils/sse';
 import { queueMessageForSync } from '../db/chatRepository';
 import CollapsibleBlock from '../components/chat/CollapsibleBlock';
-import { parseMessage } from '../utils/messageParser';
+import { parseMessage, hasRenderableContent } from '../utils/messageParser';
 import { parseSearchContent, SearchSource } from '../utils/sourceParser';
 import { healXmlTags } from '../utils/xmlHealer';
 import { useRouter } from 'expo-router';
@@ -168,8 +168,15 @@ function getCachedParse(content: string, isUser: boolean): ParsedMessageEntry {
     const segments = isUser ? ([] as ParsedSegments) : parseMessage(content);
     entry = {
       segments,
-      headerSegments: segments.filter(s => s.type === 'thought' || s.type === 'intent'),
-      bubbleContent: segments.filter(s => s.type !== 'thought' && s.type !== 'intent'),
+      // hasRenderableContent is defense-in-depth (#150): parseMessage already
+      // prunes empty closed tool_call/skill segments, but nothing empty may
+      // ever reach renderSegment/CollapsibleBlock ("Executed: Tool" phantom).
+      headerSegments: segments.filter(
+        s => (s.type === 'thought' || s.type === 'intent') && hasRenderableContent(s)
+      ),
+      bubbleContent: segments.filter(
+        s => s.type !== 'thought' && s.type !== 'intent' && hasRenderableContent(s)
+      ),
       sources: isUser ? ([] as ParsedSources) : parseSearchContent(content),
     };
     if (parseCache.size >= PARSE_CACHE_LIMIT) {
