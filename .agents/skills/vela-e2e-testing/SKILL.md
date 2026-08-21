@@ -27,42 +27,44 @@ Comprehensive guide and reference for testing the Vela Android client applicatio
 - **ADB Policy Note**: For physical personal devices, always follow ADB approval guidelines in `AGENTS.md`. On emulators (`emulator-5554`), full UI automation (`input tap`, `input text`, `screencap`, `uiautomator dump`) is permitted.
 
 ### 2. Local Mock Backend Server
-Vela requires a FastAPI backend endpoint supporting health check, chat completion streaming (SSE), history sync, and thread operations.
+Vela requires a FastAPI backend endpoint supporting health check, chat message streaming (SSE), history sync, and thread operations.
+
+**Contract note:** the client (`client/utils/sse.ts`) streams via `POST {url}/chat/message` with body `{thread_id, message, agent}` and expects SSE events of the form `data: {"type": "content", "delta": "..."}` … `data: {"type": "done", "thread_title": "..."}`. It does NOT call OpenAI-style `/chat/completions`.
 
 Start a lightweight Python mock server on host port 8000:
 ```python
 # test_server.py
 import json, time
 from fastapi import FastAPI, Request
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse
 import uvicorn
 
 app = FastAPI()
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": "1.0.0"}
+    return {"status": "ok", "version": 1.0}
 
 @app.get("/chat/threads")
 def get_threads():
     return []
 
-@app.post("/chat/completions")
-async def chat_completions(req: Request):
+@app.post("/chat/message")
+async def chat_message(req: Request):
     data = await req.json()
-    persona = data.get("persona", "assistant")
-    prompt = data.get("messages", [{}])[-1].get("content", "")
+    agent = data.get("agent", "personal assistant")
+    message = data.get("message", "")
 
     def event_stream():
-        response_text = f"[{persona.upper()}] Response to: {prompt}"
-        chunks = response_text.split(" ")
-        for chunk in chunks:
-            payload = {
-                "choices": [{"delta": {"content": chunk + " "}}]
-            }
+        response_text = f"[{agent.upper()}] Response to: {message}"
+        for chunk in response_text.split(" "):
+            if not chunk:
+                continue
+            payload = {"type": "content", "delta": chunk + " "}
             yield f"data: {json.dumps(payload)}\n\n"
             time.sleep(0.05)
-        yield "data: [DONE]\n\n"
+        done = {"type": "done", "thread_title": f"Chat: {message}"[:60]}
+        yield "data: " + json.dumps(done) + "\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
