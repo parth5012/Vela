@@ -27,3 +27,42 @@ For installing the APK on your own phone for
 
 For clean build
 npx expo prebuild --clean
+
+
+RELEASE BUILDS ON WINDOWS (SHORT-PATH)  (issue #149)
+
+Why: Windows MAX_PATH limits break the native (CMake/ninja) build when the
+repo sits in a deep path like D:\work\projects\Vela\client. Copying the tree
+to D:\a\client shortens every path -- BUT a naive copy silently drags the old
+location back in:
+
+  pnpm's node_modules is full of junctions pointing back into D:\work.
+  A plain robocopy follows them, so the copied tree resolves dependencies
+  from the ORIGINAL long path again. CMake then gets D:/work/... paths and
+  the build dies in react-native-screens / react-native-worklets.
+
+The working recipe is encoded in scripts\build-release-shortpath.ps1:
+
+    powershell -ExecutionPolicy Bypass -File scripts\build-release-shortpath.ps1
+
+What it does:
+  1. robocopy /MIR /XJ to D:\a\client   (/XJ = never copy junctions)
+     excluding node_modules, .expo, .git, android\.cxx, android\app\build
+  2. fresh FLAT "npm install --legacy-peer-deps" inside the copy
+     (never reuse pnpm's node_modules)
+  3. deletes android\.cxx and android\app\build in the copy
+  4. gradlew assembleRelease from the copy's android\
+  5. GATE: scans .cxx\**\*.ninja.txt + CMakeCache.txt for the literal
+     source prefix (e.g. 'D:/work') and FAILS if anything leaked
+
+Flags:
+  -SkipCopy    rerun gradle + leak gate only (reuse an existing copy)
+  -Prebuild    opt-in expo prebuild --clean; WARNING wipes manual android/ edits
+  -DestRoot    destination root, default D:\a
+
+Ninja fallback: ninja.exe can choke on self-referential 'build build.ninja:'
+rules emitted here. A wrapper shim that renames those rules worked; its
+source was at C:\Users\DELL\AppData\Local\Temp\ninja_wrapper.cs, compiled
+with csc.exe. Last time csc.exe was unavailable on PATH, which blocked this
+fallback - reinstalling a C# compiler (or shipping a prebuilt shim exe)
+would restore it.
