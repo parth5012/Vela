@@ -23,6 +23,7 @@ import * as Clipboard from 'expo-clipboard';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import MessageOptionsModal from '../components/ui/MessageOptionsModal';
+import MarkdownViewerOverlay from '../components/ui/MarkdownViewerOverlay';
 import { useConfigStore } from '../store/useConfigStore';
 import { useChatStore, Message, Thread } from '../store/useChatStore';
 import { useAurora } from '../hooks/useAurora';
@@ -53,29 +54,7 @@ const generateUUID = () => {
   });
 };
 
-interface Persona {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-  compact_prompt_instructions?: string;
-  compactPromptInstructions?: string;
-}
-
-const DEFAULT_PERSONAS: Persona[] = [
-  { id: 'personal assistant', name: 'Personal Assistant', description: 'Warm, approachable, direct general assistant.', icon: '🤖' },
-  { id: 'teacher', name: 'Teacher', description: 'Patient, educational instructor helper details examples.', icon: '👩🏫' },
-  { id: 'analyst', name: 'Analyst', description: 'Structured, logical, data-driven analyst focusing facts risk assessment.', icon: '📊' },
-  { id: 'prompt builder', name: 'Prompt Builder', description: 'Specialized assistant designed help craft, structure, refine agent prompts.', icon: '✍️' }
-];
-
-const COMPACT_PERSONAS_INSTRUCTIONS: Record<string, string> = {
-  "personal assistant": `Vela, adaptive, authentic personal assistant knowledgeable peer.\nVoice: Warm, approachable, direct. Balanced empathy candor. Avoid generic filler.\nGuidelines:\n1. Mirror user technical depth; respond accessibly.\n2. Prioritize concise, high-density responses.\n3. Give direct answers first, then add essential nuance.`,
-  "teacher": `Encouraging, patient, pedagogical Teacher guide.\nTone: Patient, warm, supportive, explaining concepts simply.\nGuidelines:\n1. Simplify complex terms using relatable analogies explaining student.\n2. Provide concrete, illustrative examples abstract concepts.\n3. End explanations supportive guiding question check understanding prompt discussion.`,
-  "analyst": `Sharp, logical, detail-oriented Analyst.\nTone: Objective, precise, structured, data-driven.\nGuidelines:\n1. Break down requests structured components: pros/cons, metrics, risks, trade-offs.\n2. Focus strictly facts, evidence, logical arguments.\n3. Present findings highly structured bullet points clean tables without conversational fluff.`,
-  "prompt builder": `Adaptive, authentic collaborator specializing crafting system prompts.\nTone: Warm, approachably direct. Balance empathy candor without rigid lecturing.\nGuidelines:\n1. Outline clear role definitions, formatting rules, tool integrations, evaluation criteria.\n2. Provide high-quality examples both good/valid bad/invalid prompt configurations.\n3. Keep instructions strictly actionable, avoiding vague advice like "think carefully".`,
-  "google_workspace": `Google Workspace automation specialist (Gmail, Calendar, Drive).\nTone: Efficient, precise, action-oriented, helpful.\nGuidelines:\n1. Help users manage email, calendar events, Drive files.\n2. Proactively offer check calendar slots find availability.\n3. Assist searching, drafting, organizing Gmail messages.\n4. Call out scope limitations when request exceeds capabilities.`
-};
+import { DEFAULT_PERSONAS, COMPACT_PERSONAS_INSTRUCTIONS } from '../utils/personas';
 
 const QUOTES = [
   { text: "An investment in knowledge pays the best interest.", author: "Benjamin Franklin" },
@@ -239,6 +218,7 @@ export default function ChatScreen() {
   const [showRawMap, setShowRawMap] = useState<Record<string, boolean>>({});
   const [activeMenuMessage, setActiveMenuMessage] = useState<Message | null>(null);
   const [authRequired, setAuthRequired] = useState<Record<string, boolean>>({});
+  const [viewerContent, setViewerContent] = useState<string | null>(null);
 
   // Theme values — Aurora: theme = atmosphere (colors), accent = energy (aurora)
   const { colors, sizes, aurora } = useAurora();
@@ -248,6 +228,14 @@ export default function ChatScreen() {
   const flatListRef = React.useRef<FlatList | null>(null);
   const lastOffsetY = React.useRef(0);
   const isPersonaBarVisible = React.useRef(true);
+
+  const triggerAutoScroll = useCallback(() => {
+    if (lastOffsetY.current < 120) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+      }, 50);
+    }
+  }, []);
   const personaBarHeight = React.useRef(new Animated.Value(58)).current;
 
   const pendingTokensMapRef = React.useRef<Record<string, string>>({});
@@ -700,6 +688,7 @@ export default function ChatScreen() {
     });
 
     setStreamingThread(activeThreadId, true);
+    triggerAutoScroll();
 
     if (isLocalMode) {
       await streamLocalResponse(activeThreadId, userText, [...originalHistory, { id: userMsgId, role: 'user', content: userText }]);
@@ -793,6 +782,7 @@ export default function ChatScreen() {
     setThreads,
     cleanUpThrottleAndHeal,
     isLocalMode,
+    triggerAutoScroll,
   ]);
 
   const handleRegenerate = useCallback(async (message: Message) => {
@@ -980,6 +970,7 @@ export default function ChatScreen() {
     });
 
     setStreamingThread(newThreadId, true);
+    triggerAutoScroll();
 
     if (isLocalMode) {
       await streamLocalResponse(newThreadId, textToSend.trim(), [{ id: userMsgId, role: 'user', content: textToSend.trim() }]);
@@ -1059,6 +1050,7 @@ export default function ChatScreen() {
     setStreamingThread,
     cleanUpThrottleAndHeal,
     isLocalMode,
+    triggerAutoScroll,
   ]);
 
   const handleSendPress = () => {
@@ -1195,6 +1187,10 @@ export default function ChatScreen() {
         themeColors={colors}
         themeSizes={sizes}
         accentHex={accentHex}
+        onToggle={() => {
+          // #154 anchor: maintainVisibleContentPosition keeps viewport anchored on
+          // height collapse/expand; no manual offset correction needed here.
+        }}
       >
         {hasChildren ? (
           <View style={{ gap: 4, width: '100%' }}>
@@ -1273,7 +1269,8 @@ export default function ChatScreen() {
               scrollEventThrottle={16}
               contentContainerStyle={styles.messagesList}
               keyExtractor={(item) => item.id}
-              removeClippedSubviews={true}
+              removeClippedSubviews={false}
+              maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
               windowSize={11}
               maxToRenderPerBatch={10}
               updateCellsBatchingPeriod={50}
@@ -1532,16 +1529,23 @@ export default function ChatScreen() {
           visible={activeMenuMessage !== null}
           isRaw={activeMenuMessage ? !!showRawMap[activeMenuMessage.id] : false}
           onClose={() => setActiveMenuMessage(null)}
-        onDownloadMd={() => activeMenuMessage && handleDownloadMd(activeMenuMessage)}
-        onRegenerate={() => activeMenuMessage && handleRegenerate(activeMenuMessage)}
-        onToggleRaw={() => activeMenuMessage && toggleRaw(activeMenuMessage.id)}
-        onBranch={() => activeMenuMessage && handleBranch(activeMenuMessage)}
-        onCopyText={() => activeMenuMessage && handleCopyText(activeMenuMessage.content)}
-        onCopyCode={() => activeMenuMessage && handleCopyCodeBlocks(activeMenuMessage.content)}
-        onShare={() => activeMenuMessage && handleShareText(activeMenuMessage.content)}
-        onShowInfo={() => activeMenuMessage && handleShowInfo(activeMenuMessage)}
-        themeColors={colors}
-      />
+          onDownloadMd={() => activeMenuMessage && handleDownloadMd(activeMenuMessage)}
+          onRegenerate={() => activeMenuMessage && handleRegenerate(activeMenuMessage)}
+          onToggleRaw={() => activeMenuMessage && toggleRaw(activeMenuMessage.id)}
+          onBranch={() => activeMenuMessage && handleBranch(activeMenuMessage)}
+          onCopyText={() => activeMenuMessage && handleCopyText(activeMenuMessage.content)}
+          onCopyCode={() => activeMenuMessage && handleCopyCodeBlocks(activeMenuMessage.content)}
+          onShare={() => activeMenuMessage && handleShareText(activeMenuMessage.content)}
+          onShowInfo={() => activeMenuMessage && handleShowInfo(activeMenuMessage)}
+          onView={(content) => setViewerContent(content)}
+          messageContent={activeMenuMessage?.content}
+          themeColors={colors}
+        />
+        <MarkdownViewerOverlay
+          visible={!!viewerContent}
+          content={viewerContent || ''}
+          onClose={() => setViewerContent(null)}
+        />
     </KeyboardAvoidingView>
     </LinearGradient>
   );

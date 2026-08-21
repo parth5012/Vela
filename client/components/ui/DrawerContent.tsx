@@ -11,8 +11,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useNavigation } from 'expo-router';
 import { useConfigStore } from '../../store/useConfigStore';
 import { useChatStore, Thread } from '../../store/useChatStore';
+import { useBrowserStore } from '../../store/useBrowserStore';
 import ThreadOptionsModal from './ThreadOptionsModal';
-import { THEME_COLORS, FONT_SIZES, ACCENT_COLORS } from '../../utils/theme';
+import { THEME_COLORS, FONT_SIZES, ACCENT_COLORS, getAurora } from '../../utils/theme';
 import { syncHistoryWithBackend } from '../../utils/history';
 
 const generateId = () => {
@@ -23,6 +24,33 @@ const generateId = () => {
   });
 };
 
+// Lightweight formatDistanceToNow fallback — avoids date-fns dependency while
+// matching expected UI ("2m ago", "3h ago"). Keeps WCAG-friendly textMuted styling.
+function formatDistanceToNow(date: Date | string | number): string {
+  try {
+    const d = date instanceof Date ? date : new Date(date);
+    const now = Date.now();
+    const diff = now - d.getTime();
+    if (isNaN(diff) || diff < 0) return '';
+    const sec = Math.floor(diff / 1000);
+    if (sec < 60) return 'just now';
+    const min = Math.floor(sec / 60);
+    if (min < 60) return `${min}m ago`;
+    const hrs = Math.floor(min / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    if (days < 7) return `${days}d ago`;
+    const weeks = Math.floor(days / 7);
+    if (weeks < 5) return `${weeks}w ago`;
+    const months = Math.floor(days / 30);
+    if (months < 12) return `${months}mo ago`;
+    const years = Math.floor(days / 365);
+    return `${years}y ago`;
+  } catch {
+    return '';
+  }
+}
+
 export default function DrawerContent(_props?: any) {
   const threads = useChatStore((state) => state.threads);
   const activeThreadId = useChatStore((state) => state.activeThreadId);
@@ -30,6 +58,9 @@ export default function DrawerContent(_props?: any) {
   const selectThread = useChatStore((state) => state.selectThread);
   const streamingThreadIds = useChatStore((state) => state.streamingThreadIds);
   const { apiUrl, apiKey, theme, fontSize, accentColor, defaultPersona } = useConfigStore();
+  const currentUrl = useBrowserStore((s) => s.currentUrl);
+  const pageTitle = useBrowserStore((s) => s.pageTitle);
+  const aiStatus = useBrowserStore((s) => s.aiStatus);
   const router = useRouter();
   const navigation = useNavigation<any>();
 
@@ -50,6 +81,10 @@ export default function DrawerContent(_props?: any) {
   const colors = THEME_COLORS[theme] || THEME_COLORS.deep;
   const sizes = FONT_SIZES[fontSize] || FONT_SIZES.medium;
   const accentHex = ACCENT_COLORS[accentColor] || ACCENT_COLORS.indigo;
+  const aurora = getAurora(accentColor, theme);
+
+  const isBrowserActive = currentUrl !== 'about:blank';
+  const displayTitle = pageTitle && pageTitle.trim().length > 0 ? pageTitle : 'Browser';
 
   const [optionsVisible, setOptionsVisible] = React.useState(false);
   const [selectedThread, setSelectedThread] = React.useState<Thread | null>(null);
@@ -132,6 +167,62 @@ const handleTasks = () => {
         </Text>
       </Pressable>
 
+      {/* Browser — prominent top placement per #156 */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Open Browser"
+        onPress={handleBrowser}
+        style={({ pressed }) => [
+          styles.browserRow,
+          {
+            backgroundColor: isBrowserActive ? colors.glass : 'transparent',
+            borderColor: isBrowserActive ? aurora.acc1 + '33' : colors.border,
+            borderLeftColor: isBrowserActive ? aurora.acc1 : 'transparent',
+          },
+          pressed && { opacity: 0.8 },
+        ]}
+      >
+        <View style={styles.browserRowInner}>
+          <Text style={[styles.browserIcon]}>🌐</Text>
+          <View style={styles.browserTextCol}>
+            <View style={styles.browserTitleRow}>
+              {isBrowserActive ? <View style={[styles.browserDot, { backgroundColor: aurora.acc1 }]} /> : null}
+              <Text
+                style={[
+                  styles.browserTitle,
+                  { color: isBrowserActive ? colors.text : colors.textMuted },
+                ]}
+                numberOfLines={1}
+              >
+                {displayTitle}
+              </Text>
+            </View>
+            {aiStatus !== null ? (
+              <View style={styles.browserAiRow}>
+                <View style={[styles.pulsingDot, { backgroundColor: aurora.acc1 }]} />
+                <Text
+                  style={[styles.browserAiText, { color: colors.textMuted }]}
+                  numberOfLines={1}
+                >
+                  {aiStatus}
+                </Text>
+              </View>
+            ) : isBrowserActive ? (
+              <Text style={[styles.browserUrl, { color: colors.textDark }]} numberOfLines={1}>
+                {currentUrl}
+              </Text>
+            ) : (
+              <Text style={[styles.browserUrl, { color: colors.textDark }]} numberOfLines={1}>
+                No page loaded
+              </Text>
+            )}
+          </View>
+          {aiStatus !== null ? (
+            <ActivityIndicator size="small" color={aurora.acc1} style={{ marginLeft: 8 }} />
+          ) : null}
+        </View>
+      </Pressable>
+
       <Pressable
         style={({ pressed }) => [
           styles.newChatButton, 
@@ -139,6 +230,7 @@ const handleTasks = () => {
           pressed && styles.newChatButtonPressed
         ]}
         onPress={handleNewChat}
+        accessibilityRole="button"
       >
         <Text style={[styles.newChatButtonText, { color: colors.text }]}>+ New Conversation</Text>
       </Pressable>
@@ -150,6 +242,7 @@ const handleTasks = () => {
         ) : (
           sortedThreads.map((thread) => {
             const isActive = thread.id === activeThreadId;
+            const timeAgo = thread.updated_at ? formatDistanceToNow(thread.updated_at) : '';
             return (
               <Pressable
                 key={thread.id}
@@ -162,19 +255,26 @@ const handleTasks = () => {
                 onLongPress={() => handleOpenOptions(thread)}
                 delayLongPress={450}
               >
-                <Text
-                  style={[
-                    styles.threadTitle,
-                    { color: colors.textMuted },
-                    thread.is_pinned && styles.pinnedThreadTitle,
-                    thread.is_pinned && { color: colors.text },
-                    isActive && styles.activeThreadTitle,
-                    isActive && { color: colors.text }
-                  ]}
-                  numberOfLines={1}
-                >
-                  {thread.is_pinned ? '📌 ' : ''}{thread.title}
-                </Text>
+                <View style={styles.threadTextCol}>
+                  <Text
+                    style={[
+                      styles.threadTitle,
+                      { color: colors.textMuted },
+                      thread.is_pinned && styles.pinnedThreadTitle,
+                      thread.is_pinned && { color: colors.text },
+                      isActive && styles.activeThreadTitle,
+                      isActive && { color: colors.text }
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {thread.is_pinned ? '📌 ' : ''}{thread.title}
+                  </Text>
+                  {timeAgo ? (
+                    <Text style={[styles.threadTimestamp, { color: colors.textDark }]} numberOfLines={1}>
+                      {timeAgo}
+                    </Text>
+                  ) : null}
+                </View>
             {streamingThreadIds && streamingThreadIds.has(thread.id) && (
               <ActivityIndicator size="small" color={accentHex} style={{ marginLeft: 6 }} />
             )}
@@ -186,11 +286,12 @@ const handleTasks = () => {
 
       <View style={[styles.footer, { borderTopColor: colors.border }]}>
         <Pressable
+          accessibilityRole="button"
           style={({ pressed }) => [
             styles.settingsButton, 
             pressed && styles.settingsButtonPressed, 
             pressed && { backgroundColor: colors.card },
-            { marginBottom: 8 }
+            { marginBottom: 8, minHeight: 48, justifyContent: 'center' }
           ]}
           onPress={() => {
             router.navigate('/');
@@ -202,11 +303,12 @@ const handleTasks = () => {
           <Text style={[styles.settingsButtonText, { color: colors.textMuted }]}>💬 Chat</Text>
         </Pressable>
         <Pressable
+          accessibilityRole="button"
           style={({ pressed }) => [
             styles.settingsButton, 
             pressed && styles.settingsButtonPressed,
             pressed && { backgroundColor: colors.card },
-            { marginBottom: 8, flexDirection: 'row', alignItems: 'center' }
+            { marginBottom: 8, flexDirection: 'row', alignItems: 'center', minHeight: 48 }
           ]}
           onPress={handleRefresh}
           disabled={isSyncing}
@@ -221,32 +323,24 @@ const handleTasks = () => {
           </Text>
         </Pressable>
       <Pressable
+        accessibilityRole="button"
         style={({ pressed }) => [
           styles.settingsButton,
           pressed && styles.settingsButtonPressed,
           pressed && { backgroundColor: colors.card },
-          { marginBottom: 8 }
-        ]}
-        onPress={handleBrowser}
-      >
-        <Text style={[styles.settingsButtonText, { color: colors.textMuted }]}>🌐 Browser</Text>
-      </Pressable>
-      <Pressable
-        style={({ pressed }) => [
-          styles.settingsButton,
-          pressed && styles.settingsButtonPressed,
-          pressed && { backgroundColor: colors.card },
-          { marginBottom: 8 }
+          { marginBottom: 8, minHeight: 48, justifyContent: 'center' }
         ]}
         onPress={handleTasks}
       >
         <Text style={[styles.settingsButtonText, { color: colors.textMuted }]}>📋 Tasks</Text>
       </Pressable>
         <Pressable
+          accessibilityRole="button"
           style={({ pressed }) => [
             styles.settingsButton, 
             pressed && styles.settingsButtonPressed,
-            pressed && { backgroundColor: colors.card }
+            pressed && { backgroundColor: colors.card },
+            { minHeight: 48, justifyContent: 'center' }
           ]}
           onPress={handleSettings}
         >
@@ -285,6 +379,63 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#71717a',
   },
+  browserRow: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderLeftWidth: 3,
+    borderRadius: 10,
+    minHeight: 48,
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  browserRowInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  browserIcon: {
+    fontSize: 18,
+    marginRight: 10,
+  },
+  browserTextCol: {
+    flex: 1,
+    gap: 2,
+  },
+  browserTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  browserDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  pulsingDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    opacity: 0.9,
+  },
+  browserTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    flexShrink: 1,
+  },
+  browserAiRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  browserAiText: {
+    fontSize: 11,
+    flexShrink: 1,
+  },
+  browserUrl: {
+    fontSize: 11,
+  },
   newChatButton: {
     backgroundColor: '#18181b',
     borderColor: '#27272a',
@@ -295,6 +446,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 48,
   },
   newChatButtonPressed: {
     backgroundColor: '#27272a',
@@ -337,11 +489,18 @@ const styles = StyleSheet.create({
   activeThreadItem: {
     backgroundColor: '#18181b',
   },
+  threadTextCol: {
+    flex: 1,
+    marginRight: 8,
+    gap: 2,
+  },
   threadTitle: {
     fontSize: 14,
     color: '#a1a1aa',
     flex: 1,
-    marginRight: 8,
+  },
+  threadTimestamp: {
+    fontSize: 11,
   },
   pinnedThreadTitle: {
     color: '#e4e4e7',

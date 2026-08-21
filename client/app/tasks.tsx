@@ -9,6 +9,7 @@ import { useConfigStore } from '../store/useConfigStore';
 import { AuroraScreen, Card, PrimaryButton } from '../components/ui/settingsKit';
 import { useAurora } from '../hooks/useAurora';
 import { calculateNextRun } from '../utils/backgroundTasks';
+import { DEFAULT_PERSONAS } from '../utils/personas';
 
 const generateId = () => {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -35,6 +36,7 @@ export default function TasksScreen() {
   const [formRecurrence, setFormRecurrence] = useState<'15m' | '1h' | '12h' | '24h' | 'weekly'>('24h');
   const [formPrompt, setFormPrompt] = useState('');
   const [formAgent, setFormAgent] = useState('personal assistant');
+  const [personas, setPersonas] = useState(DEFAULT_PERSONAS);
 
   // Detail/Run History State
   const [selectedTask, setSelectedTask] = useState<TaskEntity | null>(null);
@@ -45,6 +47,33 @@ export default function TasksScreen() {
   useEffect(() => {
     loadTasks();
   }, []);
+
+  useEffect(() => {
+    if (apiUrl && apiKey) {
+      const fetchPersonas = async () => {
+        try {
+          const res = await fetch(`${apiUrl}/chat/personas`, {
+            headers: { Authorization: `Bearer ${apiKey}` },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const mapped = data.map((p: any) => {
+              let icon = '🤖';
+              if (p.id === 'teacher') icon = '👩🏫';
+              else if (p.id === 'analyst') icon = '📊';
+              else if (p.id === 'prompt builder') icon = '✍️';
+              const fallback = DEFAULT_PERSONAS.find((d) => d.id === p.id);
+              return { ...p, icon: p.icon || fallback?.icon || icon };
+            });
+            setPersonas(mapped);
+          }
+        } catch (err) {
+          console.error('[fetchPersonas] Failed:', err);
+        }
+      };
+      fetchPersonas();
+    }
+  }, [apiUrl, apiKey]);
 
   const loadTasks = async () => {
     try {
@@ -123,7 +152,6 @@ export default function TasksScreen() {
             task_prompt: formPrompt.trim(),
             linked_agent: formAgent.trim(),
             next_run: nextRunTime,
-            updated_at: now,
           })
           .where(eq(tasks.id, editingTask.id));
       } else {
@@ -138,7 +166,6 @@ export default function TasksScreen() {
           last_run: null,
           next_run: calculateNextRun(formRecurrence, now),
           created_at: now,
-          updated_at: now,
         };
 
         await db.insert(tasks).values(newTask);
@@ -188,7 +215,6 @@ export default function TasksScreen() {
         .set({
           status: newStatus,
           next_run: nextRunTime,
-          updated_at: now,
         })
         .where(eq(tasks.id, task.id));
 
@@ -260,7 +286,6 @@ export default function TasksScreen() {
         .set({
           last_run: startedAt,
           next_run: nextRunTime,
-          updated_at: Date.now(),
         })
         .where(eq(tasks.id, task.id));
 
@@ -471,13 +496,35 @@ export default function TasksScreen() {
 
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.textMuted }]}>Trigger Agent</Text>
-              <TextInput
-                value={formAgent}
-                onChangeText={setFormAgent}
-                placeholder="e.g. personal assistant, analyst, teacher"
-                placeholderTextColor={colors.textDark}
-                style={[styles.textInput, { color: colors.text, borderColor: colors.glassBorder, backgroundColor: 'rgba(0,0,0,0.25)' }]}
-              />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recurrencePills}>
+                {personas.map((p) => (
+                  <Pressable
+                    key={p.id}
+                    onPress={() => setFormAgent(p.id)}
+                    style={[
+                      styles.rPill,
+                      formAgent === p.id && { backgroundColor: aurora.acc1, borderColor: aurora.acc1 },
+                    ]}
+                  >
+                    <Text style={[styles.rPillText, { color: formAgent === p.id ? aurora.onAccent : colors.textMuted }]}>
+                      {p.icon} {p.name}
+                    </Text>
+                  </Pressable>
+                ))}
+                {formAgent && !personas.some((p) => p.id === formAgent) ? (
+                  <Pressable
+                    onPress={() => setFormAgent(formAgent)}
+                    style={[
+                      styles.rPill,
+                      { backgroundColor: aurora.acc1, borderColor: aurora.acc1 },
+                    ]}
+                  >
+                    <Text style={[styles.rPillText, { color: aurora.onAccent }]}>
+                      {formAgent} (removed)
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </ScrollView>
             </View>
 
             <View style={styles.inputGroup}>

@@ -1,442 +1,463 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
+  Pressable,
   ActivityIndicator,
-  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import {
-  db,
-  initializeDatabase,
-} from '../db/client';
-import {
-  taskExecutions,
-  taskStepExecutions,
-  tasks,
-} from '../db/schema';
+import { db, initializeDatabase } from '../db/client';
+import { taskExecutions, taskStepExecutions, tasks } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import useForegroundTaskStore from '../store/useForegroundTaskStore';
 import {
   cancelForegroundTask,
-  pauseForegroundTask,
   resumeForegroundTask,
 } from '../utils/foregroundTaskRunner';
-import * as Notifications from 'expo-notifications';
+import { AuroraScreen, Card, PrimaryButton, useAurora } from '../components/ui/settingsKit';
 
-// Set up notification handler for button presses
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+type LoadState = 'loading' | 'empty' | 'active' | 'error';
+
+function SkeletonCard({ colors }: { colors: any }) {
+  return (
+    <Card style={[styles.skeletonCard, { borderColor: colors.glassBorder, backgroundColor: colors.glass }]}>
+      <View style={[styles.skeletonLine, { backgroundColor: 'rgba(255,255,255,0.08)', width: '60%' }]} />
+      <View style={[styles.skeletonLine, { backgroundColor: 'rgba(255,255,255,0.06)', width: '85%', height: 12 }]} />
+      <View style={[styles.skeletonBar, { backgroundColor: 'rgba(255,255,255,0.07)' }]}>
+        <View style={[styles.skeletonBarFill, { backgroundColor: 'rgba(255,255,255,0.12)', width: '45%' }]} />
+      </View>
+    </Card>
+  );
+}
 
 export default function TaskProgressScreen() {
   const router = useRouter();
-  const { execution_id } = useLocalSearchParams<{ execution_id: string }>();
+  const params = useLocalSearchParams<{ taskId?: string; execution_id?: string; executionId?: string }>();
+  // Plan requires reading taskId from useLocalSearchParams; keep backward compat with execution_id
+  const taskIdParam = (params.taskId ?? (params as any).execution_id ?? (params as any).executionId) as string | undefined;
+
+  const { colors, sizes, aurora } = useAurora();
+  const { execution_id: storeExecutionId, currentStep, isRunning, isCancelled, isPaused, lastAction, task_plan } =
+    useForegroundTaskStore();
+
+  const effectiveId = taskIdParam || storeExecutionId || null;
+
   const [execution, setExecution] = useState<any>(null);
   const [steps, setSteps] = useState<any[]>([]);
   const [task, setTask] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [loadState, setLoadState] = useState<LoadState>('loading');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
-  const {
-    isRunning,
-    isCancelled,
-    isPaused,
-    currentStep,
-    setLastAction,
-  } = useForegroundTaskStore();
+  const loadExecution = useCallback(async () => {
+    setLoadState('loading');
+    setErrorMessage(null);
+    try {
+      if (!effectiveId) {
+        // No id and no store execution -> empty state (no active task)
+        // Small delay to show skeleton briefly for perceived loading
+        await new Promise((r) => setTimeout(r, 350));
+        setExecution(null);
+        setSteps([]);
+        setTask(null);
+        setLoadState('empty');
+        return;
+      }
+
+      if (!db) {
+        await initializeDatabase();
+      }
+      if (!db) {
+        throw new Error('Database not available');
+      }
+      await initializeDatabase().catch(() => {});
+
+      // Try direct execution id match first
+      let execData: any = null;
+      try {
+        const rows = await db
+          .select()
+          .from(taskExecutions)
+          .where(eq(taskExecutions.id, effectiveId))
+          .limit(1);
+        execData = rows[0] || null;
+      } catch {
+        execData = null;
+      }
+
+      // If not found and param looks like a task id, try latest execution for that task
+      if (!execData && taskIdParam) {
+        try {
+          const byTask = await db
+            .select()
+            .from(taskExecutions)
+            .where(eq(taskExecutions.task_id, taskIdParam));
+          if (byTask.length > 0) {
+            // Most recent by started_at desc
+            byTask.sort((a: any, b: any) => (b.started_at || 0) - (a.started_at || 0));
+            execData = byTask[0];
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      // Fallback to store's execution_id if we used taskId param but store has different
+      if (!execData && storeExecutionId && storeExecutionId !== effectiveId) {
+        try {
+          const rows = await db
+            .select()
+            .from(taskExecutions)
+            .where(eq(taskExecutions.id, storeExecutionId))
+            .limit(1);
+          execData = rows[0] || null;
+        } catch {
+          // ignore
+        }
+      }
+
+      if (!execData) {
+        // If we have a live store task_plan but no DB row yet, treat as active (store-driven)
+        if (storeExecutionId && task_plan) {
+          setExecution({
+            id: storeExecutionId,
+            task_id: task_plan.task_id,
+            status: isRunning ? 'running' : isPaused ? 'interrupted' : 'pending',
+            current_step_index: currentStep,
+            last_action: lastAction,
+          });
+          // Build pseudo steps from task_plan
+          const pseudoSteps = task_plan.steps.map((s: any, idx: number) => ({
+            id: s.id,
+            description: s.description,
+            step_index: idx,
+            status: idx < currentStep ? 'completed' : idx === currentStep ? 'running' : 'pending',
+          }));
+          setSteps(pseudoSteps);
+          try {
+            const tRows = await db.select().from(tasks).where(eq(tasks.id, task_plan.task_id)).limit(1);
+            setTask(tRows[0] || null);
+          } catch {
+            setTask(null);
+          }
+          setLoadState('active');
+          return;
+        }
+        // No execution at all
+        if (!storeExecutionId && !taskIdParam) {
+          setLoadState('empty');
+        } else {
+          setErrorMessage('Task execution not found');
+          setLoadState('error');
+        }
+        return;
+      }
+
+      setExecution(execData);
+
+      // Load linked task
+      try {
+        const taskRows = await db.select().from(tasks).where(eq(tasks.id, execData.task_id)).limit(1);
+        setTask(taskRows[0] || null);
+      } catch {
+        setTask(null);
+      }
+
+      // Load steps
+      try {
+        const stepsData = await db
+          .select()
+          .from(taskStepExecutions)
+          .where(eq(taskStepExecutions.execution_id, execData.id))
+          .orderBy(taskStepExecutions.step_index);
+        setSteps(stepsData);
+      } catch {
+        setSteps([]);
+      }
+
+      // Determine state: if cancelled/failed/interrupted with no store running -> could be error/timeout
+      if (execData.status === 'failed' || execData.status === 'cancelled') {
+        // Still show active with status badge but also allow retry; map to active for progress view
+        setLoadState('active');
+      } else {
+        setLoadState('active');
+      }
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Failed to load task');
+      setLoadState('error');
+    }
+  }, [effectiveId, taskIdParam, storeExecutionId, currentStep, isRunning, isPaused, lastAction, task_plan]);
 
   useEffect(() => {
     loadExecution();
-  }, [execution_id]);
+  }, [loadExecution, retryKey]);
 
-  const loadExecution = async () => {
-    if (!execution_id || !db) return;
+  // Also react to store updates for live progress (poll via store subscription already via Zustand)
+  // No extra polling needed; store changes trigger re-render
 
-    await initializeDatabase();
-
-    const execData = await db
-      .select()
-      .from(taskExecutions)
-      .where(eq(taskExecutions.id, execution_id))
-      .limit(1)
-      .then((rows) => rows[0]);
-
-    if (!execData) {
-      setLoading(false);
-      return;
-    }
-
-    setExecution(execData);
-
-    const taskData = await db
-      .select()
-      .from(tasks)
-      .where(eq(tasks.id, execData.task_id))
-      .limit(1)
-      .then((rows) => rows[0]);
-    setTask(taskData);
-
-    const stepsData = await db
-      .select()
-      .from(taskStepExecutions)
-      .where(eq(taskStepExecutions.execution_id, execution_id))
-      .orderBy(taskStepExecutions.step_index);
-    setSteps(stepsData);
-
-    setLoading(false);
+  const handleRetry = () => {
+    setRetryKey((k) => k + 1);
   };
 
   const handleCancel = async () => {
-    if (!execution_id) return;
-    await cancelForegroundTask(execution_id);
+    const id = execution?.id || effectiveId;
+    if (!id) return;
+    await cancelForegroundTask(id);
     router.replace('/tasks');
-  };
-
-  const handlePause = async () => {
-    if (!execution_id) return;
-    await pauseForApproval(execution_id, 'Task paused for approval');
   };
 
   const handleResume = async () => {
-    if (!execution_id) return;
-    await resumeForegroundTask(execution_id);
+    const id = execution?.id || effectiveId;
+    if (!id) return;
+    await resumeForegroundTask(id);
+    handleRetry();
   };
 
-  const handleConfirmApproval = async () => {
-    if (!execution_id) return;
-    await resumeForegroundTask(execution_id);
-  };
+  // Timeout: if loading too long, parent will show error; we handle via loadState
 
-  const handleDenyApproval = async () => {
-    if (!execution_id) return;
-    await cancelForegroundTask(execution_id);
-    router.replace('/tasks');
-  };
+  const totalSteps = task_plan?.steps?.length || task?.steps?.length || steps.length || 1;
+  const currentIdx = typeof currentStep === 'number' ? currentStep : execution?.current_step_index ?? 0;
+  const displayStep = Math.min(currentIdx + 1, totalSteps);
+  const progressPct = totalSteps > 0 ? Math.min(100, Math.round((currentIdx / totalSteps) * 100)) : 0;
+  const currentActionText = lastAction || execution?.last_action || 'Starting...';
 
-  if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#007AFF" />
+  const renderLoading = () => (
+    <View style={styles.statesGap}>
+      <SkeletonCard colors={colors} />
+      <SkeletonCard colors={colors} />
+      <SkeletonCard colors={colors} />
+      <View style={{ alignItems: 'center', marginTop: 8 }}>
+        <ActivityIndicator size="small" color={aurora.acc1} />
+        <Text style={{ color: colors.textMuted, fontSize: sizes.sub, marginTop: 8 }}>Loading task…</Text>
       </View>
-    );
-  }
+    </View>
+  );
 
-  if (!execution) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.errorText}>Task execution not found</Text>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.replace('/tasks')}
-        >
-          <Text style={styles.backButtonText}>Back to Tasks</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+  const renderEmpty = () => (
+    <Card style={{ gap: 12 }}>
+      <Text style={{ color: colors.text, fontSize: sizes.text, fontWeight: '600' }}>No active task</Text>
+      <Text style={{ color: colors.textMuted, fontSize: sizes.sub, lineHeight: 18 }}>
+        There is no task currently running. Create or start a task to track its progress here.
+      </Text>
+      <PrimaryButton label="Go to Tasks" onPress={() => router.push('/tasks')} />
+    </Card>
+  );
 
-  const stepProgress = task
-    ? `${execution.current_step_index}/${task.steps?.length || steps.length}`
-    : `${execution.current_step_index}/${steps.length}`;
+  const renderError = () => (
+    <Card style={{ gap: 12, borderColor: 'rgba(239,68,68,0.35)' }}>
+      <Text style={{ color: '#f87171', fontSize: sizes.text, fontWeight: '700' }}>Something went wrong</Text>
+      <Text style={{ color: colors.textMuted, fontSize: sizes.sub, lineHeight: 18 }}>
+        {errorMessage || 'The task could not be loaded or timed out.'}
+      </Text>
+      <PrimaryButton label="Retry" onPress={handleRetry} />
+      <Pressable
+        onPress={() => router.push('/tasks')}
+        style={{ alignItems: 'center', paddingVertical: 10, minHeight: 48, justifyContent: 'center' }}
+        accessibilityRole="button"
+        accessibilityLabel="Go to Tasks"
+      >
+        <Text style={{ color: colors.textMuted, fontSize: sizes.text, fontWeight: '600' }}>Go to Tasks</Text>
+      </Pressable>
+    </Card>
+  );
 
-  return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>Task Progress</Text>
-        <Text style={styles.taskTitle}>{task?.title || 'Running Task'}</Text>
-      </View>
+  const renderActive = () => (
+    <View style={styles.statesGap}>
+      <Card style={{ gap: 10 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={{ color: colors.text, fontSize: sizes.text, fontWeight: '700' }} numberOfLines={1}>
+            {task?.title || 'Running Task'}
+          </Text>
+          {isCancelled ? (
+            <View style={[styles.badge, { backgroundColor: 'rgba(239,68,68,0.15)' }]}>
+              <Text style={[styles.badgeText, { color: '#f87171' }]}>Cancelled</Text>
+            </View>
+          ) : isPaused || execution?.awaiting_approval ? (
+            <View style={[styles.badge, { backgroundColor: 'rgba(251,146,60,0.15)' }]}>
+              <Text style={[styles.badgeText, { color: '#fb923c' }]}>Paused</Text>
+            </View>
+          ) : (
+            <View style={[styles.badge, { backgroundColor: 'rgba(16,185,129,0.15)' }]}>
+              <Text style={[styles.badgeText, { color: '#10b981' }]}>Running</Text>
+            </View>
+          )}
+        </View>
 
-      {/* Status Badge */}
-      <View style={styles.statusContainer}>
-        {isCancelled ? (
-          <View style={[styles.statusBadge, styles.statusCancelled]}>
-            <Text style={styles.statusText}>Cancelled</Text>
-          </View>
-        ) : isPaused ? (
-          <View style={[styles.statusBadge, styles.statusPaused]}>
-            <Text style={styles.statusText}>Paused</Text>
-          </View>
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
+          <Text style={{ color: aurora.acc1, fontSize: 22, fontWeight: '800' }}>
+            Step {displayStep}/{totalSteps}
+          </Text>
+          <Text style={{ color: colors.textMuted, fontSize: sizes.sub }}>
+            {isRunning ? 'in progress' : isPaused ? 'paused' : execution?.status || 'pending'}
+          </Text>
+        </View>
+
+        <Text style={{ color: colors.textMuted, fontSize: sizes.sub, lineHeight: 16 }} numberOfLines={2}>
+          {currentActionText}
+        </Text>
+
+        {/* Progress bar with aurora.acc1 */}
+        <View style={[styles.progressBg, { backgroundColor: 'rgba(0,0,0,0.25)', borderColor: colors.glassBorder }]}>
+          <View style={[styles.progressFill, { width: `${progressPct}%`, backgroundColor: aurora.acc1 }]} />
+        </View>
+        <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, textAlign: 'right' }}>{progressPct}%</Text>
+      </Card>
+
+      {/* Steps list */}
+      <Card style={{ gap: 0 }}>
+        <Text style={{ color: colors.text, fontSize: sizes.text, fontWeight: '600', marginBottom: 12 }}>Steps</Text>
+        {steps.length === 0 ? (
+          <Text style={{ color: colors.textMuted, fontSize: sizes.sub, textAlign: 'center', paddingVertical: 12 }}>
+            No steps recorded
+          </Text>
         ) : (
-          <View style={[styles.statusBadge, styles.statusRunning]}>
-            <Text style={styles.statusText}>Running</Text>
-          </View>
+          steps.map((step: any, index: number) => {
+            const status: string = step.status || (index < currentIdx ? 'completed' : index === currentIdx ? 'running' : 'pending');
+            return (
+              <View
+                key={step.id || `${index}`}
+                style={[
+                  styles.stepItem,
+                  { borderBottomColor: colors.glassBorder },
+                  status === 'completed' && { backgroundColor: 'rgba(16,185,129,0.06)' },
+                  status === 'running' && { backgroundColor: 'rgba(59,130,246,0.08)' },
+                ]}
+              >
+                <View style={[styles.stepNumber, { backgroundColor: status === 'completed' ? '#10b981' : status === 'running' ? aurora.acc1 : 'rgba(255,255,255,0.12)' }]}>
+                  <Text style={{ color: status === 'completed' || status === 'running' ? '#fff' : colors.textMuted, fontWeight: '700', fontSize: 12, textAlign: 'center', lineHeight: 26 }}>
+                    {status === 'completed' ? '✓' : index + 1}
+                  </Text>
+                </View>
+                <Text style={[styles.stepDescription, { color: colors.text }]} numberOfLines={2}>
+                  {step.description || (task_plan?.steps?.[index]?.description) || `Step ${index + 1}`}
+                </Text>
+                {status === 'running' ? <ActivityIndicator size="small" color={aurora.acc1} style={{ marginLeft: 8 }} /> : null}
+              </View>
+            );
+          })
         )}
-      </View>
-
-      {/* Progress */}
-      <View style={styles.progressSection}>
-        <Text style={styles.progressText}>Step {stepProgress}</Text>
-        <Text style={styles.lastAction}>{execution.last_action || 'Starting...'}</Text>
-      </View>
-
-      {/* Steps List */}
-      <View style={styles.stepsSection}>
-        <Text style={styles.stepsTitle}>Steps</Text>
-        {steps.map((step, index) => (
-          <View
-            key={step.id}
-            style={[
-              styles.stepItem,
-              step.status === 'completed' && styles.stepCompleted,
-              step.status === 'running' && styles.stepRunning,
-            ]}
-          >
-            <Text style={styles.stepNumber}>{index + 1}</Text>
-            <Text style={styles.stepDescription}>
-              {step.description || `Step ${index + 1}`}
-            </Text>
-            {step.status === 'completed' && (
-              <Text style={styles.stepCheckmark}>✓</Text>
-            )}
-            {step.status === 'running' && (
-              <ActivityIndicator size="small" color="#007AFF" />
-            )}
-          </View>
-        ))}
-      </View>
+      </Card>
 
       {/* Controls */}
-      <View style={styles.controls}>
-        {!isCancelled && !isPaused && (
-          <TouchableOpacity
-            style={[styles.button, styles.pauseButton]}
-            onPress={handlePause}
-          >
-            <Text style={styles.buttonText}>Pause</Text>
-          </TouchableOpacity>
-        )}
-
-        {isPaused && !isCancelled && (
-          <TouchableOpacity
-            style={[styles.button, styles.resumeButton]}
+      <View style={{ flexDirection: 'row', gap: 10 }}>
+        {isPaused ? (
+          <Pressable
             onPress={handleResume}
+            style={({ pressed }) => [styles.controlBtn, { backgroundColor: '#10b981' }, pressed && { opacity: 0.85 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Resume task"
           >
-            <Text style={styles.buttonText}>Resume</Text>
-          </TouchableOpacity>
-        )}
-
-        {!isCancelled && (
-          <TouchableOpacity
-            style={[styles.button, styles.cancelButton]}
+            <Text style={styles.controlBtnText}>Resume</Text>
+          </Pressable>
+        ) : !isCancelled ? (
+          <Pressable
             onPress={handleCancel}
+            style={({ pressed }) => [styles.controlBtn, { backgroundColor: 'rgba(239,68,68,0.9)' }, pressed && { opacity: 0.85 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Cancel task"
           >
-            <Text style={styles.buttonText}>Cancel</Text>
-          </TouchableOpacity>
-        )}
+            <Text style={styles.controlBtnText}>Cancel</Text>
+          </Pressable>
+        ) : null}
+        <Pressable
+          onPress={() => router.push('/tasks')}
+          style={({ pressed }) => [styles.controlBtn, { backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: colors.glassBorder }, pressed && { opacity: 0.85 }]}
+          accessibilityRole="button"
+          accessibilityLabel="View all tasks"
+        >
+          <Text style={[styles.controlBtnText, { color: colors.text }]}>View Tasks</Text>
+        </Pressable>
       </View>
-
-      {/* Approval Dialog (if awaiting approval) */}
-      {execution.awaiting_approval && (
-        <View style={styles.approvalContainer}>
-          <Text style={styles.approvalTitle}>Approval Required</Text>
-          <Text style={styles.approvalMessage}>
-            This action requires your confirmation.
-          </Text>
-          <View style={styles.approvalButtons}>
-            <TouchableOpacity
-              style={[styles.approvalButton, styles.confirmButton]}
-              onPress={handleConfirmApproval}
-            >
-              <Text style={styles.buttonText}>Confirm</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.approvalButton, styles.denyButton]}
-              onPress={handleDenyApproval}
-            >
-              <Text style={styles.buttonText}>Deny</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
     </View>
+  );
+
+  let content: React.ReactNode = null;
+  if (loadState === 'loading') content = renderLoading();
+  else if (loadState === 'error') content = renderError();
+  else if (loadState === 'empty') content = renderEmpty();
+  else content = renderActive();
+
+  return (
+    <AuroraScreen title="Task Progress" subtitle={loadState === 'active' ? currentActionText : undefined}>
+      {content}
+    </AuroraScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F2F2F7',
-    padding: 16,
+  statesGap: {
+    gap: 16,
   },
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+  skeletonCard: {
+    gap: 12,
+    minHeight: 92,
   },
-  header: {
-    marginBottom: 20,
+  skeletonLine: {
+    height: 16,
+    borderRadius: 6,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#000',
-  },
-  taskTitle: {
-    fontSize: 18,
-    color: '#666',
+  skeletonBar: {
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
     marginTop: 4,
   },
-  statusContainer: {
-    alignItems: 'center',
-    marginBottom: 20,
+  skeletonBarFill: {
+    height: '100%',
+    borderRadius: 4,
   },
-  statusBadge: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
+  progressBg: {
+    height: 8,
+    borderWidth: 1,
+    borderRadius: 999,
+    overflow: 'hidden',
   },
-  statusRunning: {
-    backgroundColor: '#E8F5E9',
+  progressFill: {
+    height: '100%',
+    borderRadius: 999,
   },
-  statusPaused: {
-    backgroundColor: '#FFF3E0',
+  badge: {
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 999,
   },
-  statusCancelled: {
-    backgroundColor: '#FFEBEE',
-  },
-  statusText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  progressSection: {
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-  },
-  progressText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#007AFF',
-  },
-  lastAction: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
-  },
-  stepsSection: {
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-  },
-  stepsTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 12,
+  badgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.4,
   },
   stepItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
+    gap: 12,
   },
   stepNumber: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#E5E5EA',
-    textAlign: 'center',
-    lineHeight: 30,
-    fontWeight: '600',
-  },
-  stepCompleted: {
-    backgroundColor: '#E8F5E9',
-  },
-  stepRunning: {
-    backgroundColor: '#E3F2FD',
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   stepDescription: {
     flex: 1,
-    marginLeft: 12,
-    fontSize: 16,
+    fontSize: 13,
+    lineHeight: 16,
   },
-  stepCheckmark: {
-    fontSize: 20,
-    color: '#4CAF50',
-    marginLeft: 8,
-  },
-  controls: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 20,
-  },
-  button: {
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: 10,
-    minWidth: 100,
-    alignItems: 'center',
-  },
-  pauseButton: {
-    backgroundColor: '#FF9500',
-  },
-  resumeButton: {
-    backgroundColor: '#4CAF50',
-  },
-  cancelButton: {
-    backgroundColor: '#FF3B30',
-  },
-  buttonText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  approvalContainer: {
-    backgroundColor: '#FFF3E0',
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 20,
-  },
-  approvalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#E65100',
-    marginBottom: 8,
-  },
-  approvalMessage: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 16,
-  },
-  approvalButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  approvalButton: {
+  controlBtn: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
+    minHeight: 48,
+    borderRadius: 12,
     alignItems: 'center',
-  },
-  confirmButton: {
-    backgroundColor: '#4CAF50',
-  },
-  denyButton: {
-    backgroundColor: '#FF3B30',
-  },
-  backButton: {
-    marginTop: 20,
+    justifyContent: 'center',
     paddingVertical: 12,
-    paddingHorizontal: 24,
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
   },
-  backButtonText: {
-    color: '#FFF',
-    fontSize: 16,
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#FF3B30',
-    marginBottom: 16,
+  controlBtnText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

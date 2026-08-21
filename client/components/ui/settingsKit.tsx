@@ -240,12 +240,16 @@ export function PrimaryButton({
 export function DangerButton({
   label,
   onPress,
+  accessibilityLabel,
 }: {
   label: string;
   onPress: () => void;
+  accessibilityLabel?: string;
 }) {
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel || label}
       style={({ pressed }) => [styles.danger, pressed && { backgroundColor: 'rgba(239, 68, 68, 0.18)' }]}
       onPress={onPress}
     >
@@ -304,7 +308,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   headerTitle: {
-    fontWeight: '700',
+    fontWeight: '600',
     textAlign: 'center',
     flexShrink: 1,
   },
@@ -383,6 +387,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 48,
   },
   dangerText: {
     color: '#f87171',
