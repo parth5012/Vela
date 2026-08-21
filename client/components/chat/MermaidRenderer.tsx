@@ -28,28 +28,8 @@ export default function MermaidRenderer({
   const sizes = FONT_SIZES[fontSize] || FONT_SIZES.medium;
   const accentHex = ACCENT_COLORS[accentColor] || ACCENT_COLORS.indigo;
 
-  // Fallback for Web targets where WebView is unavailable
-  if (Platform.OS === 'web') {
-    return renderSourceView();
-  }
-
-  function renderSourceView() {
-    return (
-      <View style={[styles.codeBlockWrapper, { backgroundColor: colors.background, borderColor: colors.border }]}>
-        {hasError && (
-          <View style={styles.errorBanner}>
-            <Text style={styles.errorText}>⚠️ Mermaid render failed. Showing source view.</Text>
-          </View>
-        )}
-        <ScrollView horizontal={true} showsHorizontalScrollIndicator={true} style={{ width: '100%' }}>
-          <Text style={[styles.codeText, { color: colors.text, fontSize: sizes.text - 1, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }]}>
-            {graph.replace(NEWLINE_END_REGEX, '')}
-          </Text>
-        </ScrollView>
-      </View>
-    );
-  }
-
+  // Hooks must run unconditionally (rules-of-hooks): compute them even on the
+  // Web fallback path below so the hook order never changes between renders.
   const isDark = theme !== 'slate'; // Slate is the only light-like theme
   const mermaidTheme = isDark ? 'dark' : 'default';
 
@@ -155,6 +135,28 @@ export default function MermaidRenderer({
   `, [colors.text, mermaidTheme, safeGraph]);
 
   const webViewSource = useMemo(() => ({ html: htmlContent }), [htmlContent]);
+
+  // Fallback for Web targets where WebView is unavailable
+  if (Platform.OS === 'web') {
+    return renderSourceView();
+  }
+
+  function renderSourceView() {
+    return (
+      <View style={[styles.codeBlockWrapper, { backgroundColor: colors.background, borderColor: colors.border }]}>
+        {hasError && (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorText}>⚠️ Mermaid render failed. Showing source view.</Text>
+          </View>
+        )}
+        <ScrollView horizontal={true} showsHorizontalScrollIndicator={true} style={{ width: '100%' }}>
+          <Text style={[styles.codeText, { color: colors.text, fontSize: sizes.text - 1, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }]}>
+            {graph.replace(NEWLINE_END_REGEX, '')}
+          </Text>
+        </ScrollView>
+      </View>
+    );
+  }
 
   const copyToClipboard = async () => {
     await Clipboard.setStringAsync(graph);

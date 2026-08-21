@@ -20,16 +20,8 @@ export default function LatexRenderer({ formula, displayMode = false }: LatexRen
   const [height, setHeight] = useState(displayMode ? 60 : 30);
   const [hasError, setHasError] = useState(false);
 
-  if (Platform.OS === 'web' || hasError) {
-    return (
-      <View style={[styles.fallbackContainer, displayMode && styles.blockPadding]}>
-        <Text style={styles.fallbackText}>
-          {displayMode ? `$$\n${formula}\n$$` : `$${formula}$`}
-        </Text>
-      </View>
-    );
-  }
-
+  // Hooks must run unconditionally (rules-of-hooks): compute them even on the
+  // fallback path below so the hook order never changes between renders.
   const safeFormula = useMemo(() => JSON.stringify(formula).replace(LT_REGEX, '\\u003c'), [formula]);
 
   const htmlContent = useMemo(() => `
@@ -106,6 +98,16 @@ export default function LatexRenderer({ formula, displayMode = false }: LatexRen
   `, [safeFormula, displayMode]);
 
   const webViewSource = useMemo(() => ({ html: htmlContent }), [htmlContent]);
+
+  if (Platform.OS === 'web' || hasError) {
+    return (
+      <View style={[styles.fallbackContainer, displayMode && styles.blockPadding]}>
+        <Text style={styles.fallbackText}>
+          {displayMode ? `$$\n${formula}\n$$` : `$${formula}$`}
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { height: height }, displayMode && styles.blockPadding]}>
