@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, Pressable, StyleSheet, Animated, Platform } from 'react-native';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { View, Text, Pressable, StyleSheet, Animated, Platform, ScrollView } from 'react-native';
 
 interface CollapsibleBlockProps {
   type: 'thought' | 'tool_call' | 'intent' | 'skill';
@@ -11,6 +11,7 @@ interface CollapsibleBlockProps {
   accentHex: string;
   children: React.ReactNode;
   onToggle?: (collapsed: boolean) => void;
+  safetyTier?: 'auto' | 'ask' | 'blocked';
 }
 
 export default function CollapsibleBlock({
@@ -22,7 +23,8 @@ export default function CollapsibleBlock({
   themeSizes,
   accentHex,
   children,
-  onToggle
+  onToggle,
+  safetyTier
 }: CollapsibleBlockProps) {
   // If streaming (unclosed) default expanded. Once closed, collapse it.
   const [collapsed, setCollapsed] = useState(isClosed);
@@ -128,6 +130,32 @@ export default function CollapsibleBlock({
 
   const isThoughtOrIntent = isThought || isIntent;
 
+  // #160: Pretty-print JSON args: try JSON.parse then 2-space stringify else raw; limit 800 chars.
+  const formattedInput = useMemo(() => {
+    if (!input) return null;
+    let out: string;
+    try {
+      const parsed = JSON.parse(input);
+      out = JSON.stringify(parsed, null, 2);
+    } catch {
+      out = input;
+    }
+    if (out.length > 800) {
+      out = out.slice(0, 800) + '... truncated';
+    }
+    return out;
+  }, [input]);
+
+  // #160: safety pill config when type === 'tool_call'
+  const safetyConfig =
+    type === 'tool_call' && safetyTier
+      ? safetyTier === 'auto'
+        ? { label: 'Auto', bg: '#22c55e', color: '#ffffff' }
+        : safetyTier === 'ask'
+          ? { label: 'Ask', bg: '#eab308', color: '#111827' }
+          : { label: 'Blocked', bg: '#ef4444', color: '#ffffff' }
+      : null;
+
   // Interpolate height on the JS driver (height is a layout prop).
   // Opacity is its own Animated.Value driven by the native driver (see above).
   const contentHeight = animatedValue.interpolate({
@@ -154,19 +182,29 @@ export default function CollapsibleBlock({
         <View style={styles.headerTextContainer}>
           <Text style={[styles.icon, { fontSize: themeSizes.text }]}>{icon}</Text>
           <View style={{ flex: 1 }}>
-            <Text style={[
-              styles.title,
-              { color: themeColors.text, fontSize: themeSizes.text + 1 }
-            ]}>
-              {title}
-            </Text>
-            {input ? (
-              <Text
-                numberOfLines={1}
-                style={[styles.inputLabel, { color: themeColors.textDark, fontSize: themeSizes.sub }]}
-              >
-                Args: {input}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <Text style={[
+                styles.title,
+                { color: themeColors.text, fontSize: themeSizes.text + 1 }
+              ]}>
+                {title}
               </Text>
+              {safetyConfig ? (
+                <View style={[styles.safetyPill, { backgroundColor: safetyConfig.bg }]}>
+                  <Text style={[styles.safetyPillText, { color: safetyConfig.color }]}>
+                    {safetyConfig.label}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            {formattedInput ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 2, maxWidth: '100%' }}>
+                <Text
+                  style={[styles.inputLabel, { color: themeColors.textDark, fontSize: themeSizes.sub }]}
+                >
+                  Args: {formattedInput}
+                </Text>
+              </ScrollView>
             ) : null}
           </View>
         </View>
@@ -239,6 +277,18 @@ const styles = StyleSheet.create({
   arrow: {
     fontWeight: 'bold',
     marginLeft: 8,
+  },
+  safetyPill: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  safetyPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 14,
   },
   content: {
     borderTopWidth: 1,

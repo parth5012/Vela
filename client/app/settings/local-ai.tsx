@@ -552,19 +552,28 @@ export default function LocalAiScreen() {
           const status = getModelStatusForRam(model.name, detectedRamBytes || 6 * 1024 * 1024 * 1024);
           const statusColor = status === 'recommended' ? '#10b981' : (status === 'borderline' ? '#fb923c' : '#ef4444');
           const statusText = status.charAt(0).toUpperCase() + status.slice(1);
+          const isActiveDownloading = isSelected && localModelDownloadProgress !== null;
           return (
             <Pressable
               key={model.name}
               onPress={() => handleSelectModel(model.name)}
-              disabled={isDownloading}
+              disabled={isDownloading && !isActiveDownloading}
+              accessibilityRole="button"
+              accessibilityLabel={
+                isActiveDownloading
+                  ? `Downloading ${model.name} ${localModelDownloadProgress}%`
+                  : `${model.name} ${statusText}, ${isDownloaded ? 'Downloaded' : 'Not downloaded'}`
+              }
+              accessibilityState={{ selected: isSelected, disabled: isDownloading && !isActiveDownloading }}
               style={[
                 styles.modelRow,
                 {
                   borderColor: isSelected ? aurora.acc1 : colors.glassBorder,
                   backgroundColor: 'rgba(0,0,0,0.25)',
-                  marginBottom: 8
+                  marginBottom: 8,
+                  minHeight: 48,
                 },
-                isDownloading && { opacity: 0.6 },
+                isDownloading && !isActiveDownloading && { opacity: 0.6 },
               ]}
             >
               <View style={{ flex: 1, marginRight: 8 }}>
@@ -589,10 +598,43 @@ export default function LocalAiScreen() {
                 <Text style={{ color: colors.textDark, fontSize: sizes.sub - 1, marginTop: 4, fontFamily: 'monospace' }}>
                   {model.filename}
                 </Text>
+                {isActiveDownloading ? (
+                  <View style={{ marginTop: 10, gap: 4 }}>
+                    <View
+                      style={{
+                        height: 8,
+                        borderRadius: 4,
+                        overflow: 'hidden',
+                        backgroundColor: 'rgba(255,255,255,0.08)',
+                        borderWidth: 1,
+                        borderColor: colors.glassBorder,
+                      }}
+                      accessibilityLabel={`Downloading ${model.name} ${localModelDownloadProgress}%`}
+                    >
+                      <View
+                        style={{
+                          height: '100%',
+                          width: `${localModelDownloadProgress ?? 0}%`,
+                          backgroundColor: aurora.acc1,
+                          borderRadius: 4,
+                        }}
+                      />
+                    </View>
+                    <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, fontWeight: '600' }}>
+                      Downloading {model.name} {localModelDownloadProgress}% 
+                    </Text>
+                  </View>
+                ) : null}
               </View>
-              <Text style={{ color: isDownloaded ? '#34d399' : colors.textDark, fontSize: sizes.sub, fontWeight: '600' }}>
-                {isDownloaded ? 'Downloaded' : 'Not downloaded'}
-              </Text>
+              {isActiveDownloading ? (
+                <Text style={{ color: aurora.acc1, fontSize: sizes.sub, fontWeight: '700', marginLeft: 8 }}>
+                  {localModelDownloadProgress}%
+                </Text>
+              ) : (
+                <Text style={{ color: isDownloaded ? '#34d399' : colors.textDark, fontSize: sizes.sub, fontWeight: '600' }}>
+                  {isDownloaded ? 'Downloaded' : 'Not downloaded'}
+                </Text>
+              )}
             </Pressable>
           );
         })}

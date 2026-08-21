@@ -12,6 +12,9 @@ export interface SuggestionStarter {
 
 export type PermissionTier = 'auto' | 'confirm' | 'deny';
 
+export type OSPermission = 'notifications' | 'camera' | 'microphone' | 'storage' | 'accessibility' | 'background';
+export type OSPermissionStatus = 'granted' | 'denied' | 'undetermined';
+
 export interface DeviceAgentPermissions {
   screen_read: PermissionTier;
   info: PermissionTier;
@@ -63,6 +66,8 @@ interface ConfigState {
   setSuggestionStarters: (starters: SuggestionStarter[]) => void;
   deviceAgentPermissions: DeviceAgentPermissions;
   setDeviceAgentPermission: (action: keyof DeviceAgentPermissions, tier: PermissionTier) => void;
+  osPermissions: Record<OSPermission, OSPermissionStatus>;
+  setOSPermission: (perm: OSPermission, status: OSPermissionStatus) => void;
   
   // Local mode configuration settings
   isLocalMode: boolean;
@@ -127,6 +132,14 @@ export const useConfigStore = create<ConfigState>()(
       permission_toggles: 'deny',
       root_shizuku: 'deny',
     },
+      osPermissions: {
+        notifications: 'undetermined',
+        camera: 'undetermined',
+        microphone: 'undetermined',
+        storage: 'granted',
+        accessibility: 'undetermined',
+        background: 'undetermined',
+      } as Record<OSPermission, OSPermissionStatus>,
       
       // Defaults for local mode
       isLocalMode: false,
@@ -192,6 +205,13 @@ export const useConfigStore = create<ConfigState>()(
         [action]: tier,
       },
     })),
+      setOSPermission: (perm, status) =>
+        set((state) => ({
+          osPermissions: {
+            ...state.osPermissions,
+            [perm]: status,
+          },
+        })),
       
       // Settors for local mode
       setIsLocalMode: (isLocalMode) => set({ isLocalMode }),

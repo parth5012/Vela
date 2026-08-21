@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import React from 'react';
 import { useConfigStore } from './useConfigStore';
 
@@ -16,6 +18,8 @@ interface PendingApproval {
   description: string;
 }
 
+export type CookieSyncStatus = 'idle' | 'synced' | 'error';
+
 interface BrowserState {
   currentUrl: string;
   isVisible: boolean;
@@ -28,6 +32,11 @@ interface BrowserState {
   lastExecutedId: string | null;
   aiStatus: string | null;
 
+  // #155 cookie sync
+  cookieSyncStatus: CookieSyncStatus;
+  lastCookieSync: number | null;
+  cookieSyncDomains: string[];
+
   // Actions
   navigate: (url: string) => void;
   setVisible: (visible: boolean) => void;
@@ -39,6 +48,9 @@ interface BrowserState {
   approveAction: () => void;
   denyAction: () => void;
   clearPendingAction: () => void;
+  setCookieSyncStatus: (s: CookieSyncStatus) => void;
+  setLastCookieSync: (n: number | null) => void;
+  setCookieSyncDomains: (d: string[]) => void;
 }
 
 // --- Pure helpers ---
@@ -251,68 +263,91 @@ const executeAction = (input: WebviewAction): void => {
 
 // --- Store ---
 
-export const useBrowserStore = create<BrowserState>()((set, get) => ({
-  currentUrl: 'about:blank',
-  isVisible: false,
-  canGoBack: false,
-  canGoForward: false,
-  isLoading: false,
-  pageTitle: '',
-  pendingApproval: null,
-  pendingAction: null,
-  lastExecutedId: null,
-  aiStatus: null,
+export const useBrowserStore = create<BrowserState>()(
+  persist(
+    (set, get) => ({
+      currentUrl: 'about:blank',
+      isVisible: false,
+      canGoBack: false,
+      canGoForward: false,
+      isLoading: false,
+      pageTitle: '',
+      pendingApproval: null,
+      pendingAction: null,
+      lastExecutedId: null,
+      aiStatus: null,
 
-  navigate: (url) => {
-    let formatted = url.trim();
-    if (!/^https?:\/\//i.test(formatted)) {
-      formatted = 'https://' + formatted;
+      cookieSyncStatus: 'idle' as CookieSyncStatus,
+      lastCookieSync: null as number | null,
+      cookieSyncDomains: [] as string[],
+
+      navigate: (url) => {
+        let formatted = url.trim();
+        if (!/^https?:\/\//i.test(formatted)) {
+          formatted = 'https://' + formatted;
+        }
+        set({ currentUrl: formatted, isLoading: true });
+      },
+
+      setVisible: (visible) => set({ isVisible: visible }),
+
+      setNavState: (canGoBack, canGoForward, url, title) =>
+        set({ canGoBack, canGoForward, currentUrl: url, pageTitle: title }),
+
+      setLoading: (loading) => set({ isLoading: loading }),
+
+      setLastExecutedId: (id) => set({ lastExecutedId: id }),
+
+      setAiStatus: (status) => set({ aiStatus: status }),
+
+      handleWebviewAction: (input) => {
+        set({ isVisible: true });
+
+        if (isSensitive(input.action, input.target)) {
+          set({
+            pendingApproval: {
+              action: input,
+              description: formatActionDescription(input),
+            },
+          });
+        } else {
+          executeAction(input);
+        }
+      },
+
+      approveAction: () => {
+        const { pendingApproval } = get();
+        if (!pendingApproval) return;
+        set({ pendingApproval: null });
+        executeAction(pendingApproval.action);
+      },
+
+      denyAction: () => {
+        const { pendingApproval } = get();
+        if (!pendingApproval) return;
+        set({ pendingApproval: null, aiStatus: null });
+        sendResponse(pendingApproval.action.conversation_id, 'denied_by_user', 'User denied the action');
+      },
+
+      clearPendingAction: () => set({ pendingAction: null, aiStatus: null }),
+
+      setCookieSyncStatus: (s) => set({ cookieSyncStatus: s }),
+      setLastCookieSync: (n) => set({ lastCookieSync: n }),
+      setCookieSyncDomains: (d) => set({ cookieSyncDomains: d }),
+    }),
+    {
+      name: 'vela-browser-storage',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
+        // persist only cookie sync + navigation; transient UI (isLoading, aiStatus etc) stays ephemeral
+        currentUrl: state.currentUrl,
+        cookieSyncStatus: state.cookieSyncStatus,
+        lastCookieSync: state.lastCookieSync,
+        cookieSyncDomains: state.cookieSyncDomains,
+      }),
     }
-    set({ currentUrl: formatted, isLoading: true });
-  },
-
-  setVisible: (visible) => set({ isVisible: visible }),
-
-  setNavState: (canGoBack, canGoForward, url, title) =>
-    set({ canGoBack, canGoForward, currentUrl: url, pageTitle: title }),
-
-  setLoading: (loading) => set({ isLoading: loading }),
-
-  setLastExecutedId: (id) => set({ lastExecutedId: id }),
-
-  setAiStatus: (status) => set({ aiStatus: status }),
-
-  handleWebviewAction: (input) => {
-    set({ isVisible: true });
-
-    if (isSensitive(input.action, input.target)) {
-      set({
-        pendingApproval: {
-          action: input,
-          description: formatActionDescription(input),
-        },
-      });
-    } else {
-      executeAction(input);
-    }
-  },
-
-  approveAction: () => {
-    const { pendingApproval } = get();
-    if (!pendingApproval) return;
-    set({ pendingApproval: null });
-    executeAction(pendingApproval.action);
-  },
-
-  denyAction: () => {
-    const { pendingApproval } = get();
-    if (!pendingApproval) return;
-    set({ pendingApproval: null, aiStatus: null });
-    sendResponse(pendingApproval.action.conversation_id, 'denied_by_user', 'User denied the action');
-  },
-
-  clearPendingAction: () => set({ pendingAction: null, aiStatus: null }),
-}));
+  )
+);
 
 // --- WebView event handlers (called from _layout.tsx) ---
 

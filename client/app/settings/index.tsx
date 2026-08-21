@@ -17,6 +17,12 @@ const GROUPS: CategoryGroup[] = [
     ],
   },
   {
+    title: 'Permissions',
+    rows: [
+      { icon: '🛡️', label: 'Permissions', hint: 'App & agent permissions', route: '/settings/permissions' },
+    ],
+  },
+  {
     title: 'Appearance',
     rows: [
       { icon: '🎨', label: 'Theme', hint: '6 aurora atmospheres', route: '/settings/appearance' },

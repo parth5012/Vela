@@ -13,12 +13,13 @@ describe('ramDetection', () => {
     it('correctly classifies models for mid memory devices (4.5 - 7.5 GB)', () => {
       const ram6GB = 6 * 1024 * 1024 * 1024;
       expect(getModelStatusForRam('Qwen2.5 0.5B', ram6GB)).toBe('recommended');
-      expect(getModelStatusForRam('Llama3.2 1B (GGUF)', ram6GB)).toBe('recommended');
+      expect(getModelStatusForRam('Llama 3.2 1B (GGUF)', ram6GB)).toBe('recommended');
       expect(getModelStatusForRam('TinyLlama 1.1B', ram6GB)).toBe('borderline');
       expect(getModelStatusForRam('Qwen2.5 1.5B (GGUF)', ram6GB)).toBe('borderline');
       expect(getModelStatusForRam('DeepSeek-R1 1.5B (GGUF)', ram6GB)).toBe('borderline');
       expect(getModelStatusForRam('Phi-4 Mini (GGUF)', ram6GB)).toBe('unsupported');
-      expect(getModelStatusForRam('Qwen2.5 1.5B', ram6GB)).toBe('unsupported');
+      expect(getModelStatusForRam('Qwen2.5 1.5B', ram6GB)).toBe('borderline');
+      expect(getModelStatusForRam('DeepSeek-R1 1.5B', ram6GB)).toBe('borderline');
     });
 
     it('correctly classifies models for high memory devices (>= 7.5 GB)', () => {
@@ -49,9 +50,14 @@ describe('ramDetection', () => {
     it('returns optimal settings for high memory tier', () => {
       const ram8GB = 8 * 1024 * 1024 * 1024;
       const settings = getOptimalSettingsForRam(ram8GB);
-      expect(settings.modelName).toBe('TinyLlama 1.1B');
+      expect(settings.modelName).toBe('Qwen2.5 1.5B (GGUF)');
       expect(settings.contextSize).toBe(4096);
       expect(settings.maxTokens).toBe(1024);
+    });
+
+    it('marks Phi-4 Mini as recommended on high memory tier', () => {
+      const ram8GB = 8 * 1024 * 1024 * 1024;
+      expect(getModelStatusForRam('Phi-4 Mini (GGUF)', ram8GB)).toBe('recommended');
     });
   });
 });

@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Text, Keyboard } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { Text, Keyboard, View, Switch } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useConfigStore } from '../../store/useConfigStore';
 import { syncHistoryWithBackend } from '../../utils/history';
 import GoogleWorkspaceCard from '../../components/ui/GoogleWorkspaceCard';
@@ -16,6 +17,18 @@ export default function ConnectionScreen() {
   const [isTesting, setIsTesting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [autoSync, setAutoSync] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem('cookie_auto_sync').then((v) => {
+      if (v !== null) setAutoSync(v === 'true');
+    });
+  }, []);
+
+  const toggleAutoSync = async (value: boolean) => {
+    setAutoSync(value);
+    await AsyncStorage.setItem('cookie_auto_sync', value ? 'true' : 'false');
+  };
 
   const handleSave = async () => {
     Keyboard.dismiss();
@@ -135,6 +148,26 @@ export default function ConnectionScreen() {
           sizes={sizes}
           accentHex={aurora.acc1}
         />
+      </Card>
+
+      <Card>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <View style={{ flex: 1, gap: 4 }}>
+            <Text style={{ color: colors.text, fontSize: sizes.text, fontWeight: '600' }}>
+              Auto-import cookies on launch
+            </Text>
+            <Text style={{ color: colors.textMuted, fontSize: sizes.sub, lineHeight: 16 }}>
+              When enabled, Vela will re-import cookies from the last selected file when the app starts. Cookies stay on-device.
+            </Text>
+          </View>
+          <Switch
+            value={autoSync}
+            onValueChange={toggleAutoSync}
+            trackColor={{ false: colors.border, true: aurora.acc1 + '80' }}
+            thumbColor={autoSync ? aurora.acc1 : colors.textMuted}
+            accessibilityLabel="Auto-import cookies on launch"
+          />
+        </View>
       </Card>
     </AuroraScreen>
   );

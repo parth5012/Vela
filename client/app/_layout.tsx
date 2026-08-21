@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
 import { useRouter, useSegments, useRootNavigationState, Slot } from 'expo-router';
 import { Drawer } from 'expo-router/drawer';
-import { ActivityIndicator, View, StyleSheet, Platform, Pressable, Text } from 'react-native';
+import { ActivityIndicator, View, StyleSheet, Platform, Pressable, Text, AppState } from 'react-native';
 import { useConfigStore } from '../store/useConfigStore';
+import { checkPermission } from '../utils/permissionManager';
 import { useChatStore } from '../store/useChatStore';
 import DrawerContent from '../components/ui/DrawerContent';
 import HealthIndicator from '../components/ui/HealthIndicator';
@@ -144,6 +145,36 @@ hydrateGoogleTokens();
 registerVelaBackgroundTask();
 }
 }, [hasHydrated]);
+
+  useEffect(() => {
+    if (!hasHydrated) return;
+    const checkPermissionsAndUpdateStore = async () => {
+      const perms: Array<'notifications' | 'camera' | 'microphone' | 'storage' | 'accessibility' | 'background'> = [
+        'notifications',
+        'camera',
+        'microphone',
+        'storage',
+        'accessibility',
+        'background',
+      ];
+      for (const perm of perms) {
+        try {
+          const status = await checkPermission(perm);
+          useConfigStore.getState().setOSPermission(perm, status);
+        } catch {
+          // ignore per-permission failures
+        }
+      }
+    };
+    // Initial check
+    checkPermissionsAndUpdateStore();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        checkPermissionsAndUpdateStore();
+      }
+    });
+    return () => sub.remove();
+  }, [hasHydrated]);
 
   useEffect(() => {
     if (!hasHydrated || !isRouterReady) return;

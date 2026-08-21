@@ -20,6 +20,8 @@ interface MessageOptionsModalProps {
   onCopyCode: () => void;
   onShare: () => void;
   onShowInfo: () => void;
+  onView?: (content: string) => void;
+  messageContent?: string;
   themeColors: ThemeColors;
   isRaw: boolean;
   isUser?: boolean;
@@ -36,6 +38,8 @@ export default function MessageOptionsModal({
   onCopyCode,
   onShare,
   onShowInfo,
+  onView,
+  messageContent,
   themeColors,
   isRaw,
   isUser,
@@ -111,6 +115,22 @@ export default function MessageOptionsModal({
             <Text style={styles.optionIcon}>🌿</Text>
             <Text style={[styles.optionButtonText, { color: themeColors.text }]}>Branch Conversation</Text>
           </Pressable>
+
+          {onView && messageContent ? (
+            <Pressable
+              style={({ pressed }) => [
+                styles.optionButton,
+                { backgroundColor: themeColors.card, borderColor: themeColors.border },
+                pressed && styles.optionButtonPressed,
+              ]}
+              onPress={() => { onView(messageContent); onClose(); }}
+              accessibilityRole="button"
+              accessibilityLabel="View full message"
+            >
+              <Text style={styles.optionIcon}>👁️</Text>
+              <Text style={[styles.optionButtonText, { color: themeColors.text }]}>View Full</Text>
+            </Pressable>
+          ) : null}
 
           <Pressable
             style={({ pressed }) => [
