@@ -46,17 +46,26 @@ function withVelaAccessibilityService(config) {
       appElement['service'] = [];
     }
 
+    const serviceClassName = 'com.vela.client.deviceagent.VelaAccessibilityService';
     const serviceExists = appElement['service'].some(
-      (srv) => srv.$?.['android:name'] === '.VelaAccessibilityService'
+      (srv) => srv.$?.['android:name'] === serviceClassName
     );
 
     if (!serviceExists) {
       const serviceTag = {
         $: {
-          'android:name': '.VelaAccessibilityService',
+          'android:name': serviceClassName,
           'android:exported': 'true',
           'android:permission': 'android.permission.BIND_ACCESSIBILITY_SERVICE',
         },
+        'meta-data': [
+          {
+            $: {
+              'android:name': 'android.accessibilityservice',
+              'android:resource': '@xml/vela_accessibility_service',
+            },
+          },
+        ],
         'intent-filter': [
           {
             action: [
