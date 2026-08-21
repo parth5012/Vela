@@ -51,6 +51,14 @@ function formatDistanceToNow(date: Date | string | number): string {
   }
 }
 
+/**
+ * Wayfinder #173 Audit — Drawer
+ * Recent chats: derived from useChatStore threads sorted pinned-first then updated_at desc (isNaN-guarded).
+ * Each thread: title + is_pinned prefix '📌 ' + streaming ActivityIndicator + timestamp via formatDistanceToNow (not date-fns).
+ * No swipe-to-delete yet (needs gesture lib); overflow via ThreadOptionsModal onLongPress 450ms (delayLongPress={450}).
+ * Browser top placement verified: isBrowserActive accent borderLeft aurora.acc1 — no move.
+ * Spec #174: timestamp 'Xm ago' (just now/5m ago/3h ago/2d ago) as threadTimestamp 11px colors.textDark under title; threadItem flex row space-between 10/12 padding 6 radius; active bg colors.card text 500, muted textMuted, pinned 600; footer 4 items Chat/Refresh/Tasks/Settings each Pressable accessibilityRole button minHeight 48 textMuted pressed bg colors.card; sectionTitle 11px 700 uppercase textDark; WCAG AA textMuted #a9a6c8 on bg #0b0b1a >4.5:1.
+ */
 export default function DrawerContent(_props?: any) {
   const threads = useChatStore((state) => state.threads);
   const activeThreadId = useChatStore((state) => state.activeThreadId);
