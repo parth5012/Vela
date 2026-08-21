@@ -12,7 +12,7 @@ import {
   PERSISTENT_WEBVIEW_VISIBLE,
   persistentWebviewContainerStyle,
   persistentWebviewPointerEvents,
-} from '../app/persistentWebviewStyle';
+} from '../utils/persistentWebviewStyle';
 
 describe('persistentWebview positioning', () => {
   it('keeps WebView mounted but positions it offscreen when hidden', () => {

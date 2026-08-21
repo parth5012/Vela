@@ -17,7 +17,7 @@ import { hydrateGoogleTokens } from '../store/useGoogleAuthStore';
 import { registerVelaBackgroundTask } from '../utils/backgroundTasks';
 import * as Notifications from 'expo-notifications';
 import { SafetyDialog } from '../components/ui/SafetyDialog';
-import { persistentWebviewContainerStyle, persistentWebviewPointerEvents } from './persistentWebviewStyle';
+import { persistentWebviewContainerStyle, persistentWebviewPointerEvents } from '../utils/persistentWebviewStyle';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
