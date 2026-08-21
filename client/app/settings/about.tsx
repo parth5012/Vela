@@ -12,6 +12,12 @@ import {
   useAurora,
 } from '../../components/ui/settingsKit';
 
+/**
+ * Wayfinder #173 Audit — Danger Zone
+ * Previous: single-tap Reset (no confirmation) — destructive, no undo. Current: double-confirm Modals (firstVisible 'Are you sure?' + Continue, secondVisible 'Confirm reset' destructive).
+ * Spec #174: first modal body 'This will erase all local settings, threads, and cached chats. You will return to the setup screen.' [Cancel | Continue(aurora.acc1)]; second modal border rgba(239,68,68,0.35) title '#f87171 Confirm reset' body 'This action cannot be undone. All local data will be permanently deleted. Tap Reset to confirm.' [Cancel | Reset(#ef4444)]; both Modals transparent fade, backdrop rgba(0,0,0,0.6), 48dp minHeight, accessibilityRole button, AA contrast.
+ * Header casing: AuroraScreen title='About' Title Case (not ABOUT) — matches _layout formatter rule.
+ */
 export default function AboutScreen() {
   const clearConfig = useConfigStore((s) => s.clearConfig);
   const clearStore = useChatStore((s) => s.clearStore);
