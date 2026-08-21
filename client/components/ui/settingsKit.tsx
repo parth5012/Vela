@@ -258,7 +258,15 @@ export function DangerButton({
   );
 }
 
+/**
+ * Wayfinder #173 Audit — settingsKit / Shell Polish
+ * AuroraScreen headerTitle weight 600 (not 700/900 except VELA logo) via headerTitle fontWeight 600 — matches _layout formatter rule.
+ * DangerButton minHeight 48 pressed rgba(239,68,68,0.18) accessibilityRole button; PrimaryButton 48dp target retained.
+ * Accent swatches: 32dp circles, selected ring 2px aurora.acc1 + checkmark, AA contrast on glass bg (glassBorder vs accent).
+ * Spec #174: enforce 32dp + 2px aurora.acc1 ring, AA contrast, 48dp targets.
+ */
 export function AccentDots() {
+  const aurora = useAurora().aurora;
   const colors = useAurora().colors;
   const accentColor = useConfigStore((s) => s.accentColor);
   const setAccentColor = useConfigStore((s) => s.setAccentColor);
@@ -273,10 +281,12 @@ export function AccentDots() {
             style={[
               styles.accentDot,
               { backgroundColor: ACCENT_COLORS[color] },
-              selected && { borderColor: colors.text, borderWidth: 2.5 },
+              selected && { borderColor: aurora.acc1, borderWidth: 2 },
             ]}
             onPress={() => setAccentColor(color)}
+            accessibilityRole="button"
             accessibilityLabel={`Accent ${color}`}
+            accessibilityState={{ selected }}
           >
             {selected ? (
               <Text style={{ color: '#0b0b1a', fontSize: 13, fontWeight: '700' }}>✓</Text>
@@ -375,6 +385,7 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 48,
   },
   primaryText: {
     fontWeight: '600',
@@ -395,9 +406,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   accentDot: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: 'transparent',
     alignItems: 'center',
