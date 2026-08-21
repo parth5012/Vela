@@ -234,6 +234,11 @@ registerVelaBackgroundTask();
           },
         }}
       >
+        {/* Wayfinder #173 Audit — Header Casing Source
+           Titles via Drawer.Screen options.headerTitle (not filename): index:'VELA' 900 letterSpacing 3 #818cf8,
+           settings:'Settings' 600 #e4e4e7, browser:'Browser' 600, tasks:'Tasks' 600.
+           task-progress uses AuroraScreen internal header (title='Task Progress' Title Case) not Drawer.Screen.
+           Spec #174: formatter rule — display titles are explicit Title Case headerTitle strings, weight 600 except VELA logo (900). */}
         <Drawer.Screen
           name="index"
           options={{
