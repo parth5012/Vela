@@ -6,32 +6,43 @@ import { parseSearchContent } from '../utils/sourceParser';
 /**
  * Wayfinder #143 regression guard.
  *
- * The fix moves the expensive per-message parsers (parseMessage / parseSearchContent)
- * behind useMemo keyed on [item.content] inside the FlatList renderItem, so that
- * streaming re-renders (appendToken every 100ms) do NOT re-parse every visible
- * message from scratch. The component-level behavior is covered by a structural
- * guard over index.tsx because mounting the full chat screen in jest pulls in
- * expo-router / expo-sqlite dependencies (same constraint documented by #144/#145).
- * The parser unit assertions below protect the parser contracts that renderItem relies on.
+ * Original fix memoized the expensive per-message parsers (parseMessage /
+ * parseSearchContent) with useMemo inside the FlatList renderItem. That crashed
+ * at runtime: renderItem is a plain callback, not a component, so hooks are
+ * illegal there (Rules of Hooks) — caught live during device E2E on 2026-08-21.
+ *
+ * The corrected implementation keeps the memoization intent via a module-level,
+ * content-keyed parse cache (`getCachedParse`) that renderItem calls. These
+ * structural guards assert the cache is used and no hook is called inside
+ * renderItem; parser unit assertions below protect the parser contracts.
  */
 describe('parse memoization guard (wayfinder #143)', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'app', 'index.tsx'), 'utf8');
   const renderItem = source.slice(source.indexOf('renderItem={'));
 
-  it('memoizes parseMessage per message content inside renderItem', () => {
+  it('uses the module-level parse cache per message inside renderItem', () => {
     expect(renderItem).toMatch(
-      /const segments = useMemo\(\(\) => \(isUser \? \[\] : parseMessage\(item\.content\)\), \[item\.content, isUser\]\);/
+      /getCachedParse\(item\.content, isUser\)/
     );
   });
 
-  it('memoizes the header and bubble segment filters', () => {
-    expect(renderItem).toMatch(/const headerSegments = useMemo\(/);
-    expect(renderItem).toMatch(/const bubbleContent = useMemo\(/);
+  it('never calls hooks inside renderItem (Rules of Hooks)', () => {
+    expect(renderItem).not.toMatch(/useMemo\(/);
+    expect(renderItem).not.toMatch(/useState\(/);
   });
 
-  it('memoizes parseSearchContent and removes the per-render parse inside the sources IIFE', () => {
-    expect(renderItem).toMatch(/const sources = useMemo\(/);
-    expect(renderItem).not.toMatch(/const sources = parseSearchContent/);
+  it('defines a bounded module-level parse cache', () => {
+    expect(source).toMatch(/const PARSE_CACHE_LIMIT = \d+/);
+    expect(source).toMatch(/const parseCache = new Map</);
+    expect(source).toMatch(/function getCachedParse\(/);
+  });
+
+  it('cache computes segments, header/bubble filters, and sources without re-parsing hits', () => {
+    const fn = source.slice(source.indexOf('function getCachedParse'), source.indexOf('export default function ChatScreen'));
+    expect(fn).toMatch(/parseMessage\(content\)/);
+    expect(fn).toMatch(/parseSearchContent\(content\)/);
+    expect(fn).toMatch(/headerSegments: segments\.filter/);
+    expect(fn).toMatch(/bubbleContent: segments\.filter/);
   });
 
   it('parseMessage still returns the expected text segment', () => {

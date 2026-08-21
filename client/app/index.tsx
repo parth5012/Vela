@@ -143,6 +143,45 @@ function SourceCard({ src, colors, sizes, accentHex }: { src: SearchSource; colo
   );
 }
 
+// Module-level parse cache (wayfinder #143 follow-up fix).
+// The FlatList renderItem below is a plain callback, NOT a component, so React
+// hooks (useMemo) are illegal inside it (Rules of Hooks) and crashed the chat
+// on the first rendered message. This content-keyed cache preserves the
+// memoization intent of #143: unchanged messages are never re-parsed during
+// streaming re-renders (appendToken every 100ms), while the streaming row
+// naturally misses cache as its content grows.
+type ParsedSegments = ReturnType<typeof parseMessage>;
+type ParsedSources = ReturnType<typeof parseSearchContent>;
+interface ParsedMessageEntry {
+  segments: ParsedSegments;
+  headerSegments: ParsedSegments;
+  bubbleContent: ParsedSegments;
+  sources: ParsedSources;
+}
+const PARSE_CACHE_LIMIT = 256;
+const parseCache = new Map<string, ParsedMessageEntry>();
+
+function getCachedParse(content: string, isUser: boolean): ParsedMessageEntry {
+  const key = (isUser ? 'u:' : 'a:') + content;
+  let entry = parseCache.get(key);
+  if (!entry) {
+    const segments = isUser ? ([] as ParsedSegments) : parseMessage(content);
+    entry = {
+      segments,
+      headerSegments: segments.filter(s => s.type === 'thought' || s.type === 'intent'),
+      bubbleContent: segments.filter(s => s.type !== 'thought' && s.type !== 'intent'),
+      sources: isUser ? ([] as ParsedSources) : parseSearchContent(content),
+    };
+    if (parseCache.size >= PARSE_CACHE_LIMIT) {
+      // Map preserves insertion order; evict the oldest entry.
+      const oldest = parseCache.keys().next().value;
+      if (oldest !== undefined) parseCache.delete(oldest);
+    }
+    parseCache.set(key, entry);
+  }
+  return entry;
+}
+
 export default function ChatScreen() {
   const router = useRouter();
   const executedDeviceToolsRef = React.useRef(new Set());
@@ -1236,10 +1275,9 @@ export default function ChatScreen() {
                 const isUser = item.role === 'user';
                 const showActionBar = activeMenuMessage?.id === item.id;
 
-                const segments = useMemo(() => (isUser ? [] : parseMessage(item.content)), [item.content, isUser]);
-                const headerSegments = useMemo(() => segments.filter(s => s.type === 'thought' || s.type === 'intent'), [segments]);
-                const bubbleContent = useMemo(() => segments.filter(s => s.type !== 'thought' && s.type !== 'intent'), [segments]);
-                const sources = useMemo(() => (!isUser ? parseSearchContent(item.content) : []), [item.content, isUser]);
+                // Hooks are illegal inside this callback (plain function, not a
+                // component) — use the module-level cache instead of useMemo.
+                const { segments, headerSegments, bubbleContent, sources } = getCachedParse(item.content, isUser);
 
                 return (
                   <View style={[styles.messageRow, isUser ? styles.userRow : styles.assistantRow]}>
