@@ -401,7 +401,7 @@ export default function ChatScreen() {
   React.useEffect(() => {
     if (!lastMsg || lastMsg.role !== 'assistant' || !activeThreadId) return;
 
-    const deviceRegex = /<call:(device_[a-z_]+)\s+input="((?:[^"\\\\]|\\\\.)*)"\s*>/g;
+    const deviceRegex = /<call:(device_[a-z_]+)\s+input="((?:[^"\\]|\\.)*)"\s*>/g;
     let match;
     const matches: { toolName: string; rawInput: string; index: number }[] = [];
 
