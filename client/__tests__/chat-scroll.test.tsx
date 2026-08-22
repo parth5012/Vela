@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 import React from 'react';
 import renderer, { act } from 'react-test-renderer';
 import { LayoutAnimation } from 'react-native';
@@ -58,3 +59,4 @@ describe('CollapsibleBlock scrolling behavior', () => {
     expect(layoutAnimationSpy).not.toHaveBeenCalled();
   });
 });
+

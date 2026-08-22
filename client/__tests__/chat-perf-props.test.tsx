@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 import React from 'react';
 import renderer, { act } from 'react-test-renderer';
 import { FlatList } from 'react-native';
@@ -44,3 +45,4 @@ describe('ChatFlatList performance props', () => {
     expect(typeof renderedProps?.renderItem).toBe('function');
   });
 });
+

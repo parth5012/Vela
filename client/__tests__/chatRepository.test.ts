@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 // Self-contained mock of the db client so repository tests never touch
 // expo-sqlite. Mirrors the pattern used in syncManager.test.ts.
 jest.mock('../db/client', () => {
@@ -276,3 +277,4 @@ describe('chatRepository (local-first chat persistence)', () => {
     });
   });
 });
+

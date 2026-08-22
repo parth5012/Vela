@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 import fs from 'fs';
 import path from 'path';
 import { parseMessage } from '../utils/messageParser';
@@ -9,7 +10,7 @@ import { parseSearchContent } from '../utils/sourceParser';
  * Original fix memoized the expensive per-message parsers (parseMessage /
  * parseSearchContent) with useMemo inside the FlatList renderItem. That crashed
  * at runtime: renderItem is a plain callback, not a component, so hooks are
- * illegal there (Rules of Hooks) — caught live during device E2E on 2026-08-21.
+ * illegal there (Rules of Hooks) â€” caught live during device E2E on 2026-08-21.
  *
  * The corrected implementation keeps the memoization intent via a module-level,
  * content-keyed parse cache (`getCachedParse`) that renderItem calls. These

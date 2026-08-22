@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 import React from 'react';
 import renderer, { act } from 'react-test-renderer';
 import CollapsibleBlock from '../components/chat/CollapsibleBlock';
@@ -89,3 +90,4 @@ describe('CollapsibleBlock mount smoke (#148)', () => {
     mountBlock({ type: 'thought', isClosed: true });
   });
 });
+

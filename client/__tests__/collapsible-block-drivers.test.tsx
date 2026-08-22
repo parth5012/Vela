@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 import React from 'react';
 import renderer, { act } from 'react-test-renderer';
 import { Animated } from 'react-native';
