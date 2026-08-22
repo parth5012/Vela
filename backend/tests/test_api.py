@@ -1,6 +1,8 @@
+import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, AsyncMock
 from agent.main import app
+
 
 
 
@@ -424,3 +426,77 @@ def test_register_device_token_endpoint(monkeypatch):
     db_client = PostgresDB()
     stored_token = db_client.get_system_setting("fcm_device_token")
     assert stored_token == "fcm-test-token-123456"
+
+
+@pytest.mark.asyncio
+async def test_lifespan_schema_migration_rename_persona():
+    """Test lifespan DB migration renames legacy persona column to agent."""
+    from agent.main import lifespan, app
+    from unittest.mock import MagicMock, patch
+
+    mock_engine = MagicMock()
+    mock_inspector = MagicMock()
+
+    # Case 1: 'persona' column present, 'agent' column absent
+    mock_inspector.get_columns.return_value = [{"name": "persona"}, {"name": "id"}]
+    mock_conn = MagicMock()
+    mock_engine.begin.return_value.__enter__.return_value = mock_conn
+
+    with patch("db.session.engine", mock_engine), patch(
+        "sqlalchemy.inspect", return_value=mock_inspector
+    ):
+        async with lifespan(app):
+            pass
+
+    # Verify RENAME COLUMN persona TO agent statement executed
+    calls = [str(call[0][0]) for call in mock_conn.execute.call_args_list]
+    assert any("RENAME COLUMN persona TO agent" in call for call in calls)
+
+
+@pytest.mark.asyncio
+async def test_lifespan_schema_migration_add_missing_columns():
+    """Test lifespan DB migration adds agent, active_skill, is_pinned, source if missing."""
+    from agent.main import lifespan, app
+    from unittest.mock import MagicMock, patch
+
+    mock_engine = MagicMock()
+    mock_inspector = MagicMock()
+
+    # Case 2: Neither 'persona' nor 'agent' present, missing active_skill, is_pinned, source
+    mock_inspector.get_columns.return_value = [{"name": "id"}]
+    mock_conn = MagicMock()
+    mock_engine.begin.return_value.__enter__.return_value = mock_conn
+
+    with patch("db.session.engine", mock_engine), patch(
+        "sqlalchemy.inspect", return_value=mock_inspector
+    ):
+        async with lifespan(app):
+            pass
+
+    calls = [str(call[0][0]) for call in mock_conn.execute.call_args_list]
+    assert any("ADD COLUMN agent" in call for call in calls)
+    assert any("ADD COLUMN active_skill" in call for call in calls)
+    assert any("ADD COLUMN is_pinned" in call for call in calls)
+    assert any("ADD COLUMN source" in call for call in calls)
+
+
+def test_message_payload_validation():
+    """Test MessagePayload default agent, persona alias, and explicit agent setting."""
+    from agent.main import MessagePayload
+
+    # 1. Default agent
+    p1 = MessagePayload(thread_id="t1", message="hello")
+    assert p1.agent == "personal assistant"
+
+    # 2. Persona alias
+    p2 = MessagePayload.model_validate({"thread_id": "t2", "message": "hi", "persona": "teacher"})
+    assert p2.agent == "teacher"
+
+    # 3. Explicit agent
+    p3 = MessagePayload(thread_id="t3", message="analyze", agent="analyst")
+    assert p3.agent == "analyst"
+
+    # 4. Google workspace agent
+    p4 = MessagePayload(thread_id="t4", message="check mail", agent="google_workspace")
+    assert p4.agent == "google_workspace"
+

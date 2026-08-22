@@ -36,4 +36,7 @@ async def test_on_message_handles_incoming_text(mock_graph_invoke):
     
     mock_db.get_or_create_discord_conversation.assert_called_with(12345)
     mock_graph_invoke.assert_called_once()
+    call_inputs = mock_graph_invoke.call_args[0][0]
+    assert call_inputs["agent"] == "personal assistant"
     mock_message.channel.send.assert_called_with("Hello from AI!")
+
