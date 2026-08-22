@@ -132,7 +132,7 @@ TaskManager.defineTask(VELA_FOREGROUND_TASK, async (body: any) => {
       .from(taskExecutions)
       .where(eq(taskExecutions.id, store.execution_id))
       .limit(1)
-      .then((rows) => rows[0]);
+      .then((rows: any[]) => rows[0]);
     if (!execution) return BackgroundTask.BackgroundTaskResult.Success;
 
     const stepCount = await db
@@ -175,7 +175,7 @@ export async function startForegroundService(
       )
     )
     .limit(1)
-    .then((rows) => rows[0]);
+    .then((rows: any[]) => rows[0]);
   if (existing) throw new Error('Task already running');
 
   const executionId = randomUUID();
