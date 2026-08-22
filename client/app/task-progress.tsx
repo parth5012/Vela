@@ -80,11 +80,10 @@ export default function TaskProgressScreen() {
 
       if (!db) {
         await initializeDatabase();
+        if (!db) {
+          throw new Error('Database not available');
+        }
       }
-      if (!db) {
-        throw new Error('Database not available');
-      }
-      await initializeDatabase().catch(() => {});
 
       // Try direct execution id match first
       let execData: any = null;
@@ -200,7 +199,9 @@ export default function TaskProgressScreen() {
       setErrorMessage(err?.message || 'Failed to load task');
       setLoadState('error');
     }
-  }, [effectiveId, taskIdParam, storeExecutionId, currentStep, isRunning, isPaused, lastAction, task_plan]);
+  // Fix: avoid re-entering loading on every store tick (currentStep/isRunning/lastAction/task_plan are live UI, not DB identity).
+  // Only re-query DB when identity changes; live progress renders via Zustand-derived currentStep/currentActionText outside loadExecution.
+  }, [effectiveId, taskIdParam, storeExecutionId, task_plan?.task_id]);
 
   useEffect(() => {
     loadExecution();
@@ -214,14 +215,15 @@ export default function TaskProgressScreen() {
   };
 
   const handleCancel = async () => {
-    const id = execution?.id || effectiveId;
+    // Prefer execution.id then storeExecutionId; effectiveId may be a taskId (not execution_id) when deep-linked via taskId.
+    const id = execution?.id || storeExecutionId || effectiveId;
     if (!id) return;
     await cancelForegroundTask(id);
     router.replace('/tasks');
   };
 
   const handleResume = async () => {
-    const id = execution?.id || effectiveId;
+    const id = execution?.id || storeExecutionId || effectiveId;
     if (!id) return;
     await resumeForegroundTask(id);
     handleRetry();
@@ -229,7 +231,8 @@ export default function TaskProgressScreen() {
 
   // Timeout: if loading too long, parent will show error; we handle via loadState
 
-  const totalSteps = task_plan?.steps?.length || task?.steps?.length || steps.length || 1;
+  // Fix: tasks schema has no steps column; use plan steps or DB steps only.
+  const totalSteps = task_plan?.steps?.length || steps.length || 1;
   const currentIdx = typeof currentStep === 'number' ? currentStep : execution?.current_step_index ?? 0;
   const displayStep = Math.min(currentIdx + 1, totalSteps);
   const progressPct = totalSteps > 0 ? Math.min(100, Math.round((currentIdx / totalSteps) * 100)) : 0;
