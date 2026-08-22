@@ -182,7 +182,7 @@ export default function LocalAiScreen() {
     if (modelBusy) return;
     setModelBusy(true);
     try {
-      await initializeLocalModel(true);;
+      await initializeLocalModel(true);
     } catch (err: any) {
       Alert.alert('Load Failed', err?.message || 'The model could not be loaded.');
     } finally {
