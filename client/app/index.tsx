@@ -43,7 +43,7 @@ import { initializeLocalModel, isLocalModelLoaded, streamLocalLlmResponse, isLoc
 import { compileLocalPrompt } from '../utils/promptCompiler';
 import { parseAndExecuteTools } from '../utils/toolProxy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { evaluateSafety } from '../utils/safetyManager';
+import { evaluateSafety, classifyAction } from '../utils/safetyManager';
 import { executeDeviceAction, sendDeviceResponse } from '../utils/deviceActionExecutor';
 
 const generateUUID = () => {
@@ -166,6 +166,42 @@ function getCachedParse(content: string, isUser: boolean): ParsedMessageEntry {
     parseCache.set(key, entry);
   }
   return entry;
+}
+
+// #160: Derive the safety tier shown on a tool_call pill from the same policy
+// inputs evaluateSafety consumes (classifyAction + configured tier), without
+// triggering any approval flow. Mirrors evaluateSafety's sensitive-word
+// escalation so the pill reflects what execution will actually do.
+type SafetyTierLabel = 'auto' | 'ask' | 'blocked';
+
+function deriveSafetyTier(name?: string, input?: string): SafetyTierLabel {
+  let target: string | undefined;
+  let value: string | undefined;
+  if (input) {
+    try {
+      const parsed = JSON.parse(input);
+      if (typeof parsed?.target === 'string') target = parsed.target;
+      if (typeof parsed?.value === 'string') value = parsed.value;
+    } catch {
+      // Non-JSON input: fall back to raw text so keyword checks still apply.
+      target = input;
+    }
+  }
+
+  const permissions = useConfigStore.getState().deviceAgentPermissions;
+  const category = classifyAction(name || '', target, value);
+  const tier = permissions[category] || 'auto';
+  if (tier === 'deny') return 'blocked';
+  if (tier === 'confirm') return 'ask';
+
+  // Auto tiers escalate on sensitive words (same heuristic as evaluateSafety).
+  const targetLower = target ? target.toLowerCase() : '';
+  const valueLower = value ? value.toLowerCase() : '';
+  const sensitiveWords = ['delete', 'buy', 'pay', 'purchase', 'send', 'call', 'remove', 'clear'];
+  if (sensitiveWords.some((word) => targetLower.includes(word) || valueLower.includes(word))) {
+    return 'ask';
+  }
+  return 'auto';
 }
 
 export default function ChatScreen() {
@@ -1176,6 +1212,12 @@ export default function ChatScreen() {
     const isClosed = segment.isClosed;
     const hasChildren = segment.children && segment.children.length > 0;
     const isThoughtOrIntent = segment.type === 'thought' || segment.type === 'intent';
+    // #160: prefer an explicit parser-provided tier, else derive it from the
+    // segment's tool name/input against the active safety policy.
+    const safetyTier =
+      segment.type === 'tool_call'
+        ? ((segment.safetyTier as SafetyTierLabel | undefined) ?? deriveSafetyTier(segment.name, segment.input))
+        : undefined;
 
     return (
       <CollapsibleBlock
@@ -1187,6 +1229,7 @@ export default function ChatScreen() {
         themeColors={colors}
         themeSizes={sizes}
         accentHex={accentHex}
+        safetyTier={safetyTier}
         onToggle={() => {
           // #154 anchor: maintainVisibleContentPosition keeps viewport anchored on
           // height collapse/expand; no manual offset correction needed here.
