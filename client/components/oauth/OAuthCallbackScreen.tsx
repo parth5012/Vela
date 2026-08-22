@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Image,
   Platform,
+  type ImageStyle,
 } from 'react-native';
 
 //--- Types ---------------------------------------------------------------
@@ -137,7 +138,7 @@ export default function OAuthCallbackScreen({
     return (
       <View style={styles.accountRow}>
         {account.picture ? (
-          <Image source={{ uri: account.picture }} style={styles.avatar} accessibilityIgnoresInvertColors />
+          <Image source={{ uri: account.picture }} style={styles.avatar as ImageStyle} accessibilityIgnoresInvertColors />
         ) : (
           <View style={[styles.avatar, styles.avatarFallback, { backgroundColor: accentSoft }]}>
             <Text style={{ color: colors.textDark, fontWeight: '600' }}>
@@ -265,13 +266,13 @@ export default function OAuthCallbackScreen({
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    minHeight: Platform.OS === 'web' ? '100vh' : '100%',
+    minHeight: Platform.OS === 'web' ? ('100vh' as unknown as number) : '100%',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
   },
   skyGlow: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     overflow: 'hidden',
   },
   skyBlob: {
