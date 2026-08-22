@@ -12,6 +12,7 @@ import {
   type PermissionStatus,
 } from '../../utils/permissionManager';
 import { useConfigStore } from '../../store/useConfigStore';
+import AccessibilityGuide from '../../components/ui/AccessibilityGuide';
 
 function StatusPill({
   status,
@@ -97,6 +98,9 @@ export default function PermissionsHubScreen() {
   });
   const [loadingPerm, setLoadingPerm] = useState<OSPermission | null>(null);
   const [bulkLoading, setBulkLoading] = useState(false);
+  // #158: accessibility has no OS dialog — show the step-by-step guide first;
+  // its CTA jumps to system settings.
+  const [showAccessibilityGuide, setShowAccessibilityGuide] = useState(false);
 
   const refreshAll = useCallback(async () => {
     const next: Record<OSPermission, PermissionStatus> = {} as Record<OSPermission, PermissionStatus>;
@@ -125,6 +129,11 @@ export default function PermissionsHubScreen() {
     async (perm: OSPermission) => {
       setLoadingPerm(perm);
       try {
+        // #158: route accessibility through the in-app guide before system settings.
+        if (perm === 'accessibility') {
+          setShowAccessibilityGuide(true);
+          return;
+        }
         const current = statuses[perm];
         if (current === 'undetermined') {
           const result = await requestPermission(perm);
@@ -283,6 +292,11 @@ export default function PermissionsHubScreen() {
           </Pressable>
         </Card>
       </View>
+
+      <AccessibilityGuide
+        visible={showAccessibilityGuide}
+        onClose={() => setShowAccessibilityGuide(false)}
+      />
     </AuroraScreen>
   );
 }

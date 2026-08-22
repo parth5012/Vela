@@ -16,6 +16,7 @@ import {
   Animated,
   Image,
   Linking,
+  Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -45,6 +46,14 @@ import { parseAndExecuteTools } from '../utils/toolProxy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { evaluateSafety, classifyAction } from '../utils/safetyManager';
 import { executeDeviceAction, sendDeviceResponse } from '../utils/deviceActionExecutor';
+import {
+  checkPermission,
+  getRationale,
+  requestPermission,
+  shouldPrompt,
+  type OSPermission,
+} from '../utils/permissionManager';
+import PermissionRequestCard from '../components/chat/PermissionRequestCard';
 
 const generateUUID = () => {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -255,6 +264,10 @@ export default function ChatScreen() {
   const [activeMenuMessage, setActiveMenuMessage] = useState<Message | null>(null);
   const [authRequired, setAuthRequired] = useState<Record<string, boolean>>({});
   const [viewerContent, setViewerContent] = useState<string | null>(null);
+  // #158: pending OS-permission prompt + session-scoped denial set so a denied
+  // permission is not re-prompted until the app restarts.
+  const [permissionPrompt, setPermissionPrompt] = useState<OSPermission | null>(null);
+  const sessionDeniedPermissionsRef = React.useRef<Set<OSPermission>>(new Set());
 
   // Theme values — Aurora: theme = atmosphere (colors), accent = energy (aurora)
   const { colors, sizes, aurora } = useAurora();
@@ -452,6 +465,24 @@ export default function ChatScreen() {
             const lastUnderscore = fullConvId.lastIndexOf('_');
             const conversationId = lastUnderscore !== -1 ? fullConvId.slice(0, lastUnderscore) : fullConvId;
             const taskToken = lastUnderscore !== -1 ? fullConvId.slice(lastUnderscore + 1) : undefined;
+
+            // #158: device automation requires the accessibility service. When
+            // it is missing, surface the in-app permission prompt (unless the
+            // user denied it this session) instead of executing, and answer the
+            // pending tool call so the agent loop is not left hanging.
+            const accessibilityStatus = await checkPermission('accessibility');
+            if (accessibilityStatus !== 'granted') {
+              if (shouldPrompt('accessibility', sessionDeniedPermissionsRef.current)) {
+                setPermissionPrompt('accessibility');
+              }
+              await sendDeviceResponse(
+                conversationId,
+                taskToken,
+                'error',
+                'Blocked: the Accessibility permission is required for this action.'
+              );
+              return;
+            }
 
             // Run safety check
             const safetyResult = await evaluateSafety(
@@ -1589,6 +1620,33 @@ export default function ChatScreen() {
           content={viewerContent || ''}
           onClose={() => setViewerContent(null)}
         />
+        {/* #158: in-app permission prompt for device actions requiring
+            accessibility. Denying suppresses re-prompts for the session. */}
+        <Modal
+          visible={permissionPrompt !== null}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setPermissionPrompt(null)}
+        >
+          <View style={styles.permissionPromptOverlay}>
+            <PermissionRequestCard
+              permission="accessibility"
+              rationale={getRationale('accessibility')}
+              onGrant={async () => {
+                await requestPermission('accessibility');
+                setPermissionPrompt(null);
+              }}
+              onDeny={() => {
+                sessionDeniedPermissionsRef.current.add('accessibility');
+                setPermissionPrompt(null);
+              }}
+              onDontAskAgain={() => {
+                sessionDeniedPermissionsRef.current.add('accessibility');
+                setPermissionPrompt(null);
+              }}
+            />
+          </View>
+        </Modal>
     </KeyboardAvoidingView>
     </LinearGradient>
   );
@@ -1875,5 +1933,11 @@ const styles = StyleSheet.create({
   sendButtonText: {
     color: '#ffffff',
     fontWeight: 'bold',
+  },
+  permissionPromptOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'flex-end',
+    padding: 16,
   },
 });

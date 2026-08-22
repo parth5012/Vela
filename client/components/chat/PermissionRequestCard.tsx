@@ -8,7 +8,7 @@ export interface PermissionRequestCardProps {
   rationale: string;
   onGrant: () => Promise<void>;
   onDeny: () => void;
-  onSuppressChange?: (suppress: boolean) => void;
+  onDontAskAgain?: () => void;
 }
 
 const PERM_LABELS: Record<OSPermission, { icon: string; label: string }> = {
@@ -25,7 +25,7 @@ export default function PermissionRequestCard({
   rationale,
   onGrant,
   onDeny,
-  onSuppressChange,
+  onDontAskAgain,
 }: PermissionRequestCardProps) {
   const { colors, sizes, aurora } = useAurora();
   const [dontAskAgain, setDontAskAgain] = useState(false);
@@ -49,10 +49,10 @@ export default function PermissionRequestCard({
   const toggleSuppress = useCallback(() => {
     setDontAskAgain((prev) => {
       const next = !prev;
-      onSuppressChange?.(next);
+      if (next) onDontAskAgain?.();
       return next;
     });
-  }, [onSuppressChange]);
+  }, [onDontAskAgain]);
 
   return (
     <Card style={[styles.card, { borderColor: colors.glassBorder }]}>
