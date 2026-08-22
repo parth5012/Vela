@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Platform, Linking } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import useGoogleAuthStore from '../store/useGoogleAuthStore';
-import useConfigStore from '../store/useConfigStore';
-import useAurora from '../hooks/useAurora';
+import { useGoogleAuthStore } from '../store/useGoogleAuthStore';
+import { useConfigStore } from '../store/useConfigStore';
+import { useAurora } from '../hooks/useAurora';
 import OAuthCallbackScreen from '../components/oauth/OAuthCallbackScreen';
 
 export default function OAuthCallbackRoute() {
@@ -21,9 +21,9 @@ export default function OAuthCallbackRoute() {
   const accent = colors.aurora1;
   const accentSoft = colors.aurora2;
   
-  const user = useGoogleAuthStore((s) => s.user);
-  const apiUrlRaw = useConfigStore((s) => s.apiUrl);
-  const apiKey = useConfigStore((s) => s.apiKey);
+  const user = useGoogleAuthStore((s: any) => s.user);
+  const apiUrlRaw = useConfigStore((s: any) => s.apiUrl);
+  const apiKey = useConfigStore((s: any) => s.apiKey);
 
   const checkTokenStatus = useCallback(async () => {
     if (!apiUrlRaw || !apiKey) {
