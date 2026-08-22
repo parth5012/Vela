@@ -121,7 +121,7 @@ export function SafetyDialog() {
                 pressed && { opacity: 0.7 },
               ]}
             >
-              <Text style={[styles.btnText, { color: colors.rose || '#f43f5e', fontSize: sizes.text }]}>
+              <Text style={[styles.btnText, { color: (colors as any).rose || '#f43f5e', fontSize: sizes.text }]}>
                 Always Block
               </Text>
             </Pressable>

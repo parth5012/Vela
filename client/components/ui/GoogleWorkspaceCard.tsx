@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Image,
   Alert,
+  Platform,
 } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { useGoogleAuthStore } from '../../store/useGoogleAuthStore';
