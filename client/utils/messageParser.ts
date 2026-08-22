@@ -5,6 +5,12 @@ export interface MessageSegment {
   input?: string;
   isClosed: boolean;
   children?: MessageSegment[];
+  /**
+   * #160: Optional policy tier for tool_call pills. Not populated by the
+   * parser itself; renderSegment derives it from the safety policy unless a
+   * caller supplied one explicitly.
+   */
+  safetyTier?: 'auto' | 'ask' | 'blocked';
 }
 
 /**
