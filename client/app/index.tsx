@@ -207,7 +207,7 @@ function deriveSafetyTier(name?: string, input?: string): SafetyTierLabel {
   const targetLower = target ? target.toLowerCase() : '';
   const valueLower = value ? value.toLowerCase() : '';
   const sensitiveWords = ['delete', 'buy', 'pay', 'purchase', 'send', 'call', 'remove', 'clear'];
-  if (sensitiveWords.some((word) => targetLower.includes(word) || valueLower.includes(word))) {
+  if (sensitiveWords.some((word) => valueLower.includes(word))) {
     return 'ask';
   }
   return 'auto';

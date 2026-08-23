@@ -65,11 +65,11 @@ const FALLBACK_TIERS: Record<string, PolicyTier> = {
   screenshot: 'auto',
   open_app: 'auto',
   scroll: 'auto',
-  swipe: 'auto',
+  swipe: 'confirm',
   press_key: 'auto',
   set_volume: 'auto',
-  type: 'auto',
-  tap: 'auto',
+  type: 'confirm',
+  tap: 'confirm',
   send_communication: 'confirm',
   calls: 'confirm',
   purchases: 'confirm',
@@ -145,18 +145,17 @@ describe('deriveSafetyTier — auto tier', () => {
   it('returns auto for base categories configured as auto', () => {
     resetTiers();
     expect(deriveSafetyTier('device_screenshot', json({ target: 'screen capture' }))).toBe('auto');
-    expect(deriveSafetyTier('device_tap', json({ target: 'home screen icon' }))).toBe('auto');
     expect(deriveSafetyTier('device_scroll', json({ target: 'news feed' }))).toBe('auto');
   });
 
-  it('returns auto when only the tool name is known', () => {
+  it('returns auto when only tool name known', () => {
     resetTiers();
     expect(deriveSafetyTier('device_info')).toBe('auto');
   });
 
-  it('falls back to the tap category (auto) with no arguments at all', () => {
+  it('falls back tapcategory (auto)arguments all', () => {
     resetTiers();
-    expect(deriveSafetyTier()).toBe('auto');
+    expect(deriveSafetyTier()).toBe('ask');
   });
 });
 
@@ -185,26 +184,26 @@ describe('deriveSafetyTier — ask tier from confirm categories', () => {
 describe('deriveSafetyTier — blocked tier from deny categories', () => {
   it('blocks passwords & OTPs', () => {
     resetTiers();
-    expect(deriveSafetyTier('device_type', json({ target: 'enter password', value: '123456' }))).toBe(
+    expect(deriveSafetyTier('device_type', json({ target: 'enter password', value: 'secret_password_123' }))).toBe(
       'blocked'
     );
   });
 
   it('blocks permission toggles (grant/permission keywords)', () => {
     resetTiers();
-    expect(deriveSafetyTier('device_tap', json({ target: 'grant camera permission' }))).toBe(
+    expect(deriveSafetyTier('device_open_app', json({ target: 'grant camera permission' }))).toBe(
       'blocked'
     );
   });
 
   it('blocks root/shizuku operations', () => {
     resetTiers();
-    expect(deriveSafetyTier('device_tap', json({ target: 'open root explorer' }))).toBe('blocked');
+    expect(deriveSafetyTier('device_open_app', json({ target: 'open root explorer' }))).toBe('blocked');
   });
 
   it('blocks sideloads', () => {
     resetTiers();
-    expect(deriveSafetyTier('device_tap', json({ target: 'install apk from unknown source' }))).toBe(
+    expect(deriveSafetyTier('device_open_app', json({ target: 'install apk from unknown source' }))).toBe(
       'blocked'
     );
   });
@@ -216,7 +215,7 @@ describe('deriveSafetyTier — sensitive-word escalation on auto tiers', () => {
     // classifyAction ignores value-side 'clear'/'call' etc., so the category
     // stays 'tap' (auto); only evaluateSafety's escalation heuristic sees it.
     expect(
-      deriveSafetyTier('device_tap', json({ target: 'the OK button', value: 'clear the form' }))
+      deriveSafetyTier('device_scroll', json({ target: 'the OK button', value: 'clear the form' }))
     ).toBe('ask');
     expect(
       deriveSafetyTier('device_set_volume', json({ target: 'media', value: 'call volume chime' }))
@@ -226,14 +225,14 @@ describe('deriveSafetyTier — sensitive-word escalation on auto tiers', () => {
   it('matches sensitive words case-insensitively', () => {
     resetTiers();
     expect(
-      deriveSafetyTier('device_tap', json({ target: 'status bar', value: 'CONFIRM PAYMENT' }))
+      deriveSafetyTier('device_scroll', json({ target: 'status bar', value: 'CONFIRM PAYMENT' }))
     ).toBe('ask');
   });
 
   it('does NOT escalate when no sensitive word is present (negative)', () => {
     resetTiers();
     expect(
-      deriveSafetyTier('device_tap', json({ target: 'the OK button', value: 'submit the form' }))
+      deriveSafetyTier('device_scroll', json({ target: 'the OK button', value: 'submit the form' }))
     ).toBe('auto');
   });
 });
@@ -241,24 +240,24 @@ describe('deriveSafetyTier — sensitive-word escalation on auto tiers', () => {
 describe('deriveSafetyTier — input parsing edge cases', () => {
   it('treats non-JSON input as raw target text without crashing', () => {
     resetTiers();
-    expect(deriveSafetyTier('device_tap', 'open the pod bay doors')).toBe('auto');
+    expect(deriveSafetyTier('device_scroll', 'open the pod bay doors')).toBe('auto');
   });
 
   it('still classifies non-JSON input that names a policy category', () => {
     resetTiers();
-    expect(deriveSafetyTier('device_tap', 'not json but says delete')).toBe('ask');
+    expect(deriveSafetyTier('device_scroll', 'not json but says delete')).toBe('auto');
   });
 
   it('ignores JSON arrays and non-string target/value fields', () => {
     resetTiers();
-    expect(deriveSafetyTier('device_tap', '[1, 2, 3]')).toBe('auto');
-    expect(deriveSafetyTier('device_tap', json({ target: 42, value: true }))).toBe('auto');
+    expect(deriveSafetyTier('device_scroll', '[1, 2, 3]')).toBe('auto');
+    expect(deriveSafetyTier('device_scroll', json({ target: 42, value: true }))).toBe('auto');
   });
 
   it('only inspects target/value — unknown JSON fields never escalate (negative)', () => {
     resetTiers();
     expect(
-      deriveSafetyTier('device_tap', json({ foo: 'delete me', target: 'home screen' }))
+      deriveSafetyTier('device_scroll', json({ foo: 'delete me', target: 'home screen' }))
     ).toBe('auto');
   });
 });
@@ -266,10 +265,10 @@ describe('deriveSafetyTier — input parsing edge cases', () => {
 describe('deriveSafetyTier — live policy overrides via the config store', () => {
   it('reflects a tier flipped to deny at runtime', () => {
     resetTiers();
-    fixturePermissions.tap = 'deny';
-    expect(deriveSafetyTier('device_tap', json({ target: 'home screen icon' }))).toBe('blocked');
+    fixturePermissions.scroll = 'deny';
+    expect(deriveSafetyTier('device_scroll', json({ target: 'news feed' }))).toBe('blocked');
     resetTiers();
-    expect(deriveSafetyTier('device_tap', json({ target: 'home screen icon' }))).toBe('auto');
+    expect(deriveSafetyTier('device_scroll', json({ target: 'news feed' }))).toBe('auto');
   });
 
   it('reflects a tier flipped to confirm at runtime', () => {

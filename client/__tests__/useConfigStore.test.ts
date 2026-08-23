@@ -106,6 +106,25 @@ describe('useConfigStore', () => {
     expect(updatedState.detectedRamBytes).toBe(4000000000);
   });
 
+  it('should default tap/type/swipe device permissions to confirm (audit fix regression guard)', () => {
+    const perms = useConfigStore.getState().deviceAgentPermissions;
+    // These three were downgraded from 'auto' to 'confirm' in the audit fix:
+    expect(perms.tap).toBe('confirm');
+    expect(perms.type).toBe('confirm');
+    expect(perms.swipe).toBe('confirm');
+    // Negative contrast: read-only actions stay automatic, destructive stay denied.
+    expect(perms.screenshot).toBe('auto');
+    expect(perms.passwords_otps).toBe('deny');
+  });
+
+  it('should update a single device agent permission without touching others', () => {
+    useConfigStore.getState().setDeviceAgentPermission('tap', 'deny');
+    const perms = useConfigStore.getState().deviceAgentPermissions;
+    expect(perms.tap).toBe('deny');
+    expect(perms.type).toBe('confirm'); // untouched
+    expect(Object.keys(perms).length).toBe(20); // no categories lost
+  });
+
   it('should have default suggestion starters', () => {
     const state = useConfigStore.getState();
     expect(state.suggestionStarters.length).toBe(3);

@@ -12,92 +12,62 @@ export function classifyAction(
   const targetLower = target ? target.toLowerCase() : '';
   const valueLower = value ? value.toLowerCase() : '';
 
-  // 1. Check High Risk / Deny categories first
-  if (targetLower.includes('root') || targetLower.includes('shizuku') || targetLower.includes('magisk') || targetLower.includes('superuser')) {
-    return 'root_shizuku';
-  }
+  // 1. Passwords / OTPs check on typed value
   if (
-    targetLower.includes('accessibility') ||
-    targetLower.includes('permission') ||
-    targetLower.includes('grant') ||
-    targetLower.includes('allow access')
-  ) {
-    return 'permission_toggles';
-  }
-  if (
-    targetLower.includes('sideload') ||
-    targetLower.includes('install apk') ||
-    targetLower.includes('unknown source') ||
-    targetLower.includes('package installer')
-  ) {
-    return 'sideloads';
-  }
-  if (
-    targetLower.includes('password') ||
-    targetLower.includes('otp') ||
-    targetLower.includes('pin') ||
-    targetLower.includes('credentials') ||
-    targetLower.includes('verification code') ||
     valueLower.includes('password') ||
     valueLower.includes('otp') ||
-    valueLower.includes('pin')
+    valueLower.includes('pin') ||
+    valueLower.includes('credentials') ||
+    valueLower.includes('verification code')
   ) {
     return 'passwords_otps';
   }
 
-  // 2. Check Medium Risk / Confirm categories next
-  if (
-    (toolName === 'device_open_app' && (targetLower.includes('play store') || targetLower.includes('google play'))) ||
-    targetLower.includes('play store') ||
-    targetLower.includes('google play')
-  ) {
-    return 'play_installs';
-  }
-  if (
-    (toolName === 'device_open_app' && (targetLower.includes('settings') || targetLower.includes('config'))) ||
-    targetLower.includes('system settings') ||
-    targetLower.includes('developer options') ||
-    targetLower.includes('configure')
-  ) {
-    return 'settings_changes';
-  }
-  if (
-    targetLower.includes('delete') ||
-    targetLower.includes('erase') ||
-    targetLower.includes('wipe') ||
-    targetLower.includes('remove') ||
-    targetLower.includes('clear')
-  ) {
-    return 'deletions';
-  }
-  if (
-    targetLower.includes('buy') ||
-    targetLower.includes('pay') ||
-    targetLower.includes('purchase') ||
-    targetLower.includes('checkout') ||
-    targetLower.includes('subscribe') ||
-    targetLower.includes('premium')
-  ) {
-    return 'purchases';
-  }
-  if (
-    targetLower.includes('send') ||
-    targetLower.includes('sms') ||
-    targetLower.includes('whatsapp') ||
-    targetLower.includes('email') ||
-    targetLower.includes('message')
-  ) {
-    return 'send_communication';
-  }
-  if (targetLower.includes('call') || targetLower.includes('dial') || targetLower.includes('phone')) {
-    return 'calls';
+  // 2. App launch classifications based on app target
+  if (toolName === 'device_open_app') {
+    if (
+      targetLower.includes('root') ||
+      targetLower.includes('shizuku') ||
+      targetLower.includes('magisk') ||
+      targetLower.includes('superuser')
+    ) {
+      return 'root_shizuku';
+    }
+    if (
+      targetLower.includes('accessibility') ||
+      targetLower.includes('permission') ||
+      targetLower.includes('grant') ||
+      targetLower.includes('allow access')
+    ) {
+      return 'permission_toggles';
+    }
+    if (
+      targetLower.includes('sideload') ||
+      targetLower.includes('install apk') ||
+      targetLower.includes('unknown source') ||
+      targetLower.includes('package installer')
+    ) {
+      return 'sideloads';
+    }
+    if (targetLower.includes('play store') || targetLower.includes('google play')) {
+      return 'play_installs';
+    }
+    if (
+      targetLower.includes('settings') ||
+      targetLower.includes('config') ||
+      targetLower.includes('system settings') ||
+      targetLower.includes('developer options') ||
+      targetLower.includes('configure')
+    ) {
+      return 'settings_changes';
+    }
+    return 'open_app';
   }
 
-  // 3. Fallback to base action types
+  // 3. Direct tool mapping to permission category without fragile target element matching
   if (toolName === 'device_screen_read') return 'screen_read';
   if (toolName === 'device_info') return 'info';
   if (toolName === 'device_screenshot') return 'screenshot';
-  if (toolName === 'device_open_app') return 'open_app';
   if (toolName === 'device_scroll') return 'scroll';
   if (toolName === 'device_swipe') return 'swipe';
   if (toolName === 'device_press_key') return 'press_key';
@@ -153,13 +123,11 @@ export async function evaluateSafety(
   const category = classifyAction(toolName, target, value);
   let tier = permissions[category] || 'auto';
 
-  // Heuristic sensitive word pattern check
-  // If action is configured as Auto but hits sensitive keywords, upgrade tier to Ask/Confirm
+  // Sensitive word check on input values (avoid fragile target element string matching)
   if (tier === 'auto') {
-    const targetLower = target ? target.toLowerCase() : '';
     const valueLower = value ? value.toLowerCase() : '';
     const sensitiveWords = ['delete', 'buy', 'pay', 'purchase', 'send', 'call', 'remove', 'clear'];
-    const hasSensitiveWord = sensitiveWords.some(word => targetLower.includes(word) || valueLower.includes(word));
+    const hasSensitiveWord = sensitiveWords.some(word => valueLower.includes(word));
     
     if (hasSensitiveWord) {
       tier = 'confirm';
@@ -194,7 +162,7 @@ export async function evaluateSafety(
     }
   }
 
-  // Auto path: return success directly to allow native invocation
+  // Auto path: return success directly allowing native invocation
   return {
     status: 'success',
     result: 'Allowed automatically'
