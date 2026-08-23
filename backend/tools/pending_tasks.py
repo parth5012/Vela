@@ -21,10 +21,12 @@ async def wait_for_client_event(
 ):
     """Blocks execution and awaits an event response from the mobile client."""
     event = asyncio.Event()
+    loop = asyncio.get_running_loop()
     key = f"{conversation_id}_{task_token}" if task_token else conversation_id
     
     PENDING_TASKS[key] = {
         "event": event,
+        "loop": loop,
         "response": None
     }
     

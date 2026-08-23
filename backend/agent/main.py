@@ -45,6 +45,30 @@ def get_pending_tasks():
 
 logger = StructuredLogger("VelaServer")
 
+BACKGROUND_TASKS: set[asyncio.Task] = set()
+
+def create_background_task(coro):
+    """Creates an asyncio background task and maintains a strong reference until completion."""
+    task = asyncio.create_task(coro)
+    BACKGROUND_TASKS.add(task)
+    task.add_done_callback(BACKGROUND_TASKS.discard)
+    return task
+
+def _safe_set_event(task_data: dict) -> None:
+    """Safely sets an asyncio.Event across threads using call_soon_threadsafe on its loop."""
+    event = task_data.get("event")
+    if not event:
+        return
+    loop = task_data.get("loop")
+    if loop and loop.is_running():
+        loop.call_soon_threadsafe(event.set)
+    else:
+        try:
+            current_loop = asyncio.get_running_loop()
+            current_loop.call_soon_threadsafe(event.set)
+        except RuntimeError:
+            event.set()
+
 GLOBAL_OAUTH_CONVERSATION_ID = "00000000-0000-0000-0000-000000000001"
 
 db = PostgresDB()
@@ -413,11 +437,11 @@ async def chat_message(payload: MessagePayload):
                                 .first()
                             )
                             if active_session:
-                                asyncio.create_task(evaluate_webview_session(active_session.id))
+                                create_background_task(evaluate_webview_session(active_session.id))
                     except Exception as ex:
                         logger.error("Failed to trigger webview session evaluation", error=str(ex))
 
-            producer_task = asyncio.create_task(producer())
+            producer_task = create_background_task(producer())
             producer_started = True
 
             try:
@@ -1089,7 +1113,7 @@ def submit_webview_response(payload: WebViewResponsePayload):
             "status": payload.status,
             "result": payload.result
         }
-        pending_tasks[key]["event"].set()
+        _safe_set_event(pending_tasks[key])
         logger.info("Received WebView response for task", conversation_id=conversation_id, status=payload.status)
         return {"status": "accepted"}
     else:
@@ -1124,7 +1148,7 @@ def submit_device_response(payload: DeviceResponsePayload):
             "status": payload.status,
             "result": payload.result
         }
-        pending_tasks[key]["event"].set()
+        _safe_set_event(pending_tasks[key])
         logger.info("Received Device response for task", conversation_id=conversation_id, status=payload.status)
         return {"status": "accepted"}
     else:
