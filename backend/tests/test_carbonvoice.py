@@ -292,3 +292,99 @@ def test_get_google_credentials_fallback():
         assert result == mock_creds
         mock_db.get_latest_oauth_tokens.assert_called_with("google")
         mock_db.store_oauth_tokens.assert_called_once()
+
+
+from gateway.carbonvoice import is_safe_audio_url
+
+def test_is_safe_audio_url_blocks_private_ranges():
+    assert not is_safe_audio_url("http://127.0.0.1/audio.wav")
+    assert not is_safe_audio_url("http://169.254.169.254/latest/meta-data/")
+    assert not is_safe_audio_url("http://10.0.0.1/audio.wav")
+    assert not is_safe_audio_url("http://172.16.0.1/audio.wav")
+    assert not is_safe_audio_url("http://192.168.1.1/audio.wav")
+    assert not is_safe_audio_url("http://localhost/audio.wav")
+    assert not is_safe_audio_url("file:///etc/passwd")
+
+
+# ---------------------------------------------------------------------------
+# is_safe_audio_url — positive paths and resolution edge cases (mocked DNS,
+# no real network access in unit tests)
+# ---------------------------------------------------------------------------
+
+import socket as _socket
+
+PUBLIC_V4 = [( _socket.AF_INET, _socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))]
+PUBLIC_V6 = [(_socket.AF_INET6, _socket.SOCK_STREAM, 6, "", ("2606:2800:220:1:248:1893:25c8:1946", 0, 0, 0))]
+
+
+def _addrinfo(*entries):
+    return list(entries)
+
+
+def test_is_safe_audio_url_allows_public_ipv4():
+    """Positive guard: a legitimate public URL must NOT be blocked."""
+    with patch("gateway.carbonvoice.socket.getaddrinfo", return_value=_addrinfo(*PUBLIC_V4)):
+        assert is_safe_audio_url("https://cdn.example.com/audio.wav") is True
+
+
+def test_is_safe_audio_url_allows_public_ipv6():
+    with patch("gateway.carbonvoice.socket.getaddrinfo", return_value=_addrinfo(*PUBLIC_V6)):
+        assert is_safe_audio_url("https://cdn.example.com/audio.wav") is True
+
+
+def test_is_safe_audio_url_blocks_when_any_resolved_address_is_private():
+    """DNS rebinding defense: one private A record among public ones blocks."""
+    mixed = PUBLIC_V4 + [
+        (_socket.AF_INET, _socket.SOCK_STREAM, 6, "", ("192.168.1.50", 0))
+    ]
+    with patch("gateway.carbonvoice.socket.getaddrinfo", return_value=_addrinfo(*mixed)):
+        assert is_safe_audio_url("https://rebind.example.com/audio.wav") is False
+
+
+@pytest.mark.parametrize(
+    "resolved_ip",
+    [
+        ("127.0.0.1", "loopback"),
+        ("::1", "ipv6 loopback"),
+        ("169.254.169.254", "link-local metadata"),
+        ("224.0.0.1", "multicast"),
+        ("240.0.0.1", "reserved"),
+        ("0.0.0.0", "unspecified"),
+    ],
+)
+def test_is_safe_audio_url_blocks_dangerous_resolved_addresses(resolved_ip):
+    ip, _label = resolved_ip
+    entries = [(_socket.AF_INET, _socket.SOCK_STREAM, 6, "", (ip, 0))]
+    with patch("gateway.carbonvoice.socket.getaddrinfo", return_value=entries):
+        assert is_safe_audio_url(f"https://evil.example.com/audio.wav") is False
+
+
+def test_is_safe_audio_url_rejects_unresolvable_hostname():
+    """DNS failure must fail closed."""
+    with patch(
+        "gateway.carbonvoice.socket.getaddrinfo",
+        side_effect=_socket.gaierror("Name or service not known"),
+    ):
+        assert is_safe_audio_url("https://does-not-exist.example.com/a.wav") is False
+
+
+def test_is_safe_audio_url_rejects_missing_hostname():
+    assert is_safe_audio_url("http:///audio.wav") is False
+
+
+def test_is_safe_audio_url_rejects_non_http_schemes():
+    assert is_safe_audio_url("ftp://cdn.example.com/audio.wav") is False
+    assert is_safe_audio_url("gopher://cdn.example.com/audio.wav") is False
+
+@pytest.mark.asyncio
+async def test_carbonvoice_gateway_blocks_ssrf_urls(mock_db, mock_graph_invoke, mock_google_drive):
+    gateway = CarbonVoiceGateway(db=mock_db)
+    payload = {
+        "audio_url": "http://169.254.169.254/latest/meta-data/",
+        "text": "Hello world"
+    }
+    with patch("httpx.AsyncClient.get") as mock_get:
+        response = await gateway.handle_webhook(payload=payload)
+        # Verify httpx.get was NEVER called for the unsafe URL
+        mock_get.assert_not_called()
+        assert response["status"] == "success"

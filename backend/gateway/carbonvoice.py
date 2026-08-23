@@ -1,3 +1,6 @@
+import socket
+import urllib.parse
+import ipaddress
 import os
 import uuid
 import httpx
@@ -8,6 +11,69 @@ from agent.graph import graph
 from utils.logger import StructuredLogger
 from db.database import PostgresDB
 from utils.google_drive import get_google_credentials, upload_to_google_drive
+
+
+def is_safe_audio_url(url: str) -> bool:
+    """
+    Validates audio fetch URL to prevent SSRF attacks by blocking local and private IP ranges:
+    - 127.0.0.1 / loopback (127.0.0.0/8, ::1)
+    - 169.254.169.254 / link-local (169.254.0.0/16)
+    - 10.0.0.0/8
+    - 172.16.0.0/12 (172.16.x.x - 172.31.x.x)
+    - 192.168.0.0/16
+    - Localhost / internal hostnames
+    """
+    try:
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return False
+
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+
+        lower_host = hostname.lower()
+        if lower_host in ("localhost", "localhost.localdomain", "127.0.0.1", "::1"):
+            return False
+
+        try:
+            addr_info = socket.getaddrinfo(hostname, None)
+        except Exception:
+            return False
+
+        for family, socktype, proto, canonname, sockaddr in addr_info:
+            ip_str = sockaddr[0]
+            ip = ipaddress.ip_address(ip_str)
+            if (
+                ip.is_private
+                or ip.is_loopback
+                or ip.is_link_local
+                or ip.is_reserved
+                or ip.is_multicast
+                or ip.is_unspecified
+                # Blocks carrier-grade NAT (100.64.0.0/10) and any other
+                # non-globally-routable address space (fail-closed).
+                or not ip.is_global
+            ):
+                return False
+
+            if isinstance(ip, ipaddress.IPv4Address):
+                if ip in ipaddress.IPv4Network("127.0.0.0/8"):
+                    return False
+                if ip in ipaddress.IPv4Network("169.254.0.0/16"):
+                    return False
+                if ip in ipaddress.IPv4Network("10.0.0.0/8"):
+                    return False
+                if ip in ipaddress.IPv4Network("172.16.0.0/12"):
+                    return False
+                if ip in ipaddress.IPv4Network("192.168.0.0/16"):
+                    return False
+                if ip in ipaddress.IPv4Network("0.0.0.0/8"):
+                    return False
+
+        return True
+    except Exception:
+        return False
 
 class CarbonVoiceGateway:
     """
@@ -136,29 +202,32 @@ class CarbonVoiceGateway:
 
         # If audio is not directly sent but a URL is provided, download it
         if not audio_bytes and audio_url:
-            self.logger.info("Downloading audio URL", audio_url=audio_url)
-            try:
-                headers = {}
-                # Do NOT forward the incoming Authorization header (which contains our VELA_API_KEY)
-                # to the external audio URL download request, as it leaks credentials and causes
-                # S3 presigned URLs to fail with invalid authorization headers.
-                async with httpx.AsyncClient() as client:
-                    response = await client.get(audio_url, headers=headers, timeout=15.0)
-                    if response.status_code == 200:
-                        audio_bytes = response.content
-                        self.logger.info("Successfully downloaded audio from URL")
-                        # Try to get extension from URL or content-type
-                        content_type = response.headers.get("content-type")
-                        if content_type:
-                            audio_mime_type = content_type
-                            if "mpeg" in content_type:
-                                audio_filename = f"audio_{timestamp}_{unique_id}.mp3"
-                            elif "wav" in content_type:
-                                audio_filename = f"audio_{timestamp}_{unique_id}.wav"
-                    else:
-                        self.logger.warning("Failed to download audio", status_code=response.status_code)
-            except Exception as dl_err:
-                self.logger.error("Error downloading audio from URL", error=str(dl_err))
+            if not is_safe_audio_url(audio_url):
+                self.logger.warning("Blocked unsafe audio fetch URL (SSRF prevention)", audio_url=audio_url)
+            else:
+                self.logger.info("Downloading audio URL", audio_url=audio_url)
+                try:
+                    headers = {}
+                    # Do NOT forward the incoming Authorization header (which contains our VELA_API_KEY)
+                    # to the external audio URL download request, as it leaks credentials and causes
+                    # S3 presigned URLs to fail with invalid authorization headers.
+                    async with httpx.AsyncClient() as client:
+                        response = await client.get(audio_url, headers=headers, timeout=15.0)
+                        if response.status_code == 200:
+                            audio_bytes = response.content
+                            self.logger.info("Successfully downloaded audio from URL")
+                            # Try to get extension from URL or content-type
+                            content_type = response.headers.get("content-type")
+                            if content_type:
+                                audio_mime_type = content_type
+                                if "mpeg" in content_type:
+                                    audio_filename = f"audio_{timestamp}_{unique_id}.mp3"
+                                elif "wav" in content_type:
+                                    audio_filename = f"audio_{timestamp}_{unique_id}.wav"
+                        else:
+                            self.logger.warning("Failed to download audio", status_code=response.status_code)
+                except Exception as dl_err:
+                    self.logger.error("Error downloading audio from URL", error=str(dl_err))
 
         # 4. Save Audio-Text Dataset Pairs to Google Drive
         drive_audio_file_id = None
