@@ -22,3 +22,4 @@ client/credentials.json
 *.log
 client/modules/**/build/
 client/modules/**/.cxx/
+screenshots/
