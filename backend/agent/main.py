@@ -766,9 +766,9 @@ def get_oauth_status(conversation_id: str = Query(default=None)):
                     "email": user_info.get("email", ""),
                     "picture": user_info.get("picture", ""),
                 },
-                "access_token": token_data.get("access_token", ""),
-                "refresh_token": token_data.get("refresh_token", ""),
-                "id_token": token_data.get("id_token", ""),
+                "access_token": "[REDACTED]" if token_data.get("access_token") else "",
+                "refresh_token": "[REDACTED]" if token_data.get("refresh_token") else "",
+                "id_token": "[REDACTED]" if token_data.get("id_token") else "",
                 "expires_at": token_data.get("expiry", ""),
             }
             return result

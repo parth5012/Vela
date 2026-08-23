@@ -4,6 +4,7 @@ import os
 import json
 import base64
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock, ANY
 from agent.main import app
@@ -19,8 +20,15 @@ CLIENT_REDIRECT_URI = "vela-client://oauth/callback"
 TEST_API_KEY = "vela5012"
 
 
+@pytest.fixture(autouse=True)
+def _auto_set_env(monkeypatch):
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "test-client-id-123")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "test-client-secret-456")
+    monkeypatch.setenv("GOOGLE_REDIRECT_URI", OAUTH_REDIRECT_URI)
+    monkeypatch.setenv("VELA_API_KEY", TEST_API_KEY)
+
 def _set_env_vars():
-    """Override env vars for tests (force set, not setdefault, to beat .env)."""
+    """Override env vars for tests."""
     os.environ["GOOGLE_CLIENT_ID"] = "test-client-id-123"
     os.environ["GOOGLE_CLIENT_SECRET"] = "test-client-secret-456"
     os.environ["GOOGLE_REDIRECT_URI"] = OAUTH_REDIRECT_URI
@@ -381,9 +389,66 @@ def test_token_status_connected(mock_db_client_class):
     assert data["connected"] is True
     assert data["user"]["name"] == "Test User"
     assert data["user"]["email"] == "test@gmail.com"
-    assert data["access_token"] == "at-abc"
-    assert data["refresh_token"] == "rt-xyz"
-    assert data["id_token"] == "jwt-xyz"
+    assert data["access_token"] == "[REDACTED]"
+    assert data["refresh_token"] == "[REDACTED]"
+    assert data["id_token"] == "[REDACTED]"
+
+
+@patch.dict(os.environ, {"VELA_API_KEY": TEST_API_KEY})
+@patch("agent.main.DBClient")
+def test_token_status_never_leaks_raw_tokens(mock_db_client_class):
+    """Audit fix regression guard: raw token values must not appear anywhere
+    in the /oauth/token/status response body."""
+    mock_db = MagicMock()
+    token_record = MagicMock()
+    token_record.token = {
+        "access_token": "ya29.super-secret-access-value",
+        "refresh_token": "1//super-secret-refresh-value",
+        "id_token": "eyJ.super-secret-id-value",
+        "expiry": "2027-01-01T00:00:00+00:00",
+        "user_info": {"name": "Leak Check", "email": "leak@gmail.com"},
+    }
+    mock_db.get_oauth_token.return_value = token_record
+    mock_db_client_class.return_value = mock_db
+
+    response = client.get(
+        "/oauth/token/status?conversation_id=conv-123",
+        headers={"Authorization": f"Bearer {TEST_API_KEY}"},
+    )
+    assert response.status_code == 200
+    body = response.text
+    assert "ya29.super-secret-access-value" not in body
+    assert "1//super-secret-refresh-value" not in body
+    assert "eyJ.super-secret-id-value" not in body
+
+
+@patch.dict(os.environ, {"VELA_API_KEY": TEST_API_KEY})
+@patch("agent.main.DBClient")
+def test_token_status_empty_token_fields_are_blank_not_placeholder(mock_db_client_class):
+    """Missing/empty token fields return '' — '[REDACTED]' only when a value exists."""
+    mock_db = MagicMock()
+    token_record = MagicMock()
+    token_record.token = {
+        "access_token": "",
+        "refresh_token": None,
+        # id_token absent entirely
+        "expiry": "",
+        "user_info": {"name": "Partial User", "email": ""},
+    }
+    mock_db.get_oauth_token.return_value = token_record
+    mock_db_client_class.return_value = mock_db
+
+    response = client.get(
+        "/oauth/token/status",
+        headers={"Authorization": f"Bearer {TEST_API_KEY}"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["connected"] is True
+    assert data["access_token"] == ""
+    assert data["refresh_token"] == ""
+    assert data["id_token"] == ""
+    assert "[REDACTED]" not in response.text
 
 
 # ---------------------------------------------------------------------------
