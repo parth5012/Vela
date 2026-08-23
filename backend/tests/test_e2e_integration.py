@@ -8,11 +8,14 @@ Covers:
 """
 
 import os
+import pytest
 from unittest.mock import patch, MagicMock, AsyncMock, PropertyMock
 
 # Ensure GOOGLE_API_KEY is set so the graph chatbot_node doesn't short-circuit
-os.environ.setdefault("GOOGLE_API_KEY", "AIzaSyFakeKeyForE2ETests")
-os.environ.setdefault("VELA_API_KEY", "e2e-test-secret-key")
+@pytest.fixture(autouse=True)
+def reset_e2e_env(monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "AIzaSyFakeKeyForE2ETests")
+    monkeypatch.setenv("VELA_API_KEY", "e2e-test-secret-key")
 
 
 # ---------------------------------------------------------------------------

@@ -10,9 +10,9 @@ from langchain_core.messages import AIMessageChunk
 from agent.main import app, normalize_thread_id
 
 @pytest.mark.asyncio
-async def test_sse_concurrency():
-    os.environ["MAX_CONCURRENT_STREAMS"] = "2"
-    
+async def test_sse_concurrency(monkeypatch):
+    monkeypatch.setenv("MAX_CONCURRENT_STREAMS", "2")
+
     # Reset global semaphore to load env var
     import agent.main
     agent.concurrency._semaphore = None
@@ -63,7 +63,10 @@ async def test_sse_concurrency():
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             headers = {"Authorization": "Bearer super-secret-key"}
-            os.environ["VELA_API_KEY"] = "super-secret-key"
+            # monkeypatch restores the previous value after the test — a raw
+            # os.environ assignment here leaked "super-secret-key" into every
+            # later test module and broke their API-key auth in full-suite runs.
+            monkeypatch.setenv("VELA_API_KEY", "super-secret-key")
             
             payloads = [
                 {"thread_id": f"thread_{i}", "message": f"msg_{i}"}
