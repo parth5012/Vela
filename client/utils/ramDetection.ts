@@ -58,7 +58,6 @@ export function getModelStatusForRam(modelName: string, ramBytes: number): Model
     ) {
       return 'borderline';
     }
-    if (modelName === 'Phi-4 Mini (GGUF)') return 'unsupported';
     return 'unsupported';
   } else {
     // High tier (>= 7.5 GB) - all models are recommended, nothing is unsupported
