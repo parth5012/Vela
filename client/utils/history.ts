@@ -67,11 +67,19 @@ export async function syncHistoryWithBackend(apiUrl?: string, apiKey?: string): 
                 'Accept': 'application/json',
               },
             });
-            if (res.ok) {
-              const messages: Message[] = await res.json();
-              // 4. For each thread that returns messages successfully, cache them locally.
-              useChatStore.getState().setHistory(thread.id, messages);
-            } else {
+        if (res.ok) {
+          const messages: Message[] = await res.json();
+          const isStreaming = useChatStore.getState().isThreadStreaming(thread.id);
+          const currentLocal = useChatStore.getState().messages[thread.id] || [];
+          if (isStreaming) {
+            return null;
+          }
+          if (messages.length === 0 && currentLocal.length > 0) {
+            return null;
+          }
+          // 4. For each thread that returns messages successfully, cache locally.
+          useChatStore.getState().setHistory(thread.id, messages);
+        } else {
               return { threadId: thread.id, reason: `HTTP ${res.status}` };
             }
           } catch (err) {

@@ -309,8 +309,9 @@ export const useChatStore = create<ChatState>()(
         saveThreads(threads).catch(() => {});
       },
       setHistory: (threadId, history) => {
+        if (get().isThreadStreaming(threadId)) return;
         set((state) => ({
-          messages: { ...state.messages, [threadId]: history }
+          messages: { ...state.messages, [threadId]: history },
         }));
         saveMessages(threadId, history).catch(() => {});
       },
