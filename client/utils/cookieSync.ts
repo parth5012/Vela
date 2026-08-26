@@ -158,10 +158,8 @@ export function parseChromeJson(text: string): CookieEntry[] {
 // @react-native-cookies/cookies is not installed in dev/web
 // ------------------------------------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let CookieManager: any = null;
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   // @ts-ignore - dynamic require is build-safe when package not installed
   const mod = require('@react-native-cookies/cookies');
   CookieManager = (mod && mod.default) ? mod.default : mod?.CookieManager ? mod.CookieManager : mod;
@@ -171,9 +169,14 @@ try {
 
 function getCookieManager(): {
   set: (url: string, cookie: Record<string, unknown>) => Promise<boolean>;
+  getAll: (useWebKit?: boolean) => Promise<Record<string, unknown>>;
   clearAll: (useWebKit?: boolean) => Promise<boolean>;
 } | null {
-  if (CookieManager && typeof CookieManager.set === 'function') return CookieManager;
+  if (CookieManager && typeof CookieManager.set === 'function') return CookieManager as {
+    set: (url: string, cookie: Record<string, unknown>) => Promise<boolean>;
+    getAll: (useWebKit?: boolean) => Promise<Record<string, unknown>>;
+    clearAll: (useWebKit?: boolean) => Promise<boolean>;
+  };
   return null;
 }
 
@@ -253,4 +256,27 @@ export function filterBySelectedDomains(
   // Normalize selected set values for comparison
   const normalizedSelected = new Set(Array.from(selected).map(normalizeDomain));
   return entries.filter((e) => normalizedSelected.has(normalizeDomain(e.domain)));
+}
+
+export async function getAllCookies(): Promise<Record<string, Record<string, unknown>>> {
+  const manager = getCookieManager();
+  if (!manager || typeof (manager as unknown as { getAll?: unknown }).getAll !== 'function') return {};
+  try {
+    const all = await (manager as { getAll: (b?: boolean) => Promise<Record<string, Record<string, unknown>>> }).getAll(true);
+    if (all && typeof all === 'object') return all;
+    return (await (manager as { getAll: () => Promise<Record<string, Record<string, unknown>>> }).getAll()) || {};
+  } catch {
+    return {};
+  }
+}
+
+export function groupEntriesByDomain(entries: CookieEntry[]): Record<string, CookieEntry[]> {
+  const map: Record<string, CookieEntry[]> = {};
+  for (const e of entries) {
+    const key = normalizeDomain(e.domain);
+    if (!key) continue;
+    if (!map[key]) map[key] = [];
+    map[key].push(e);
+  }
+  return map;
 }
