@@ -103,6 +103,16 @@ export async function clearChatLocal(): Promise<void> {
 
 export async function saveMessage(conversationId: string, message: Message): Promise<void> {
   if (!db) return;
+  try {
+    const existingThread = await db.select({ id: threads.id }).from(threads).where(eq(threads.id, conversationId)).limit(1);
+    if (!existingThread || existingThread.length === 0) {
+      const memoryThread = useChatStore.getState().threads.find((t) => t.id === conversationId);
+      if (memoryThread) {
+        await saveThread(memoryThread);
+      }
+    }
+  } catch (err) {}
+
   const row = toMessageRow(conversationId, message);
   await db
     .insert(messages)
@@ -124,6 +134,16 @@ export async function saveMessage(conversationId: string, message: Message): Pro
  */
 export async function queueMessageForSync(conversationId: string, message: Message): Promise<void> {
   if (!db) return;
+  try {
+    const existingThread = await db.select({ id: threads.id }).from(threads).where(eq(threads.id, conversationId)).limit(1);
+    if (!existingThread || existingThread.length === 0) {
+      const memoryThread = useChatStore.getState().threads.find((t) => t.id === conversationId);
+      if (memoryThread) {
+        await saveThread(memoryThread);
+      }
+    }
+  } catch (err) {}
+
   const row = toMessageRow(conversationId, message);
 
   await db
