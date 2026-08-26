@@ -47,6 +47,7 @@ function pruneEmptyClosedSegments(segments: MessageSegment[]): MessageSegment[] 
 }
 
 export function parseMessage(content: string): MessageSegment[] {
+  if (typeof content !== 'string') return [];
   const root: MessageSegment = {
     type: 'text',
     isClosed: true,

@@ -400,7 +400,9 @@ export default function ChatScreen() {
     }
   }, [apiUrl, apiKey]);
 
-  const activeMessages = (activeThreadId && messages[activeThreadId]) || [];
+  const activeMessages = useMemo(() => {
+    return (activeThreadId && messages[activeThreadId]) || [];
+  }, [activeThreadId, messages]);
   const lastMsg = activeMessages[activeMessages.length - 1];
 
   const isCurrentThreadStreaming = activeThreadId ? isThreadStreaming(activeThreadId) : false;

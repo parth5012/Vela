@@ -13,7 +13,7 @@ function findLastIndex<T>(array: T[], predicate: (value: T) => boolean): number 
  * It builds the string dynamically, auto-closing any nested unclosed tags to prevent crossed-tag nesting violations.
  */
 export function healXmlTags(content: string): string {
-  if (!content) return '';
+  if (typeof content !== 'string' || !content) return '';
 
   const stack: string[] = [];
   let healed = '';

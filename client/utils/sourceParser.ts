@@ -52,6 +52,7 @@ export function extractDomain(url: string): string {
  */
 export function parseSearchContent(rawContent: string): SearchSource[] {
   const sources: SearchSource[] = [];
+  if (typeof rawContent !== 'string') return sources;
   const cleaned = rawContent.trim();
   if (!cleaned) return sources;
 

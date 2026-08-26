@@ -133,12 +133,13 @@ export default function CollapsibleBlock({
   // #160: Pretty-print JSON args: try JSON.parse then 2-space stringify else raw; limit 800 chars.
   const formattedInput = useMemo(() => {
     if (!input) return null;
+    let strInput = typeof input === 'string' ? input : String(input);
     let out: string;
     try {
-      const parsed = JSON.parse(input);
+      const parsed = JSON.parse(strInput);
       out = JSON.stringify(parsed, null, 2);
     } catch {
-      out = input;
+      out = strInput;
     }
     if (out.length > 800) {
       out = out.slice(0, 800) + '... truncated';
