@@ -36,7 +36,6 @@ export async function checkPermission(perm: OSPermission): Promise<PermissionSta
       case 'camera': {
         try {
           // Optional dependency — may not be installed
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const CameraMod = require('expo-camera');
           const Camera = CameraMod?.Camera ?? CameraMod?.default ?? CameraMod;
           if (Camera?.getCameraPermissionsAsync) {
@@ -55,7 +54,6 @@ export async function checkPermission(perm: OSPermission): Promise<PermissionSta
       case 'microphone': {
         try {
           // Try expo-av or expo-camera for microphone if available
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const AvMod = require('expo-av');
           if (AvMod?.Audio?.getPermissionsAsync) {
             const { status } = await AvMod.Audio.getPermissionsAsync();
@@ -73,7 +71,6 @@ export async function checkPermission(perm: OSPermission): Promise<PermissionSta
       }
       case 'accessibility': {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const DeviceAgent = require('../modules/device-agent').default;
           if (DeviceAgent && typeof DeviceAgent.isAccessibilityEnabled === 'function') {
             const enabled: boolean = await DeviceAgent.isAccessibilityEnabled();
@@ -109,7 +106,6 @@ export async function requestPermission(perm: OSPermission): Promise<PermissionS
       }
       case 'camera': {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const CameraMod = require('expo-camera');
           const Camera = CameraMod?.Camera ?? CameraMod?.default ?? CameraMod;
           if (Camera?.requestCameraPermissionsAsync) {
@@ -127,7 +123,6 @@ export async function requestPermission(perm: OSPermission): Promise<PermissionS
       }
       case 'microphone': {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const AvMod = require('expo-av');
           if (AvMod?.Audio?.requestPermissionsAsync) {
             const { status } = await AvMod.Audio.requestPermissionsAsync();
@@ -241,7 +236,6 @@ export function buildSettingsDeepLink(perm: OSPermission): string {
 export async function openSettings(perm: OSPermission): Promise<void> {
   if (perm === 'accessibility' && Platform.OS === 'android') {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const IntentLauncher = require('expo-intent-launcher');
       const launcher = IntentLauncher.default ?? IntentLauncher;
       if (launcher?.startActivityAsync) {
