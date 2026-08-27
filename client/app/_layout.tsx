@@ -20,6 +20,7 @@ import * as Notifications from 'expo-notifications';
 import { SafetyDialog } from '../components/ui/SafetyDialog';
 import { persistentWebviewContainerStyle, persistentWebviewPointerEvents } from '../utils/persistentWebviewStyle';
 import { registerAndPostToken, setupTokenRefreshListener } from '../utils/pushRegistration';
+import { routeByType } from '../utils/notificationRouting';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -139,6 +140,65 @@ registerVelaBackgroundTask();
       }
     };
   }, [hasHydrated, isConfigured]);
+
+  // Notification listeners: foreground banner (system), background tap, cold-start — per #136/#133
+  // Trio: foreground addNotificationReceivedListener (log only, banner via setNotificationHandler),
+  // background addNotificationResponseReceivedListener, killed getLastNotificationResponseAsync.
+  // Hook-safe: placed before early return with hasHydrated && isRouterReady guard.
+  useEffect(() => {
+    if (!hasHydrated || !isRouterReady) return;
+    let foregroundSub: Notifications.Subscription | null = null;
+    let responseSub: Notifications.Subscription | null = null;
+    let cancelled = false;
+
+    const selectThread = (id: string | null) => useChatStore.getState().selectThread(id);
+
+    // Cold-start: app launched from killed state via notification tap
+    Notifications.getLastNotificationResponseAsync()
+      .then((response: unknown) => {
+        if (cancelled) return;
+        const data = (response as { notification?: { request?: { content?: { data?: Record<string, string> } } } })
+          ?.notification?.request?.content?.data;
+        if (data) {
+          routeByType(data, router, selectThread);
+        }
+      })
+      .catch(() => {
+        // silent
+      });
+
+    // Foreground: system banner via setNotificationHandler; listener only for logging
+    foregroundSub = Notifications.addNotificationReceivedListener((notification: unknown) => {
+      const data = (notification as { request?: { content?: { data?: unknown } } })?.request?.content?.data;
+      console.log('[notifications] foreground received', data);
+    });
+
+    // Background: user tapped banner while app in background
+    responseSub = Notifications.addNotificationResponseReceivedListener((response: unknown) => {
+      const data = (response as { notification?: { request?: { content?: { data?: Record<string, string> } } } })
+        ?.notification?.request?.content?.data;
+      if (data) {
+        routeByType(data, router, selectThread);
+      } else {
+        console.log('[notifications] response without data');
+        router.replace('/');
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      try {
+        foregroundSub?.remove();
+      } catch {
+        // ignore cleanup errors
+      }
+      try {
+        responseSub?.remove();
+      } catch {
+        // ignore cleanup errors
+      }
+    };
+  }, [hasHydrated, isRouterReady, router]);
 
   useEffect(() => {
     if (!hasHydrated) return;
