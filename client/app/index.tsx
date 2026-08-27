@@ -1453,9 +1453,12 @@ export default function ChatScreen() {
                         <Pressable style={styles.actionBtn} onPress={() => handleCopyText(item.content)}>
                           <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Copy</Text>
                         </Pressable>
-                        {!isUser && (
-                          <>
-                            <Pressable style={styles.actionBtn} onPress={() => handleCopyCodeBlocks(item.content)}>
+                {!isUser && (
+                  <>
+                    <Pressable style={styles.actionBtn} onPress={() => setViewerContent(item.content)}>
+                      <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>View</Text>
+                    </Pressable>
+                    <Pressable style={styles.actionBtn} onPress={() => handleCopyCodeBlocks(item.content)}>
                               <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Code</Text>
                             </Pressable>
                             <Pressable style={styles.actionBtn} onPress={() => handleRegenerate(item)}>
