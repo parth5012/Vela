@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useRouter, useSegments, useRootNavigationState, Slot } from 'expo-router';
 import { Drawer } from 'expo-router/drawer';
-import { ActivityIndicator, View, StyleSheet, Platform, Pressable, Text, AppState } from 'react-native';
+import { ActivityIndicator, View, StyleSheet, Pressable, Text, AppState } from 'react-native';
 import { useConfigStore } from '../store/useConfigStore';
 import { checkPermission } from '../utils/permissionManager';
 import { useChatStore } from '../store/useChatStore';
@@ -19,6 +19,7 @@ import { registerVelaBackgroundTask } from '../utils/backgroundTasks';
 import * as Notifications from 'expo-notifications';
 import { SafetyDialog } from '../components/ui/SafetyDialog';
 import { persistentWebviewContainerStyle, persistentWebviewPointerEvents } from '../utils/persistentWebviewStyle';
+import { registerAndPostToken, setupTokenRefreshListener } from '../utils/pushRegistration';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -29,44 +30,6 @@ Notifications.setNotificationHandler({
     shouldShowList: true,
   }),
 });
-
-async function registerForPushNotificationsAsync() {
-  let token;
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('vela_task_completion', {
-      name: 'Vela Task Completion',
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#FF231F71',
-    });
-    await Notifications.setNotificationChannelAsync('vela_calendar_reminders', {
-      name: 'Vela Calendar Reminders',
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#FF231F71',
-    });
-  }
-
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
-  if (finalStatus !== 'granted') {
-    console.log('Failed to get push token for push notification!');
-    return;
-  }
-
-  try {
-    token = (await Notifications.getDevicePushTokenAsync()).data;
-    console.log('[FCM Token]:', token);
-  } catch (error) {
-    console.error('Error getting device push token:', error);
-  }
-
-  return token;
-}
 
 
 import { initializeDatabase } from '../db/client';
@@ -147,6 +110,35 @@ hydrateGoogleTokens();
 registerVelaBackgroundTask();
 }
 }, [hasHydrated]);
+
+  // FCM push registration — triggers on setup completion (hasHydrated && isConfigured)
+  // per #132. Extracted to utils/pushRegistration.ts; reads apiUrl/apiKey via
+  // useConfigStore.getState() at call time (same pattern as backgroundTasks).
+  useEffect(() => {
+    if (!hasHydrated || !isConfigured) return;
+    let refreshSub: Notifications.Subscription | null = null;
+    let cancelled = false;
+    // Fire registration; on success register refresh listener. Failures are silent+logged inside util.
+    registerAndPostToken().then((token) => {
+      if (cancelled) return;
+      // Only listen for refresh if permission was granted (token obtained).
+      // If denied, listener is skipped; next app launch after grant will register.
+      if (!token) return;
+      try {
+        refreshSub = setupTokenRefreshListener();
+      } catch {
+        // silent
+      }
+    });
+    return () => {
+      cancelled = true;
+      try {
+        refreshSub?.remove();
+      } catch {
+        // ignore cleanup errors
+      }
+    };
+  }, [hasHydrated, isConfigured]);
 
   useEffect(() => {
     if (!hasHydrated) return;
