@@ -98,3 +98,14 @@ CREATE TABLE IF NOT EXISTS system_settings (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS briefings (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(255),
+    date VARCHAR(10) NOT NULL,
+    summary_text TEXT,
+    sections_json JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_briefings_date ON briefings(date);
+

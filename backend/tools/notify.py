@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+from langchain_core.tools import tool
 
 from db.client import DBClient
 from db.models import SystemSetting
@@ -221,5 +222,29 @@ async def send_push_async(
     data: dict[str, str] | None = None,
     channel_id: str | None = None,
 ) -> bool:
-    """Async wrapper around :func:`send_push` via ``asyncio.to_thread``."""
+    """Async wrapper around :func:`send_push` using ``asyncio.to_thread``."""
     return await asyncio.to_thread(send_push, title, body, data, channel_id)
+
+
+@tool
+def save_briefing_watch_item(text: str, date_hint: str | None = None) -> str:
+    """Saves a watch item (topic, project, keyword, or reminder) for upcoming daily briefings.
+
+    Use this tool when the user asks to track a topic, watch something for daily briefings,
+    or add a reminder/topic to their briefing watch list.
+
+    Args:
+        text: The item description or topic to watch.
+        date_hint: Optional date hint or timeframe for the item (e.g. '2026-09-01', 'tomorrow', 'next week').
+
+    Returns:
+        Confirmation message with details of the saved watch item.
+    """
+    try:
+        with get_db_session() as session:
+            client = DBClient(session)
+            item = client.add_watch_item(text=text, date_hint=date_hint)
+            return f"Watch item saved: {item.get('text')} (id: {item.get('id')})"
+    except Exception as e:
+        logger.error("Failed to save briefing watch item", error=str(e))
+        return f"Error saving watch item: {str(e)}"

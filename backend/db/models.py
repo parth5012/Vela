@@ -1,7 +1,8 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import JSON, DateTime, Integer, String, Float, Boolean, Column, ForeignKey, BigInteger
+from sqlalchemy import JSON, DateTime, Integer, String, Float, Boolean, Column, ForeignKey, BigInteger, Text
 from sqlalchemy.orm import declarative_base
+from utils.ulid import generate_ulid
 from pgvector.sqlalchemy import Vector
 
 Base = declarative_base()
@@ -119,4 +120,15 @@ class SystemSetting(Base):
     key = Column(String(100), primary_key=True)
     value = Column(String, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class Briefing(Base):
+    __tablename__ = "briefings"
+
+    id = Column(String(36), primary_key=True, default=lambda: generate_ulid())
+    user_id = Column(String(255), nullable=True)
+    date = Column(String(10), index=True, nullable=False)
+    summary_text = Column(Text, nullable=True)
+    sections_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 

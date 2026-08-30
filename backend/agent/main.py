@@ -1164,6 +1164,64 @@ def trigger_consolidation():
 
 
 # ---------------------------------------------------------------------------
+# Daily Briefings & Watch List Endpoints
+# ---------------------------------------------------------------------------
+
+class WatchItemPayload(BaseModel):
+    text: str
+    date_hint: Optional[str] = None
+
+
+@app.get("/api/briefing/config", dependencies=[Depends(verify_api_key)])
+def get_briefing_config():
+    with get_db_session() as session:
+        client = DBClient(session)
+        return client.get_briefing_config()
+
+
+@app.put("/api/briefing/config", dependencies=[Depends(verify_api_key)])
+def update_briefing_config(payload: dict):
+    with get_db_session() as session:
+        client = DBClient(session)
+        return client.update_briefing_config(payload)
+
+
+@app.post("/api/briefings/watch", dependencies=[Depends(verify_api_key)])
+def add_watch_item(payload: WatchItemPayload):
+    with get_db_session() as session:
+        client = DBClient(session)
+        return client.add_watch_item(text=payload.text, date_hint=payload.date_hint)
+
+
+@app.delete("/api/briefings/watch/{item_id}", dependencies=[Depends(verify_api_key)])
+def delete_watch_item(item_id: str):
+    with get_db_session() as session:
+        client = DBClient(session)
+        success = client.delete_watch_item(item_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Watch item not found")
+        return {"status": "ok", "deleted_id": item_id}
+
+
+@app.get("/api/briefings", dependencies=[Depends(verify_api_key)])
+def get_briefings(days: int = Query(14)):
+    with get_db_session() as session:
+        client = DBClient(session)
+        briefings = client.get_briefing_history(days=days)
+        return [
+            {
+                "id": b.id,
+                "user_id": b.user_id,
+                "date": b.date,
+                "summary_text": b.summary_text,
+                "sections_json": b.sections_json,
+                "created_at": b.created_at.isoformat() if b.created_at else None,
+            }
+            for b in briefings
+        ]
+
+
+# ---------------------------------------------------------------------------
 # Tool Proxy and Sync Endpoints for Local LLM Integration
 # ---------------------------------------------------------------------------
 

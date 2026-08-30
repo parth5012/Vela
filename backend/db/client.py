@@ -1,7 +1,9 @@
 import uuid
+import json
 from sqlalchemy.orm import Session
-from db.models import Conversation, OAuthToken, MemoryVector, Experience, SystemPromptFragment, SkillsRegistry, SystemSetting
-from datetime import datetime, UTC
+from db.models import Conversation, OAuthToken, MemoryVector, Experience, SystemPromptFragment, SkillsRegistry, SystemSetting, Briefing
+from datetime import datetime, timedelta, UTC
+from utils.ulid import generate_ulid
 
 class DBClient:
     """Wrapper database client offering standard CRUD queries using SQLAlchemy session scopes.
@@ -232,8 +234,107 @@ class DBClient:
         return False
 
     def get_conversation_history(self, conversation_id: str) -> list[Experience]:
-        """Fetches all experiences associated with a conversation ordered chronologically."""
+        """Fetches all experiences associated with conversation ordered chronologically."""
         return self.session.query(Experience).filter_by(
             conversation_id=conversation_id
         ).order_by(Experience.created_at.asc()).all()
+
+    def get_briefing_config(self) -> dict:
+        """Retrieves briefing config with default values."""
+        defaults = {
+            "enabled": True,
+            "time": "07:00",
+            "weekdays": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+            "sections": {"today": True, "inbox": True, "radar": True},
+        }
+
+        enabled_raw = self.get_system_setting("briefing_enabled")
+        if enabled_raw is not None:
+            defaults["enabled"] = enabled_raw.lower() == "true"
+
+        time_raw = self.get_system_setting("briefing_time")
+        if time_raw is not None:
+            defaults["time"] = time_raw
+
+        weekdays_raw = self.get_system_setting("briefing_weekdays")
+        if weekdays_raw is not None:
+            try:
+                defaults["weekdays"] = json.loads(weekdays_raw)
+            except Exception:
+                pass
+
+        sections_raw = self.get_system_setting("briefing_sections")
+        if sections_raw is not None:
+            try:
+                defaults["sections"] = json.loads(sections_raw)
+            except Exception:
+                pass
+
+        return defaults
+
+    def update_briefing_config(self, config_data: dict) -> dict:
+        """Updates system settings for briefing config."""
+        if "enabled" in config_data:
+            self.set_system_setting("briefing_enabled", "true" if config_data["enabled"] else "false")
+        if "time" in config_data:
+            self.set_system_setting("briefing_time", str(config_data["time"]))
+        if "weekdays" in config_data:
+            self.set_system_setting("briefing_weekdays", json.dumps(config_data["weekdays"]))
+        if "sections" in config_data:
+            self.set_system_setting("briefing_sections", json.dumps(config_data["sections"]))
+        return self.get_briefing_config()
+
+    def get_watch_items(self) -> list[dict]:
+        """Reads briefing watch items list from system settings."""
+        raw = self.get_system_setting("briefing_watch_items")
+        if not raw:
+            return []
+        try:
+            items = json.loads(raw)
+            return items if isinstance(items, list) else []
+        except Exception:
+            return []
+
+    def add_watch_item(self, text: str, date_hint: str | None = None) -> dict:
+        """Creates a watch item dict and appends to briefing_watch_items system setting."""
+        items = self.get_watch_items()
+        item = {
+            "id": generate_ulid(),
+            "text": text,
+            "date_hint": date_hint,
+            "created_at": datetime.now(UTC).isoformat(),
+        }
+        items.append(item)
+        self.set_system_setting("briefing_watch_items", json.dumps(items))
+        return item
+
+    def delete_watch_item(self, item_id: str) -> bool:
+        """Deletes watch item by id from briefing_watch_items system setting."""
+        items = self.get_watch_items()
+        filtered = [i for i in items if i.get("id") != item_id]
+        if len(filtered) < len(items):
+            self.set_system_setting("briefing_watch_items", json.dumps(filtered))
+            return True
+        return False
+
+    def save_briefing(self, date: str, summary_text: str, sections_json: dict | list, user_id: str | None = None) -> Briefing:
+        """Creates and saves a Briefing record."""
+        briefing = Briefing(
+            id=generate_ulid(),
+            user_id=user_id,
+            date=date,
+            summary_text=summary_text,
+            sections_json=sections_json,
+        )
+        self.session.add(briefing)
+        self.session.flush()
+        return briefing
+
+    def get_briefing_history(self, days: int = 14) -> list[Briefing]:
+        """Fetches recent Briefing records."""
+        query = self.session.query(Briefing)
+        if days > 0:
+            cutoff_date = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+            query = query.filter(Briefing.date >= cutoff_date)
+        return query.order_by(Briefing.date.desc(), Briefing.created_at.desc()).all()
 

@@ -27,6 +27,7 @@ class AgentConfig:
         "delete_user_memory",
         "send_status_message",
         "webview_browser",
+        "save_briefing_watch_item",
     ])
 
 
@@ -230,6 +231,7 @@ _registry.register(AgentConfig(
         "gmail_read_emails",
         "calendar_list_events",
         "calendar_create_event",
+        "save_briefing_watch_item",
     ],
 ))
 
