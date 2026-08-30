@@ -13,6 +13,7 @@ export interface NotificationData {
 export interface ParsedNotification {
   type: string;
   conversation_id?: string;
+  route?: string;
 }
 
 /**
@@ -108,6 +109,17 @@ export function parseUrl(url: string | null | undefined): ParsedNotification | n
       return { type: '', conversation_id: id };
     }
 
+    if (segments[0] === 'briefing') {
+      if (segments[1] === 'settings') {
+        return { type: 'briefing', route: '/settings/briefing' };
+      }
+      return { type: 'briefing', route: '/briefing' };
+    }
+
+    if (segments[0] === 'settings' && segments[1] === 'briefing') {
+      return { type: 'briefing', route: '/settings/briefing' };
+    }
+
     // If URL is like vela-client://{id} (single segment), treat as conversation_id
     // Do not misinterpret other top-level routes without id
     if (segments.length === 1) {
@@ -166,14 +178,15 @@ export function routeByType(
       break;
     }
     case 'briefing': {
-      // Future: router.replace('/briefing-history') or '/briefing'
       if (conversation_id) {
         console.log(`[notifications] routing ${normalizedType} -> conversation/${conversation_id}`);
         selectThread(conversation_id);
+        router.replace('/');
       } else {
-        console.log(`[notifications] routing ${normalizedType} without conversation_id`);
+        const targetRoute = parsed.route || '/briefing';
+        console.log(`[notifications] routing ${normalizedType} to ${targetRoute}`);
+        router.replace(targetRoute);
       }
-      router.replace('/');
       break;
     }
     case 'checkin': {

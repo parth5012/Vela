@@ -85,6 +85,17 @@ describe('notificationRouting', () => {
       expect(parseUrl('vela-client://chat/xyz-789')).toEqual({ type: '', conversation_id: 'xyz-789' });
     });
 
+    it('parses briefing deep-link URLs', () => {
+      expect(parseUrl('vela-client://briefing')).toEqual({
+        type: 'briefing',
+        route: '/briefing',
+      });
+      expect(parseUrl('vela-client://settings/briefing')).toEqual({
+        type: 'briefing',
+        route: '/settings/briefing',
+      });
+    });
+
     it('returns null for invalid/missing id', () => {
       expect(parseUrl('vela-client://conversation/')).toBeNull();
       expect(parseUrl('vela-client://')).toBeNull();
