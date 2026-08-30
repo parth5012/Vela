@@ -5,6 +5,9 @@ from db.session import get_db_session
 from db.models import Experience, SystemPromptFragment
 from utils.llm import get_llm
 from utils.logger import StructuredLogger
+from cron.briefing import run_daily_briefing
+
+__all__ = ["run_self_improvement", "run_daily_briefing"]
 
 logger = StructuredLogger("ConsolidatedCron")
 

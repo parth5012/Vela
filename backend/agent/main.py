@@ -12,7 +12,7 @@ from google_auth_oauthlib.flow import Flow
 from db.database import PostgresDB
 from gateway.telegram import TelegramGateway
 from gateway.discord import DiscordGateway
-from cron.consolidate import run_self_improvement
+from cron.consolidate import run_self_improvement, run_daily_briefing
 from utils.logger import StructuredLogger
 from db.client import DBClient
 from db.session import get_db_session
@@ -1157,10 +1157,11 @@ def submit_device_response(payload: DeviceResponsePayload):
 
 @app.post("/consolidate", dependencies=[Depends(verify_api_key)])
 def trigger_consolidation():
-    logger.info("Triggering nightly self-improvement consolidation loop")
+    logger.info("Triggering nightly self-improvement consolidation loop and daily briefing")
     msg = run_self_improvement()
-    logger.info("Consolidation loop completed", result=msg)
-    return {"status": "success"}
+    briefing_result = run_daily_briefing()
+    logger.info("Consolidation loop completed", result=msg, briefing=briefing_result)
+    return {"status": "success", "consolidation": msg, "briefing": briefing_result}
 
 
 # ---------------------------------------------------------------------------
