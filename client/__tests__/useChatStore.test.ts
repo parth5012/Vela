@@ -92,23 +92,31 @@ describe('useChatStore', () => {
     expect(useChatStore.getState().messages['test-uuid-2'].length).toBe(2);
   });
 
-  it('should handle setHistory, setThreads, and setStreaming', () => {
+  it('should handle setHistory, setThreads, setStreaming', () => {
     const store = useChatStore.getState();
     store.createThread('Thread 1', 'test-uuid-3');
-
-    store.setStreamingThread('test-uuid-3', true);
-    expect(useChatStore.getState().isThreadStreaming('test-uuid-3')).toBe(true);
 
     const history = [
       { id: 'msg1', role: 'user' as const, content: 'hello' },
       { id: 'msg2', role: 'assistant' as const, content: 'world' },
     ];
+
     store.setHistory('test-uuid-3', history);
     expect(useChatStore.getState().messages['test-uuid-3']).toEqual(history);
 
+    store.setStreamingThread('test-uuid-3', true);
+    expect(useChatStore.getState().isThreadStreaming('test-uuid-3')).toBe(true);
+
+    // setHistory should be ignored while streaming
+    store.setHistory('test-uuid-3', []);
+    expect(useChatStore.getState().messages['test-uuid-3']).toEqual(history);
+
+    store.setStreamingThread('test-uuid-3', false);
+
     const newThreads = [
-      { id: 'test-uuid-4', title: 'Thread 4', updated_at: '2026-07-04T18:00:00.000Z' }
+      { id: 'test-uuid-4', title: 'Thread 4', updated_at: '2026-07-04T18:00:00.000Z' },
     ];
+
     store.setThreads(newThreads);
     expect(useChatStore.getState().threads).toEqual(newThreads);
   });
