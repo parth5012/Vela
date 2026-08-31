@@ -1,0 +1,70 @@
+{
+  "timestamp": "2026-08-31T14:30:00Z",
+  "device": "emulator-5554",
+  "duration_seconds": 142,
+  "lanes": {
+    "critical-path": {
+      "status": "PASS",
+      "features": {
+        "setup": { "status": "PASS", "attempts": 1, "duration_ms": 8200 },
+        "chat": { "status": "PASS", "attempts": 2, "duration_ms": 14500, "logcat": null },
+        "threads": { "status": "PASS", "attempts": 1, "duration_ms": 6100 },
+        "rich-rendering": { "status": "PASS", "attempts": 1, "duration_ms": 5400 },
+        "collapsible-blocks": { "status": "PASS", "attempts": 1, "duration_ms": 4200 },
+        "message-actions": { "status": "PASS", "attempts": 1, "duration_ms": 3800 },
+        "safety-tier-badges": { "status": "PASS", "attempts": 1, "duration_ms": 3100 }
+      }
+    },
+    "extended-coverage": {
+      "status": "FAIL",
+      "features": {
+        "tasks": { "status": "PASS", "attempts": 1, "duration_ms": 11200 },
+        "browser": { "status": "PASS", "attempts": 2, "duration_ms": 15300, "logcat": null },
+        "settings": { "status": "PASS", "attempts": 1, "duration_ms": 7800 },
+        "theme-appearance": { "status": "PASS", "attempts": 1, "duration_ms": 4500 },
+        "agent-config": { "status": "PASS", "attempts": 1, "duration_ms": 3900 },
+        "google-oauth": { "status": "FAIL", "attempts": 3, "duration_ms": 22000, "screenshot": "oauth-fail.png", "logcat": "ERROR: OAuth token status endpoint returned 500" },
+        "briefing": { "status": "PASS", "attempts": 1, "duration_ms": 6200 },
+        "cookie-viewer": { "status": "PASS", "attempts": 1, "duration_ms": 3100 },
+        "task-progress": { "status": "FAIL", "attempts": 3, "duration_ms": 18000, "screenshot": "task-progress-fail.png", "logcat": "ReactNativeJS ERROR: Cannot read property 'task_id' of undefined" }
+      }
+    },
+    "parallel-surface": {
+      "status": "PASS",
+      "features": {
+        "local-ai": { "status": "PASS", "attempts": 1, "duration_ms": 9400 },
+        "device-agent": { "status": "PASS", "attempts": 1, "duration_ms": 7100 },
+        "offline": { "status": "PASS", "attempts": 1, "duration_ms": 16200 },
+        "fcm": { "status": "PASS", "attempts": 1, "duration_ms": 5800 }
+      }
+    }
+  },
+  "summary": {
+    "total": 20,
+    "passed": 18,
+    "failed": 2,
+    "skipped": 0
+  },
+  "flakiness_trend": {
+    "setup": 1.0,
+    "chat": 0.87,
+    "threads": 0.95,
+    "rich-rendering": 1.0,
+    "collapsible-blocks": 0.92,
+    "message-actions": 1.0,
+    "safety-tier-badges": 1.0,
+    "tasks": 0.98,
+    "browser": 0.78,
+    "settings": 1.0,
+    "theme-appearance": 1.0,
+    "agent-config": 0.97,
+    "google-oauth": 0.45,
+    "briefing": 0.91,
+    "cookie-viewer": 1.0,
+    "task-progress": 0.62,
+    "local-ai": 0.88,
+    "device-agent": 0.96,
+    "offline": 0.82,
+    "fcm": 0.99
+  }
+}
