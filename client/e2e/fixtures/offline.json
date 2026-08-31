@@ -1,0 +1,8 @@
+{
+  "feature": "offline",
+  "description": "Mock responses for offline mode verification",
+  "endpoints": {
+    "/health": {"status": "ok", "version": 1.0}
+  },
+  "notes": "Offline mode is tested by disconnecting network, not by mock endpoints"
+}

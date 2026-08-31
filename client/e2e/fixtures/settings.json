@@ -1,0 +1,17 @@
+{
+  "feature": "settings",
+  "description": "Mock responses for settings verification",
+  "endpoints": {
+    "/health": {"status": "ok", "version": 1.0},
+    "/settings": {
+      "server_url": "http://127.0.0.1:8000",
+      "api_key": "test-key",
+      "theme": "aurora",
+      "accent_color": "#6366f1",
+      "font_size": "medium",
+      "default_persona": "personal assistant",
+      "model": "default",
+      "temperature": 0.7
+    }
+  }
+}

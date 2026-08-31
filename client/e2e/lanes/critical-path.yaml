@@ -1,0 +1,29 @@
+# Critical Path Lane
+# Sequential execution — must pass before extended coverage runs.
+# These are the core user flows that block all other verification.
+
+name: critical-path
+description: "Core user flows: Setup → Chat → Threads"
+execution: sequential
+
+features:
+  - name: setup
+    fixture: setup
+    oracle: setup.md
+    timeout_seconds: 60
+    critical: true
+
+  - name: chat
+    fixture: chat
+    oracle: chat.md
+    timeout_seconds: 120
+    critical: true
+
+  - name: threads
+    fixture: chat  # Uses chat fixtures (threads endpoint)
+    oracle: chat.md  # Shares chat oracle (thread list verification)
+    timeout_seconds: 60
+    critical: true
+
+# If any critical feature fails, abort remaining features in this lane.
+abort_on_failure: true

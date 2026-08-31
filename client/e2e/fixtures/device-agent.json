@@ -1,0 +1,9 @@
+{
+  "feature": "device-agent",
+  "description": "Mock responses for device agent verification",
+  "endpoints": {
+    "/health": {"status": "ok", "version": 1.0},
+    "/device-agent/status": {"status": "idle", "capabilities": ["shell", "browser", "files"]},
+    "/device-agent/execute": {"status": "completed", "result": "mock-execution-result"}
+  }
+}

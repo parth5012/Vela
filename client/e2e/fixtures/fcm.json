@@ -1,0 +1,9 @@
+{
+  "feature": "fcm",
+  "description": "Mock responses for FCM push notification verification",
+  "endpoints": {
+    "/health": {"status": "ok", "version": 1.0},
+    "/fcm/register": {"status": "registered", "token": "mock-fcm-token-001"},
+    "/fcm/status": {"registered": true, "token_preview": "mock-...001"}
+  }
+}

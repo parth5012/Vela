@@ -1,0 +1,10 @@
+{
+  "feature": "setup",
+  "description": "Mock responses for setup screen verification",
+  "endpoints": {
+    "/health": {
+      "status": "ok",
+      "version": 1.0
+    }
+  }
+}

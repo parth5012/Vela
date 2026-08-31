@@ -1,0 +1,11 @@
+{
+  "feature": "tasks",
+  "description": "Mock responses for task scheduler verification",
+  "endpoints": {
+    "/health": {"status": "ok", "version": 1.0},
+    "/tasks": [
+      {"id": "task-001", "title": "Daily Digest", "recurrence": "24h", "agent": "personal assistant", "status": "active", "prompt": "Summarize today's news"},
+      {"id": "task-002", "title": "Weekly Report", "recurrence": "168h", "agent": "analyst", "status": "paused", "prompt": "Generate weekly summary"}
+    ]
+  }
+}

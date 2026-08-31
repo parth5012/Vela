@@ -1,0 +1,7 @@
+{
+  "feature": "browser",
+  "description": "Mock responses for in-app browser verification",
+  "endpoints": {
+    "/health": {"status": "ok", "version": 1.0}
+  }
+}

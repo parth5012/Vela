@@ -1,0 +1,37 @@
+# Parallel Surface Lane
+# Independent features that can run in parallel with extended coverage.
+# Each has its own mock fixture and doesn't depend on other features.
+
+name: parallel-surface
+description: "Independent surfaces: Local-AI, Device-Agent, Offline, FCM"
+execution: parallel
+
+features:
+  - name: local-ai
+    fixture: local-ai
+    oracle: local-ai.md
+    timeout_seconds: 120
+    critical: false
+
+  - name: device-agent
+    fixture: device-agent
+    oracle: device-agent.md
+    timeout_seconds: 90
+    critical: false
+
+  - name: offline
+    fixture: offline
+    oracle: offline.md
+    timeout_seconds: 60
+    critical: false
+    notes: "Requires network disconnect — test by killing mock server"
+
+  - name: fcm
+    fixture: fcm
+    oracle: fcm.md
+    timeout_seconds: 60
+    critical: false
+    notes: "FCM registration verification — push delivery requires real FCM setup"
+
+# Failures here are non-blocking but reported.
+abort_on_failure: false

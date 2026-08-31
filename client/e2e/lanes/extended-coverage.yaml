@@ -1,0 +1,29 @@
+# Extended Coverage Lane
+# Runs after critical path passes. Features are independent
+# and can run in parallel if multiple emulators available.
+
+name: extended-coverage
+description: "Secondary features: Tasks, Browser, Settings"
+execution: parallel  # Can be sequential on single emulator
+
+features:
+  - name: tasks
+    fixture: tasks
+    oracle: tasks.md
+    timeout_seconds: 90
+    critical: false
+
+  - name: browser
+    fixture: browser
+    oracle: browser.md
+    timeout_seconds: 60
+    critical: false
+
+  - name: settings
+    fixture: settings
+    oracle: settings.md
+    timeout_seconds: 90
+    critical: false
+
+# Failures here are non-blocking but reported.
+abort_on_failure: false

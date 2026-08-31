@@ -1,0 +1,38 @@
+{
+  "feature": "chat",
+  "description": "Mock responses for chat and SSE streaming verification",
+  "endpoints": {
+    "/health": {
+      "status": "ok",
+      "version": 1.0
+    },
+    "/chat/threads": [
+      {
+        "id": "thread-001",
+        "title": "Test Conversation",
+        "created_at": "2026-08-31T12:00:00Z",
+        "message_count": 2
+      }
+    ],
+    "/chat/message": {
+      "type": "sse",
+      "events": [
+        {"type": "content", "delta": "Hello "},
+        {"type": "content", "delta": "from "},
+        {"type": "content", "delta": "the "},
+        {"type": "content", "delta": "mock "},
+        {"type": "content", "delta": "backend! "},
+        {"type": "content", "delta": "This "},
+        {"type": "content", "delta": "is "},
+        {"type": "content", "delta": "a "},
+        {"type": "content", "delta": "test "},
+        {"type": "content", "delta": "response "},
+        {"type": "content", "delta": "for "},
+        {"type": "content", "delta": "E2E "},
+        {"type": "content", "delta": "verification."},
+        {"type": "done", "thread_title": "E2E Test Chat"}
+      ],
+      "delay_ms": 50
+    }
+  }
+}
