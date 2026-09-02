@@ -114,3 +114,4 @@ function withVelaAccessibilityService(config) {
 }
 
 module.exports = withVelaAccessibilityService;
+module.exports.default = withVelaAccessibilityService;
