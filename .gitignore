@@ -24,3 +24,5 @@ client/modules/**/build/
 client/modules/**/.cxx/
 screenshots/
 client/google-services.json
+.ua
+.vite
