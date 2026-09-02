@@ -1,4 +1,16 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
 const IS_PROD = process.env.APP_VARIANT === 'production';
+
+// EAS Build only uploads git-tracked files (google-services.json is gitignored).
+// Don't hard-fail prebuild when the file is missing on CI - Firebase will be
+// unavailable but the build succeeds. Provide the file via EAS secret
+// GOOGLE_SERVICES_JSON or commit it if you need FCM.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const googleServicesFilePath = './google-services.json';
+const hasGoogleServicesFile = fs.existsSync(path.join(__dirname, googleServicesFilePath));
 
 export default {
   "expo": {
@@ -25,7 +37,7 @@ export default {
       },
       "predictiveBackGestureEnabled": false,
       "package": IS_PROD ? "com.parth5012.client" : "com.parth5012.client.dev",
-      "googleServicesFile": "./google-services.json",
+      ...(hasGoogleServicesFile ? { "googleServicesFile": googleServicesFilePath } : {}),
       "softwareKeyboardLayoutMode": "adjustResize"
     },
     "web": {
