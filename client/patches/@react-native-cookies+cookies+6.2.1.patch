@@ -1,0 +1,22 @@
+diff --git a/node_modules/@react-native-cookies/cookies/android/build.gradle b/node_modules/@react-native-cookies/cookies/android/build.gradle
+index 1234567..abcdef0 100644
+--- a/node_modules/@react-native-cookies/cookies/android/build.gradle
++++ b/node_modules/@react-native-cookies/cookies/android/build.gradle
+@@ -30,7 +30,7 @@ buildscript {
+     if (project == rootProject) {
+         repositories {
+             google()
+-            jcenter()
++            mavenCentral()
+         }
+         dependencies {
+             classpath 'com.android.tools.build:gradle:3.5.3'
+@@ -65,7 +65,7 @@ repositories {
+         url "$rootDir/../node_modules/jsc-android/dist"
+     }
+     google()
+-    jcenter()
++    mavenCentral()
+ }
+ 
+ dependencies {
