@@ -91,10 +91,19 @@ function withVelaAccessibilityService(config) {
       const settingsGradlePath = path.join(config.modRequest.platformProjectRoot, 'settings.gradle');
       let content = fs.readFileSync(settingsGradlePath, 'utf8');
       if (!content.includes("include ':device-agent'")) {
-        content = content.replace(
-          "include ':stable-diffusion'",
-          "include ':device-agent'\nproject(':device-agent').projectDir = new File(settingsDir, '../modules/device-agent/android')\ninclude ':stable-diffusion'"
-        );
+        // Handle both prebuild templates: stable-diffusion line with single quotes or flexible spacing
+        if (content.includes("include ':stable-diffusion'")) {
+          content = content.replace(
+            "include ':stable-diffusion'",
+            "include ':device-agent'\nproject(':device-agent').projectDir = new File(settingsDir, '../modules/device-agent/android')\ninclude ':stable-diffusion'"
+          );
+        } else {
+          // Fallback: append before includeBuild
+          content = content.replace(
+            /includeBuild\(expoAutolinking\.reactNativeGradlePlugin\)/,
+            "include ':device-agent'\nproject(':device-agent').projectDir = new File(settingsDir, '../modules/device-agent/android')\nincludeBuild(expoAutolinking.reactNativeGradlePlugin)"
+          );
+        }
       }
       fs.writeFileSync(settingsGradlePath, content);
       return config;

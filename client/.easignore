@@ -44,5 +44,4 @@ yarn-error.*
 credentials.json
 *.zip
 app-release/
-android/
 graphify-out/

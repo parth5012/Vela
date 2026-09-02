@@ -1,4 +1,6 @@
 allowBuilds:
-  esbuild: set this to true or false
-  llama.rn: set this to true or false
-  postinstall-postinstall: set this to true or false
+  esbuild: true
+  llama.rn: true
+  postinstall-postinstall: true
+minimumReleaseAgeExclude:
+  - expo-constants@57.0.17

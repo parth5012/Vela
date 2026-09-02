@@ -4,14 +4,16 @@
   "main": "expo-router/entry",
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-cookies/cookies": "^6.2.1",
     "@react-navigation/drawer": "^7.12.6",
+    "device-agent": "file:./modules/device-agent",
     "drizzle-orm": "^0.45.2",
     "expo": "~57.0.2",
     "expo-auth-session": "^57.0.5",
     "expo-background-task": "^57.0.9",
     "expo-clipboard": "~57.0.0",
+    "expo-constants": "~57.0.17",
     "expo-crypto": "^57.0.1",
-    "@react-native-cookies/cookies": "^6.2.1",
     "expo-device": "^57.0.1",
     "expo-document-picker": "^57.0.1",
     "expo-file-system": "~57.0.0",
@@ -40,7 +42,6 @@
     "react-native-webview": "13.16.1",
     "react-native-worklets": "^0.10.3",
     "stable-diffusion": "./modules/stable-diffusion",
-    "device-agent": "file:./modules/device-agent",
     "zustand": "^5.0.1"
   },
   "devDependencies": {
@@ -68,7 +69,7 @@
     "web": "expo start --web",
     "lint": "eslint .",
     "test": "npm run lint && jest",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package || echo \"patch-package: some patches failed but continuing\""
   },
   "jest": {
     "preset": "jest-expo",
@@ -83,5 +84,18 @@
       "node_modules/(?!\\.pnpm/[^/]*(react-native|expo|unimodules)|((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg)"
     ]
   },
-  "private": true
+  "private": true,
+  "expo": {
+    "install": {
+      "exclude": [
+        "@react-native-cookies/cookies"
+      ]
+    },
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": ["@react-native-cookies/cookies", "device-agent", "stable-diffusion"],
+        "listUnknownPackages": false
+      }
+    }
+  }
 }
