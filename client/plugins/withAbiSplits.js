@@ -11,7 +11,7 @@ const SPLITS_BLOCK = [
   '            enable = true',
   '            reset()',
   `            include ${ABI_INCLUDE.map((a) => JSON.stringify(a)).join(', ')}`,
-  '            universalApk = false',
+  '            universalApk = false // keep false: universal is ~2x size; use per-ABI APKs (arm64 for phones, x86_64 for emulators) via scripts/install-apk.ps1',
   '        }',
   '    }',
 ].join('\n');

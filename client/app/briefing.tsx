@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, Pressable, RefreshControl } from 'react-native';
-import useRouter from 'expo-router';
+import { useRouter } from 'expo-router';
 import useConfigStore from '../store/useConfigStore';
 import AuroraScreen, { Card, useAurora } from '../components/ui/settingsKit';
 

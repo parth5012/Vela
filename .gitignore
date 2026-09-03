@@ -26,3 +26,6 @@ screenshots/
 client/google-services.json
 .ua
 .vite
+dist/
+*.apk
+client/e2e/results/

@@ -28,15 +28,23 @@
   OPT-IN: run `npx expo prebuild -p android --clean` before building.
   WARNING: regenerates android/ and DISCARDS manual native edits.
 
+.PARAMETER Production
+  Build production variant (com.parth5012.client). Sets APP_VARIANT=production
+  for prebuild + gradle. Without this you build dev variant (com.parth5012.client.dev).
+  Production needs `APP_VARIANT=production npx expo prebuild --clean` or android/app/build.gradle stays on dev.
+
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File scripts\build-release-shortpath.ps1
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File scripts\build-release-shortpath.ps1 -SkipCopy
+.EXAMPLE
+  powershell -ExecutionPolicy Bypass -File scripts\build-release-shortpath.ps1 -Production -Prebuild
 #>
 param(
     [string]$DestRoot = 'D:\a',
     [switch]$SkipCopy,
-    [switch]$Prebuild
+    [switch]$Prebuild,
+    [switch]$Production
 )
 
 $ErrorActionPreference = 'Stop'
@@ -59,6 +67,8 @@ function Step([string]$Msg) { Write-Host "`n=== $Msg ===" -ForegroundColor Cyan 
 Write-Host "Source : $ClientSource"
 Write-Host "Dest   : $Dest"
 Write-Host "Gate   : fail if CMake artifacts contain '$LeakPattern'"
+Write-Host "Variant: $(if ($Production) { 'production (com.parth5012.client)' } else { 'development (com.parth5012.client.dev)' })"
+if ($Production) { $env:APP_VARIANT = "production" } else { $env:APP_VARIANT = "development" }
 
 if (-not $SkipCopy) {
     Step "Step 1/5: robocopy /MIR /XJ -> $Dest"
@@ -96,8 +106,15 @@ if ($Prebuild) {
     Write-Warning '-Prebuild regenerates android/ and DISCARDS manual native edits.'
     Push-Location $Dest
     try {
+        # APP_VARIANT must be set BEFORE prebuild so app.config.js picks correct package (client/app.config.js:39)
         npx expo prebuild -p android --clean
         if ($LASTEXITCODE -ne 0) { throw "expo prebuild failed with exit code $LASTEXITCODE" }
+        # verify package actually switched
+        $gradle = Get-Content (Join-Path $Dest "android/app/build.gradle") -Raw
+        $want = if ($Production) { "com.parth5012.client'" } else { "com.parth5012.client.dev'" }
+        if ($gradle -notmatch [regex]::Escape($want)) {
+            Write-Warning "Prebuild did not set expected applicationId $want. Check app.config.js APP_VARIANT handling."
+        }
     } finally { Pop-Location }
 }
 

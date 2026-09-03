@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable, Alert, ScrollView } from 'react-native';
-import useRouter from 'expo-router';
+import { useRouter } from 'expo-router';
 import useConfigStore from '../../store/useConfigStore';
 import AuroraScreen, {
   Card,
