@@ -1,0 +1,10 @@
+{
+  "name": "needle",
+  "version": "1.0.0",
+  "description": "On-device Cactus Needle 45M inference module for Vela",
+  "main": "index.ts",
+  "types": "index.d.ts",
+  "peerDependencies": {
+    "expo": "*"
+  }
+}
