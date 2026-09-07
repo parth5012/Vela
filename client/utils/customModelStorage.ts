@@ -105,6 +105,15 @@ export async function preflightUrlMagicBytes(
   contentLength?: number;
   error?: string;
 }> {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return { format: null, valid: false, error: 'URL must use http or https protocol' };
+    }
+  } catch {
+    return { format: null, valid: false, error: 'Invalid URL format' };
+  }
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000);
 
@@ -134,6 +143,14 @@ export async function preflightUrlMagicBytes(
       reader.cancel();
       bytes = chunk.value ? chunk.value.slice(0, 16) : new Uint8Array(0);
     } else {
+      const cl = response.headers.get('content-length');
+      if (cl && parseInt(cl, 10) > 1024 * 1024 && response.status === 200) {
+        return {
+          format: null,
+          valid: false,
+          error: 'Server does not support partial range preflight',
+        };
+      }
       const arrayBuffer = await response.arrayBuffer();
       bytes = new Uint8Array(arrayBuffer.slice(0, 16));
     }

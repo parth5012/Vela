@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, Alert, StyleSheet, TextInput } from 'react-native';
+import { View, Text, Pressable, Alert, StyleSheet, TextInput, Modal, ScrollView, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as DocumentPicker from 'expo-document-picker';
@@ -17,8 +17,21 @@ import {
 import {
   detectRamBytes,
   getModelStatusForRam,
-  getOptimalSettingsForRam
+  getOptimalSettingsForRam,
+  getDynamicModelStatusForRam,
 } from '../../utils/ramDetection';
+import {
+  getCustomModels,
+  deleteCustomModel,
+  importModelFromFile,
+  startCustomModelDownload,
+  pauseCustomModelDownload,
+  resumeCustomModelDownload,
+  preflightUrlMagicBytes,
+  CustomModelRecord,
+  CustomModelDownloadProgress,
+  SupportedModelFormat,
+} from '../../utils/customModelStorage';
 import {
   AuroraScreen,
   Card,
@@ -118,6 +131,161 @@ export default function LocalAiScreen() {
     }
   };
   const [loadedModelName, setLoadedModelName] = useState<string | null>(getLoadedModelName());
+  const [customModels, setCustomModels] = useState<CustomModelRecord[]>([]);
+  const [showAddCustomModal, setShowAddCustomModal] = useState(false);
+  const [customTab, setCustomTab] = useState<'url' | 'file'>('url');
+  const [customModelName, setCustomModelName] = useState('');
+  const [customModelUrl, setCustomModelUrl] = useState('');
+  const [customFormat, setCustomFormat] = useState<SupportedModelFormat>('cact');
+  const [isPreflighting, setIsPreflighting] = useState(false);
+  const [preflightResult, setPreflightResult] = useState<{
+    valid: boolean;
+    format: SupportedModelFormat | null;
+    contentLength?: number;
+    error?: string;
+  } | null>(null);
+  const [customDownloadProgress, setCustomDownloadProgress] = useState<CustomModelDownloadProgress | null>(null);
+
+  const loadCustomModelsList = async () => {
+    try {
+      const list = await getCustomModels();
+      if (isMounted.current) {
+        setCustomModels(list);
+      }
+    } catch (e) {
+      console.warn('[local-ai] Failed to load custom models:', e);
+    }
+  };
+
+  useEffect(() => {
+    loadCustomModelsList();
+  }, []);
+
+  const handleSelectCustomModel = async (model: CustomModelRecord) => {
+    const ram = detectedRamBytes || 6 * 1024 * 1024 * 1024;
+    const status = getDynamicModelStatusForRam(model.sizeBytes, model.format, ram);
+    const selectAction = async () => {
+      setLocalModelName(model.name);
+      await AsyncStorage.setItem(localModelStorageKey(model.name), 'true');
+      await AsyncStorage.setItem(`${localModelStorageKey(model.name)}_path`, model.localUri);
+    };
+
+    if (status === 'borderline') {
+      Alert.alert(
+        'Borderline Memory',
+        'Warning: This custom model requires more memory than recommended and may run slowly.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Select', onPress: selectAction },
+        ]
+      );
+    } else if (status === 'unsupported') {
+      Alert.alert(
+        'High OOM Risk',
+        'Warning: This custom model requires significantly more RAM than your device has. Do you want to select it anyway?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Select Anyway', onPress: selectAction },
+        ]
+      );
+    } else {
+      await selectAction();
+    }
+  };
+
+  const handleDeleteCustomModel = (model: CustomModelRecord) => {
+    Alert.alert(
+      'Delete Model',
+      `Are you sure you want to delete ${model.name}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await deleteCustomModel(model.id);
+            if (localModelName === model.name) {
+              setLocalModelName('Qwen2.5 0.5B');
+            }
+            await loadCustomModelsList();
+          },
+        },
+      ]
+    );
+  };
+
+  const handlePreflightUrl = async () => {
+    if (!customModelUrl) {
+      Alert.alert('Error', 'Please enter a model URL');
+      return;
+    }
+    setIsPreflighting(true);
+    setPreflightResult(null);
+    try {
+      const res = await preflightUrlMagicBytes(customModelUrl);
+      setPreflightResult(res);
+      if (res.format) {
+        setCustomFormat(res.format);
+      }
+    } catch (err: any) {
+      setPreflightResult({ valid: false, format: null, error: err?.message });
+    } finally {
+      setIsPreflighting(false);
+    }
+  };
+
+  const handleStartCustomDownload = async () => {
+    if (!customModelUrl || !customModelName) {
+      Alert.alert('Error', 'Please enter model name and URL');
+      return;
+    }
+    try {
+      const modelId = `custom_${Date.now()}`;
+      await startCustomModelDownload(
+        {
+          id: modelId,
+          name: customModelName,
+          url: customModelUrl,
+          format: customFormat,
+        },
+        (progress: CustomModelDownloadProgress) => {
+          if (isMounted.current) {
+            setCustomDownloadProgress(progress);
+          }
+        }
+      );
+      Alert.alert('Success', `Model ${customModelName} downloaded successfully!`);
+      setShowAddCustomModal(false);
+      setCustomModelName('');
+      setCustomModelUrl('');
+      setPreflightResult(null);
+      setCustomDownloadProgress(null);
+      await loadCustomModelsList();
+    } catch (err: any) {
+      Alert.alert('Download Failed', err?.message || 'Unknown download error');
+    }
+  };
+
+  const handlePickDocument = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets || result.assets.length === 0) {
+        return;
+      }
+
+      const asset = result.assets[0];
+      const record = await importModelFromFile(asset.uri, asset.name);
+      Alert.alert('Import Complete', `Imported ${record.name} (${record.format.toUpperCase()})`);
+      setShowAddCustomModal(false);
+      await loadCustomModelsList();
+    } catch (err: any) {
+      Alert.alert('Import Failed', err?.message || 'Failed to import model file');
+    }
+  };
   const [modelBusy, setModelBusy] = useState(false);
 
   useEffect(() => {
@@ -648,6 +816,86 @@ export default function LocalAiScreen() {
       </Card>
 
       <Card>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <Label>Custom Models (.cact, .gguf, .task)</Label>
+          <Pressable
+            style={{ backgroundColor: aurora.acc1, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 }}
+            onPress={() => setShowAddCustomModal(true)}
+          >
+            <Text style={{ color: '#fff', fontSize: sizes.sub, fontWeight: '700' }}>+ Add Custom Model</Text>
+          </Pressable>
+        </View>
+
+        {customModels.length === 0 ? (
+          <Text style={{ color: colors.textMuted, fontSize: sizes.sub, fontStyle: 'italic', marginVertical: 8 }}>
+            No custom models installed yet. Tap above to import via URL or file.
+          </Text>
+        ) : (
+          customModels.map((m) => {
+            const isSelected = localModelName === m.name;
+            const ram = detectedRamBytes || 6 * 1024 * 1024 * 1024;
+            const status = getDynamicModelStatusForRam(m.sizeBytes, m.format, ram);
+            const statusBg =
+              status === 'recommended'
+                ? '#10b981'
+                : status === 'borderline'
+                ? '#f59e0b'
+                : '#ef4444';
+
+            return (
+              <View
+                key={m.id}
+                style={[
+                  styles.modelRow,
+                  {
+                    borderColor: isSelected ? aurora.acc1 : colors.glassBorder,
+                    backgroundColor: isSelected ? 'rgba(99,102,241,0.1)' : 'transparent',
+                    marginBottom: 8,
+                  },
+                ]}
+              >
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={{ color: colors.text, fontSize: sizes.text, fontWeight: '600' }}>{m.name}</Text>
+                    <View style={{ backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4 }}>
+                      <Text style={{ color: colors.textMuted, fontSize: 10, fontWeight: '700' }}>{m.format.toUpperCase()}</Text>
+                    </View>
+                    <View style={{ backgroundColor: statusBg, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                      <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700', textTransform: 'capitalize' }}>{status}</Text>
+                    </View>
+                  </View>
+                  <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, marginTop: 2 }}>
+                    {(m.sizeBytes / (1024 * 1024)).toFixed(1)} MB • {m.source === 'url' ? 'URL Download' : 'File Import'}
+                  </Text>
+                </View>
+
+                <View style={{ flexDirection: 'row', gap: 6 }}>
+                  {!isSelected ? (
+                    <Pressable
+                      style={{ backgroundColor: aurora.acc1, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 6 }}
+                      onPress={() => handleSelectCustomModel(m)}
+                    >
+                      <Text style={{ color: '#fff', fontSize: sizes.sub - 1, fontWeight: '600' }}>Select</Text>
+                    </Pressable>
+                  ) : (
+                    <View style={{ backgroundColor: 'rgba(16,185,129,0.2)', paddingHorizontal: 8, paddingVertical: 5, borderRadius: 6 }}>
+                      <Text style={{ color: '#10b981', fontSize: sizes.sub - 1, fontWeight: '700' }}>Active</Text>
+                    </View>
+                  )}
+                  <Pressable
+                    style={{ backgroundColor: 'rgba(239,68,68,0.2)', paddingHorizontal: 8, paddingVertical: 5, borderRadius: 6 }}
+                    onPress={() => handleDeleteCustomModel(m)}
+                  >
+                    <Text style={{ color: '#ef4444', fontSize: sizes.sub - 1, fontWeight: '600' }}>Delete</Text>
+                  </Pressable>
+                </View>
+              </View>
+            );
+          })
+        )}
+      </Card>
+
+      <Card>
         <Label>Context Limit Settings</Label>
         <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
           <View style={{ flex: 1 }}>
@@ -804,6 +1052,151 @@ export default function LocalAiScreen() {
           </>
         )}
       </View>
+      {/* Add Custom Model Modal Sheet */}
+      <Modal
+        visible={showAddCustomModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowAddCustomModal(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' }}>
+          <View style={{ backgroundColor: '#1e1e2d', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, maxHeight: '85%' }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <Text style={{ color: '#fff', fontSize: sizes.title, fontWeight: '700' }}>Add Custom Model</Text>
+              <Pressable onPress={() => setShowAddCustomModal(false)}>
+                <Text style={{ color: colors.textMuted, fontSize: sizes.title }}>✕</Text>
+              </Pressable>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+              <Pressable
+                style={{
+                  flex: 1,
+                  paddingVertical: 8,
+                  alignItems: 'center',
+                  borderRadius: 8,
+                  backgroundColor: customTab === 'url' ? aurora.acc1 : 'rgba(255,255,255,0.06)',
+                }}
+                onPress={() => setCustomTab('url')}
+              >
+                <Text style={{ color: '#fff', fontWeight: '600' }}>URL Download</Text>
+              </Pressable>
+              <Pressable
+                style={{
+                  flex: 1,
+                  paddingVertical: 8,
+                  alignItems: 'center',
+                  borderRadius: 8,
+                  backgroundColor: customTab === 'file' ? aurora.acc1 : 'rgba(255,255,255,0.06)',
+                }}
+                onPress={() => setCustomTab('file')}
+              >
+                <Text style={{ color: '#fff', fontWeight: '600' }}>File Import</Text>
+              </Pressable>
+            </View>
+
+            {customTab === 'url' ? (
+              <ScrollView>
+                <Text style={{ color: colors.textMuted, fontSize: sizes.sub, marginBottom: 4 }}>Model Name</Text>
+                <TextInput
+                  style={{
+                    backgroundColor: 'rgba(0,0,0,0.3)',
+                    color: '#fff',
+                    borderRadius: 8,
+                    padding: 10,
+                    marginBottom: 12,
+                    borderWidth: 1,
+                    borderColor: colors.glassBorder,
+                  }}
+                  placeholder="e.g. My Needle 45M"
+                  placeholderTextColor="#777"
+                  value={customModelName}
+                  onChangeText={setCustomModelName}
+                />
+
+                <Text style={{ color: colors.textMuted, fontSize: sizes.sub, marginBottom: 4 }}>Download URL (.cact, .gguf, .task)</Text>
+                <TextInput
+                  style={{
+                    backgroundColor: 'rgba(0,0,0,0.3)',
+                    color: '#fff',
+                    borderRadius: 8,
+                    padding: 10,
+                    marginBottom: 12,
+                    borderWidth: 1,
+                    borderColor: colors.glassBorder,
+                  }}
+                  placeholder="https://huggingface.co/.../model.cact"
+                  placeholderTextColor="#777"
+                  value={customModelUrl}
+                  onChangeText={(val) => {
+                    setCustomModelUrl(val);
+                    setPreflightResult(null);
+                  }}
+                />
+
+                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
+                  <Pressable
+                    style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.1)', padding: 10, borderRadius: 8, alignItems: 'center' }}
+                    onPress={handlePreflightUrl}
+                    disabled={isPreflighting}
+                  >
+                    {isPreflighting ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={{ color: '#fff', fontWeight: '600' }}>Validate Header</Text>
+                    )}
+                  </Pressable>
+                </View>
+
+                {preflightResult && (
+                  <View
+                    style={{
+                      padding: 10,
+                      borderRadius: 8,
+                      backgroundColor: preflightResult.valid ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
+                      marginBottom: 12,
+                      borderWidth: 1,
+                      borderColor: preflightResult.valid ? '#10b981' : '#ef4444',
+                    }}
+                  >
+                    <Text style={{ color: preflightResult.valid ? '#34d399' : '#f87171', fontWeight: '600' }}>
+                      {preflightResult.valid
+                        ? `Valid format: ${preflightResult.format?.toUpperCase()} (${preflightResult.contentLength ? (preflightResult.contentLength / (1024 * 1024)).toFixed(1) + ' MB' : 'Size unknown'})`
+                        : `Validation error: ${preflightResult.error || 'Invalid magic bytes'}`}
+                    </Text>
+                  </View>
+                )}
+
+                {customDownloadProgress && (
+                  <View style={{ marginBottom: 12 }}>
+                    <Text style={{ color: '#fff', fontSize: sizes.sub, marginBottom: 4 }}>
+                      Downloading: {Math.round(customDownloadProgress.progressFraction * 100)}%
+                    </Text>
+                    <View style={styles.progressBg}>
+                      <View style={[styles.progressFill, { width: `${Math.round(customDownloadProgress.progressFraction * 100)}%`, backgroundColor: aurora.acc1 }]} />
+                    </View>
+                  </View>
+                )}
+
+                <PrimaryButton
+                  label="Start Resumable Download"
+                  onPress={handleStartCustomDownload}
+                />
+              </ScrollView>
+            ) : (
+              <View style={{ paddingVertical: 20 }}>
+                <Text style={{ color: colors.textMuted, fontSize: sizes.sub, marginBottom: 16 }}>
+                  Select a local .cact, .gguf, or .task model file from your device storage to import into Vela.
+                </Text>
+                <PrimaryButton
+                  label="📁 Select File from Device"
+                  onPress={handlePickDocument}
+                />
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </AuroraScreen>
   );
 }
