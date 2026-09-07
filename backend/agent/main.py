@@ -1543,6 +1543,99 @@ class TaskRunPayload(BaseModel):
     prompt: str
     agent: str = Field(default="personal assistant")
 
+
+class DeviceStepEvent(BaseModel):
+    id: str
+    role: str = "assistant"
+    content: Optional[str] = None
+    tool_name: Optional[str] = None
+    target: Optional[str] = None
+    value: Optional[str] = None
+    status: str = "executed"
+    observation: Optional[str] = None
+    timestamp: Optional[int] = None
+
+
+class DeviceStepsSyncPayload(BaseModel):
+    conversation_id: str
+    client_sync_id: Optional[str] = None
+    events: list[DeviceStepEvent] = Field(default_factory=list, max_length=100)
+
+
+@app.post("/api/sync/device-steps", dependencies=[Depends(verify_api_key)])
+def sync_device_steps(payload: DeviceStepsSyncPayload):
+    accepted: list[str] = []
+    rejected: list[str] = []
+
+    with get_db_session() as session:
+        client = DBClient(session)
+        conv = session.query(Conversation).filter_by(id=payload.conversation_id).first()
+        if not conv:
+            conv = client.create_client_conversation(
+                title="Synced Device Steps",
+                agent="personal assistant",
+                conversation_id=payload.conversation_id,
+                source="android_client",
+            )
+            session.commit()
+        elif conv.source != "android_client":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot sync device steps to non-client conversation",
+            )
+
+        for ev in payload.events:
+            if not ev.id:
+                rejected.append(ev.id or "missing_id")
+                continue
+
+            # 1. Idempotent upsert into SyncMessage
+            msg_content = ev.content or (
+                f"[{ev.status.upper()}] {ev.tool_name or 'action'}: {ev.observation or ''}"
+            )
+            existing_msg = session.query(SyncMessage).filter_by(id=ev.id).first()
+            if not existing_msg:
+                created_ts = ev.timestamp or int(datetime.now(timezone.utc).timestamp() * 1000)
+                new_msg = SyncMessage(
+                    id=ev.id,
+                    conversation_id=payload.conversation_id,
+                    role=ev.role or "assistant",
+                    content=msg_content,
+                    provider="android_client",
+                    created_at=int(created_ts),
+                )
+                session.add(new_msg)
+            else:
+                existing_msg.content = msg_content
+
+            # 2. Idempotent upsert into ToolInvocation if tool_name is present
+            if ev.tool_name:
+                existing_tool = session.query(ToolInvocation).filter_by(request_id=ev.id).first()
+                if not existing_tool:
+                    tool_inv = ToolInvocation(
+                        request_id=ev.id,
+                        tool_name=ev.tool_name,
+                        status=ev.status or "executed",
+                        result=ev.observation,
+                        created_at=datetime.now(timezone.utc),
+                    )
+                    session.add(tool_inv)
+                else:
+                    existing_tool.status = ev.status or "executed"
+                    existing_tool.result = ev.observation
+
+            session.commit()
+            accepted.append(ev.id)
+
+    return {
+        "status": "ok",
+        "conversation_id": payload.conversation_id,
+        "accepted": accepted,
+        "rejected": rejected,
+        "processed": len(accepted),
+    }
+
+
 @app.post("/api/tasks/run", dependencies=[Depends(verify_api_key)])
 async def execute_task_run(payload: TaskRunPayload):
     allowed_agents = [config.identifier for config in AGENT_REGISTRY.list_agents()]
