@@ -2,6 +2,7 @@ import { NativeModules, NativeEventEmitter } from 'react-native';
 import { initLlama, LlamaContext } from 'llama.rn';
 import { useConfigStore } from '../store/useConfigStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import NeedleModule from '../modules/needle';
 
 /** Event name emitted by GemmaReactNativeModule for streamed generation. */
 const GEMMA_STREAM_EVENT = 'GemmaLlmStream';
@@ -87,7 +88,7 @@ export interface LocalModelSpec {
   downloadUrl: string;
   filename: string;
   /** 'task' = MediaPipe LiteRT `.task` bundle, 'gguf' = llama.cpp GGUF via llama.rn */
-  format: 'task' | 'gguf';
+  format: 'task' | 'gguf' | 'cact';
 }
 
 /**
@@ -105,6 +106,15 @@ export interface LocalModelSpec {
  * and the app silently serves mock responses. Keep formats matched to engines.
  */
 export const LOCAL_MODELS: LocalModelSpec[] = [
+  {
+    name: 'Cactus Needle 45M',
+    size: '0.04GB',
+    description: 'Ultra-fast on-device action & tool routing model (Needle Engine)',
+    downloadUrl:
+      'https://huggingface.co/cactus-ai/needle-45m/resolve/main/needle-45m.cact',
+    filename: 'needle-45m.cact',
+    format: 'cact',
+  },
   {
     name: 'Qwen2.5 0.5B',
     size: '~0.52 GB',
@@ -227,6 +237,7 @@ export async function initializeLocalModel(throwOnFallback: boolean = false): Pr
   }
 
   const isGguf = modelPath.toLowerCase().endsWith('.gguf');
+  const isCact = modelPath.toLowerCase().endsWith('.cact');
 
   // If a different model (or a different engine) is already loaded, tear the
   // old engine down first so the two runtimes never overlap.
@@ -240,7 +251,35 @@ export async function initializeLocalModel(throwOnFallback: boolean = false): Pr
   useFallback = false;
   localLlmFallbackReason = null;
 
-  if (isGguf) {
+  if (isCact) {
+    try {
+      const cleanPath = modelPath.startsWith('file://') ? modelPath.slice(7) : modelPath;
+      const ctxSize = useConfigStore.getState().localContextSize || 256;
+      const success = await NeedleModule.init(cleanPath, ctxSize);
+      if (!success) {
+        throw new Error('NeedleModule initialization returned false');
+      }
+      loadedModelName = localModelName;
+      notifyLoadedStateChanged();
+    } catch (error: any) {
+      try {
+    await NeedleModule.unload();
+  } catch (error) {
+    console.warn('NeedleModule unload failed:', error);
+  }
+
+  loadedModelName = null;
+      notifyLoadedStateChanged();
+      const reason = error?.message || String(error);
+      console.warn('NeedleModule initialization failed, using mock fallback:', reason);
+      useFallback = true;
+      localLlmFallbackReason = reason;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      if (throwOnFallback) {
+        throw new Error('NeedleModule initialization failed: ' + reason);
+      }
+    }
+  } else if (isGguf) {
     // ---- llama.cpp engine (GGUF) ----
     if (typeof initLlama === 'function') {
       try {
@@ -348,6 +387,12 @@ export async function unloadLocalModel(): Promise<void> {
     }
   }
 
+  try {
+    await NeedleModule.unload();
+  } catch (error) {
+    console.warn('NeedleModule unload failed:', error);
+  }
+
   loadedModelName = null;
   isLocalModelLoaded = false;
   useFallback = false;
@@ -370,6 +415,88 @@ export async function* streamLocalLlmResponse(
 
   if (!isLocalModelLoaded) {
     throw new Error('Local model not loaded. Call initializeLocalModel() first.');
+  }
+
+  const isCactModel = loadedModelName ? (
+    LOCAL_MODELS.find(m => m.name === loadedModelName)?.format === 'cact' ||
+    loadedModelName.toLowerCase().endsWith('.cact') ||
+    loadedModelName.includes('Needle')
+  ) : false;
+
+  if (!useFallback && isCactModel) {
+    let sub: any = null;
+    try {
+      const queue: string[] = [];
+      let finished = false;
+      let hasReceivedStreamTokens = false;
+      let failure: Error | null = null;
+      let wake: (() => void) | null = null;
+
+      const notify = () => {
+        if (wake) {
+          const w = wake;
+          wake = null;
+          w();
+        }
+      };
+
+      sub = NeedleModule.addListener((event: any) => {
+        if (event.type === 'token' && event.token) {
+          hasReceivedStreamTokens = true;
+          queue.push(event.token);
+          notify();
+        } else if (event.type === 'tool_call' && event.data) {
+          hasReceivedStreamTokens = true;
+          queue.push(event.data);
+          notify();
+        } else if (event.type === 'done') {
+          finished = true;
+          notify();
+        }
+      });
+
+      NeedleModule.complete(prompt).then((res) => {
+        if (!hasReceivedStreamTokens && queue.length === 0 && res.text) {
+          queue.push(res.text);
+        }
+        finished = true;
+        notify();
+      }).catch((err) => {
+        failure = err;
+        notify();
+      });
+
+      const deadline = Date.now() + NATIVE_STREAM_TIMEOUT_MS;
+
+      while (true) {
+        while (queue.length > 0) {
+          const token = queue.shift() as string;
+          onToken?.(token);
+          yield token;
+        }
+
+        if (failure) throw failure;
+        if (finished && queue.length === 0) break;
+
+        if (Date.now() > deadline) {
+          throw new Error(`Needle streaming timed out after ${NATIVE_STREAM_TIMEOUT_MS / 1000}s`);
+        }
+
+        await new Promise<void>((resolve) => {
+          wake = resolve;
+          setTimeout(notify, 250);
+        });
+      }
+
+      return;
+    } catch (error: any) {
+      const reason = error?.message || String(error);
+      console.warn('Needle streaming failed, using mock fallback:', reason);
+      useFallback = true;
+      localLlmFallbackReason = reason;
+    } finally {
+      sub?.remove?.();
+    }
   }
 
   // ---- llama.cpp engine (GGUF): stream via llama.rn completion callback ----
