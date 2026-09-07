@@ -3,6 +3,39 @@ import { Platform } from 'react-native';
 
 export type ModelRecommendationStatus = 'recommended' | 'borderline' | 'unsupported';
 
+export const FORMAT_RAM_MULTIPLIERS: Record<string, number> = {
+  cact: 1.2,
+  gguf: 1.35,
+  task: 1.6,
+};
+
+export const KV_CACHE_BYTES_PER_TOKEN = 512;
+
+export function calculateEstimatedPeakRam(
+  modelSizeBytes: number,
+  format: string,
+  contextSize: number = 2048
+): number {
+  const normFormat = format.toLowerCase().replace(/^\./, '');
+  const multiplier = FORMAT_RAM_MULTIPLIERS[normFormat] ?? 1.35;
+  const kvCache = contextSize * KV_CACHE_BYTES_PER_TOKEN;
+  return Math.round(modelSizeBytes * multiplier + kvCache);
+}
+
+export function getDynamicModelStatusForRam(
+  modelSizeBytes: number,
+  format: string,
+  ramBytes: number,
+  contextSize: number = 2048
+): ModelRecommendationStatus {
+  if (ramBytes <= 0) return 'borderline';
+  const estimatedPeak = calculateEstimatedPeakRam(modelSizeBytes, format, contextSize);
+  const ratio = estimatedPeak / ramBytes;
+  if (ratio < 0.5) return 'recommended';
+  if (ratio <= 0.75) return 'borderline';
+  return 'unsupported';
+}
+
 export async function detectRamBytes(): Promise<number> {
   if (Platform.OS === 'web') {
     return 6 * 1024 * 1024 * 1024; // 6 GB default for web/simulation
