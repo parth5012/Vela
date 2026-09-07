@@ -304,7 +304,8 @@ export async function importModelFromFile(
   }
 
   const destDir = await getModelDirectory(format);
-  const sanitizedName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const safeBaseName = fileName.split(/[\/\\]/).pop() || 'model';
+  const sanitizedName = safeBaseName.replace(/\.\./g, '').replace(/[^a-zA-Z0-9._-]/g, '_');
   const modelId = `custom_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const destUri = `${destDir}${modelId}_${sanitizedName}`;
 
@@ -318,7 +319,7 @@ export async function importModelFromFile(
 
   const record: CustomModelRecord = {
     id: modelId,
-    name: fileName.replace(/\.[^/.]+$/, ''),
+    name: safeBaseName.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9._-]/g, '_'),
     format,
     sizeBytes,
     localUri: destUri,
