@@ -79,9 +79,19 @@ CREATE TABLE IF NOT EXISTS webview_automation_steps (
 );
 CREATE INDEX IF NOT EXISTS idx_webview_automation_steps_session_id ON webview_automation_steps(session_id);
 
+CREATE TABLE IF NOT EXISTS tool_invocations (
+    request_id VARCHAR(50) PRIMARY KEY,
+    tool_name VARCHAR(100) NOT NULL,
+    status VARCHAR(50) NOT NULL,
+    result TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS title VARCHAR(255) DEFAULT 'New Chat';
-ALTER TABLE conversations ADD COLUMN IF NOT EXISTS persona VARCHAR(50) DEFAULT 'personal assistant' NOT NULL;
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS agent VARCHAR(50) DEFAULT 'personal assistant' NOT NULL;
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS active_skill VARCHAR(50) DEFAULT NULL;
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN DEFAULT FALSE NOT NULL;
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'telegram' NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sync_messages (
     id VARCHAR(50) PRIMARY KEY,

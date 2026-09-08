@@ -77,82 +77,123 @@ discord_gateway = DiscordGateway(db=db)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Run database migration: rename persona to agent, ensure active_skill exists
+    # Run database migrations with individual error boundaries
+    from db.session import engine
+    from sqlalchemy import inspect, text
+
     try:
-        from db.session import engine
-        from sqlalchemy import inspect, text
         inspector = inspect(engine)
-        columns = [col['name'] for col in inspector.get_columns('conversations')]
-        if 'persona' in columns:
-            logger.info("Database migration: renaming 'persona' column to 'agent'")
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE conversations RENAME COLUMN persona TO agent"))
-        elif 'agent' not in columns:
-            logger.info("Database migration: adding 'agent' column to 'conversations' table")
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE conversations ADD COLUMN agent VARCHAR(50) DEFAULT 'personal assistant' NOT NULL"))
-        if 'active_skill' not in columns:
-            logger.info("Database migration: adding 'active_skill' column to 'conversations' table")
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE conversations ADD COLUMN active_skill VARCHAR(50) DEFAULT NULL"))
-        if 'is_pinned' not in columns:
-            logger.info("Database migration: adding 'is_pinned' column to 'conversations' table")
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE conversations ADD COLUMN is_pinned BOOLEAN DEFAULT FALSE NOT NULL"))
-        if 'source' not in columns:
-            logger.info("Database migration: adding 'source' column to 'conversations' table")
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE conversations ADD COLUMN source VARCHAR(50) DEFAULT 'telegram' NOT NULL"))
-
-        # Create tool_invocations table if not exists
-        if 'tool_invocations' not in inspector.get_table_names():
-            logger.info("Database migration: creating 'tool_invocations' table")
-            with engine.begin() as conn:
-                conn.execute(text("""
-                    CREATE TABLE tool_invocations (
-                        request_id VARCHAR(50) PRIMARY KEY,
-                        tool_name VARCHAR(100) NOT NULL,
-                        status VARCHAR(50) NOT NULL,
-                        result TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                """))
-
-        # Create sync_messages table if not exists
-        if 'sync_messages' not in inspector.get_table_names():
-            logger.info("Database migration: creating 'sync_messages' table")
-            with engine.begin() as conn:
-                conn.execute(text("""
-                    CREATE TABLE sync_messages (
-                        id VARCHAR(50) PRIMARY KEY,
-                        conversation_id VARCHAR(255) NOT NULL,
-                        role VARCHAR(50) NOT NULL,
-                        content TEXT NOT NULL,
-                        provider VARCHAR(50) NOT NULL,
-                        created_at BIGINT NOT NULL,
-                        FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
-                    )
-                """))
-
-        # Create system_settings table if not exists
-        if 'system_settings' not in inspector.get_table_names():
-            logger.info("Database migration: creating 'system_settings' table")
-            with engine.begin() as conn:
-                conn.execute(text("""
-                    CREATE TABLE system_settings (
-                        key VARCHAR(100) PRIMARY KEY,
-                        value TEXT NOT NULL,
-                        updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-                    )
-                """))
-        else:
-            columns = [col['name'] for col in inspector.get_columns('system_settings')]
-            if 'updated_at' not in columns:
-                logger.info("Database migration: adding 'updated_at' column to 'system_settings' table")
-                with engine.begin() as conn:
-                    conn.execute(text("ALTER TABLE system_settings ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL"))
     except Exception as e:
-        logger.error("Failed to run database migration", error=str(e))
+        logger.error("Failed to inspect database engine", error=str(e))
+        inspector = None
+
+    if inspector is not None:
+        # 1. Conversations table migrations
+        try:
+            columns = [col['name'] for col in inspector.get_columns('conversations')]
+            if 'persona' in columns:
+                logger.info("Database migration: renaming 'persona' column to 'agent'")
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE conversations RENAME COLUMN persona TO agent"))
+            elif 'agent' not in columns:
+                logger.info("Database migration: adding 'agent' column to 'conversations' table")
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE conversations ADD COLUMN agent VARCHAR(50) DEFAULT 'personal assistant' NOT NULL"))
+            if 'active_skill' not in columns:
+                logger.info("Database migration: adding 'active_skill' column to 'conversations' table")
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE conversations ADD COLUMN active_skill VARCHAR(50) DEFAULT NULL"))
+            if 'is_pinned' not in columns:
+                logger.info("Database migration: adding 'is_pinned' column to 'conversations' table")
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE conversations ADD COLUMN is_pinned BOOLEAN DEFAULT FALSE NOT NULL"))
+            if 'source' not in columns:
+                logger.info("Database migration: adding 'source' column to 'conversations' table")
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE conversations ADD COLUMN source VARCHAR(50) DEFAULT 'telegram' NOT NULL"))
+        except Exception as e:
+            logger.error("Failed to run conversations table migration", error=str(e))
+
+        # 2. Create tool_invocations table if not exists
+        try:
+            table_names = inspector.get_table_names()
+            if 'tool_invocations' not in table_names:
+                logger.info("Database migration: creating 'tool_invocations' table")
+                with engine.begin() as conn:
+                    conn.execute(text("""
+                        CREATE TABLE tool_invocations (
+                            request_id VARCHAR(50) PRIMARY KEY,
+                            tool_name VARCHAR(100) NOT NULL,
+                            status VARCHAR(50) NOT NULL,
+                            result TEXT,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        )
+                    """))
+        except Exception as e:
+            logger.error("Failed to create tool_invocations table", error=str(e))
+
+        # 3. Create sync_messages table if not exists
+        try:
+            table_names = inspector.get_table_names()
+            if 'sync_messages' not in table_names:
+                logger.info("Database migration: creating 'sync_messages' table")
+                conv_id_type = "UUID" if engine.dialect.name == "postgresql" else "VARCHAR(255)"
+                with engine.begin() as conn:
+                    conn.execute(text(f"""
+                        CREATE TABLE sync_messages (
+                            id VARCHAR(50) PRIMARY KEY,
+                            conversation_id {conv_id_type} NOT NULL,
+                            role VARCHAR(50) NOT NULL,
+                            content TEXT NOT NULL,
+                            provider VARCHAR(50) NOT NULL,
+                            created_at BIGINT NOT NULL,
+                            FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+                        )
+                    """))
+        except Exception as e:
+            logger.error("Failed to create sync_messages table", error=str(e))
+
+        # 4. Create system_settings table if not exists
+        try:
+            table_names = inspector.get_table_names()
+            if 'system_settings' not in table_names:
+                logger.info("Database migration: creating 'system_settings' table")
+                with engine.begin() as conn:
+                    conn.execute(text("""
+                        CREATE TABLE system_settings (
+                            key VARCHAR(100) PRIMARY KEY,
+                            value TEXT NOT NULL,
+                            updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+                        )
+                    """))
+            else:
+                columns = [col['name'] for col in inspector.get_columns('system_settings')]
+                if 'updated_at' not in columns:
+                    logger.info("Database migration: adding 'updated_at' column to 'system_settings' table")
+                    with engine.begin() as conn:
+                        conn.execute(text("ALTER TABLE system_settings ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL"))
+        except Exception as e:
+            logger.error("Failed to create/migrate system_settings table", error=str(e))
+
+        # 5. Create briefings table if not exists
+        try:
+            table_names = inspector.get_table_names()
+            if 'briefings' not in table_names:
+                logger.info("Database migration: creating 'briefings' table")
+                created_at_default = "timezone('utc'::text, now())" if engine.dialect.name == "postgresql" else "CURRENT_TIMESTAMP"
+                with engine.begin() as conn:
+                    conn.execute(text(f"""
+                        CREATE TABLE briefings (
+                            id VARCHAR(36) PRIMARY KEY,
+                            user_id VARCHAR(255),
+                            date VARCHAR(10) NOT NULL,
+                            summary_text TEXT,
+                            sections_json JSON,
+                            created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT {created_at_default} NOT NULL
+                        )
+                    """))
+        except Exception as e:
+            logger.error("Failed to create briefings table", error=str(e))
 
     yield
 
@@ -461,7 +502,12 @@ async def chat_message(payload: MessagePayload):
                         break
 
                     kind = event.get("event")
+                    node = event.get("metadata", {}).get("langgraph_node")
                     if kind == "on_chat_model_stream":
+                        # Only stream tokens from the chatbot node to the client.
+                        # Suppress internal supervisor classification JSON or intermediate prompts.
+                        if node and node != "chatbot":
+                            continue
                         chunk = event.get("data", {}).get("chunk")
                         if chunk and chunk.content:
                             content = chunk.content
@@ -588,7 +634,16 @@ async def chat_message(payload: MessagePayload):
                 logger.info("Semaphore released in sse_generator error handler", thread_id=normalized_id)
             raise
 
-    return StreamingResponse(sse_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        sse_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "Content-Type": "text/event-stream",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.post("/chat/threads/branch", dependencies=[Depends(verify_api_key)])
