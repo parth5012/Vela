@@ -246,6 +246,7 @@ class DBClient:
             "time": "07:00",
             "weekdays": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
             "sections": {"today": True, "inbox": True, "radar": True},
+            "watch_items": [],
         }
 
         enabled_raw = self.get_system_setting("briefing_enabled")
@@ -269,6 +270,8 @@ class DBClient:
                 defaults["sections"] = json.loads(sections_raw)
             except Exception:
                 pass
+
+        defaults["watch_items"] = self.get_watch_items()
 
         return defaults
 

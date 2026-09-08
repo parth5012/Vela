@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import useConfigStore from '../../store/useConfigStore';
 import AuroraScreen, {
   Card,
-  Field,
   Label,
   PillGroup,
   PrimaryButton,
@@ -30,8 +29,9 @@ const ALL_WEEKDAYS = [
 
 export default function BriefingSettingsScreen() {
   const router = useRouter();
-  const { colors, sizes } = useAurora();
+  const { colors, sizes, aurora } = useAurora();
   const { apiUrl, apiKey } = useConfigStore();
+  const accent = aurora.acc1;
 
   const [enabled, setEnabled] = useState(true);
   const [time, setTime] = useState('07:00');
@@ -128,7 +128,8 @@ export default function BriefingSettingsScreen() {
       });
       if (res.ok) {
         const data = await res.json();
-        setWatchItems([...watchItems, data.item || { id: Date.now().toString(), text: newWatchText.trim() }]);
+        const newItem = (data as any).id ? data : ((data as any).item || { id: Date.now().toString(), text: newWatchText.trim() });
+        setWatchItems([...watchItems, newItem]);
         setNewWatchText('');
       } else {
         Alert.alert('Error', 'Failed to add watch item.');
@@ -165,15 +166,15 @@ export default function BriefingSettingsScreen() {
   return (
     <AuroraScreen title="Daily Briefing" onBack={() => router.back()}>
       <Card style={styles.card}>
-        <Text style={[styles.sectionTitle, { color: colors.text, fontSize: sizes.header }]}>
+        <Text style={[styles.sectionTitle, { color: colors.text, fontSize: sizes.title }]}>
           Briefing Preferences
         </Text>
         <Text style={[styles.hint, { color: colors.textMuted, fontSize: sizes.sub }]}>
           Every morning, Vela compiles a brief summary of your day, inbox, and watch items.
         </Text>
 
-        <Field>
-          <Label text="Enable Daily Briefing" />
+        <View style={styles.fieldGroup}>
+          <Label>Enable Daily Briefing</Label>
           <PillGroup
             options={[
               { value: 'yes', label: 'Enabled' },
@@ -182,10 +183,10 @@ export default function BriefingSettingsScreen() {
             value={enabled ? 'yes' : 'no'}
             onChange={(val) => setEnabled(val === 'yes')}
           />
-        </Field>
+        </View>
 
-        <Field>
-          <Label text="Delivery Time (HH:MM)" hint="Default 07:00" />
+        <View style={styles.fieldGroup}>
+          <Label>Delivery Time (HH:MM)</Label>
           <TextInput
             style={[
               styles.input,
@@ -201,10 +202,10 @@ export default function BriefingSettingsScreen() {
             placeholder="07:00"
             placeholderTextColor={colors.textMuted}
           />
-        </Field>
+        </View>
 
-        <Field>
-          <Label text="Delivery Days" />
+        <View style={styles.fieldGroup}>
+          <Label>Delivery Days</Label>
           <View style={styles.weekdaysRow}>
             {ALL_WEEKDAYS.map((w) => {
               const active = weekdays.includes(w.value);
@@ -215,34 +216,34 @@ export default function BriefingSettingsScreen() {
                   style={[
                     styles.dayPill,
                     {
-                      borderColor: active ? colors.accent : colors.glassBorder,
-                      backgroundColor: active ? colors.accent + '33' : colors.surface,
+                      borderColor: active ? accent : colors.glassBorder,
+                      backgroundColor: active ? accent + '33' : colors.surface,
                     },
                   ]}
                 >
-                  <Text style={{ color: active ? colors.accent : colors.textMuted, fontSize: sizes.sub }}>
+                  <Text style={{ color: active ? accent : colors.textMuted, fontSize: sizes.sub }}>
                     {w.label}
                   </Text>
                 </Pressable>
               );
             })}
           </View>
-        </Field>
+        </View>
 
-        <Field>
-          <Label text="Briefing Sections" />
+        <View style={styles.fieldGroup}>
+          <Label>Briefing Sections</Label>
           <View style={styles.togglesRow}>
             <Pressable
               onPress={() => setSections({ ...sections, today: !sections.today })}
               style={[
                 styles.togglePill,
                 {
-                  borderColor: sections.today ? colors.accent : colors.glassBorder,
-                  backgroundColor: sections.today ? colors.accent + '22' : colors.surface,
+                  borderColor: sections.today ? accent : colors.glassBorder,
+                  backgroundColor: sections.today ? accent + '22' : colors.surface,
                 },
               ]}
             >
-              <Text style={{ color: sections.today ? colors.accent : colors.textMuted, fontSize: sizes.sub }}>
+              <Text style={{ color: sections.today ? accent : colors.textMuted, fontSize: sizes.sub }}>
                 📅 Today Events ({sections.today ? 'On' : 'Off'})
               </Text>
             </Pressable>
@@ -252,12 +253,12 @@ export default function BriefingSettingsScreen() {
               style={[
                 styles.togglePill,
                 {
-                  borderColor: sections.inbox ? colors.accent : colors.glassBorder,
-                  backgroundColor: sections.inbox ? colors.accent + '22' : colors.surface,
+                  borderColor: sections.inbox ? accent : colors.glassBorder,
+                  backgroundColor: sections.inbox ? accent + '22' : colors.surface,
                 },
               ]}
             >
-              <Text style={{ color: sections.inbox ? colors.accent : colors.textMuted, fontSize: sizes.sub }}>
+              <Text style={{ color: sections.inbox ? accent : colors.textMuted, fontSize: sizes.sub }}>
                 📬 Inbox Triage ({sections.inbox ? 'On' : 'Off'})
               </Text>
             </Pressable>
@@ -267,27 +268,28 @@ export default function BriefingSettingsScreen() {
               style={[
                 styles.togglePill,
                 {
-                  borderColor: sections.radar ? colors.accent : colors.glassBorder,
-                  backgroundColor: sections.radar ? colors.accent + '22' : colors.surface,
+                  borderColor: sections.radar ? accent : colors.glassBorder,
+                  backgroundColor: sections.radar ? accent + '22' : colors.surface,
                 },
               ]}
             >
-              <Text style={{ color: sections.radar ? colors.accent : colors.textMuted, fontSize: sizes.sub }}>
+              <Text style={{ color: sections.radar ? accent : colors.textMuted, fontSize: sizes.sub }}>
                 📡 Radar Watch ({sections.radar ? 'On' : 'Off'})
               </Text>
             </Pressable>
           </View>
-        </Field>
+        </View>
 
         <PrimaryButton
-          title={saving ? 'Saving...' : 'Save Settings'}
+          label={saving ? 'Saving...' : 'Save Settings'}
           onPress={handleSaveConfig}
+          loading={saving}
           disabled={saving}
         />
       </Card>
 
       <Card style={styles.card}>
-        <Text style={[styles.sectionTitle, { color: colors.text, fontSize: sizes.header }]}>
+        <Text style={[styles.sectionTitle, { color: colors.text, fontSize: sizes.title }]}>
           On-Radar Watch Items
         </Text>
         <Text style={[styles.hint, { color: colors.textMuted, fontSize: sizes.sub }]}>
@@ -313,7 +315,7 @@ export default function BriefingSettingsScreen() {
           />
           <Pressable
             onPress={handleAddWatchItem}
-            style={[styles.addBtn, { backgroundColor: colors.accent }]}
+            style={[styles.addBtn, { backgroundColor: accent }]}
           >
             <Text style={{ color: '#fff', fontWeight: 'bold' }}>Add</Text>
           </Pressable>
@@ -338,7 +340,7 @@ export default function BriefingSettingsScreen() {
       </Card>
 
       <Card style={styles.card}>
-        <Text style={[styles.sectionTitle, { color: colors.text, fontSize: sizes.header }]}>
+        <Text style={[styles.sectionTitle, { color: colors.text, fontSize: sizes.title }]}>
           Briefing History
         </Text>
         <Text style={[styles.hint, { color: colors.textMuted, fontSize: sizes.sub, marginBottom: 12 }]}>
@@ -348,7 +350,7 @@ export default function BriefingSettingsScreen() {
           onPress={() => router.push('/briefing' as any)}
           style={[styles.historyBtn, { borderColor: colors.glassBorder, backgroundColor: colors.surface }]}
         >
-          <Text style={{ color: colors.accent, fontWeight: 'bold', fontSize: sizes.sub }}>
+          <Text style={{ color: accent, fontWeight: 'bold', fontSize: sizes.sub }}>
             📜 View Past Briefings
           </Text>
         </Pressable>
@@ -362,6 +364,9 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginVertical: 8,
     padding: 16,
+  },
+  fieldGroup: {
+    gap: 6,
   },
   sectionTitle: {
     fontWeight: '700',

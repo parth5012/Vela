@@ -37,7 +37,8 @@ export default function BriefingHistoryScreen() {
       });
       if (res.ok) {
         const data = await res.json();
-        setBriefings(data.briefings || []);
+        const list = Array.isArray(data) ? data : (data.briefings || []);
+        setBriefings(list);
       }
     } catch (e) {
       console.warn('Failed to fetch briefing history:', e);
@@ -96,7 +97,7 @@ export default function BriefingHistoryScreen() {
   );
 
   return (
-    <AuroraScreen title="Briefing History" onBack={() => router.back()}>
+    <AuroraScreen title="Briefing History" onBack={() => router.back()} scrollable={false}>
       {loading ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={accentColor} />
