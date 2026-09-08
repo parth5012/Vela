@@ -27,11 +27,13 @@ export function AuroraScreen({
   title,
   subtitle,
   onBack,
+  scrollable = true,
   children,
 }: {
   title: string;
   subtitle?: string;
   onBack?: () => void;
+  scrollable?: boolean;
   children: React.ReactNode;
 }) {
   const { colors, sizes } = useAurora();
@@ -55,13 +57,17 @@ export function AuroraScreen({
       {subtitle ? (
         <Text style={[styles.subtitle, { color: colors.textMuted, fontSize: sizes.sub }]}>{subtitle}</Text>
       ) : null}
-      <ScrollView
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-      >
-        {children}
-      </ScrollView>
+      {scrollable ? (
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
+          {children}
+        </ScrollView>
+      ) : (
+        <View style={styles.nonScrollContent}>{children}</View>
+      )}
     </LinearGradient>
   );
 }
@@ -331,6 +337,10 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 40,
     gap: 20,
+  },
+  nonScrollContent: {
+    flex: 1,
+    paddingHorizontal: 16,
   },
   card: {
     borderRadius: 16,
