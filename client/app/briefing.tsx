@@ -14,8 +14,9 @@ interface BriefingRecord {
 
 export default function BriefingHistoryScreen() {
   const router = useRouter();
-  const { colors, sizes } = useAurora();
+  const { colors, sizes, aurora } = useAurora();
   const { apiUrl, apiKey } = useConfigStore();
+  const accent = aurora.acc1;
 
   const [briefings, setBriefings] = useState<BriefingRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,7 +37,8 @@ export default function BriefingHistoryScreen() {
       });
       if (res.ok) {
         const data = await res.json();
-        setBriefings(data.briefings || []);
+        const list = Array.isArray(data) ? data : (data.briefings || []);
+        setBriefings(list);
       }
     } catch (e) {
       console.warn('Failed to fetch briefing history:', e);
@@ -58,7 +60,7 @@ export default function BriefingHistoryScreen() {
   const renderBriefingCard = ({ item }: { item: BriefingRecord }) => (
     <Card style={styles.card}>
       <View style={styles.cardHeader}>
-        <Text style={[styles.dateText, { color: colors.accent, fontSize: sizes.header }]}>
+        <Text style={[styles.dateText, { color: accent, fontSize: sizes.title }]}>
           📅 {item.date}
         </Text>
         {item.created_at ? (
@@ -75,18 +77,18 @@ export default function BriefingHistoryScreen() {
       {item.sections_json ? (
         <View style={styles.badgeRow}>
           {item.sections_json.today ? (
-            <View style={[styles.badge, { backgroundColor: colors.accent + '22', borderColor: colors.accent }]}>
-              <Text style={{ color: colors.accent, fontSize: sizes.sub - 2 }}>Today</Text>
+            <View style={[styles.badge, { backgroundColor: accent + '22', borderColor: accent }]}>
+              <Text style={{ color: accent, fontSize: sizes.sub - 2 }}>Today</Text>
             </View>
           ) : null}
           {item.sections_json.inbox ? (
-            <View style={[styles.badge, { backgroundColor: colors.accent + '22', borderColor: colors.accent }]}>
-              <Text style={{ color: colors.accent, fontSize: sizes.sub - 2 }}>Inbox</Text>
+            <View style={[styles.badge, { backgroundColor: accent + '22', borderColor: accent }]}>
+              <Text style={{ color: accent, fontSize: sizes.sub - 2 }}>Inbox</Text>
             </View>
           ) : null}
           {item.sections_json.radar ? (
-            <View style={[styles.badge, { backgroundColor: colors.accent + '22', borderColor: colors.accent }]}>
-              <Text style={{ color: colors.accent, fontSize: sizes.sub - 2 }}>Radar</Text>
+            <View style={[styles.badge, { backgroundColor: accent + '22', borderColor: accent }]}>
+              <Text style={{ color: accent, fontSize: sizes.sub - 2 }}>Radar</Text>
             </View>
           ) : null}
         </View>
@@ -95,17 +97,17 @@ export default function BriefingHistoryScreen() {
   );
 
   return (
-    <AuroraScreen title="Briefing History" onBack={() => router.back()}>
+    <AuroraScreen title="Briefing History" onBack={() => router.back()} scrollable={false}>
       {loading ? (
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={colors.accent} />
+          <ActivityIndicator size="large" color={accent} />
           <Text style={[styles.loadingText, { color: colors.textMuted, fontSize: sizes.sub }]}>
             Loading briefing history...
           </Text>
         </View>
       ) : briefings.length === 0 ? (
         <View style={styles.centerContainer}>
-          <Text style={[styles.emptyTitle, { color: colors.text, fontSize: sizes.header }]}>
+          <Text style={[styles.emptyTitle, { color: colors.text, fontSize: sizes.title }]}>
             No Briefings Found
           </Text>
           <Text style={[styles.emptySub, { color: colors.textMuted, fontSize: sizes.sub }]}>
@@ -113,7 +115,7 @@ export default function BriefingHistoryScreen() {
           </Text>
           <Pressable
             onPress={() => router.push('/settings/briefing' as any)}
-            style={[styles.settingsBtn, { backgroundColor: colors.accent }]}
+            style={[styles.settingsBtn, { backgroundColor: accent }]}
           >
             <Text style={{ color: '#fff', fontWeight: 'bold' }}>Briefing Settings</Text>
           </Pressable>
@@ -124,7 +126,7 @@ export default function BriefingHistoryScreen() {
           keyExtractor={(item) => item.id || item.date}
           renderItem={renderBriefingCard}
           contentContainerStyle={styles.listContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.accent} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={accent} />}
         />
       )}
     </AuroraScreen>
