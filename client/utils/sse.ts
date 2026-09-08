@@ -46,13 +46,15 @@ export async function streamAgentResponse(
     // Default agent to 'personal assistant' if not provided
     const requestAgent = agent || 'personal assistant';
 
-    let sseFetch;
+    let sseFetch: typeof fetch;
     try {
-      sseFetch = Platform.OS !== 'web' && process.env.NODE_ENV !== 'test'
-        ? require('react-native-fetch-api').fetch
-        : fetch;
+      if (Platform.OS !== 'web' && process.env.NODE_ENV !== 'test') {
+        const rnFetchApi = require('react-native-fetch-api');
+        sseFetch = rnFetchApi.fetch || rnFetchApi.default || rnFetchApi;
+      } else {
+        sseFetch = fetch;
+      }
     } catch (libError) {
-      // Fallback to native fetch if react-native-fetch-api is not available
       console.warn('[streamAgentResponse] react-native-fetch-api not available, falling back to native fetch');
       sseFetch = fetch;
     }
@@ -107,8 +109,9 @@ export async function streamAgentResponse(
     let buffer = '';
     let chunkCount = 0;
     resetTimeout();
-  while (true) {
+    while (true) {
       const { value, done } = await reader.read();
+      resetTimeout();
       if (done) {
         // Clear timeout on successful completion
         clearTimeout(timeoutId);
