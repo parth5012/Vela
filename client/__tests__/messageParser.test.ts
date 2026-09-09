@@ -464,7 +464,6 @@ describe('messageParser crash-fix caps (FIX-1)', () => {
   };
 
   it('exports MAX_NESTING=5 and MAX_INPUT_LENGTH=2000', () => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mod = require('../utils/messageParser') as {
       MAX_NESTING: number;
       MAX_INPUT_LENGTH: number;
