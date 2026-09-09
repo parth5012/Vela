@@ -41,6 +41,7 @@ import {
   DangerButton,
   useAurora,
 } from '../../components/ui/settingsKit';
+import NeedleModule from '../../modules/needle';
 
 const MODE_OPTIONS = [
   { value: 'cloud' as const, label: '☁️ Cloud' },
@@ -55,9 +56,13 @@ const NETWORK_OPTIONS = [
 /**
  * Wayfinder #173 Audit — Local AI Rows
  * Model rows: LOCAL_MODELS filtered by getModelStatusForRam (recommended/borderline/unsupported) — filtered when showUnsupportedModels=false.
+ * Cactus Needle 45M is 'recommended' on <4.5GB and 4.5-7.5GB tiers (ramDetection.ts), so it is
+ * never hidden when showUnsupportedModels=false — no duplicated tier logic here, just the shared helper.
  * Download state: useConfigStore localModelDownloadProgress nullable; isDownloading = progress!==null; isActiveDownloading = isSelected && progress!==null.
  * Progress lives inline under filename when isActiveDownloading (View h8 radius4 bg rgba(255,255,255,0.08) + fill aurora.acc1 width `${progress}%`) plus global Card fallback when isDownloading.
  * Spec #174: per-row inline bar + 'Downloading {name} {progress}%' textMuted sub-1 600 + right-aligned '{progress}%' aurora.acc1 700; row Pressable minHeight 48, accessibilityLabel 'Downloading {model} {progress}%' vs '{name} {status}, Downloaded/Not downloaded', no native ProgressBar, 48dp targets, AA contrast.
+ * Cancel: inline 'Cancel download {name}' Pressable + global Card Cancel button; pauseAsync + delete partial + progress null (mirrors cancelCustomModelDownload). Delete: confirm Alert + remove file/keys (DangerButton).
+ * Wayfinder #230 — Needle engine pill: NeedleModule.hasNativeLibrary() true → 'Accelerated' (#10b981), false → 'Mock Fallback' (#fb923c) block-with-warning, never silent mock.
  */
 export default function LocalAiScreen() {
   const isLocalMode = useConfigStore((s) => s.isLocalMode);
@@ -83,6 +88,22 @@ export default function LocalAiScreen() {
   const setLocalMaxTokens = useConfigStore((s) => s.setLocalMaxTokens);
 
   const [showUnsupportedModels, setShowUnsupportedModels] = useState(false);
+
+  // Wayfinder #230: Needle engine runtime state. Synchronous boolean, safe on
+  // web/Jest where the native module is absent (hasNativeLibrary() → false).
+  const [needleHasNative] = useState(() => {
+    try {
+      return NeedleModule.hasNativeLibrary();
+    } catch {
+      return false;
+    }
+  });
+  // Active built-in model DownloadResumable so Cancel can pauseAsync + clean up.
+  const downloadResumableRef = useRef<any>(null);
+  // CodeReview #234: suppresses the erroneous 'Download Failed' alert when the
+  // user cancels — the pauseAsync rejection / aborted downloadAsync surfaces
+  // through the same catch path as a real network failure.
+  const isCancelledRef = useRef(false);
 
   useEffect(() => {
     if (detectedRamBytes === null) {
@@ -343,6 +364,20 @@ export default function LocalAiScreen() {
       Alert.alert('Local Model Down', 'The local LLM is currently down/unavailable.');
       return;
     }
+    // Wayfinder #230 / #232: block-with-warning on mock Needle runtime (never silent mock).
+    // CodeReview #234: gate covers built-in Needle row AND any custom .cact model
+    // (custom .cact models run through the Needle engine, so they bypass silently otherwise).
+    const isNeedleModel =
+      localModelName === 'Cactus Needle 45M' ||
+      LOCAL_MODELS.find((m) => m.name === localModelName)?.format === 'cact' ||
+      customModels.find((m) => m.name === localModelName)?.format === 'cact';
+    if (isNeedleModel && !needleHasNative) {
+      Alert.alert(
+        'Needle Engine Unavailable',
+        'The Needle native library is not packaged in this build (mock fallback stub is active). On-device Needle inference is blocked. Use a dev build with the Needle native module.'
+      );
+      return;
+    }
     if (!isActiveModelDownloaded) {
       Alert.alert('Not Downloaded', `Download ${localModelName} first before loading it into RAM.`);
       return;
@@ -401,6 +436,7 @@ export default function LocalAiScreen() {
     }
 
     const downloadModel = async () => {
+      isCancelledRef.current = false;
       const modelDir = `${FileSystem.documentDirectory}models/`;
       const modelUri = `${modelDir}${selectedModel.filename}`;
 
@@ -426,8 +462,20 @@ export default function LocalAiScreen() {
             setLocalModelDownloadProgress(progress);
           }
         );
+        downloadResumableRef.current = downloadResumable;
 
         const result = await downloadResumable.downloadAsync();
+        downloadResumableRef.current = null;
+
+        // CodeReview #234: user-cancelled — skip success handling AND the
+        // 'Download Failed' alert; progress already reset by handleCancelDownload.
+        if (isCancelledRef.current) {
+          isCancelledRef.current = false;
+          if (isMounted.current) {
+            setLocalModelDownloadProgress(null);
+          }
+          return;
+        }
 
         if (result && result.status === 200) {
           const info = await FileSystem.getInfoAsync(modelUri);
@@ -460,6 +508,16 @@ export default function LocalAiScreen() {
         }
       } catch (downloadError: any) {
         console.error('[handleDownloadModel] Download failed:', downloadError);
+        downloadResumableRef.current = null;
+        // CodeReview #234: pauseAsync/abort during cancel rejects here — not a
+        // real failure, so reset progress silently without the alert.
+        if (isCancelledRef.current) {
+          isCancelledRef.current = false;
+          if (isMounted.current) {
+            setLocalModelDownloadProgress(null);
+          }
+          return;
+        }
         try {
           const partial = await FileSystem.getInfoAsync(modelUri);
           if (partial.exists) {
@@ -489,6 +547,35 @@ export default function LocalAiScreen() {
       );
     } else {
       await downloadModel();
+    }
+  };
+
+  // Spec #174 cancel flow: pause the resumable, delete the partial file, reset progress.
+  const handleCancelDownload = async () => {
+    isCancelledRef.current = true;
+    const resumable = downloadResumableRef.current;
+    if (resumable) {
+      try {
+        await resumable.pauseAsync();
+      } catch {
+        // Ignore pause failure during cancel (mirrors cancelCustomModelDownload).
+      }
+      downloadResumableRef.current = null;
+    }
+    try {
+      const selectedModel = LOCAL_MODELS.find((m) => m.name === localModelName);
+      if (selectedModel) {
+        const modelUri = `${FileSystem.documentDirectory}models/${selectedModel.filename}`;
+        const partial = await FileSystem.getInfoAsync(modelUri);
+        if (partial.exists) {
+          await FileSystem.deleteAsync(modelUri, { idempotent: true });
+        }
+      }
+    } catch (err) {
+      console.warn('[handleCancelDownload] Failed to clean up partial file:', err);
+    }
+    if (isMounted.current) {
+      setLocalModelDownloadProgress(null);
     }
   };
 
@@ -677,6 +764,29 @@ export default function LocalAiScreen() {
         <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, lineHeight: 16 }}>
           Local mode uses {localModelName || 'the selected model'} entirely on-device. A mock fallback is always labeled as a mock.
         </Text>
+        <View
+          style={{
+            alignSelf: 'flex-start',
+            marginTop: 8,
+            backgroundColor: 'rgba(0,0,0,0.3)',
+            paddingHorizontal: 8,
+            paddingVertical: 3,
+            borderRadius: 6,
+            borderWidth: 1,
+            borderColor: needleHasNative ? '#10b981' : '#fb923c',
+          }}
+          accessibilityRole="text"
+          accessibilityLabel={needleHasNative ? 'Needle Engine Accelerated' : 'Needle Engine Mock fallback'}
+        >
+          <Text style={{ color: needleHasNative ? '#10b981' : '#fb923c', fontSize: sizes.sub - 1, fontWeight: '700' }}>
+            {needleHasNative ? '⚡ Needle Engine: Accelerated (native)' : '⚠️ Needle Engine: Mock fallback — on-device blocked'}
+          </Text>
+        </View>
+        {!needleHasNative ? (
+          <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, lineHeight: 16, marginTop: 6 }}>
+            Native Needle library not detected in this build. Loading Cactus Needle 45M is blocked with a warning — mock output is never served silently.
+          </Text>
+        ) : null}
       </Card>
 
       {detectedRamBytes !== null && !localConfigAutoApplied && (
@@ -761,6 +871,17 @@ export default function LocalAiScreen() {
                       {statusText}
                     </Text>
                   </View>
+                  {model.name === 'Cactus Needle 45M' ? (
+                    <View
+                      style={{ backgroundColor: 'rgba(0,0,0,0.3)', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, borderWidth: 1, borderColor: needleHasNative ? '#10b981' : '#fb923c' }}
+                      accessibilityRole="text"
+                      accessibilityLabel={needleHasNative ? 'Needle Engine Accelerated' : 'Needle Engine Mock fallback'}
+                    >
+                      <Text style={{ color: needleHasNative ? '#10b981' : '#fb923c', fontSize: sizes.sub - 2, fontWeight: '700' }}>
+                        {needleHasNative ? 'Accelerated' : 'Mock Fallback'}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
                 {model.format === 'task' ? (
                   <Text style={{ color: '#fb923c', fontSize: sizes.sub - 1, fontWeight: 'normal' }}>
@@ -773,6 +894,11 @@ export default function LocalAiScreen() {
                 <Text style={{ color: colors.textDark, fontSize: sizes.sub - 1, marginTop: 4, fontFamily: 'monospace' }}>
                   {model.filename}
                 </Text>
+                {model.name === 'Cactus Needle 45M' && !needleHasNative ? (
+                  <Text style={{ color: '#fb923c', fontSize: sizes.sub - 1, marginTop: 4, fontWeight: '600' }}>
+                    Mock fallback active — loading is blocked until the native library is packaged.
+                  </Text>
+                ) : null}
                 {isActiveDownloading ? (
                   <View style={{ marginTop: 10, gap: 4 }}>
                     <View
@@ -796,8 +922,28 @@ export default function LocalAiScreen() {
                       />
                     </View>
                     <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, fontWeight: '600' }}>
-                      Downloading {model.name} {localModelDownloadProgress}% 
+                      Downloading {model.name} {localModelDownloadProgress}%
                     </Text>
+                    <Pressable
+                      onPress={handleCancelDownload}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Cancel download ${model.name}`}
+                      style={{
+                        alignSelf: 'flex-start',
+                        backgroundColor: 'rgba(239,68,68,0.15)',
+                        borderColor: 'rgba(239,68,68,0.4)',
+                        borderWidth: 1,
+                        paddingHorizontal: 10,
+                        paddingVertical: 6,
+                        borderRadius: 6,
+                        marginTop: 4,
+                      }}
+                    >
+                      <Text style={{ color: '#f87171', fontSize: sizes.sub - 1, fontWeight: '700' }}>
+                        Cancel Download
+                      </Text>
+                    </Pressable>
                   </View>
                 ) : null}
               </View>
@@ -1006,6 +1152,25 @@ export default function LocalAiScreen() {
               style={[styles.progressFill, { width: `${localModelDownloadProgress ?? 0}%`, backgroundColor: aurora.acc1 }]}
             />
           </View>
+          <Pressable
+            onPress={handleCancelDownload}
+            accessibilityRole="button"
+            accessibilityLabel={`Cancel download ${localModelName}`}
+            style={{
+              marginTop: 10,
+              backgroundColor: 'rgba(239, 68, 68, 0.15)',
+              borderWidth: 1,
+              borderColor: 'rgba(239, 68, 68, 0.35)',
+              borderRadius: 10,
+              paddingVertical: 11,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Text style={{ color: '#f87171', fontSize: sizes.text, fontWeight: '600' }}>
+              Cancel Download
+            </Text>
+          </Pressable>
         </Card>
       ) : null}
 
