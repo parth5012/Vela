@@ -67,6 +67,15 @@ describe('localLlm NeedleEngine (.cact) integration', () => {
     expect(needleModel?.filename).toContain('.cact');
   });
 
+  it('matches the needle-45m.cact spec exactly (filename + HF URL)', () => {
+    const needleModel = LOCAL_MODELS.find((m) => m.name === 'Cactus Needle 45M');
+    expect(needleModel).toBeDefined();
+    expect(needleModel?.filename).toBe('needle-45m.cact');
+    expect(needleModel?.format).toBe('cact');
+    expect(needleModel?.downloadUrl).toContain('cactus-ai/needle-45m');
+    expect(needleModel?.downloadUrl.endsWith('needle-45m.cact')).toBe(true);
+  });
+
   it('initializes NeedleModule when .cact model is configured', async () => {
     await initializeLocalModel();
     expect(isLocalModelLoaded).toBe(true);
@@ -93,5 +102,19 @@ describe('localLlm NeedleEngine (.cact) integration', () => {
     await unloadLocalModel();
     expect(isLocalModelLoaded).toBe(false);
     expect(NeedleModule.unload).toHaveBeenCalled();
+  });
+
+  it('falls back to clearly-labeled mock output when Needle init fails', async () => {
+    (NeedleModule.init as jest.Mock).mockRejectedValueOnce(new Error('needle lib missing'));
+    await initializeLocalModel();
+    expect(isLocalModelLoaded).toBe(true);
+
+    const tokens: string[] = [];
+    for await (const token of streamLocalLlmResponse('hello needle')) {
+      tokens.push(token);
+    }
+    const text = tokens.join('');
+    expect(text).toContain('Mock mode');
+    expect(text).toContain('needle lib missing');
   });
 });
