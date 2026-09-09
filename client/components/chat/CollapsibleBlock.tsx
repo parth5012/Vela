@@ -33,36 +33,49 @@ export default function CollapsibleBlock({
   const contentOpacity = useRef(new Animated.Value(isClosed ? 0 : 1)).current;
 
   useEffect(() => {
-    // transitions when streaming closed, collapse automatically
+    const isLarge = (input?.length || 0) > 2000 || measuredHeight > 2000;
+    // transitions when streaming is closed, collapse automatically
     if (isClosed) {
-      Animated.parallel([
-        Animated.timing(animatedValue, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: false, // height is a layout prop; keep on JS driver
-        }),
-        Animated.timing(contentOpacity, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true, // opacity can run on the native driver
-        }),
-      ]).start(() => {
+      if (isLarge) {
+        animatedValue.setValue(0);
+        contentOpacity.setValue(0);
         setCollapsed(true);
-      });
+      } else {
+        Animated.parallel([
+          Animated.timing(animatedValue, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: false, // height is a layout prop; keep on JS driver
+          }),
+          Animated.timing(contentOpacity, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: true, // opacity can run on the native driver
+          }),
+        ]).start(() => {
+          setCollapsed(true);
+        });
+      }
     } else {
-      setCollapsed(false);
-      Animated.parallel([
-        Animated.timing(animatedValue, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: false, // height is a layout prop; keep on JS driver
-        }),
-        Animated.timing(contentOpacity, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true, // opacity can run on the native driver
-        }),
-      ]).start();
+      if (isLarge) {
+        animatedValue.setValue(1);
+        contentOpacity.setValue(1);
+        setCollapsed(false);
+      } else {
+        setCollapsed(false);
+        Animated.parallel([
+          Animated.timing(animatedValue, {
+            toValue: 1,
+            duration: 200,
+            useNativeDriver: false, // height is a layout prop; keep on JS driver
+          }),
+          Animated.timing(contentOpacity, {
+            toValue: 1,
+            duration: 200,
+            useNativeDriver: true, // opacity can run on the native driver
+          }),
+        ]).start();
+      }
     }
   }, [isClosed]);
 
@@ -71,35 +84,48 @@ export default function CollapsibleBlock({
     if (onToggle) {
       onToggle(nextCollapsed);
     }
+    const isLarge = (input?.length || 0) > 2000 || measuredHeight > 2000;
     if (nextCollapsed) {
-      Animated.parallel([
-        Animated.timing(animatedValue, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: false, // height is a layout prop; keep on JS driver
-        }),
-        Animated.timing(contentOpacity, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true, // opacity can run on the native driver
-        }),
-      ]).start(() => {
+      if (isLarge) {
+        animatedValue.setValue(0);
+        contentOpacity.setValue(0);
         setCollapsed(true);
-      });
+      } else {
+        Animated.parallel([
+          Animated.timing(animatedValue, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: false, // height is a layout prop; keep on JS driver
+          }),
+          Animated.timing(contentOpacity, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: true, // opacity can run on the native driver
+          }),
+        ]).start(() => {
+          setCollapsed(true);
+        });
+      }
     } else {
-      setCollapsed(false);
-      Animated.parallel([
-        Animated.timing(animatedValue, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: false, // height is a layout prop; keep on JS driver
-        }),
-        Animated.timing(contentOpacity, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true, // opacity can run on the native driver
-        }),
-      ]).start();
+      if (isLarge) {
+        animatedValue.setValue(1);
+        contentOpacity.setValue(1);
+        setCollapsed(false);
+      } else {
+        setCollapsed(false);
+        Animated.parallel([
+          Animated.timing(animatedValue, {
+            toValue: 1,
+            duration: 200,
+            useNativeDriver: false, // height is a layout prop; keep on JS driver
+          }),
+          Animated.timing(contentOpacity, {
+            toValue: 1,
+            duration: 200,
+            useNativeDriver: true, // opacity can run on the native driver
+          }),
+        ]).start();
+      }
     }
   };
 

@@ -449,3 +449,60 @@ describe('messageParser phantom tool_call guard (#150)', () => {
   });
 });
 
+describe('messageParser crash-fix caps (FIX-1)', () => {
+  const maxToolDepth = (segments: MessageSegment[]): number => {
+    let max = 0;
+    const walk = (segs: MessageSegment[], depth: number) => {
+      for (const s of segs) {
+        const d = s.type === 'tool_call' || s.type === 'skill' ? depth + 1 : depth;
+        if (d > max) max = d;
+        walk(s.children || [], d);
+      }
+    };
+    walk(segments, 0);
+    return max;
+  };
+
+  it('exports MAX_NESTING=5 and MAX_INPUT_LENGTH=2000', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('../utils/messageParser') as {
+      MAX_NESTING: number;
+      MAX_INPUT_LENGTH: number;
+    };
+    expect(mod.MAX_NESTING).toBe(5);
+    expect(mod.MAX_INPUT_LENGTH).toBe(2000);
+  });
+
+  it('caps nesting depth for 10 nested unclosed <call:> tags (depth <= 5)', () => {
+    let text = '';
+    for (let i = 0; i < 10; i++) text += `<call:tool${i} input="q${i}">`;
+    text += 'leftover';
+    const result = parseMessage(text);
+    expect(maxToolDepth(result)).toBeLessThanOrEqual(5);
+  });
+
+  it('caps nesting depth for 10 nested unclosed <skill:> tags (depth <= 5)', () => {
+    let text = '';
+    for (let i = 0; i < 10; i++) text += `<skill:skill${i} input="q${i}">`;
+    text += 'leftover';
+    const result = parseMessage(text);
+    expect(maxToolDepth(result)).toBeLessThanOrEqual(5);
+  });
+
+  it('truncates a 3000-char input attribute to 2000 chars + suffix', () => {
+    const big = 'a'.repeat(3000);
+    const result = parseMessage(`<call:tool input="${big}">body</call:tool>`);
+    const node = result.find((s) => s.type === 'tool_call');
+    expect(node).toBeDefined();
+    expect(node!.input).toBe(`${'a'.repeat(2000)}... truncated`);
+  });
+
+  it('truncates giant input on the streaming/no-match fallback path', () => {
+    const big = 'b'.repeat(3000);
+    const result = parseMessage(`<call:tool input="${big}`);
+    const node = result.find((s) => s.type === 'tool_call');
+    expect(node).toBeDefined();
+    expect(node!.input).toBe(`${'b'.repeat(2000)}... truncated`);
+  });
+});
+
