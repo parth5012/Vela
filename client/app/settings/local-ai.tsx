@@ -675,10 +675,7 @@ export default function LocalAiScreen() {
       const pickedUri = asset.uri;
       const pickedName = asset.name;
 
-      const isTask = selectedModel.format === 'task';
-      const isValidExtension = isTask
-        ? pickedName.toLowerCase().endsWith('.task')
-        : pickedName.toLowerCase().endsWith('.gguf');
+      const isValidExtension = pickedName.toLowerCase().endsWith(`.${selectedModel.format}`);
 
       if (!isValidExtension) {
         Alert.alert(
