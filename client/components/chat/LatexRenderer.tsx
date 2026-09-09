@@ -14,15 +14,22 @@ interface LatexRendererProps {
   displayMode?: boolean;
 }
 
+const SCRIPT_CLOSE_REGEX = /<\/script/gi;
 const LT_REGEX = /</g;
 
 export default function LatexRenderer({ formula, displayMode = false }: LatexRendererProps) {
   const [height, setHeight] = useState(displayMode ? 60 : 30);
   const [hasError, setHasError] = useState(false);
 
-  // Hooks must run unconditionally (rules-of-hooks): compute them even on the
-  // fallback path below so the hook order never changes between renders.
-  const safeFormula = useMemo(() => JSON.stringify(formula).replace(LT_REGEX, '\\u003c'), [formula]);
+  // Hooks must run unconditionally (rules-of-hooks): compute
+  // the fallback path below so hook order never changes between renders.
+  const safeFormula = useMemo(
+    () =>
+      JSON.stringify(formula)
+        .replace(SCRIPT_CLOSE_REGEX, '<\\/script')
+        .replace(LT_REGEX, '\\u003c'),
+    [formula]
+  );
 
   const htmlContent = useMemo(() => `
     <!DOCTYPE html>
@@ -111,13 +118,14 @@ export default function LatexRenderer({ formula, displayMode = false }: LatexRen
 
   return (
     <View style={[styles.container, { height: height }, displayMode && styles.blockPadding]}>
-      <WebView
-        originWhitelist={['*']}
-        source={webViewSource}
-        style={styles.webview}
-        scrollEnabled={false}
-        overScrollMode="never"
-        onMessage={(event) => {
+    <WebView
+      originWhitelist={['*']}
+      source={webViewSource}
+      style={styles.webview}
+      scrollEnabled={false}
+      overScrollMode="never"
+      onRenderProcessGone={() => setHasError(true)}
+      onMessage={(event) => {
           try {
             const data = JSON.parse(event.nativeEvent.data);
             if (data.height) {
