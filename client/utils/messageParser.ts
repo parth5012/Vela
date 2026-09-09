@@ -73,6 +73,12 @@ export function parseMessage(content: string): MessageSegment[] {
 
   const activeNode = () => stack[stack.length - 1];
 
+  // FIX: nesting cap counts only open tool_call/skill nodes. The root stack
+  // entry is type 'text', so pure tool nesting counts are unchanged, while
+  // <thought>/<intent> wrappers no longer consume the tool budget.
+  const openToolDepth = () =>
+    stack.filter((s) => s.type === 'tool_call' || s.type === 'skill').length;
+
   const addText = (text: string) => {
     if (!text) return;
     const current = activeNode();
@@ -194,7 +200,7 @@ export function parseMessage(content: string): MessageSegment[] {
           }
         }
 
-        if (stack.length - 1 >= MAX_NESTING) {
+        if (openToolDepth() >= MAX_NESTING) {
           // FIX-1: nesting cap reached — emit the raw tag as literal text
           // instead of pushing another node, then exit as existing code does.
           addText(callRemaining);
@@ -221,7 +227,7 @@ export function parseMessage(content: string): MessageSegment[] {
 
       index += openTagLength;
 
-      if (stack.length - 1 >= MAX_NESTING) {
+      if (openToolDepth() >= MAX_NESTING) {
         // FIX-1: nesting cap reached — emit the raw tag as literal text
         // instead of pushing another node.
         addText(openTagMatch[0]);
@@ -282,7 +288,7 @@ export function parseMessage(content: string): MessageSegment[] {
           }
         }
 
-        if (stack.length - 1 >= MAX_NESTING) {
+        if (openToolDepth() >= MAX_NESTING) {
           // FIX-1: nesting cap reached — emit the raw tag as literal text
           // instead of pushing another node, then exit as existing code does.
           addText(skillRemaining);
@@ -309,7 +315,7 @@ export function parseMessage(content: string): MessageSegment[] {
 
       index += openTagLength;
 
-      if (stack.length - 1 >= MAX_NESTING) {
+      if (openToolDepth() >= MAX_NESTING) {
         // FIX-1: nesting cap reached — emit the raw tag as literal text
         // instead of pushing another node.
         addText(openTagMatch[0]);

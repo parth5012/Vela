@@ -112,9 +112,8 @@ describe('streamAgentResponse', () => {
     expect(errorMessage).toBe('Response body is not readable');
   });
 
-  it('should handle network aborts by triggering onError', async () => {
+  it('should suppress onError for intentional aborts (pre-aborted signal)', async () => {
     let errorOccurred = false;
-    let errorMessage = '';
 
     (globalThis as any).fetch = jest.fn().mockImplementation(() => {
       return Promise.reject(new DOMException('The user aborted a request.', 'AbortError'));
@@ -122,6 +121,32 @@ describe('streamAgentResponse', () => {
 
     const controller = new AbortController();
     controller.abort();
+
+    await streamAgentResponse(
+      'http://localhost',
+      'key',
+      'thread-1',
+      'hi',
+      () => {},
+      () => {},
+      () => {
+        errorOccurred = true;
+      },
+      controller.signal
+    );
+
+    expect(errorOccurred).toBe(false);
+  });
+
+  it('should still trigger onError when fetch rejects without external abort (timeout)', async () => {
+    let errorOccurred = false;
+    let errorMessage = '';
+
+    (globalThis as any).fetch = jest.fn().mockImplementation(() => {
+      return Promise.reject(new DOMException('The operation was aborted.', 'AbortError'));
+    });
+
+    const controller = new AbortController();
 
     await streamAgentResponse(
       'http://localhost',
@@ -138,7 +163,7 @@ describe('streamAgentResponse', () => {
     );
 
     expect(errorOccurred).toBe(true);
-    expect(errorMessage).toBe('The user aborted a request.');
+    expect(errorMessage).toBe('The operation was aborted.');
   });
 
   it('should process non-newline-terminated final chunk in buffer when stream ends', async () => {

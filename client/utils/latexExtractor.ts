@@ -50,12 +50,12 @@ export function parseContent(text: string): ContentSegment[] {
 
   // FIX-2: strip fenced code blocks before matching so `$` inside code never
   // becomes LaTeX — code chunks stay verbatim markdown.
-  const chunks = text.split(/(```[\s\S]*?```)/g);
+  const chunks = text.split(/(```[\s\S]*?(?:```|$))/g);
 
   const out: ContentSegment[] = [];
   for (const chunk of chunks) {
     if (!chunk) continue;
-    if (chunk.startsWith('```') && chunk.endsWith('```') && chunk.length >= 6) {
+    if (chunk.startsWith('```')) {
       out.push({ type: 'markdown', content: chunk });
       continue;
     }

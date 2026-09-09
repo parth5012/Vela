@@ -88,4 +88,11 @@ describe('latexExtractor crash-fix gates (FIX-2)', () => {
     expect(segments.filter((s) => s.type === 'latex-block')).toHaveLength(0);
     expect(segments).toEqual([{ type: 'markdown', content: text }]);
   });
+
+  it('unclosed trailing fence during streaming never parses as LaTeX', () => {
+    const text = '```\nconst v = $x^2$';
+    const segments = parseContent(text);
+    expect(segments.filter((s) => s.type !== 'markdown')).toHaveLength(0);
+    expect(segments.map((s) => s.content).join('')).toBe(text);
+  });
 });

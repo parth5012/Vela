@@ -77,7 +77,7 @@ export default function CollapsibleBlock({
         ]).start();
       }
     }
-  }, [isClosed]);
+  }, [isClosed, measuredHeight]);
 
   const toggleCollapse = () => {
     const nextCollapsed = !collapsed;

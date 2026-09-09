@@ -172,6 +172,6 @@ export async function streamAgentResponse(
     // Clear timeout
     clearTimeout(timeoutId);
     console.error('[streamAgentResponse] Error:', error.message);
-    onError(error);
+    if (!signal?.aborted) onError(error);
   }
 }
