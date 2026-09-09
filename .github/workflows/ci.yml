@@ -22,7 +22,7 @@ jobs:
         working-directory: backend
     env:
       DATABASE_URL: sqlite:///test_vela_backend.db
-      VELA_API_KEY: dummy-ci-key
+      VELA_API_KEY: vela5012
       GOOGLE_API_KEY: dummy-ci-key
       JWT_SECRET: dummy-ci-jwt-secret
       PYTHONPATH: .
