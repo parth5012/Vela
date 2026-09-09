@@ -25,6 +25,8 @@ export const PERSISTENT_WEBVIEW_HIDDEN: ViewStyle = {
   opacity: 0,
   width: 1,
   height: 1,
+  right: 'auto' as any,
+  bottom: 'auto' as any,
 };
 
 export const PERSISTENT_WEBVIEW_VISIBLE: ViewStyle = {
