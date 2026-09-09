@@ -504,5 +504,13 @@ describe('messageParser crash-fix caps (FIX-1)', () => {
     expect(node).toBeDefined();
     expect(node!.input).toBe(`${'b'.repeat(2000)}... truncated`);
   });
+
+  it('nested <thought> wrappers do not consume the tool nesting budget', () => {
+    const thoughts = '<thought>'.repeat(6) + 'deep' + '</thought>'.repeat(6);
+    const text = `${thoughts}<call:tool input="x">out</call:tool>`;
+    const flat = JSON.stringify(parseMessage(text));
+    expect(flat).toContain('"type":"tool_call"');
+    expect(flat).not.toContain('<call:tool');
+  });
 });
 
