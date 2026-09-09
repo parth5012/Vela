@@ -1,4 +1,9 @@
-import { getModelStatusForRam, getOptimalSettingsForRam } from '../utils/ramDetection';
+import {
+  calculateEstimatedPeakRam,
+  FORMAT_RAM_MULTIPLIERS,
+  getModelStatusForRam,
+  getOptimalSettingsForRam,
+} from '../utils/ramDetection';
 
 describe('ramDetection', () => {
   describe('getModelStatusForRam', () => {
@@ -27,6 +32,22 @@ describe('ramDetection', () => {
       expect(getModelStatusForRam('Phi-4 Mini (GGUF)', ram8GB)).toBe('recommended');
       expect(getModelStatusForRam('DeepSeek-R1 1.5B (GGUF)', ram8GB)).toBe('recommended');
       expect(getModelStatusForRam('Qwen2.5 1.5B', ram8GB)).toBe('recommended');
+    });
+
+    it("marks 'Cactus Needle 45M' as recommended on 2GB, 3GB, 4GB, 6GB, and 8GB RAM devices", () => {
+      const GB = 1024 * 1024 * 1024;
+      for (const ramGB of [2, 3, 4, 6, 8]) {
+        expect(getModelStatusForRam('Cactus Needle 45M', ramGB * GB)).toBe('recommended');
+      }
+    });
+
+    it('estimates peak RAM for .cact format with 1.2 multiplier plus KV cache', () => {
+      expect(FORMAT_RAM_MULTIPLIERS.cact).toBe(1.2);
+      const modelSizeBytes = 40 * 1024 * 1024; // ~40MB Needle model
+      const contextSize = 2048;
+      const expected = Math.round(modelSizeBytes * 1.2 + contextSize * 512);
+      expect(calculateEstimatedPeakRam(modelSizeBytes, '.cact', contextSize)).toBe(expected);
+      expect(calculateEstimatedPeakRam(modelSizeBytes, 'cact', contextSize)).toBe(expected);
     });
   });
 
