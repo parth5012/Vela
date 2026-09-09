@@ -47,3 +47,45 @@ describe('latexExtractor', () => {
     expect(segments[0]).toEqual({ type: 'markdown', content: text });
   });
 });
+
+describe('latexExtractor crash-fix gates (FIX-2)', () => {
+  it('rejects shell paths like $HOME/.grok/bin$ (zero latex-inline)', () => {
+    const text = 'Run $HOME/.grok/bin$ to start';
+    const segments = parseContent(text);
+    expect(segments.filter((s) => s.type === 'latex-inline')).toHaveLength(0);
+    expect(segments.every((s) => s.type === 'markdown')).toBe(true);
+    expect(segments.map((s) => s.content).join('')).toBe(text);
+  });
+
+  it('keeps $VAR inside fenced code blocks as markdown', () => {
+    const text = '```\necho $VAR\n```';
+    const segments = parseContent(text);
+    expect(segments.filter((s) => s.type !== 'markdown')).toHaveLength(0);
+  });
+
+  it('keeps real math $x^2 + y^2 = z^2$ as latex-inline', () => {
+    const segments = parseContent('$x^2 + y^2 = z^2$');
+    expect(segments).toEqual([{ type: 'latex-inline', content: 'x^2 + y^2 = z^2' }]);
+  });
+
+  it('keeps $\\frac{a}{b}$ as latex-inline', () => {
+    const segments = parseContent('$\\frac{a}{b}$');
+    expect(segments).toEqual([{ type: 'latex-inline', content: '\\frac{a}{b}' }]);
+  });
+
+  it('demotes inline formulas over 300 chars to markdown', () => {
+    const inner = `x^{${'a'.repeat(310)}}`;
+    const text = `$${inner}$`;
+    const segments = parseContent(text);
+    expect(segments.filter((s) => s.type === 'latex-inline')).toHaveLength(0);
+    expect(segments).toEqual([{ type: 'markdown', content: text }]);
+  });
+
+  it('demotes block formulas over 2000 chars to markdown', () => {
+    const inner = `x + ${'a'.repeat(2010)}`;
+    const text = `$$${inner}$$`;
+    const segments = parseContent(text);
+    expect(segments.filter((s) => s.type === 'latex-block')).toHaveLength(0);
+    expect(segments).toEqual([{ type: 'markdown', content: text }]);
+  });
+});
