@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import {
+  AppState,
   View,
   Text,
   StyleSheet,
@@ -300,8 +301,10 @@ export default function ChatScreen() {
     // Flush any leftover tokens
     if (pendingTokensMapRef.current[threadId]) {
       appendToken(threadId, pendingTokensMapRef.current[threadId]);
-      delete pendingTokensMapRef.current[threadId];
     }
+    // FIX-3: always drop the buffer entry (even when empty) so a later
+    // tick cannot resurrect work for a finished thread.
+    delete pendingTokensMapRef.current[threadId];
 
     // Heal XML tags
     const threadMsgs = useChatStore.getState().messages[threadId] || [];
@@ -368,11 +371,31 @@ export default function ChatScreen() {
       Object.values(abortControllersRef.current).forEach((controller) => {
         controller.abort();
       });
-      Object.values(throttleTimersRef.current).forEach((timer) => {
-        clearInterval(timer);
+      // FIX-3: unmount clears ALL throttle timers AND pending token buffers.
+      Object.keys(throttleTimersRef.current).forEach((key) => {
+        clearInterval(throttleTimersRef.current[key]);
+        delete throttleTimersRef.current[key];
+      });
+      Object.keys(pendingTokensMapRef.current).forEach((key) => {
+        delete pendingTokensMapRef.current[key];
       });
     };
   }, []);
+
+  // FIX-3: backgrounding mid-stream must not sustain CPU. When the app
+  // leaves `active`, flush + clear every throttle interval and mark all
+  // streaming threads stopped.
+  React.useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') {
+        Object.keys(throttleTimersRef.current).forEach((id) => {
+          cleanUpThrottleAndHeal(id);
+          setStreamingThread(id, false);
+        });
+      }
+    });
+    return () => sub.remove();
+  }, [cleanUpThrottleAndHeal, setStreamingThread]);
 
   React.useEffect(() => {
     if (apiUrl && apiKey) {
@@ -621,6 +644,12 @@ export default function ChatScreen() {
         // 3. Setup throttle timer
         if (!throttleTimersRef.current[threadId]) {
           throttleTimersRef.current[threadId] = setInterval(() => {
+            // FIX-3 self-heal: stream ended without cleanup -> stop ticking.
+            if (!useChatStore.getState().isThreadStreaming(threadId)) {
+              clearInterval(throttleTimersRef.current[threadId]);
+              delete throttleTimersRef.current[threadId];
+              return;
+            }
             if (pendingTokensMapRef.current[threadId]) {
               appendToken(threadId, pendingTokensMapRef.current[threadId]);
               pendingTokensMapRef.current[threadId] = '';
@@ -780,6 +809,12 @@ export default function ChatScreen() {
           pendingTokensMapRef.current[activeThreadId] = (pendingTokensMapRef.current[activeThreadId] || '') + chunk;
           if (!throttleTimersRef.current[activeThreadId]) {
             throttleTimersRef.current[activeThreadId] = setInterval(() => {
+              // FIX-3 self-heal: stream ended without cleanup -> stop ticking.
+              if (!useChatStore.getState().isThreadStreaming(activeThreadId)) {
+                clearInterval(throttleTimersRef.current[activeThreadId]);
+                delete throttleTimersRef.current[activeThreadId];
+                return;
+              }
               if (pendingTokensMapRef.current[activeThreadId]) {
                 appendToken(activeThreadId, pendingTokensMapRef.current[activeThreadId]);
                 pendingTokensMapRef.current[activeThreadId] = '';
@@ -913,6 +948,12 @@ export default function ChatScreen() {
           pendingTokensMapRef.current[activeThreadId] = (pendingTokensMapRef.current[activeThreadId] || '') + chunk;
           if (!throttleTimersRef.current[activeThreadId]) {
             throttleTimersRef.current[activeThreadId] = setInterval(() => {
+              // FIX-3 self-heal: stream ended without cleanup -> stop ticking.
+              if (!useChatStore.getState().isThreadStreaming(activeThreadId)) {
+                clearInterval(throttleTimersRef.current[activeThreadId]);
+                delete throttleTimersRef.current[activeThreadId];
+                return;
+              }
               if (pendingTokensMapRef.current[activeThreadId]) {
                 appendToken(activeThreadId, pendingTokensMapRef.current[activeThreadId]);
                 pendingTokensMapRef.current[activeThreadId] = '';
@@ -1059,6 +1100,12 @@ export default function ChatScreen() {
           pendingTokensMapRef.current[newThreadId] = (pendingTokensMapRef.current[newThreadId] || '') + chunk;
           if (!throttleTimersRef.current[newThreadId]) {
             throttleTimersRef.current[newThreadId] = setInterval(() => {
+              // FIX-3 self-heal: stream ended without cleanup -> stop ticking.
+              if (!useChatStore.getState().isThreadStreaming(newThreadId)) {
+                clearInterval(throttleTimersRef.current[newThreadId]);
+                delete throttleTimersRef.current[newThreadId];
+                return;
+              }
               if (pendingTokensMapRef.current[newThreadId]) {
                 appendToken(newThreadId, pendingTokensMapRef.current[newThreadId]);
                 pendingTokensMapRef.current[newThreadId] = '';
@@ -1347,10 +1394,11 @@ export default function ChatScreen() {
               keyExtractor={(item) => item.id}
               removeClippedSubviews={false}
               maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
-              windowSize={11}
-              maxToRenderPerBatch={10}
+              getItemLayout={undefined}
+              windowSize={5}
+              maxToRenderPerBatch={5}
               updateCellsBatchingPeriod={50}
-              initialNumToRender={15}
+              initialNumToRender={6}
               renderItem={({ item }) => {
                 const isUser = item.role === 'user';
                 const showActionBar = activeMenuMessage?.id === item.id;
