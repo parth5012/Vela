@@ -1,6 +1,7 @@
 import {
   calculateEstimatedPeakRam,
   FORMAT_RAM_MULTIPLIERS,
+  getDynamicModelStatusForRam,
   getModelStatusForRam,
   getOptimalSettingsForRam,
 } from '../utils/ramDetection';
@@ -48,6 +49,23 @@ describe('ramDetection', () => {
       const expected = Math.round(modelSizeBytes * 1.2 + contextSize * 512);
       expect(calculateEstimatedPeakRam(modelSizeBytes, '.cact', contextSize)).toBe(expected);
       expect(calculateEstimatedPeakRam(modelSizeBytes, 'cact', contextSize)).toBe(expected);
+    });
+
+    it("rates 45MB '.cact' Needle model as 'recommended' via dynamic RAM budget", () => {
+      const GB = 1024 * 1024 * 1024;
+      const needle45MBytes = 45 * 1024 * 1024;
+      // ~54MB peak (45MB * 1.2 + 256 * 512B KV cache) fits even a 2GB device.
+      const expectedPeak = Math.round(needle45MBytes * 1.2 + 256 * 512);
+      expect(calculateEstimatedPeakRam(needle45MBytes, '.cact', 256)).toBe(expectedPeak);
+      for (const ramGB of [2, 3, 4, 6, 8]) {
+        expect(getDynamicModelStatusForRam(needle45MBytes, '.cact', ramGB * GB, 256)).toBe(
+          'recommended'
+        );
+      }
+      // Dot-prefixed format normalizes identically.
+      expect(getDynamicModelStatusForRam(needle45MBytes, 'cact', 2 * GB, 256)).toBe(
+        'recommended'
+      );
     });
   });
 
