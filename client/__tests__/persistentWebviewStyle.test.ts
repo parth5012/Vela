@@ -30,6 +30,8 @@ describe('persistentWebview positioning', () => {
     expect(hidden.opacity).toBe(0);
     expect(hidden.width).toBe(1);
     expect(hidden.height).toBe(1);
+    expect(hidden.right).toBe('auto');
+    expect(hidden.bottom).toBe('auto');
 
     expect(persistentWebviewPointerEvents(false)).toBe('none');
   });
