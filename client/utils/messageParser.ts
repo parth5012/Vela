@@ -14,6 +14,20 @@ export interface MessageSegment {
 }
 
 /**
+ * FIX-1: caps so unclosed / giant tool-call payloads can't freeze the chat.
+ * MAX_NESTING bounds `<call:>`/`<skill:>` node depth (deeper tags become
+ * literal text); MAX_INPUT_LENGTH bounds captured `input` per node.
+ */
+export const MAX_NESTING = 5;
+export const MAX_INPUT_LENGTH = 2000;
+
+function truncateInput(val: string | undefined): string | undefined {
+  if (!val) return val;
+  if (val.length > MAX_INPUT_LENGTH) return val.slice(0, MAX_INPUT_LENGTH) + '... truncated';
+  return val;
+}
+
+/**
  * Whether a segment carries enough information to be worth rendering.
  *
  * Only tool_call/skill segments can be "empty" (no name, no input, no content,
@@ -180,6 +194,13 @@ export function parseMessage(content: string): MessageSegment[] {
           }
         }
 
+        if (stack.length - 1 >= MAX_NESTING) {
+          // FIX-1: nesting cap reached — emit the raw tag as literal text
+          // instead of pushing another node, then exit as existing code does.
+          addText(callRemaining);
+          break;
+        }
+
         const newNode: MessageSegment = {
           type: 'tool_call',
           name,
@@ -187,7 +208,7 @@ export function parseMessage(content: string): MessageSegment[] {
           children: [],
         };
         if (input !== undefined) {
-          newNode.input = input;
+          newNode.input = truncateInput(input);
         }
         activeNode().children!.push(newNode);
         stack.push(newNode);
@@ -200,6 +221,13 @@ export function parseMessage(content: string): MessageSegment[] {
 
       index += openTagLength;
 
+      if (stack.length - 1 >= MAX_NESTING) {
+        // FIX-1: nesting cap reached — emit the raw tag as literal text
+        // instead of pushing another node.
+        addText(openTagMatch[0]);
+        continue;
+      }
+
       const newNode: MessageSegment = {
         type: 'tool_call',
         name: toolName,
@@ -207,7 +235,7 @@ export function parseMessage(content: string): MessageSegment[] {
         children: [],
       };
       if (inputVal !== undefined) {
-        newNode.input = inputVal;
+        newNode.input = truncateInput(inputVal);
       }
       activeNode().children!.push(newNode);
       stack.push(newNode);
@@ -254,6 +282,13 @@ export function parseMessage(content: string): MessageSegment[] {
           }
         }
 
+        if (stack.length - 1 >= MAX_NESTING) {
+          // FIX-1: nesting cap reached — emit the raw tag as literal text
+          // instead of pushing another node, then exit as existing code does.
+          addText(skillRemaining);
+          break;
+        }
+
         const newNode: MessageSegment = {
           type: 'skill',
           name,
@@ -261,7 +296,7 @@ export function parseMessage(content: string): MessageSegment[] {
           children: [],
         };
         if (input !== undefined) {
-          newNode.input = input;
+          newNode.input = truncateInput(input);
         }
         activeNode().children!.push(newNode);
         stack.push(newNode);
@@ -274,6 +309,13 @@ export function parseMessage(content: string): MessageSegment[] {
 
       index += openTagLength;
 
+      if (stack.length - 1 >= MAX_NESTING) {
+        // FIX-1: nesting cap reached — emit the raw tag as literal text
+        // instead of pushing another node.
+        addText(openTagMatch[0]);
+        continue;
+      }
+
       const newNode: MessageSegment = {
         type: 'skill',
         name: skillName,
@@ -281,7 +323,7 @@ export function parseMessage(content: string): MessageSegment[] {
         children: [],
       };
       if (inputVal !== undefined) {
-        newNode.input = inputVal;
+        newNode.input = truncateInput(inputVal);
       }
       activeNode().children!.push(newNode);
       stack.push(newNode);
