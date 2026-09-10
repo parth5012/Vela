@@ -135,6 +135,24 @@ export const useChatStore = create<ChatState>()(
       selectThread: (id) => set({ activeThreadId: id }),
       deleteThread: (id) => {
         const config = useConfigStore.getState();
+        const doLocalDelete = () => {
+          set((state) => {
+            const nextThreads = state.threads.filter((t) => t.id !== id);
+            // Blank-chat guard lives in the fetch above (backend 500 keeps
+            // local copy). Here: deleting the active thread moves active to
+            // the next thread; null only when no threads remain (empty state).
+            const nextActive = nextThreads.length === 0
+              ? null
+              : state.activeThreadId === id
+                ? nextThreads[0].id
+                : state.activeThreadId;
+            const nextMessages = { ...state.messages };
+            delete nextMessages[id];
+            return { threads: nextThreads, activeThreadId: nextActive, messages: nextMessages };
+          });
+          deleteThreadLocal(id).catch(() => {});
+        };
+
         if (!config.isLocalMode && config.apiUrl && config.apiKey) {
           const formattedUrl = normalizeUrl(config.apiUrl);
           fetch(`${formattedUrl}/chat/threads/${id}`, {
@@ -144,21 +162,17 @@ export const useChatStore = create<ChatState>()(
             },
           }).then((res) => {
             if (!res.ok) {
-              console.error(`[deleteThread] Failed to delete on backend, status: ${res.status}`);
+              // Backend 500 (seen 10:39:18 in repro): keep local copy so chat
+              // never blanks; user can retry delete later.
+              console.error(`[deleteThread] Failed to delete on backend, status: ${res.status} — keeping local copy`);
+              return;
             }
+            doLocalDelete();
           }).catch((err) => console.error('[deleteThread] Failed to delete on backend:', err));
+          return;
         }
 
-        set((state) => {
-          const nextThreads = state.threads.filter((t) => t.id !== id);
-          const nextActive = state.activeThreadId === id
-            ? (nextThreads[0]?.id || null)
-            : state.activeThreadId;
-          const nextMessages = { ...state.messages };
-          delete nextMessages[id];
-          return { threads: nextThreads, activeThreadId: nextActive, messages: nextMessages };
-        });
-        deleteThreadLocal(id).catch(() => {});
+        doLocalDelete();
       },
   addMessage: (threadId, message) => {
     const now = new Date().toISOString();

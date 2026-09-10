@@ -396,6 +396,19 @@ export default function ChatScreen() {
           abortControllersRef.current[id]?.abort();
           delete abortControllersRef.current[id];
           cleanUpThrottleAndHeal(id);
+          // Same blank-chat guard as manual Stop: never leave an aborted
+          // thread with zero visible messages.
+          const cur = useChatStore.getState().messages[id] || [];
+          const hadEmpty = cur.length > 0 && cur[cur.length - 1]?.role === 'assistant' && !(cur[cur.length - 1]?.content || '').trim();
+          useChatStore.getState().removeLastEmptyAssistant(id);
+          if (hadEmpty) {
+            useChatStore.getState().addMessage(id, {
+              id: generateId('msg_assistant'),
+              role: 'assistant',
+              content: '⏹️ Stopped — app went to background. Your message is kept above. Tap Send again to retry.',
+              created_at: new Date().toISOString(),
+            });
+          }
           setStreamingThread(id, false);
         });
       }
@@ -754,7 +767,20 @@ export default function ChatScreen() {
         delete abortControllersRef.current[activeThreadId];
       }
       cleanUpThrottleAndHeal(activeThreadId);
-    useChatStore.getState().removeLastEmptyAssistant(activeThreadId);
+      // Blank-chat guard: abort skips onError (signal.aborted), so an empty
+      // assistant placeholder would be deleted leaving a bare user msg or an
+      // empty thread. Keep a visible Stopped bubble instead of blank.
+      const preStop = useChatStore.getState().messages[activeThreadId] || [];
+      const hadEmptyAssistant = preStop.length > 0 && preStop[preStop.length - 1]?.role === 'assistant' && !(preStop[preStop.length - 1]?.content || '').trim();
+      useChatStore.getState().removeLastEmptyAssistant(activeThreadId);
+      if (hadEmptyAssistant) {
+        addMessage(activeThreadId, {
+          id: generateId('msg_assistant'),
+          role: 'assistant',
+          content: '⏹️ Stopped — stream was aborted. Your message is kept above. Tap Send again to retry.',
+          created_at: new Date().toISOString(),
+        });
+      }
       setStreamingThread(activeThreadId, false);
       return;
     }
@@ -1442,6 +1468,14 @@ export default function ChatScreen() {
                           <Text style={[styles.rawText, { color: colors.text, fontSize: sizes.text }]}>
                             {item.content}
                           </Text>
+                        ) : bubbleContent.length === 0 ? (
+                          <RichText
+                            content={item.content || '…'}
+                            colors={colors}
+                            sizes={sizes}
+                            accentHex={accentHex}
+                            onCopyText={handleCopyText}
+                          />
                         ) : (
                           <View style={{ gap: 8 }}>
                             {bubbleContent.map((segment, idx) => {
