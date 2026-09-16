@@ -93,18 +93,23 @@ def test_briefing_watch_items_crud(db_session):
 def test_save_and_get_briefing_history(db_session):
     client = DBClient(db_session)
 
+    from datetime import datetime, timedelta
+
+    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+    yesterday_str = (datetime.utcnow() - timedelta(days=1)).strftime("%Y-%m-%d")
+
     b1 = client.save_briefing(
-        date="2026-08-30",
+        date=today_str,
         summary_text="Today summary text",
         sections_json={"today": ["Task 1", "Task 2"]},
         user_id="user_123",
     )
     assert b1.id is not None
-    assert b1.date == "2026-08-30"
+    assert b1.date == today_str
     assert b1.user_id == "user_123"
 
     b2 = client.save_briefing(
-        date="2026-08-29",
+        date=yesterday_str,
         summary_text="Yesterday summary text",
         sections_json={"today": ["Task 0"]},
         user_id="user_123",
@@ -112,8 +117,8 @@ def test_save_and_get_briefing_history(db_session):
 
     history = client.get_briefing_history(days=14)
     assert len(history) == 2
-    assert history[0].date == "2026-08-30"
-    assert history[1].date == "2026-08-29"
+    assert history[0].date == today_str
+    assert history[1].date == yesterday_str
 
 
 def test_assistant_tool_save_briefing_watch_item(db_session, monkeypatch):
