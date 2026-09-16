@@ -128,7 +128,13 @@ export default function BriefingSettingsScreen() {
       });
       if (res.ok) {
         const data = await res.json();
-        const newItem = (data as any).id ? data : ((data as any).item || { id: Date.now().toString(), text: newWatchText.trim() });
+        const newItem =
+          (data as any).id
+            ? data
+            : (data as any).data?.item ?? (data as any).item ?? {
+                id: Date.now().toString(),
+                text: newWatchText.trim(),
+              };
         setWatchItems([...watchItems, newItem]);
         setNewWatchText('');
       } else {
