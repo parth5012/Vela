@@ -9,6 +9,7 @@ import { useConfigStore } from '../store/useConfigStore';
 import { AuroraScreen, Card, PrimaryButton } from '../components/ui/settingsKit';
 import { useAurora } from '../hooks/useAurora';
 import { calculateNextRun } from '../utils/backgroundTasks';
+import { isUserVisibleTask } from '../utils/checkinScheduler';
 import { DEFAULT_PERSONAS } from '../utils/personas';
 
 const generateId = () => {
@@ -81,7 +82,8 @@ export default function TasksScreen() {
       if (db) {
         await initializeDatabase().catch(() => {});
         const result = await db.select().from(tasks);
-        setTaskList(result);
+        // Scheduler rows (description = vela:checkin) run headless; keep them out of the user list.
+        setTaskList(result.filter(isUserVisibleTask));
       }
     } catch (error) {
       console.error('Failed to load tasks:', error);

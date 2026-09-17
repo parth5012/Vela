@@ -4,8 +4,25 @@ import db from '../db/client';
 import { tasks, taskRuns } from '../db/schema';
 import { eq, and, lte, isNull, or } from 'drizzle-orm';
 import { useConfigStore } from '../store/useConfigStore';
+import {
+  isCheckinSchedulerTask,
+  gateCheckinTask,
+  presentCheckinNotification,
+  NUDGE_TASK_ID,
+} from './checkinScheduler';
 
 export const VELA_BACKGROUND_TASK = 'vela-background-task';
+
+async function advanceTaskSchedule(taskId: string, recurrenceRule: string, startedAt: number): Promise<void> {
+  if (!db) return;
+  const nextRunTime = calculateNextRun(recurrenceRule, startedAt);
+  await db.update(tasks)
+    .set({
+      last_run: startedAt,
+      next_run: nextRunTime,
+    })
+    .where(eq(tasks.id, taskId));
+}
 
 export function calculateNextRun(recurrenceRule: string, lastRun: number): number {
   const base = lastRun || Date.now();
@@ -60,9 +77,27 @@ TaskManager.defineTask(VELA_BACKGROUND_TASK, async (body: any) => {
       return BackgroundTask.BackgroundTaskResult.Success;
     }
 
-    for (const task of activeTasks.slice(0, 1)) {
+    for (const task of activeTasks) {
       const runId = generateId();
       const startedAt = Date.now();
+
+      // Check-in scheduler rows are gated: suppressed rows advance without
+      // firing so other due tasks still get their turn this tick.
+      if (isCheckinSchedulerTask(task)) {
+        const gate = await gateCheckinTask(task.id);
+        if (!gate.fire) {
+          await db.insert(taskRuns).values({
+            id: runId,
+            task_id: task.id,
+            status: 'completed',
+            started_at: startedAt,
+            completed_at: Date.now(),
+            output: gate.reason,
+          });
+          await advanceTaskSchedule(task.id, task.recurrence_rule, startedAt);
+          continue;
+        }
+      }
 
       await db.insert(taskRuns).values({
         id: runId,
@@ -99,6 +134,21 @@ TaskManager.defineTask(VELA_BACKGROUND_TASK, async (body: any) => {
               output: data.output,
             })
             .where(eq(taskRuns.id, runId));
+          if (isCheckinSchedulerTask(task)) {
+            if (task.id === NUDGE_TASK_ID) {
+              await presentCheckinNotification(
+                'vela-checkin-nudge-note',
+                'Gentle nudge 🌱',
+                `${data.output || 'No check-in yesterday — how are you today?'} Reply 'skip' to dismiss.`
+              );
+            } else {
+              await presentCheckinNotification(
+                'vela-checkin-weekly-note',
+                'Weekly reflection 📊',
+                data.output || 'Your week in review is ready — open chat to see it.'
+              );
+            }
+          }
         } else {
           throw new Error(data.output || 'Unknown backend error');
         }
@@ -112,14 +162,8 @@ TaskManager.defineTask(VELA_BACKGROUND_TASK, async (body: any) => {
           .where(eq(taskRuns.id, runId));
       }
 
-      const nextRunTime = calculateNextRun(task.recurrence_rule, startedAt);
-      await db.update(tasks)
-        .set({
-          last_run: startedAt,
-          next_run: nextRunTime,
-          updated_at: Date.now(),
-        })
-        .where(eq(tasks.id, task.id));
+      await advanceTaskSchedule(task.id, task.recurrence_rule, startedAt);
+      break;
     }
 
     return BackgroundTask.BackgroundTaskResult.Success;
