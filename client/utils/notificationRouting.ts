@@ -120,6 +120,11 @@ export function parseUrl(url: string | null | undefined): ParsedNotification | n
       return { type: 'briefing', route: '/settings/briefing' };
     }
 
+    if (segments[0] === 'checkin') {
+      // vela-client://checkin opens chat home so the reply becomes the check-in.
+      return { type: 'checkin', route: '/' };
+    }
+
     // If URL is like vela-client://{id} (single segment), treat as conversation_id
     // Do not misinterpret other top-level routes without id
     if (segments.length === 1) {

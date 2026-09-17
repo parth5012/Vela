@@ -47,6 +47,7 @@ const GROUPS: CategoryGroup[] = [
     rows: [
       { icon: '💬', label: 'Suggestion Starters', hint: 'Welcome-view starter cards', route: '/settings/messaging' },
       { icon: '🌅', label: 'Daily Morning Briefing', hint: 'Schedule, sections, watch items', route: '/settings/briefing' },
+      { icon: '📝', label: 'Daily Check-in', hint: 'Reminder time, days, mute', route: '/settings/checkin' },
     ],
   },
   {
