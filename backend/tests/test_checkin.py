@@ -310,3 +310,51 @@ def test_tasks_run_accepts_checkin_agent(api_client, monkeypatch):
     assert res.status_code == 200, res.text
     assert res.json()["status"] == "success"
     assert "steady progress" in res.json()["output"]
+
+
+# ---------------------------------------------------------------------------
+# CheckInSkill dialog script, JSON contract, safety fallback (wayfinder #116)
+# ---------------------------------------------------------------------------
+
+def _skill_instructions():
+    import asyncio
+
+    from skills.checkin import CheckInSkill
+
+    return asyncio.run(CheckInSkill().execute({}))
+
+
+def test_checkin_skill_registered_for_intent_classification():
+    from skills import skills
+
+    names = [s.name for s in skills]
+    assert "CheckInSkill" in names
+
+
+def test_checkin_skill_one_question_at_a_time_structure():
+    instructions = _skill_instructions()
+    lowered = instructions.lower()
+    for step in ("mood", "energy", "win", "carrying"):
+        assert step in lowered
+    assert "one question at a time" in lowered
+
+
+def test_checkin_skill_json_contract_field_names():
+    import re
+
+    instructions = _skill_instructions()
+    match = re.search(r"\{[^{}]*\"mood\"[^{}]*\}", instructions)
+    assert match, "skill must spell out the exact JSON completion contract"
+    keys = set(re.findall(r"\"(mood|energy|win|carrying|note)\"\s*:", match.group(0)))
+    assert keys == {"mood", "energy", "win", "carrying", "note"}
+
+
+def test_checkin_skill_safety_fallback_no_fabricated_hotlines():
+    import re
+
+    instructions = _skill_instructions()
+    lowered = instructions.lower()
+    assert "stop the script" in lowered
+    assert "do not save" in lowered
+    # Verified-only fallback: the prompt must never contain phone-like resources
+    assert not re.search(r"\+?\d[\d\s\-()]{7,}\d", instructions)
