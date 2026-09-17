@@ -101,18 +101,18 @@ def test_streaming_chat_message_with_personas(monkeypatch):
         assert response.status_code == 200
         assert "text/event-stream" in response.headers["content-type"]
 
-    # 5. Test get personas list endpoint
+    # 5. Test get personas list endpoint (dynamic: derived from the registry,
+    # so registering a new agent never requires a hardcoded count update)
+    from agent.registry import AGENT_REGISTRY
+
     resp_personas = client.get("/chat/personas", headers=headers)
     assert resp_personas.status_code == 200
     personas = resp_personas.json()
-    assert len(personas) == 6
-    persona_ids = [p["id"] for p in personas]
-    assert "prompt builder" in persona_ids
-    assert "teacher" in persona_ids
-    assert "analyst" in persona_ids
-    assert "personal assistant" in persona_ids
-    assert "google_workspace" in persona_ids
-    assert "device_agent" in persona_ids
+    expected_ids = {config.identifier for config in AGENT_REGISTRY.list_agents()}
+    persona_ids = {p["id"] for p in personas}
+    assert persona_ids == expected_ids
+    # Core chat personas must always be present
+    assert {"personal assistant", "teacher", "analyst", "prompt builder"} <= persona_ids
 
 
 

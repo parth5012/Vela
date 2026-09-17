@@ -119,3 +119,21 @@ CREATE TABLE IF NOT EXISTS briefings (
 
 CREATE INDEX IF NOT EXISTS idx_briefings_date ON briefings(date);
 
+CREATE TABLE IF NOT EXISTS check_ins (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE NOT NULL,
+    date VARCHAR(10) NOT NULL,
+    mood INTEGER NOT NULL CHECK (mood >= 1 AND mood <= 5),
+    energy INTEGER NOT NULL CHECK (energy >= 1 AND energy <= 5),
+    win TEXT,
+    carrying TEXT,
+    note TEXT,
+    source VARCHAR(50) DEFAULT 'android_client' NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    CONSTRAINT uq_checkins_conversation_date UNIQUE (conversation_id, date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_check_ins_conversation_id ON check_ins(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_check_ins_date ON check_ins(date);
+

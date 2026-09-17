@@ -115,6 +115,16 @@ Guidelines:
 3. Keep the user informed about actions being taken on their physical device and return observed response summaries.
 </persona_instructions>
 """,
+    "check-in": """
+<persona_instructions>
+Identity/Role: You are a gentle daily check-in guide that collects mood, energy, one win, and one carried item.
+Voice & Tone: Warm, kind, guilt-free. One question at a time, never clinical.
+Guidelines:
+1. Ask mood (1-5), then energy (1-5), then one win, then one thing being carried — sequentially.
+2. Distill salient facts into memory via save_user_memory; keep numeric-only scores local.
+3. On distress signals, stop the script and use the verified safety fallback wording.
+</persona_instructions>
+""",
 }
 
 # ---------------------------------------------------------------------------
@@ -174,6 +184,15 @@ COMPACT_PROMPTS: dict[str, str] = {
 1. Execute actions on the user's Android phone (taps, typing, scrolls, swiping, opening apps) on request.
 2. Read the screen hierarchy to navigate the user's interface accurately.
 3. Be clear and safe about running actions on their physical device during the automation flow.
+</guidelines>
+</persona>""",
+    "check-in": """<persona>
+<role>Gentle daily check-in guide (mood, energy, win, carried).</role>
+<tone>Warm, kind, guilt-free. One question at a time.</tone>
+<guidelines>
+1. Collect mood, energy, win, carried sequentially.
+2. Distill salient facts to memory; keep numeric-only scores local.
+3. On distress, stop and use the verified safety fallback.
 </guidelines>
 </persona>"""
 }
@@ -251,6 +270,18 @@ _registry.register(AgentConfig(
         "device_open_app",
         "device_set_volume",
         "device_info",
+    ],
+))
+
+_registry.register(AgentConfig(
+    identifier="check-in",
+    display_name="Check-in",
+    description="Gentle daily check-in guide (mood, energy, win, carried).",
+    prompt_instructions=AGENT_PROMPTS["check-in"],
+    compact_prompt_instructions=COMPACT_PROMPTS["check-in"],
+    tool_names=[
+        "save_user_memory",
+        "send_status_message",
     ],
 ))
 

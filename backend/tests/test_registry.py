@@ -1,8 +1,12 @@
 from agent.registry import AGENT_REGISTRY
 
 def test_registry_compact_prompts():
+    from agent.registry import AGENT_PROMPTS, COMPACT_PROMPTS
+
     agents = AGENT_REGISTRY.list_agents()
-    assert len(agents) == 6
+    assert agents
+    # Dynamic: registry and prompt tables must stay in sync (no hardcoded count)
+    assert {a.identifier for a in agents} == set(AGENT_PROMPTS) == set(COMPACT_PROMPTS)
     for agent in agents:
         assert agent.compact_prompt_instructions
         assert "<persona>" in agent.compact_prompt_instructions

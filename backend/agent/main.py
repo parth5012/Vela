@@ -195,6 +195,32 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error("Failed to create briefings table", error=str(e))
 
+        # 6. Create check_ins table if not exists
+        try:
+            table_names = inspector.get_table_names()
+            if 'check_ins' not in table_names:
+                logger.info("Database migration: creating 'check_ins' table")
+                created_at_default = "timezone('utc'::text, now())" if engine.dialect.name == "postgresql" else "CURRENT_TIMESTAMP"
+                with engine.begin() as conn:
+                    conn.execute(text(f"""
+                        CREATE TABLE check_ins (
+                            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                            conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE NOT NULL,
+                            date VARCHAR(10) NOT NULL,
+                            mood INTEGER NOT NULL CHECK (mood >= 1 AND mood <= 5),
+                            energy INTEGER NOT NULL CHECK (energy >= 1 AND energy <= 5),
+                            win TEXT,
+                            carrying TEXT,
+                            note TEXT,
+                            source VARCHAR(50) DEFAULT 'android_client' NOT NULL,
+                            created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT {created_at_default} NOT NULL,
+                            updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT {created_at_default} NOT NULL,
+                            CONSTRAINT uq_checkins_conversation_date UNIQUE (conversation_id, date)
+                        )
+                    """))
+        except Exception as e:
+            logger.error("Failed to create check_ins table", error=str(e))
+
     yield
 
 app = FastAPI(title="Vela Server", lifespan=lifespan)
@@ -1275,6 +1301,113 @@ def get_briefings(days: int = Query(14)):
             }
             for b in briefings
         ]
+
+
+# ---------------------------------------------------------------------------
+# Daily check-ins (wayfinder #115)
+# ---------------------------------------------------------------------------
+
+class CheckInPayload(BaseModel):
+    conversation_id: str
+    mood: int = Field(ge=1, le=5)
+    energy: int = Field(ge=1, le=5)
+    win: Optional[str] = None
+    carrying: Optional[str] = None
+    note: Optional[str] = None
+    date: Optional[str] = None
+    source: Optional[str] = "android_client"
+
+
+def _serialize_checkin(c):
+    return {
+        "id": c.id,
+        "conversation_id": c.conversation_id,
+        "date": c.date,
+        "mood": c.mood,
+        "energy": c.energy,
+        "win": c.win,
+        "carrying": c.carrying,
+        "note": c.note,
+        "source": c.source,
+        "created_at": c.created_at.isoformat() if c.created_at else None,
+        "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+    }
+
+
+def _distill_checkin_memory(conversation_id: str, date: str, win: Optional[str], carrying: Optional[str], note: Optional[str]) -> None:
+    """Distills salient check-in facts into semantic memory.
+
+    Numeric-only scores stay local; win/carrying/note are saved verbatim.
+    Accesses the tool via module attribute so tests can monkeypatch it.
+    """
+    facts: list[str] = []
+    if win and win.strip():
+        facts.append(f"Check-in {date}: win - {win.strip()}")
+    if carrying and carrying.strip():
+        facts.append(f"Check-in {date}: carrying - {carrying.strip()}")
+    if note and note.strip():
+        facts.append(f"Check-in {date}: note - {note.strip()}")
+    if not facts:
+        return
+    try:
+        import tools.memory as memory_tools
+
+        saver = memory_tools.save_user_memory
+        func = getattr(saver, "func", None) or saver
+        for fact in facts:
+            func(conversation_id, fact)
+    except Exception as e:
+        logger.error("Failed to distill check-in memory", error=str(e))
+
+
+@app.post("/api/checkins", dependencies=[Depends(verify_api_key)])
+def post_checkin(payload: CheckInPayload):
+    checkin_date = payload.date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    with get_db_session() as session:
+        client = DBClient(session)
+        if not session.query(Conversation).filter_by(id=payload.conversation_id).first():
+            client.create_client_conversation(conversation_id=payload.conversation_id)
+        checkin = client.upsert_checkin(
+            conversation_id=payload.conversation_id,
+            date=checkin_date,
+            mood=payload.mood,
+            energy=payload.energy,
+            win=payload.win,
+            carrying=payload.carrying,
+            note=payload.note,
+            source=payload.source or "android_client",
+        )
+        result = _serialize_checkin(checkin)
+    _distill_checkin_memory(payload.conversation_id, checkin_date, payload.win, payload.carrying, payload.note)
+    return result
+
+
+@app.get("/api/checkins", dependencies=[Depends(verify_api_key)])
+def list_checkins(conversation_id: Optional[str] = Query(None), days: int = Query(14)):
+    with get_db_session() as session:
+        client = DBClient(session)
+        entries = client.get_checkins(conversation_id=conversation_id, days=days)
+        return [_serialize_checkin(e) for e in entries]
+
+
+@app.get("/api/checkins/summary", dependencies=[Depends(verify_api_key)])
+def get_checkins_summary(conversation_id: Optional[str] = Query(None), days: int = Query(14)):
+    with get_db_session() as session:
+        client = DBClient(session)
+        entries = client.get_checkins(conversation_id=conversation_id, days=days)
+        count = len(entries)
+        if count == 0:
+            return {"count": 0, "summary": "No check-ins in this window yet.", "avg_mood": None, "avg_energy": None}
+        avg_mood = round(sum(e.mood for e in entries) / count, 2)
+        avg_energy = round(sum(e.energy for e in entries) / count, 2)
+        wins = [e.win for e in entries if e.win]
+        carrying = [e.carrying for e in entries if e.carrying]
+        lines = [f"{count} check-in(s) in the last {days} days. Avg mood {avg_mood}/5, avg energy {avg_energy}/5."]
+        if wins:
+            lines.append(f"Wins: {'; '.join(wins[:3])}")
+        if carrying:
+            lines.append(f"Carrying: {'; '.join(carrying[:3])}")
+        return {"count": count, "summary": " ".join(lines), "avg_mood": avg_mood, "avg_energy": avg_energy}
 
 
 # ---------------------------------------------------------------------------
