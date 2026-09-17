@@ -20,7 +20,8 @@ import json
 import uuid
 import base64
 import urllib.parse
-from datetime import datetime, timedelta, timezone
+from datetime import date as dt_date, datetime, timedelta, timezone
+from uuid import UUID
 import httpx
 from httpx import HTTPStatusError
 from typing import Optional
@@ -1308,13 +1309,13 @@ def get_briefings(days: int = Query(14)):
 # ---------------------------------------------------------------------------
 
 class CheckInPayload(BaseModel):
-    conversation_id: str
+    conversation_id: UUID
     mood: int = Field(ge=1, le=5)
     energy: int = Field(ge=1, le=5)
     win: Optional[str] = None
     carrying: Optional[str] = None
     note: Optional[str] = None
-    date: Optional[str] = None
+    date: Optional[dt_date] = None
     source: Optional[str] = "android_client"
 
 
@@ -1362,13 +1363,14 @@ def _distill_checkin_memory(conversation_id: str, date: str, win: Optional[str],
 
 @app.post("/api/checkins", dependencies=[Depends(verify_api_key)])
 def post_checkin(payload: CheckInPayload):
-    checkin_date = payload.date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    conversation_id = str(payload.conversation_id)
+    checkin_date = payload.date.isoformat() if payload.date else datetime.now(timezone.utc).strftime("%Y-%m-%d")
     with get_db_session() as session:
         client = DBClient(session)
-        if not session.query(Conversation).filter_by(id=payload.conversation_id).first():
-            client.create_client_conversation(conversation_id=payload.conversation_id)
+        if not session.query(Conversation).filter_by(id=conversation_id).first():
+            client.create_client_conversation(conversation_id=conversation_id)
         checkin = client.upsert_checkin(
-            conversation_id=payload.conversation_id,
+            conversation_id=conversation_id,
             date=checkin_date,
             mood=payload.mood,
             energy=payload.energy,
@@ -1378,12 +1380,12 @@ def post_checkin(payload: CheckInPayload):
             source=payload.source or "android_client",
         )
         result = _serialize_checkin(checkin)
-    _distill_checkin_memory(payload.conversation_id, checkin_date, payload.win, payload.carrying, payload.note)
+    _distill_checkin_memory(conversation_id, checkin_date, payload.win, payload.carrying, payload.note)
     return result
 
 
 @app.get("/api/checkins", dependencies=[Depends(verify_api_key)])
-def list_checkins(conversation_id: Optional[str] = Query(None), days: int = Query(14)):
+def list_checkins(conversation_id: Optional[str] = Query(None), days: int = Query(14, ge=1)):
     with get_db_session() as session:
         client = DBClient(session)
         entries = client.get_checkins(conversation_id=conversation_id, days=days)
@@ -1391,7 +1393,7 @@ def list_checkins(conversation_id: Optional[str] = Query(None), days: int = Quer
 
 
 @app.get("/api/checkins/summary", dependencies=[Depends(verify_api_key)])
-def get_checkins_summary(conversation_id: Optional[str] = Query(None), days: int = Query(14)):
+def get_checkins_summary(conversation_id: Optional[str] = Query(None), days: int = Query(14, ge=1)):
     with get_db_session() as session:
         client = DBClient(session)
         entries = client.get_checkins(conversation_id=conversation_id, days=days)
