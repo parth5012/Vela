@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import JSON, DateTime, Integer, String, Float, Boolean, Column, ForeignKey, BigInteger, Text
+from sqlalchemy import JSON, DateTime, Integer, String, Float, Boolean, Column, ForeignKey, BigInteger, Text, UniqueConstraint
 from sqlalchemy.orm import declarative_base
 from utils.ulid import generate_ulid
 from pgvector.sqlalchemy import Vector
@@ -131,4 +131,27 @@ class Briefing(Base):
     summary_text = Column(Text, nullable=True)
     sections_json = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class CheckIn(Base):
+    """Daily check-in row: mood/energy scores plus one win and one carried item.
+
+    A second check-in on the same day replaces the first via the unique
+    (conversation_id, date) constraint (same-day upsert).
+    """
+
+    __tablename__ = "check_ins"
+    __table_args__ = (UniqueConstraint("conversation_id", "date", name="uq_checkins_conversation_date"),)
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    conversation_id = Column(String, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+    date = Column(String(10), nullable=False, index=True)  # YYYY-MM-DD
+    mood = Column(Integer, nullable=False)  # 1-5
+    energy = Column(Integer, nullable=False)  # 1-5
+    win = Column(Text, nullable=True)
+    carrying = Column(Text, nullable=True)
+    note = Column(Text, nullable=True)
+    source = Column(String(50), default="android_client", nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 

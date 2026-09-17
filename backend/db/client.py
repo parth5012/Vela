@@ -1,7 +1,7 @@
 import uuid
 import json
 from sqlalchemy.orm import Session
-from db.models import Conversation, OAuthToken, MemoryVector, Experience, SystemPromptFragment, SkillsRegistry, SystemSetting, Briefing
+from db.models import Conversation, OAuthToken, MemoryVector, Experience, SystemPromptFragment, SkillsRegistry, SystemSetting, Briefing, CheckIn
 from datetime import datetime, timedelta, UTC
 from utils.ulid import generate_ulid
 
@@ -340,4 +340,62 @@ class DBClient:
             cutoff_date = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
             query = query.filter(Briefing.date >= cutoff_date)
         return query.order_by(Briefing.date.desc(), Briefing.created_at.desc()).all()
+
+    def upsert_checkin(
+        self,
+        conversation_id: str,
+        date: str,
+        mood: int,
+        energy: int,
+        win: str | None = None,
+        carrying: str | None = None,
+        note: str | None = None,
+        source: str = "android_client",
+    ) -> CheckIn:
+        """Creates or replaces the check-in for (conversation_id, date).
+
+        Same-day re-check-ins replace the first row instead of duplicating it.
+        """
+        existing = (
+            self.session.query(CheckIn)
+            .filter_by(conversation_id=conversation_id, date=date)
+            .first()
+        )
+        now = datetime.now(UTC).replace(tzinfo=None)
+        if existing:
+            existing.mood = mood
+            existing.energy = energy
+            existing.win = win
+            existing.carrying = carrying
+            existing.note = note
+            existing.source = source
+            existing.updated_at = now
+            self.session.flush()
+            return existing
+        checkin = CheckIn(
+            id=str(uuid.uuid4()),
+            conversation_id=conversation_id,
+            date=date,
+            mood=mood,
+            energy=energy,
+            win=win,
+            carrying=carrying,
+            note=note,
+            source=source,
+            created_at=now,
+            updated_at=now,
+        )
+        self.session.add(checkin)
+        self.session.flush()
+        return checkin
+
+    def get_checkins(self, conversation_id: str | None = None, days: int = 14) -> list[CheckIn]:
+        """Fetches recent check-ins, newest first."""
+        query = self.session.query(CheckIn)
+        if conversation_id:
+            query = query.filter(CheckIn.conversation_id == conversation_id)
+        if days > 0:
+            cutoff_date = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+            query = query.filter(CheckIn.date >= cutoff_date)
+        return query.order_by(CheckIn.date.desc(), CheckIn.created_at.desc()).all()
 
