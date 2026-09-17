@@ -104,3 +104,18 @@ export type TaskExecutionEntity = typeof taskExecutions.$inferSelect;
 export type InsertTaskExecutionEntity = typeof taskExecutions.$inferInsert;
 export type TaskStepExecutionEntity = typeof taskStepExecutions.$inferSelect;
 export type InsertTaskStepExecutionEntity = typeof taskStepExecutions.$inferInsert;
+
+export const checkIns = sqliteTable('check_ins', {
+  id: text('id').primaryKey(),
+  date: text('date').notNull(),
+  mood: integer('mood').notNull(),
+  energy: integer('energy').notNull(),
+  win: text('win'),
+  carrying: text('carrying'),
+  note: text('note'),
+  synced: integer('synced', { mode: 'boolean' }).default(false).notNull(),
+  created_at: integer('created_at').notNull(),
+});
+
+export type CheckInEntity = typeof checkIns.$inferSelect;
+export type InsertCheckInEntity = typeof checkIns.$inferInsert;
