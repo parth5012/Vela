@@ -1,6 +1,8 @@
 import { AppState } from 'react-native';
 import { useConfigStore } from '../store/useConfigStore';
+import { useChatStore } from '../store/useChatStore';
 import { syncDatabase } from './syncManager';
+import { flushUnsyncedCheckins } from '../db/checkinRepository';
 
 let wired = false;
 
@@ -18,6 +20,24 @@ export async function flushPendingMessages(): Promise<void> {
     await syncDatabase(config.apiUrl, config.apiKey);
   } catch (error) {
     console.warn('[offlineSync] Flush failed (backend unreachable?), keeping queue pending:', error);
+  }
+  await flushPendingCheckins(config.apiUrl, config.apiKey);
+}
+
+/**
+ * Flushes locally-queued check-ins (synced = false) to POST /api/checkins.
+ * Single-tenant device: rows flush under the most recent thread id.
+ * Failures keep rows pending for the next trigger.
+ */
+export async function flushPendingCheckins(apiUrl: string, apiKey: string): Promise<void> {
+  try {
+    const conversationId = useChatStore.getState().threads?.[0]?.id;
+    if (!conversationId) {
+      return;
+    }
+    await flushUnsyncedCheckins(apiUrl, apiKey, conversationId);
+  } catch (error) {
+    console.warn('[offlineSync] Check-in flush failed, keeping queue pending:', error);
   }
 }
 
