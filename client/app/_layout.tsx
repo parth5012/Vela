@@ -338,6 +338,17 @@ fontSize: 16,
 }
 }}
 />
+<Drawer.Screen
+name="journal"
+options={{
+headerTitle: 'Journal',
+headerTitleStyle: {
+fontWeight: '600',
+color: '#e4e4e7',
+fontSize: 16,
+}
+}}
+/>
       </Drawer>
 
       {/* Persistent WebView — always mounted, visibility toggled by offscreen positioning */}
