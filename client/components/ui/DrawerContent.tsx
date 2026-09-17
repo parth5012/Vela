@@ -144,6 +144,13 @@ const handleTasks = () => {
   }
 };
 
+const handleJournal = () => {
+  router.navigate('/journal');
+  if (typeof navigation.closeDrawer === 'function') {
+    navigation.closeDrawer();
+  }
+};
+
   const sortedThreads = React.useMemo(() => {
     const list = Array.isArray(threads) ? threads : [];
     return [...list].sort((a, b) => {
@@ -341,6 +348,18 @@ const handleTasks = () => {
         onPress={handleTasks}
       >
         <Text style={[styles.settingsButtonText, { color: colors.textMuted }]}>📋 Tasks</Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        style={({ pressed }) => [
+          styles.settingsButton,
+          pressed && styles.settingsButtonPressed,
+          pressed && { backgroundColor: colors.card },
+          { marginBottom: 8, minHeight: 48, justifyContent: 'center' }
+        ]}
+        onPress={handleJournal}
+      >
+        <Text style={[styles.settingsButtonText, { color: colors.textMuted }]}>📝 Journal</Text>
       </Pressable>
         <Pressable
           accessibilityRole="button"
