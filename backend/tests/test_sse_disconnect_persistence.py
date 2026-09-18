@@ -225,3 +225,52 @@ async def test_tool_call_turn_does_not_clobber_prior_turn(monkeypatch):
             assert rows[1].agent_response == "second answer"
     finally:
         _cleanup_conv(conv_id)
+
+
+@pytest.mark.asyncio
+async def test_chatbot_node_normalizes_structured_list_content(monkeypatch):
+    """Coderabbit #262: list-based text blocks must not collapse to empty string."""
+    monkeypatch.setenv("GOOGLE_API_KEY", "AIzaFakeKeyForT6Test")
+    from agent.graph import chatbot_node
+    from db.client import DBClient
+    from db.models import Experience
+    from db.session import get_db_session
+
+    conv_id = _unique_id("t6-struct")
+    with get_db_session() as session:
+        DBClient(session).create_client_conversation(
+            title="T6 struct", agent="personal assistant", conversation_id=conv_id,
+        )
+
+    def _llm_with(chunks):
+        mock_llm = MagicMock()
+        bound = MagicMock()
+
+        async def _astream(*args, **kwargs):
+            for c in chunks:
+                yield c
+
+        bound.astream = _astream
+        mock_llm.bind_tools.return_value = bound
+        return mock_llm
+
+    try:
+        with patch("agent.graph.build_system_prompt", return_value="sys"):
+            structured_chunk = AIMessageChunk(content=[
+                {"type": "text", "text": "Hello "},
+                {"type": "text", "text": "world!"},
+            ])
+            with patch("agent.graph.get_llm", return_value=_llm_with([structured_chunk])):
+                r = await chatbot_node({
+                    "messages": [HumanMessage(content="test structured")],
+                    "db_conv_id": conv_id,
+                    "agent": "personal assistant",
+                })
+            assert r.get("experience_id")
+
+        with get_db_session() as session:
+            exp = session.query(Experience).filter_by(id=r["experience_id"]).first()
+            assert exp is not None
+            assert exp.agent_response == "Hello world!"
+    finally:
+        _cleanup_conv(conv_id)
