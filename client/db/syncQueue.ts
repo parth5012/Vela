@@ -1,6 +1,7 @@
 import { db } from './client';
 import { operationLog, OperationLogEntity } from './schema';
 import { eq, inArray } from 'drizzle-orm';
+import { generateUlid } from '../utils/syncIds';
 
 export interface DeviceStepSyncEvent {
   id: string;
@@ -66,16 +67,29 @@ export async function drainDeviceStepSyncQueue(
 
   for (const [convId, ops] of grouped.entries()) {
     const events: DeviceStepSyncEvent[] = [];
-    const opIds: string[] = [];
+    const postedIds: string[] = [];
 
     for (const op of ops) {
-      opIds.push(op.id);
-      let data: any = {};
+      let data: any = null;
       try {
         data = JSON.parse(op.payload);
       } catch {
-        data = {};
+        // T5 (#253): quarantine the poison row so one corrupt payload cannot
+        // wedge the queue forever (each retry would rebuild the same junk
+        // event). Delete + count as failed, never abort the batch.
+        console.warn('[syncQueue] Quarantining device-step op with corrupt payload:', op.id);
+        try {
+          await db.delete(operationLog).where(eq(operationLog.id, op.id));
+        } catch (deleteErr) {
+          console.warn('[syncQueue] Failed to quarantine corrupt op:', op.id, deleteErr);
+        }
+        totalFailed += 1;
+        continue;
       }
+
+      // Only posted ids participate in the accepted/rejected accounting below;
+      // quarantined rows are already counted as failed above.
+      postedIds.push(op.id);
 
       events.push({
         id: op.id,
@@ -89,9 +103,14 @@ export async function drainDeviceStepSyncQueue(
       });
     }
 
+    if (events.length === 0) {
+      // Every op in this group was quarantined; nothing to POST.
+      continue;
+    }
+
     const payload: DeviceStepsSyncPayload = {
       conversation_id: convId,
-      client_sync_id: `sync_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      client_sync_id: generateUlid(),
       events,
     };
 
@@ -118,13 +137,13 @@ export async function drainDeviceStepSyncQueue(
         totalSynced += acceptedIds.length;
       }
 
-      const rejectedCount = opIds.length - acceptedIds.length;
+      const rejectedCount = postedIds.length - acceptedIds.length;
       if (rejectedCount > 0) {
         totalFailed += rejectedCount;
       }
     } catch (err) {
       console.warn(`[syncQueue] Failed to sync device steps for conversation ${convId}:`, err);
-      totalFailed += ops.length;
+      totalFailed += postedIds.length;
     }
   }
 

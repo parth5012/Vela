@@ -1,5 +1,5 @@
 import { db } from '../db/client';
-import { operationLog, threads, messages, OperationLogEntity } from '../db/schema';
+import { operationLog, threads, messages } from '../db/schema';
 import { eq, inArray } from 'drizzle-orm';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { markMessageSynced } from '../db/chatRepository';
@@ -10,17 +10,47 @@ export async function syncDatabase(apiUrl: string, apiKey: string): Promise<void
     return;
   }
 
-  // 1. Fetch pending sync operations from operation log
-  const pendingOps = await db.select().from(operationLog);
+  // 1. Fetch pending MESSAGE sync operations. Device steps share the same
+  // operation_log table but drain exclusively via POST /api/sync/device-steps
+  // (drainDeviceStepSyncQueue) — POSTing them to /api/sync/push only earns a
+  // server rejection, so filter them out at the query (T5, issue #253).
+  const pendingOps = await db
+    .select()
+    .from(operationLog)
+    .where(eq(operationLog.type, 'message'));
 
-  if (pendingOps.length > 0) {
-    const mappedOps = pendingOps.map((op: OperationLogEntity) => ({
-      id: op.id,
-      type: op.type,
-      conversation_id: op.conversation_id,
-      payload: JSON.parse(op.payload),
-    }));
+  // Per-row parse with quarantine: one corrupt payload must never abort the
+  // whole sync (T5, issue #253). Bad rows are deleted (dead-lettered) and
+  // logged; the message row itself is left untouched.
+  const mappedOps: {
+    id: string;
+    type: string;
+    conversation_id: string;
+    payload: unknown;
+  }[] = [];
+  for (const op of pendingOps) {
+    try {
+      mappedOps.push({
+        id: op.id,
+        type: op.type,
+        conversation_id: op.conversation_id,
+        payload: JSON.parse(op.payload),
+      });
+    } catch (err) {
+      console.warn('[Sync] Quarantining operation with corrupt payload:', op.id, err);
+      try {
+        await db.delete(operationLog).where(eq(operationLog.id, op.id));
+      } catch (deleteErr) {
+        console.warn('[Sync] Failed to quarantine corrupt operation:', op.id, deleteErr);
+      }
+    }
+  }
 
+  // Defense-in-depth: even if the query filter above is ever bypassed
+  // (mocked db, query-builder drift), never POST device_step ops to /push.
+  const pushableOps = mappedOps.filter((op) => op.type === 'message');
+
+  if (pushableOps.length > 0) {
     const pushResponse = await fetch(`${apiUrl}/api/sync/push`, {
       method: 'POST',
       headers: {
@@ -28,7 +58,7 @@ export async function syncDatabase(apiUrl: string, apiKey: string): Promise<void
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       },
-      body: JSON.stringify({ operations: mappedOps }),
+      body: JSON.stringify({ operations: pushableOps }),
     });
 
     if (!pushResponse.ok) {

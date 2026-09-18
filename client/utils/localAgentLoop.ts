@@ -3,6 +3,7 @@ import { evaluateSafety } from './safetyManager';
 import { executeDeviceAction } from './deviceActionExecutor';
 import { db } from '../db/client';
 import { operationLog } from '../db/schema';
+import { generateUlid } from './syncIds';
 
 export interface ParsedToolCall {
   toolName: string;
@@ -187,7 +188,11 @@ async function logDeviceStepToDb(
     });
 
     await db.insert(operationLog).values({
-      id: `devicestep_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+      // T5 (#253): ULID so the id stays monotonic in the server's ULID cursor
+      // space even if the row ever lands in `sync_messages` with a pull-visible
+      // provider. (Device steps also carry provider android_client, which
+      // sync_pull already excludes — belt and braces, see utils/syncIds.ts.)
+      id: generateUlid(),
       type: 'device_step',
       conversation_id: conversationId,
       payload,

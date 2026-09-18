@@ -65,6 +65,7 @@ const generateUUID = () => {
 };
 
 import { DEFAULT_PERSONAS, COMPACT_PERSONAS_INSTRUCTIONS } from '../utils/personas';
+import { generateUlid } from '../utils/syncIds';
 
 const QUOTES = [
   { text: "An investment in knowledge pays the best interest.", author: "Benjamin Franklin" },
@@ -79,8 +80,13 @@ const QUOTES = [
   { text: "Focus on being productive instead of busy.", author: "Tim Ferriss" }
 ];
 
-const generateId = (prefix: string) => {
-  return prefix + '_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
+const generateId = (_prefix: string) => {
+  // T5 (#253): cursor-safe IDs are pure ULIDs. The prefix argument is kept so
+  // existing call sites stay readable (`generateId('msg_user')`), but it is
+  // intentionally NOT embedded: any constant prefix would make
+  // `sync_pull`'s `id > cursor ORDER BY id` sort by type first and skip rows
+  // across pages (finding-009). See utils/syncIds.ts.
+  return generateUlid();
 };
 
 function SourceCard({ src, colors, sizes, accentHex }: { src: SearchSource; colors: any; sizes: any; accentHex: string }) {
