@@ -3,7 +3,7 @@
 from unittest.mock import patch, MagicMock
 from datetime import datetime, timezone
 
-from utils.auth_gate import ensure_google_auth, AUTH_REQUIRED
+from utils.auth_gate import ensure_google_auth, AUTH_REQUIRED, GLOBAL_OAUTH_CONVERSATION_ID
 
 
 # ---------------------------------------------------------------------------
@@ -76,7 +76,7 @@ def test_valid_tokens_returns_credentials():
 
     assert result is not AUTH_REQUIRED
     assert result is dummy_creds
-    db.get_oauth_tokens.assert_called_once_with("global", "google")
+    db.get_oauth_tokens.assert_called_once_with(GLOBAL_OAUTH_CONVERSATION_ID, "google")
     mock_creds.assert_called_once()
 
 
@@ -105,7 +105,7 @@ def test_expired_tokens_refreshes_and_persists():
     refreshed_creds.refresh.assert_called_once_with(mock_request.return_value)
     # Verify tokens were persisted back
     db.store_oauth_tokens.assert_called_once_with(
-        "global",
+        GLOBAL_OAUTH_CONVERSATION_ID,
         "google",
         {
             "access_token": "at-updated-xyz",

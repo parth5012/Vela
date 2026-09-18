@@ -22,7 +22,8 @@ class PostgresDB:
             self.logger.error("Database query failed, returning fallback mock-uuid", error=str(e), telegram_chat_id=telegram_chat_id)
             return "mock-conversation-uuid"
 
-    def store_oauth_tokens(self, conversation_id: str, provider: str, token_data: dict):
+    def store_oauth_tokens(self, conversation_id: str, provider: str, token_data: dict) -> bool:
+        """Persist OAuth tokens. Returns True on success, raises on failure."""
         self.logger.info("Storing OAuth tokens via SQLAlchemy", conversation_id=conversation_id, provider=provider)
         try:
             with get_db_session() as session:
@@ -30,8 +31,10 @@ class PostgresDB:
                 client.store_oauth_token(conversation_id, provider, token_data)
                 session.commit()
                 self.logger.info("Successfully saved OAuth tokens", conversation_id=conversation_id, provider=provider)
+                return True
         except Exception as e:
             self.logger.error("Failed to store OAuth tokens", error=str(e), conversation_id=conversation_id, provider=provider)
+            raise
 
     def get_oauth_tokens(self, conversation_id: str, provider: str) -> dict | None:
         self.logger.info("Retrieving OAuth tokens via SQLAlchemy", conversation_id=conversation_id, provider=provider)
