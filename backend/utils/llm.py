@@ -13,6 +13,14 @@ from utils.logger import StructuredLogger
 
 logger = StructuredLogger("llm_fallback")
 
+# Re-exported here so embedding producers and the pgvector schema share one
+# width. All providers below (primary Gemini + Voyage/Jina fallbacks) are
+# pinned to this dimensionality to match db/models.py:MemoryVector.
+try:
+    from db.models import EMBEDDING_DIMENSIONS
+except ImportError:  # pragma: no cover - db package unavailable (docs/tests)
+    EMBEDDING_DIMENSIONS = 512
+
 
 class FallbackLoggingHandler(BaseCallbackHandler):
     def on_llm_start(self, serialized, prompts, **kwargs):
@@ -122,7 +130,7 @@ def get_embeddings():
     primary_emb = GoogleGenerativeAIEmbeddings(
         model="models/gemini-embedding-2",
         api_key=google_api_key,
-        output_dimensionality=512,
+        output_dimensionality=EMBEDDING_DIMENSIONS,
     )
 
     embeddings_list = [primary_emb]
@@ -131,7 +139,7 @@ def get_embeddings():
     if voyage_api_key and not voyage_api_key.startswith("your_"):
         embeddings_list.append(
             VoyageAIEmbeddings(
-                model="voyage-3", api_key=voyage_api_key, output_dimension=512
+                model="voyage-3", api_key=voyage_api_key, output_dimension=EMBEDDING_DIMENSIONS
             )
         )
 
@@ -141,7 +149,7 @@ def get_embeddings():
             JinaEmbeddings(
                 model="jina-embeddings-v3",
                 jina_api_key=jina_api_key,
-                model_kwargs={"dimensions": 512},
+                model_kwargs={"dimensions": EMBEDDING_DIMENSIONS},
             )
         )
 

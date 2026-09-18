@@ -8,18 +8,26 @@ CREATE TABLE IF NOT EXISTS conversations (
 );
 
 CREATE TABLE IF NOT EXISTS oauth_tokens (
-    conversation_id UUID PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+    conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE,
     provider VARCHAR(50) NOT NULL,
     token_data JSONB NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    PRIMARY KEY (conversation_id, provider)
 );
+-- Migration for pre-T2 deployments whose PK was (conversation_id) only:
+--   ALTER TABLE oauth_tokens DROP CONSTRAINT IF EXISTS oauth_tokens_pkey;
+--   ALTER TABLE oauth_tokens ALTER COLUMN provider SET NOT NULL;
+--   ALTER TABLE oauth_tokens ADD PRIMARY KEY (conversation_id, provider);
+-- (Existing single-provider rows migrate cleanly: conversation_id was unique.)
 CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE TABLE IF NOT EXISTS memory_vectors (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
+    -- Width must match EMBEDDING_DIMENSIONS in db/models.py (shared with
+    -- utils/llm.py:get_embeddings, where Gemini/Voyage/Jina are pinned to 512).
     embedding VECTOR(512) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );

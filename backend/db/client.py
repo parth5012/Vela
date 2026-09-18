@@ -1,7 +1,7 @@
 import uuid
 import json
 from sqlalchemy.orm import Session
-from db.models import Conversation, OAuthToken, MemoryVector, Experience, SystemPromptFragment, SkillsRegistry, SystemSetting, Briefing, CheckIn
+from db.models import Conversation, OAuthToken, MemoryVector, Experience, SystemPromptFragment, SkillsRegistry, SystemSetting, Briefing, CheckIn, EMBEDDING_DIMENSIONS
 from datetime import datetime, timedelta, UTC
 from utils.ulid import generate_ulid
 
@@ -108,7 +108,17 @@ class DBClient:
             
         Returns:
             The created MemoryVector instance.
+
+        Raises:
+            ValueError: If the embedding width != EMBEDDING_DIMENSIONS.
         """
+        if len(embedding_vector) != EMBEDDING_DIMENSIONS:
+            raise ValueError(
+                f"Embedding dimension mismatch: got {len(embedding_vector)} dims, "
+                f"expected {EMBEDDING_DIMENSIONS} (pgvector VECTOR({EMBEDDING_DIMENSIONS})). "
+                "Regenerate the embedding with output_dimensionality="
+                f"{EMBEDDING_DIMENSIONS} (see utils/llm.py:get_embeddings)."
+            )
         vector_id = str(uuid.uuid4())
         vector = MemoryVector(id=vector_id, conversation_id=conversation_id, content=content, vector=embedding_vector)
         self.session.add(vector)

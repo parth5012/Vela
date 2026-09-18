@@ -1,18 +1,24 @@
 import uuid
 from datetime import datetime
 from sqlalchemy import JSON, DateTime, Integer, String, Float, Boolean, Column, ForeignKey, BigInteger, Text, UniqueConstraint
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import declarative_base, validates
 from utils.ulid import generate_ulid
 from pgvector.sqlalchemy import Vector
 
 Base = declarative_base()
 
+# Single source of truth for the pgvector embedding width.
+# Must stay in sync with db/schema.sql `VECTOR(512)` and the
+# output_dimensionality used in utils/llm.py:get_embeddings
+# (primary Gemini + Voyage/Jina fallbacks are all pinned to 512 there).
+EMBEDDING_DIMENSIONS = 512
+
 
 class Conversation(Base):
     __tablename__ = "conversations"
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    telegram_chat_id = Column(Integer, unique=True, index=True, nullable=True)
-    discord_channel_id = Column(Integer, unique=True, index=True, nullable=True)
+    telegram_chat_id = Column(BigInteger, unique=True, index=True, nullable=True)
+    discord_channel_id = Column(BigInteger, unique=True, index=True, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
     title = Column(String(255), default="New Chat")
@@ -25,11 +31,14 @@ class Conversation(Base):
 
 class OAuthToken(Base):
     __tablename__ = "oauth_tokens"
+    # Composite PK: one Conversation holds one row per provider
+    # (google + future providers). Legacy single-provider rows migrate
+    # cleanly since conversation_id was already unique.
     conversation_id = Column(
         String, ForeignKey("conversations.id", ondelete="CASCADE"), primary_key=True
     )
+    provider = Column(String, primary_key=True)
     token = Column("token_data", JSON, nullable=False)
-    provider = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
 
@@ -37,9 +46,20 @@ class MemoryVector(Base):
     __tablename__ = "memory_vectors"
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     conversation_id = Column(String, ForeignKey("conversations.id", ondelete="CASCADE"), index=True)
-    vector = Column("embedding", Vector(512), nullable=False)
+    vector = Column("embedding", Vector(EMBEDDING_DIMENSIONS), nullable=False)
     content = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    @validates("vector")
+    def validate_vector_dimensions(self, key, value):
+        if value is not None and len(value) != EMBEDDING_DIMENSIONS:
+            raise ValueError(
+                f"Embedding dimension mismatch: got {len(value)} dims, "
+                f"expected {EMBEDDING_DIMENSIONS} (pgvector VECTOR({EMBEDDING_DIMENSIONS})). "
+                "Regenerate the embedding with output_dimensionality="
+                f"{EMBEDDING_DIMENSIONS} (see utils/llm.py:get_embeddings)."
+            )
+        return value
 
 class Experience(Base):
     __tablename__ = "experiences"
