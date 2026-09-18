@@ -193,6 +193,13 @@ export const useChatStore = create<ChatState>()(
         threads: updatedThreads
       };
     });
+    // T5 (#253): persist the bumped updated_at alongside the message so the
+    // SQLite thread ordering (loadThreads: updated_at DESC) still matches the
+    // in-memory order after an app restart.
+    const updatedThread = useChatStore.getState().threads.find((t) => t.id === threadId);
+    if (updatedThread) {
+      saveThread(updatedThread).catch(() => {});
+    }
     saveMessage(threadId, message).catch(() => {});
   },
       appendToken: (threadId, token) => {

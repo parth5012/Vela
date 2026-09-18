@@ -98,7 +98,7 @@ describe('syncQueue - Drizzle SQLite device-step batch sync', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('preserves items in operationLog on network failure', async () => {
+    it('preserves items in operationLog on network failure', async () => {
     const mockPendingOps = [
       {
         id: 'devicestep_failed',
@@ -126,5 +126,66 @@ describe('syncQueue - Drizzle SQLite device-step batch sync', () => {
     expect(result.syncedCount).toBe(0);
     expect(result.failedCount).toBe(1);
     expect(db!.delete).not.toHaveBeenCalled();
+  });
+
+  it('quarantines a corrupt-payload row and still drains the good row (T5)', async () => {
+    const mockPendingOps = [
+      {
+        id: 'devicestep_bad',
+        type: 'device_step',
+        conversation_id: 'conv_bad',
+        payload: '{not valid json',
+        created_at: 1725700000000,
+      },
+      {
+        id: 'devicestep_good',
+        type: 'device_step',
+        conversation_id: 'conv_good',
+        payload: JSON.stringify({
+          toolName: 'device_info',
+          status: 'executed',
+          observation: 'Battery: 85%',
+          timestamp: 1725700002000,
+        }),
+        created_at: 1725700002000,
+      },
+    ];
+
+    const mockWhere = jest.fn().mockReturnValue({
+      limit: jest.fn().mockResolvedValue(mockPendingOps),
+    });
+    (db!.select as jest.Mock).mockReturnValue({
+      from: jest.fn().mockReturnValue({ where: mockWhere }),
+    });
+
+    const mockDeleteWhere = jest.fn().mockResolvedValue(true);
+    (db!.delete as jest.Mock).mockReturnValue({
+      where: mockDeleteWhere,
+    });
+
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValue({
+        status: 'ok',
+        accepted: ['devicestep_good'],
+        processed: 1,
+      }),
+    });
+
+    const result = await drainDeviceStepSyncQueue(mockApiUrl, mockApiKey);
+
+    // Good row synced, corrupt row quarantined (deleted, counted as failed).
+    expect(result.syncedCount).toBe(1);
+    expect(result.failedCount).toBe(1);
+
+    // Only the good conversation was POSTed; the quarantined group was skipped.
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const postedBody = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+    expect(postedBody.conversation_id).toBe('conv_good');
+    expect(postedBody.events.map((e: any) => e.id)).toEqual(['devicestep_good']);
+
+    // Quarantine delete + accepted delete.
+    expect(db!.delete).toHaveBeenCalledTimes(2);
   });
 });
