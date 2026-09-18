@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS memory_vectors (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_memory_vectors_conversation_id ON memory_vectors(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_memory_vectors_embedding_cosine ON memory_vectors USING hnsw (embedding vector_cosine_ops);
 
 CREATE TABLE IF NOT EXISTS experiences (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
