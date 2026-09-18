@@ -256,6 +256,25 @@ async def lifespan(app: FastAPI):
                             conn.execute(text("DROP TABLE oauth_tokens_legacy"))
         except Exception as e:
             logger.error("Failed to migrate oauth_tokens primary key", error=str(e))
+            raise
+
+        # 8. Widen conversations chat-ID columns to BIGINT on PostgreSQL (T2):
+        # models declare BigInteger to match schema.sql; pre-existing INTEGER
+        # columns would reject Discord snowflakes above 2^31-1. SQLite needs
+        # no change (its INTEGER already stores 64-bit).
+        try:
+            if engine.dialect.name == "postgresql":
+                from sqlalchemy import inspect as sa_inspect_bigint
+                pg_cols = {c["name"]: str(c["type"]) for c in sa_inspect_bigint(engine).get_columns("conversations")}
+                for chat_col in ("telegram_chat_id", "discord_channel_id"):
+                    col_type = pg_cols.get(chat_col, "")
+                    if col_type and "BIGINT" not in col_type.upper() and "INT8" not in col_type.upper():
+                        logger.info(f"Database migration: widening conversations.{chat_col} to BIGINT")
+                        with engine.begin() as conn:
+                            conn.execute(text(f"ALTER TABLE conversations ALTER COLUMN {chat_col} TYPE BIGINT"))
+        except Exception as e:
+            logger.error("Failed to widen conversations chat-ID columns to BIGINT", error=str(e))
+            raise
 
     yield
 

@@ -136,6 +136,10 @@ def run_migrations():
     print("\nChecking 'oauth_tokens' primary key...")
     migrate_oauth_tokens_composite_pk(engine)
 
+    # 7. Conversations chat-ID columns to BIGINT on PostgreSQL (T2)
+    print("\nChecking 'conversations' chat-ID column types...")
+    migrate_chat_ids_bigint(engine)
+
     # Verification
     inspector = inspect(engine)
     final_tables = set(inspector.get_table_names())
@@ -184,6 +188,38 @@ def migrate_oauth_tokens_composite_pk(engine):
             conn.execute(text("DROP TABLE oauth_tokens_legacy;"))
     print("  'oauth_tokens' PK migration applied.")
     return True
+
+
+def migrate_chat_ids_bigint(engine):
+    """Widen conversations.telegram_chat_id/discord_channel_id to BIGINT on PG.
+
+    models.py declares BigInteger to match schema.sql; pre-existing INTEGER
+    columns would reject Discord snowflakes above 2^31-1. SQLite needs no
+    change (its INTEGER already stores 64-bit). Idempotent: only alters
+    columns whose current type is not already BIGINT/INT8.
+    """
+    from sqlalchemy import inspect as sa_inspect
+    if engine.dialect.name != "postgresql":
+        print("  Non-Postgres dialect, skipping BIGINT widen.")
+        return False
+    inspector = sa_inspect(engine)
+    if "conversations" not in inspector.get_table_names():
+        print("  'conversations' table missing, skipping BIGINT widen.")
+        return False
+    cols = {c["name"]: str(c["type"]) for c in inspector.get_columns("conversations")}
+    widened = False
+    for chat_col in ("telegram_chat_id", "discord_channel_id"):
+        col_type = cols.get(chat_col, "")
+        if col_type and "BIGINT" not in col_type.upper() and "INT8" not in col_type.upper():
+            print(f"  Widening 'conversations.{chat_col}' to BIGINT...")
+            with engine.begin() as conn:
+                conn.execute(text(f"ALTER TABLE conversations ALTER COLUMN {chat_col} TYPE BIGINT;"))
+            widened = True
+    if not widened:
+        print("  'conversations' chat-ID columns already BIGINT, skipping.")
+    else:
+        print("  'conversations' chat-ID widen applied.")
+    return widened
 
 
 if __name__ == "__main__":
