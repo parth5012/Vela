@@ -1711,26 +1711,32 @@ def sync_push(payload: SyncPushPayload):
                         op_ok = False
                     else:
                         existing = session.query(SyncMessage).filter_by(id=op.id).first()
-                        if not existing:
-                            role = op.payload.get("role", "")
-                            content = op.payload.get("content", "")
-                            provider = op.payload.get("provider", "")
-                            created_at = op.payload.get("created_at")
+                        if existing and existing.conversation_id != op.conversation_id:
+                            # Global PK collision: the caller's ID already belongs
+                            # to another conversation — reject, never overwrite
+                            # or misattribute it (coderabbit #260).
+                            op_ok = False
+                        else:
+                            if not existing:
+                                role = op.payload.get("role", "")
+                                content = op.payload.get("content", "")
+                                provider = op.payload.get("provider", "")
+                                created_at = op.payload.get("created_at")
 
-                            if created_at is None:
-                                created_at = int(time.time() * 1000)
+                                if created_at is None:
+                                    created_at = int(time.time() * 1000)
 
-                            new_msg = SyncMessage(
-                                id=op.id,
-                                conversation_id=op.conversation_id,
-                                role=role,
-                                content=content,
-                                provider=provider,
-                                created_at=int(created_at)
-                            )
-                            session.add(new_msg)
-                        session.flush()
-                        op_ok = True
+                                new_msg = SyncMessage(
+                                    id=op.id,
+                                    conversation_id=op.conversation_id,
+                                    role=role,
+                                    content=content,
+                                    provider=provider,
+                                    created_at=int(created_at)
+                                )
+                                session.add(new_msg)
+                            session.flush()
+                            op_ok = True
             except HTTPException:
                 raise
             except Exception as e:
@@ -1867,6 +1873,10 @@ def sync_device_steps(payload: DeviceStepsSyncPayload):
                         f"[{ev.status.upper()}] {ev.tool_name or 'action'}: {ev.observation or ''}"
                     )
                     existing_msg = session.query(SyncMessage).filter_by(id=ev.id).first()
+                    if existing_msg and existing_msg.conversation_id != payload.conversation_id:
+                        # Global PK collision across conversations — reject via
+                        # the per-item savepoint handler (coderabbit #260).
+                        raise ValueError("SyncMessage ID belongs to another conversation")
                     if not existing_msg:
                         created_ts = ev.timestamp or int(datetime.now(timezone.utc).timestamp() * 1000)
                         new_msg = SyncMessage(
