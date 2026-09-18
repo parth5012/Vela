@@ -132,10 +132,58 @@ def run_migrations():
     else:
         print("  'briefings' exists.")
 
+    # 6. OAuth tokens composite PK (T2: multi-provider per conversation)
+    print("\nChecking 'oauth_tokens' primary key...")
+    migrate_oauth_tokens_composite_pk(engine)
+
     # Verification
     inspector = inspect(engine)
     final_tables = set(inspector.get_table_names())
     print(f"\nMigration complete! Current tables: {sorted(final_tables)}")
+
+
+def migrate_oauth_tokens_composite_pk(engine):
+    """Migrate oauth_tokens PK (conversation_id) -> (conversation_id, provider).
+
+    Lets one Conversation hold google + future providers. Existing
+    single-provider rows migrate cleanly (conversation_id was unique).
+    Returns True if a migration was applied.
+    """
+    from sqlalchemy import inspect as sa_inspect
+    inspector = sa_inspect(engine)
+    if "oauth_tokens" not in inspector.get_table_names():
+        return False
+    pk_cols = set(
+        (inspector.get_pk_constraint("oauth_tokens") or {}).get("constrained_columns", [])
+    )
+    if pk_cols != {"conversation_id"}:
+        print("  'oauth_tokens' PK already composite, skipping.")
+        return False
+    print("  Migrating 'oauth_tokens' PK -> (conversation_id, provider)...")
+    if engine.dialect.name == "postgresql":
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE oauth_tokens DROP CONSTRAINT IF EXISTS oauth_tokens_pkey;"))
+            conn.execute(text("ALTER TABLE oauth_tokens ALTER COLUMN provider SET NOT NULL;"))
+            conn.execute(text("ALTER TABLE oauth_tokens ADD PRIMARY KEY (conversation_id, provider);"))
+    else:
+        # SQLite cannot drop PK constraints; rebuild preserving rows.
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE oauth_tokens RENAME TO oauth_tokens_legacy;"))
+            conn.execute(text("""
+                CREATE TABLE oauth_tokens (
+                    conversation_id VARCHAR(255) NOT NULL,
+                    provider VARCHAR(50) NOT NULL,
+                    token_data JSON NOT NULL,
+                    created_at TIMESTAMP,
+                    updated_at TIMESTAMP,
+                    PRIMARY KEY (conversation_id, provider),
+                    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+                );
+            """))
+            conn.execute(text("INSERT INTO oauth_tokens SELECT conversation_id, provider, token_data, created_at, updated_at FROM oauth_tokens_legacy;"))
+            conn.execute(text("DROP TABLE oauth_tokens_legacy;"))
+    print("  'oauth_tokens' PK migration applied.")
+    return True
 
 
 if __name__ == "__main__":

@@ -187,3 +187,48 @@ def test_save_experience_invalid_conversation(db_session):
     with pytest.raises(IntegrityError):
         client.save_experience("non-existent-conv-id", "hello", "world")
         db_session.commit()
+
+
+def test_store_multiple_providers_same_conversation(db_session):
+    """One Conversation can hold tokens for google + future providers (T2)."""
+    client = DBClient(db_session)
+    conv = client.get_or_create_conversation(12345)
+
+    client.store_oauth_token(conv.id, "google", {"access_token": "g-abc"})
+    client.store_oauth_token(conv.id, "github", {"access_token": "gh-abc"})
+    db_session.commit()
+
+    assert client.get_oauth_token(conv.id, "google").token == {"access_token": "g-abc"}
+    assert client.get_oauth_token(conv.id, "github").token == {"access_token": "gh-abc"}
+
+
+def test_discord_snowflake_bigint_roundtrip(db_session):
+    """Discord snowflakes exceed 32-bit int; columns must be BigInteger (T2)."""
+    from sqlalchemy import BigInteger
+    from db.models import Conversation
+
+    assert isinstance(Conversation.__table__.c.telegram_chat_id.type, BigInteger)
+    assert isinstance(Conversation.__table__.c.discord_channel_id.type, BigInteger)
+
+    client = DBClient(db_session)
+    snowflake = 123456789012345678
+    conv = client.get_or_create_discord_conversation(snowflake)
+    db_session.commit()
+    db_session.expire_all()
+
+    fetched = client.get_or_create_discord_conversation(snowflake)
+    assert fetched.id == conv.id
+    assert fetched.discord_channel_id == snowflake
+
+
+def test_save_memory_vector_rejects_wrong_dim(db_session):
+    """Wrong-dim embeddings fail with an actionable error, not a raw DB exception (T2)."""
+    from db.models import EMBEDDING_DIMENSIONS
+
+    assert EMBEDDING_DIMENSIONS == 512
+
+    client = DBClient(db_session)
+    conv = client.get_or_create_conversation(12345)
+
+    with pytest.raises(ValueError, match="512"):
+        client.save_memory_vector(conv.id, "bad dim fact", [0.1] * 128)
