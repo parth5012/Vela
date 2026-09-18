@@ -135,7 +135,25 @@ Example response format:
     return {"active_skill": new_active_skill, "next_node": "chatbot"}
 
 
-    
+def _normalize_content(content) -> str:
+    """Normalize LangChain AIMessage content (string, dict, or list of content blocks) to a plain string."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                parts.append(item.get("text", ""))
+            elif hasattr(item, "text"):
+                parts.append(getattr(item, "text", ""))
+            elif hasattr(item, "get") and "text" in item:
+                parts.append(item.get("text"))
+        return "".join(parts)
+    if content is None:
+        return ""
+    return str(content)
 
 
 async def chatbot_node(state: AgentState) -> dict:
@@ -216,7 +234,7 @@ async def chatbot_node(state: AgentState) -> dict:
                 from db.client import DBClient
                 client = DBClient(session)
                 content = response_msg.content
-                content_str = content if isinstance(content, str) else ""
+                content_str = _normalize_content(content)
                 if experience_id:
                     exp = session.query(Experience).filter_by(id=experience_id).first()
                     if exp is not None:
