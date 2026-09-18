@@ -737,7 +737,7 @@ def branch_thread(payload: BranchPayload):
             if not parent_conv:
                 raise HTTPException(status_code=404, detail="Parent thread not found")
             
-            new_conv = Conversation(id=new_id, title=payload.title[:255], agent=parent_conv.agent)
+            new_conv = Conversation(id=new_id, title=payload.title[:255], agent=parent_conv.agent, source=parent_conv.source)
             session.add(new_conv)
             session.flush()
             
@@ -782,10 +782,22 @@ def truncate_thread(thread_id: str, payload: TruncatePayload):
                 target_exp = None
             if not target_exp:
                 raise HTTPException(status_code=404, detail="Message not found in thread")
-            
+            # Capture cutoff before deletes (avoid read-after-delete on expired object).
+            target_created_at = target_exp.created_at
+            threshold_ms = int(target_created_at.replace(tzinfo=timezone.utc).timestamp() * 1000)
+
             session.query(Experience).filter(
                 Experience.conversation_id == normalized_id,
-                Experience.created_at >= target_exp.created_at
+                Experience.created_at >= target_created_at
+            ).delete(synchronize_session=False)
+
+            # Prune sync rows at/after the cut so a later sync_pull cannot
+            # resurrect truncated messages (wayfinder T4, issue #252).
+            # SyncMessage.created_at is epoch-ms while Experience.created_at
+            # is naive UTC datetime (T3 rule), hence the conversion.
+            session.query(SyncMessage).filter(
+                SyncMessage.conversation_id == normalized_id,
+                SyncMessage.created_at >= threshold_ms
             ).delete(synchronize_session=False)
 
             conv = session.query(Conversation).filter_by(id=normalized_id).first()
@@ -1677,43 +1689,60 @@ def sync_push(payload: SyncPushPayload):
                 rejected.append(op.id)
                 continue
 
-            conv = session.query(Conversation).filter_by(id=op.conversation_id).first()
-            if not conv:
-                # Auto-create the conversation for local-first offline sync:
-                # a thread created entirely on the device has no backend
-                # counterpart until its first flush.
-                conv = client.create_client_conversation(
-                    title="Synced Conversation",
-                    agent="personal assistant",
-                    conversation_id=op.conversation_id,
-                    source="android_client"
-                )
-            if conv.source != "android_client":
+            try:
+                # Per-item SAVEPOINT (wayfinder T4, issue #252): a poison op
+                # rolls back to here without discarding the rest of the batch,
+                # and the client can retry just the rejected ids idempotently.
+                # This is a SAVEPOINT, not a commit — the outer get_db_session
+                # still owns the single final commit (T3 rule, issue #251).
+                with session.begin_nested():
+                    conv = session.query(Conversation).filter_by(id=op.conversation_id).first()
+                    if not conv:
+                        # Auto-create the conversation for local-first offline sync:
+                        # a thread created entirely on the device has no backend
+                        # counterpart until its first flush.
+                        conv = client.create_client_conversation(
+                            title="Synced Conversation",
+                            agent="personal assistant",
+                            conversation_id=op.conversation_id,
+                            source="android_client"
+                        )
+                    if conv.source != "android_client":
+                        op_ok = False
+                    else:
+                        existing = session.query(SyncMessage).filter_by(id=op.id).first()
+                        if not existing:
+                            role = op.payload.get("role", "")
+                            content = op.payload.get("content", "")
+                            provider = op.payload.get("provider", "")
+                            created_at = op.payload.get("created_at")
+
+                            if created_at is None:
+                                created_at = int(time.time() * 1000)
+
+                            new_msg = SyncMessage(
+                                id=op.id,
+                                conversation_id=op.conversation_id,
+                                role=role,
+                                content=content,
+                                provider=provider,
+                                created_at=int(created_at)
+                            )
+                            session.add(new_msg)
+                        session.flush()
+                        op_ok = True
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error("sync_push rejected poisoned op", op_id=op.id, error=str(e))
                 rejected.append(op.id)
                 continue
 
-            existing = session.query(SyncMessage).filter_by(id=op.id).first()
-            if not existing:
-                role = op.payload.get("role", "")
-                content = op.payload.get("content", "")
-                provider = op.payload.get("provider", "")
-                created_at = op.payload.get("created_at")
-
-                if created_at is None:
-                    created_at = int(time.time() * 1000)
-
-                new_msg = SyncMessage(
-                    id=op.id,
-                    conversation_id=op.conversation_id,
-                    role=role,
-                    content=content,
-                    provider=provider,
-                    created_at=int(created_at)
-                )
-                session.add(new_msg)
-
-            accepted.append(op.id)
-            latest_ulid = op.id
+            if op_ok:
+                accepted.append(op.id)
+                latest_ulid = max(latest_ulid, op.id) if latest_ulid else op.id
+            else:
+                rejected.append(op.id)
 
     return {
         "accepted": accepted,
@@ -1815,6 +1844,9 @@ def sync_device_steps(payload: DeviceStepsSyncPayload):
                 source="android_client",
             )
         elif conv.source != "android_client":
+            # Raised before any writes: get_db_session rolls the untouched
+            # transaction back and re-raises, so FastAPI returns a clean 400
+            # with no broken-transaction state left behind.
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot sync device steps to non-client conversation",
@@ -1825,40 +1857,52 @@ def sync_device_steps(payload: DeviceStepsSyncPayload):
                 rejected.append(ev.id or "missing_id")
                 continue
 
-            # 1. Idempotent upsert into SyncMessage
-            msg_content = ev.content or (
-                f"[{ev.status.upper()}] {ev.tool_name or 'action'}: {ev.observation or ''}"
-            )
-            existing_msg = session.query(SyncMessage).filter_by(id=ev.id).first()
-            if not existing_msg:
-                created_ts = ev.timestamp or int(datetime.now(timezone.utc).timestamp() * 1000)
-                new_msg = SyncMessage(
-                    id=ev.id,
-                    conversation_id=payload.conversation_id,
-                    role=ev.role or "assistant",
-                    content=msg_content,
-                    provider="android_client",
-                    created_at=int(created_ts),
-                )
-                session.add(new_msg)
-            else:
-                existing_msg.content = msg_content
-
-            # 2. Idempotent upsert into ToolInvocation if tool_name is present
-            if ev.tool_name:
-                existing_tool = session.query(ToolInvocation).filter_by(request_id=ev.id).first()
-                if not existing_tool:
-                    tool_inv = ToolInvocation(
-                        request_id=ev.id,
-                        tool_name=ev.tool_name,
-                        status=ev.status or "executed",
-                        result=ev.observation,
-                        created_at=utcnow_naive(),
+            try:
+                # Per-item SAVEPOINT (wayfinder T4, issue #252): same contract
+                # as sync_push — one poison event must not discard the batch.
+                # SAVEPOINT only; final commit stays with get_db_session (T3).
+                with session.begin_nested():
+                    # 1. Idempotent upsert into SyncMessage
+                    msg_content = ev.content or (
+                        f"[{ev.status.upper()}] {ev.tool_name or 'action'}: {ev.observation or ''}"
                     )
-                    session.add(tool_inv)
-                else:
-                    existing_tool.status = ev.status or "executed"
-                    existing_tool.result = ev.observation
+                    existing_msg = session.query(SyncMessage).filter_by(id=ev.id).first()
+                    if not existing_msg:
+                        created_ts = ev.timestamp or int(datetime.now(timezone.utc).timestamp() * 1000)
+                        new_msg = SyncMessage(
+                            id=ev.id,
+                            conversation_id=payload.conversation_id,
+                            role=ev.role or "assistant",
+                            content=msg_content,
+                            provider="android_client",
+                            created_at=int(created_ts),
+                        )
+                        session.add(new_msg)
+                    else:
+                        existing_msg.content = msg_content
+
+                    # 2. Idempotent upsert into ToolInvocation if tool_name is present
+                    if ev.tool_name:
+                        existing_tool = session.query(ToolInvocation).filter_by(request_id=ev.id).first()
+                        if not existing_tool:
+                            tool_inv = ToolInvocation(
+                                request_id=ev.id,
+                                tool_name=ev.tool_name,
+                                status=ev.status or "executed",
+                                result=ev.observation,
+                                created_at=utcnow_naive(),
+                            )
+                            session.add(tool_inv)
+                        else:
+                            existing_tool.status = ev.status or "executed"
+                            existing_tool.result = ev.observation
+                    session.flush()
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error("sync_device_steps rejected poisoned event", event_id=ev.id, error=str(e))
+                rejected.append(ev.id)
+                continue
 
             accepted.append(ev.id)
 
