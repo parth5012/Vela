@@ -171,7 +171,6 @@ class CheckIn(Base):
     A second check-in on the same day replaces the first via the unique
     (conversation_id, date) constraint (same-day upsert).
     """
-
     __tablename__ = "check_ins"
     __table_args__ = (UniqueConstraint("conversation_id", "date", name="uq_checkins_conversation_date"),)
 
@@ -186,4 +185,27 @@ class CheckIn(Base):
     source = Column(String(50), default="android_client", nullable=False)
     created_at = Column(DateTime, default=utcnow_naive, nullable=False)
     updated_at = Column(DateTime, default=utcnow_naive, nullable=False)
+
+
+class PendingClientMailbox(Base):
+    """Cross-worker fallback for client tool responses (wayfinder T8).
+
+    ``wait_for_client_event`` registers a ``waiting`` row; a response POST
+    landing on a *different* worker (no in-memory ``PENDING_TASKS`` entry)
+    marks the row ``responded`` instead of 404ing, and the waiting worker
+    picks it up via short-interval DB polling. Single-worker fast path
+    (in-memory event) is unchanged; this table is only the fallback.
+    Rows are deleted on consume/timeout; stale rows (>15 min) are pruned
+    opportunistically on register/submit.
+    """
+
+    __tablename__ = "pending_client_mailbox"
+
+    key = Column(String(255), primary_key=True)  # registry key: conv or conv_token
+    conversation_id = Column(String, nullable=False, index=True)
+    state = Column(String(20), nullable=False, default="waiting")  # waiting | responded
+    status = Column(String(50), nullable=True)
+    result = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow_naive, nullable=False)
+    updated_at = Column(DateTime, default=utcnow_naive, onupdate=utcnow_naive, nullable=False)
 

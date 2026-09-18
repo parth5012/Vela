@@ -2,6 +2,7 @@
 
 import os
 import base64
+from concurrent.futures import ThreadPoolExecutor
 from email.message import EmailMessage
 from langchain_core.tools import tool
 from googleapiclient.discovery import build
@@ -9,6 +10,10 @@ from utils.auth_gate import get_authenticated_service, AUTH_REQUIRED
 from utils.logger import StructuredLogger
 
 logger = StructuredLogger("GmailTool")
+
+# Max concurrent messages.get fetches (wayfinder T8). The 50-result cap
+# below is preserved; this only parallelizes the per-message fetch.
+GMAIL_FETCH_MAX_WORKERS = 8
 
 
 @tool
@@ -79,13 +84,27 @@ def gmail_read_emails(max_results: int = 10, query: str = "", conversation_id: s
             return "No emails found matching your criteria."
 
         result_lines = [f"**Recent Emails ({len(messages)}):**"]
-        for msg in messages:
-            msg_data = (
+
+        def _fetch_metadata(msg_id: str):
+            return (
                 service.users()
                 .messages()
-                .get(userId="me", id=msg["id"], format="metadata", metadataHeaders=["From", "Subject", "Date"])
+                .get(userId="me", id=msg_id, format="metadata", metadataHeaders=["From", "Subject", "Date"])
                 .execute()
             )
+
+        # T8: parallelize the per-message .get calls (blocking HTTP) in a
+        # threadpool instead of sequentially. executor.map preserves input
+        # order, so output ordering is unchanged; the 50-cap above stays.
+        # A single fetch failure still fails the whole read (same as the old
+        # sequential loop) and is reported via the friendly error below.
+        msg_ids = [msg["id"] for msg in messages]
+        with ThreadPoolExecutor(
+            max_workers=min(GMAIL_FETCH_MAX_WORKERS, len(msg_ids))
+        ) as pool:
+            fetched = list(pool.map(_fetch_metadata, msg_ids))
+
+        for msg_data in fetched:
             headers = {h["name"]: h["value"] for h in msg_data.get("payload", {}).get("headers", [])}
             from_ = headers.get("From", "(unknown)")
             subject = headers.get("Subject", "(no subject)")

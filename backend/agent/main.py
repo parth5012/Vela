@@ -78,8 +78,16 @@ discord_gateway = DiscordGateway(db=db)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Run database migrations with individual error boundaries
-    from db.session import engine
+    from db.session import engine, ensure_prod_schema
     from sqlalchemy import inspect, text
+
+    # T8: idempotent prod DDL guard FIRST so a clean Postgres boots —
+    # Base.metadata.create_all (check_first) converges both this path and
+    # migrate.py on db.models as the single source of truth (no Alembic).
+    try:
+        ensure_prod_schema(engine)
+    except Exception as e:
+        logger.error("Failed to ensure prod schema", error=str(e))
 
     try:
         inspector = inspect(engine)
@@ -1327,26 +1335,21 @@ class WebViewResponsePayload(BaseModel):
 
 @app.post("/chat/webview/response", dependencies=[Depends(verify_api_key)])
 def submit_webview_response(payload: WebViewResponsePayload):
-    conversation_id = payload.conversation_id
-    key = None
-    pending_tasks = get_pending_tasks()
-    if conversation_id in pending_tasks:
-        key = conversation_id
-    else:
-        for k in pending_tasks.keys():
-            if k.startswith(f"{conversation_id}_"):
-                key = k
-                break
+    # T8 multi-worker: local PENDING_TASKS first, DB mailbox fallback so a
+    # response landing on a different worker is accepted (no 404) and picked
+    # up by the waiting worker's poll. Still 404s when no waiter exists.
+    from tools.pending_tasks import submit_cross_worker_response
+    key = submit_cross_worker_response(
+        payload.conversation_id, payload.status, payload.result
+    )
     if key:
-        pending_tasks[key]["response"] = {
-            "status": payload.status,
-            "result": payload.result
-        }
-        _safe_set_event(pending_tasks[key])
-        logger.info("Received WebView response for task", conversation_id=conversation_id, status=payload.status)
+        pending_tasks = get_pending_tasks()
+        if key in pending_tasks:
+            _safe_set_event(pending_tasks[key])
+        logger.info("Received WebView response for task", conversation_id=payload.conversation_id, status=payload.status)
         return {"status": "accepted"}
     else:
-        logger.warning("Received WebView response but no pending task found", conversation_id=conversation_id)
+        logger.warning("Received WebView response but no pending task found", conversation_id=payload.conversation_id)
         raise HTTPException(status_code=404, detail="No pending task found for this conversation ID")
 
 class DeviceResponsePayload(BaseModel):
@@ -1357,31 +1360,20 @@ class DeviceResponsePayload(BaseModel):
 
 @app.post("/chat/device/response", dependencies=[Depends(verify_api_key)])
 def submit_device_response(payload: DeviceResponsePayload):
-    conversation_id = payload.conversation_id
-    task_token = payload.task_token
-    pending_tasks = get_pending_tasks()
-    key = None
-    if task_token:
-        possible_key = f"{conversation_id}_{task_token}"
-        if possible_key in pending_tasks:
-            key = possible_key
-    if not key and conversation_id in pending_tasks:
-        key = conversation_id
-    if not key:
-        for k in pending_tasks.keys():
-            if k.startswith(f"{conversation_id}_"):
-                key = k
-                break
+    # T8 multi-worker: same local-first + DB mailbox fallback as webview.
+    from tools.pending_tasks import submit_cross_worker_response
+    key = submit_cross_worker_response(
+        payload.conversation_id, payload.status, payload.result,
+        task_token=payload.task_token,
+    )
     if key:
-        pending_tasks[key]["response"] = {
-            "status": payload.status,
-            "result": payload.result
-        }
-        _safe_set_event(pending_tasks[key])
-        logger.info("Received Device response for task", conversation_id=conversation_id, status=payload.status)
+        pending_tasks = get_pending_tasks()
+        if key in pending_tasks:
+            _safe_set_event(pending_tasks[key])
+        logger.info("Received Device response for task", conversation_id=payload.conversation_id, status=payload.status)
         return {"status": "accepted"}
     else:
-        logger.warning("Received Device response but no pending task found", conversation_id=conversation_id)
+        logger.warning("Received Device response but no pending task found", conversation_id=payload.conversation_id)
         raise HTTPException(status_code=404, detail="No pending task found for this conversation ID")
 
 @app.post("/consolidate", dependencies=[Depends(verify_api_key)])
@@ -1568,7 +1560,46 @@ import time
 
 RATE_LIMIT_STORE = defaultdict(list)
 
+# Optional Redis backing for the tool-proxy rate limiter (wayfinder T8).
+# Flag-guarded: REDIS_URL unset (default) keeps the process-local sliding
+# window below with zero new infra. Without Redis each worker enforces
+# 10 req/min locally, so the cluster-wide effective limit scales with the
+# worker count — deploy behind sticky-affinity (or set REDIS_URL) when exact
+# global enforcement matters. Redis failures always fall back to local.
+_redis_rate_state = {"attempted": False, "client": None}
+
+
+def _get_redis_client():
+    if _redis_rate_state["attempted"]:
+        return _redis_rate_state["client"]
+    _redis_rate_state["attempted"] = True
+    url = os.getenv("REDIS_URL", "")
+    if not url:
+        return None
+    try:
+        import redis
+        client = redis.Redis.from_url(url, socket_connect_timeout=2, socket_timeout=2)
+        client.ping()
+        _redis_rate_state["client"] = client
+        logger.info("Tool-proxy rate limiting via Redis")
+    except Exception as e:
+        logger.warning("Redis unavailable, using local rate-limit fallback", error=str(e))
+        _redis_rate_state["client"] = None
+    return _redis_rate_state["client"]
+
+
 def check_rate_limit(api_key: str) -> bool:
+    rc = _get_redis_client()
+    if rc is not None:
+        try:
+            minute = int(time.time() // 60)
+            rkey = f"vela:ratelimit:{api_key}:{minute}"
+            count = rc.incr(rkey)
+            if count == 1:
+                rc.expire(rkey, 65)
+            return count <= 10
+        except Exception:
+            pass  # fall through to the local single-worker fallback
     now = time.time()
     RATE_LIMIT_STORE[api_key] = [t for t in RATE_LIMIT_STORE[api_key] if now - t < 60]
     if len(RATE_LIMIT_STORE[api_key]) >= 10:
