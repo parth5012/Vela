@@ -7,7 +7,9 @@ records the briefing in the database, and sets a daily dedup marker.
 
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
+from contextlib import nullcontext
 
+from sqlalchemy.exc import SQLAlchemyError
 from db.session import get_db_session
 from db.client import DBClient
 from db.models import MemoryVector
@@ -55,16 +57,21 @@ def _search_radar_memories(session, item_text: str, conversation_id=None,
         return _radar_ilike_fallback(session, item_text, conversation_id, limit)
 
     try:
-        query = session.query(MemoryVector)
-        if conversation_id:
-            query = query.filter(MemoryVector.conversation_id == conversation_id)
-        rows = (
-            query.order_by(MemoryVector.vector.cosine_distance(item_vec))
-            .limit(limit)
-            .all()
-        )
-        return [m.content for m in rows]
-    except Exception as e:
+        # Coderabbit #263: wrap vector query in a savepoint so database-level
+        # failures (e.g. pgvector operator errors in non-pgvector environments)
+        # roll back to the savepoint before the ILIKE fallback reuses the session.
+        savepoint = session.begin_nested() if hasattr(session, "begin_nested") else nullcontext()
+        with savepoint:
+            query = session.query(MemoryVector)
+            if conversation_id:
+                query = query.filter(MemoryVector.conversation_id == conversation_id)
+            rows = (
+                query.order_by(MemoryVector.vector.cosine_distance(item_vec))
+                .limit(limit)
+                .all()
+            )
+            return [m.content for m in rows]
+    except (SQLAlchemyError, Exception) as e:
         logger.warning("pgvector radar query failed, using ILIKE fallback", error=str(e))
         return _radar_ilike_fallback(session, item_text, conversation_id, limit)
 
