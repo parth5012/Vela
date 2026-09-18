@@ -1,11 +1,23 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import JSON, DateTime, Integer, String, Float, Boolean, Column, ForeignKey, BigInteger, Text, UniqueConstraint
 from sqlalchemy.orm import declarative_base, validates
 from utils.ulid import generate_ulid
 from pgvector.sqlalchemy import Vector
 
 Base = declarative_base()
+
+
+def utcnow_naive() -> datetime:
+    """Single datetime rule (wayfinder T3, issue #251): naive UTC everywhere.
+
+    All ``DateTime`` columns stay timezone-naive (SQLite-friendly) and every
+    default/``onupdate`` plus every ``DBClient``/endpoint timestamp assignment
+    uses this helper — never the deprecated ``utcnow`` constructor and never an
+    aware ``datetime.now(timezone.utc)``, so naive/aware values can never mix
+    in comparisons.
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 # Single source of truth for the pgvector embedding width.
 # Must stay in sync with db/schema.sql `VECTOR(512)` and the
@@ -19,8 +31,8 @@ class Conversation(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     telegram_chat_id = Column(BigInteger, unique=True, index=True, nullable=True)
     discord_channel_id = Column(BigInteger, unique=True, index=True, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow_naive)
+    updated_at = Column(DateTime, default=utcnow_naive)
     title = Column(String(255), default="New Chat")
     agent = Column(String(50), default="personal assistant", nullable=False)
     active_skill = Column(String(50), nullable=True, default=None)
@@ -39,8 +51,8 @@ class OAuthToken(Base):
     )
     provider = Column(String, primary_key=True)
     token = Column("token_data", JSON, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow_naive)
+    updated_at = Column(DateTime, default=utcnow_naive)
 
 class MemoryVector(Base):
     __tablename__ = "memory_vectors"
@@ -48,7 +60,7 @@ class MemoryVector(Base):
     conversation_id = Column(String, ForeignKey("conversations.id", ondelete="CASCADE"), index=True)
     vector = Column("embedding", Vector(EMBEDDING_DIMENSIONS), nullable=False)
     content = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow_naive)
 
     @validates("vector")
     def validate_vector_dimensions(self, key, value):
@@ -70,20 +82,20 @@ class Experience(Base):
     eval_score = Column(Float, nullable=True)
     eval_reason = Column(String, nullable=True)
     consolidated = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow_naive)
 
 class SystemPromptFragment(Base):
     __tablename__ = "system_prompt_fragments"
     key = Column(String, primary_key=True)
     content = Column(String, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow,nullable=False)
+    updated_at = Column(DateTime, default=utcnow_naive,nullable=False)
 
 class SkillsRegistry(Base):
     __tablename__ = "skills_registry"
     name = Column(String,primary_key=True)
     description = Column(String,nullable=False)
     enabled = Column(Boolean,default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow_naive)
 
 class WebViewAutomationSession(Base):
     __tablename__ = "webview_automation_sessions"
@@ -94,8 +106,8 @@ class WebViewAutomationSession(Base):
     is_success = Column(Boolean, nullable=True)
     eval_score = Column(Float, nullable=True)
     eval_reason = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow_naive)
+    updated_at = Column(DateTime, default=utcnow_naive)
 
 class WebViewAutomationStep(Base):
     __tablename__ = "webview_automation_steps"
@@ -110,7 +122,7 @@ class WebViewAutomationStep(Base):
     value = Column(String, nullable=True)
     status = Column(String(20), nullable=False)  # success, error, timeout
     observation = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow_naive)
 
 
 class ToolInvocation(Base):
@@ -120,7 +132,7 @@ class ToolInvocation(Base):
     tool_name = Column(String(100), nullable=False)
     status = Column(String(50), nullable=False)
     result = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow_naive)
 
 
 class SyncMessage(Base):
@@ -139,7 +151,7 @@ class SystemSetting(Base):
 
     key = Column(String(100), primary_key=True)
     value = Column(String, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow_naive, onupdate=utcnow_naive, nullable=False)
 
 
 class Briefing(Base):
@@ -150,7 +162,7 @@ class Briefing(Base):
     date = Column(String(10), index=True, nullable=False)
     summary_text = Column(Text, nullable=True)
     sections_json = Column(JSON, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow_naive, nullable=False)
 
 
 class CheckIn(Base):
@@ -172,6 +184,6 @@ class CheckIn(Base):
     carrying = Column(Text, nullable=True)
     note = Column(Text, nullable=True)
     source = Column(String(50), default="android_client", nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow_naive, nullable=False)
+    updated_at = Column(DateTime, default=utcnow_naive, nullable=False)
 
