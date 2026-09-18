@@ -32,6 +32,7 @@ from agent.graph import graph
 from db.models import Conversation, Experience, SyncMessage, ToolInvocation, Base
 from fastapi import Response
 from utils.ulid import generate_ulid
+from utils.auth_gate import GLOBAL_OAUTH_CONVERSATION_ID
 
 # Import PENDING_TASKS at runtime to avoid module duplication issues
 # This ensures we always reference the current module's PENDING_TASKS dict
@@ -69,8 +70,6 @@ def _safe_set_event(task_data: dict) -> None:
             current_loop.call_soon_threadsafe(event.set)
         except RuntimeError:
             event.set()
-
-GLOBAL_OAUTH_CONVERSATION_ID = "00000000-0000-0000-0000-000000000001"
 
 db = PostgresDB()
 telegram_gateway = TelegramGateway(db=db)
@@ -1084,7 +1083,15 @@ def oauth_callback(code: str, state: str):
         "user_info": user_info,
     }
 
-    db.store_oauth_tokens(GLOBAL_OAUTH_CONVERSATION_ID, "google", token_record)
+    try:
+        stored = db.store_oauth_tokens(GLOBAL_OAUTH_CONVERSATION_ID, "google", token_record)
+        if stored is False:
+            raise RuntimeError("store_oauth_tokens returned False")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to store OAuth tokens", error=str(e), conversation_id=GLOBAL_OAUTH_CONVERSATION_ID)
+        raise HTTPException(status_code=500, detail="Failed to store OAuth tokens")
     logger.info("OAuth tokens stored", conversation_id=GLOBAL_OAUTH_CONVERSATION_ID)
 
     # ── Redirect back to client (mobile flow) ──

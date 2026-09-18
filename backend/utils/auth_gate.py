@@ -21,6 +21,11 @@ DEFAULT_SCOPES = [
     "https://www.googleapis.com/auth/drive.file",
 ]
 
+# Global Conversation ID for single-tenant Owner OAuth credentials.
+# Single shared constant: tokens are written under this ID by the OAuth
+# callback (agent/main.py) and read back here. Do not duplicate this literal.
+GLOBAL_OAUTH_CONVERSATION_ID = "00000000-0000-0000-0000-000000000001"
+
 # Sentinel value returned when no valid credentials exist.
 # Tools check for this and surface the auth-required message to the user.
 AUTH_REQUIRED = {"status": "auth_required", "provider": "google"}
@@ -54,8 +59,8 @@ def ensure_google_auth(
     resolved_scopes = scopes or DEFAULT_SCOPES
     logger.info("Running auth gate", conversation_id=conversation_id)
 
-    # 1. Read tokens from DB
-    token_data = db.get_oauth_tokens("global", "google")
+    # 1. Read tokens from DB (global single-tenant Owner credentials)
+    token_data = db.get_oauth_tokens(GLOBAL_OAUTH_CONVERSATION_ID, "google")
     if not token_data:
         logger.info("No OAuth tokens found, auth required", conversation_id=conversation_id)
         return AUTH_REQUIRED
@@ -85,7 +90,7 @@ def ensure_google_auth(
         if creds.expired and creds.refresh_token:
             logger.info("Access token expired, refreshing", conversation_id=conversation_id)
             creds.refresh(Request())
-            _persist_tokens(db, "global", creds, resolved_scopes)
+            _persist_tokens(db, GLOBAL_OAUTH_CONVERSATION_ID, creds, resolved_scopes)
             logger.info("Refreshed tokens persisted", conversation_id=conversation_id)
 
         return creds
