@@ -15,9 +15,58 @@ from utils.auth_gate import get_authenticated_service
 from utils.llm import get_llm, get_embeddings
 from utils.logger import StructuredLogger
 from tools.notify import send_push
-from tools.memory import calculate_cosine_distance
 
 logger = StructuredLogger("BriefingCron")
+
+# Wayfinder T7: bounded radar fan-out per watch item (matches the indexed
+# ORDER BY ... LIMIT query below — never a full-table load).
+RADAR_MATCH_LIMIT = 3
+
+
+def _radar_ilike_fallback(session, item_text: str, conversation_id=None,
+                          limit: int = RADAR_MATCH_LIMIT) -> List[str]:
+    """Bounded ILIKE fallback for radar search (embedding/query failure)."""
+    try:
+        query = session.query(MemoryVector)
+        if conversation_id:
+            query = query.filter(MemoryVector.conversation_id == conversation_id)
+        mems = query.filter(
+            MemoryVector.content.ilike(f"%{item_text}%")
+        ).limit(limit).all()
+        return [m.content for m in mems]
+    except Exception:
+        return []
+
+
+def _search_radar_memories(session, item_text: str, conversation_id=None,
+                           limit: int = RADAR_MATCH_LIMIT) -> List[str]:
+    """Finds related memories for one radar watch item.
+
+    Primary path embeds the watch-item text and issues an indexed pgvector
+    ``ORDER BY embedding <=> :vec LIMIT n`` query scoped per conversation
+    where applicable — no full-table ``.all()`` load. Falls back to a
+    bounded ILIKE query when embeddings fail or when the vector operator is
+    unavailable (SQLite test env has no pgvector).
+    """
+    try:
+        embeddings = get_embeddings()
+        item_vec = embeddings.embed_query(item_text)
+    except Exception:
+        return _radar_ilike_fallback(session, item_text, conversation_id, limit)
+
+    try:
+        query = session.query(MemoryVector)
+        if conversation_id:
+            query = query.filter(MemoryVector.conversation_id == conversation_id)
+        rows = (
+            query.order_by(MemoryVector.vector.cosine_distance(item_vec))
+            .limit(limit)
+            .all()
+        )
+        return [m.content for m in rows]
+    except Exception as e:
+        logger.warning("pgvector radar query failed, using ILIKE fallback", error=str(e))
+        return _radar_ilike_fallback(session, item_text, conversation_id, limit)
 
 
 def run_daily_briefing(today_date: Optional[str] = None) -> Dict[str, Any]:
@@ -121,28 +170,11 @@ def run_daily_briefing(today_date: Optional[str] = None) -> Dict[str, Any]:
                 item_text = item.get("text", "")
                 matched_memories: List[str] = []
                 if item_text:
-                    try:
-                        embeddings = get_embeddings()
-                        item_vec = embeddings.embed_query(item_text)
-                        mem_rows = session.query(MemoryVector).all()
-                        scored = []
-                        for m in mem_rows:
-                            try:
-                                dist = calculate_cosine_distance(m.vector, item_vec)
-                                if dist < 0.4:
-                                    scored.append((dist, m.content))
-                            except Exception:
-                                pass
-                        scored.sort(key=lambda x: x[0])
-                        matched_memories = [content for _, content in scored[:3]]
-                    except Exception:
-                        try:
-                            mems = session.query(MemoryVector).filter(
-                                MemoryVector.content.ilike(f"%{item_text}%")
-                            ).limit(3).all()
-                            matched_memories = [m.content for m in mems]
-                        except Exception:
-                            pass
+                    matched_memories = _search_radar_memories(
+                        session,
+                        item_text,
+                        conversation_id=item.get("conversation_id"),
+                    )
 
                 radar_items.append({
                     "id": item.get("id"),
