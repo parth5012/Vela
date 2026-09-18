@@ -231,4 +231,35 @@ describe('syncDatabase engine', () => {
     // Two deletes: one quarantine for op_bad, one accepted-cleanup for op_good.
     expect(db.delete).toHaveBeenCalledTimes(2);
   });
+
+  it("should quarantine a JSON 'null' payload row and never POST it (coderabbit #261)", async () => {
+    // JSON.parse('null') succeeds but yields null, which violates the
+    // /api/sync/push dictionary-payload contract — it must be quarantined.
+    const rows = [
+      { id: 'op_good', type: 'message', conversation_id: 'conv_1', payload: JSON.stringify({ role: 'user', content: 'hello' }), created_at: Date.now() },
+      { id: 'op_null', type: 'message', conversation_id: 'conv_1', payload: 'null', created_at: Date.now() },
+    ];
+
+    (db.select as jest.Mock).mockImplementationOnce(() => ({
+      from: jest.fn(() => ({
+        where: jest.fn(() => Promise.resolve(rows)),
+        then: (resolve: any) => resolve(rows),
+      })),
+    }));
+    mockEmptySelects();
+
+    (globalThis.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ accepted: ['op_good'], rejected: [] }),
+    });
+    mockPullEmpty();
+
+    await expect(syncDatabase('https://api.vela.run', 'test_key')).resolves.toBeUndefined();
+
+    const pushCall = (globalThis.fetch as jest.Mock).mock.calls[0];
+    const pushBody = JSON.parse(pushCall[1].body);
+    expect(pushBody.operations.map((op: any) => op.id)).toEqual(['op_good']);
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+  });
 });

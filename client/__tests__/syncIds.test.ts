@@ -28,4 +28,12 @@ describe('syncIds (T5 cursor-safe ULIDs)', () => {
     const ids = new Set(Array.from({ length: 1000 }, () => generateUlid()));
     expect(ids.size).toBe(1000);
   });
+
+  it('rejects ULIDs whose first char exceeds 7 (130-bit overflow)', () => {
+    // Coderabbit #261: the first ULID char carries only 3 timestamp bits.
+    expect(isUlid('ZZZZZZZZZZZZZZZZZZZZZZZZZZ')).toBe(false);
+    expect(isUlid('8ZZZZZZZZZZZZZZZZZZZZZZZZZ')).toBe(false);
+    expect(isUlid('7ZZZZZZZZZZZZZZZZZZZZZZZZZ')).toBe(true);
+    expect(isUlid('0'.repeat(26))).toBe(true);
+  });
 });

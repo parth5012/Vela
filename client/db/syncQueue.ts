@@ -73,6 +73,12 @@ export async function drainDeviceStepSyncQueue(
       let data: any = null;
       try {
         data = JSON.parse(op.payload);
+        // Coderabbit #261: JSON.parse('null') succeeds but yields null, and
+        // data.toolName below would then throw outside quarantine and abort
+        // the whole drain. Treat any non-dictionary payload as corrupt.
+        if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+          throw new Error('decoded payload is not a dictionary');
+        }
       } catch {
         // T5 (#253): quarantine the poison row so one corrupt payload cannot
         // wedge the queue forever (each retry would rebuild the same junk

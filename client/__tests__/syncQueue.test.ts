@@ -188,4 +188,60 @@ describe('syncQueue - Drizzle SQLite device-step batch sync', () => {
     // Quarantine delete + accepted delete.
     expect(db!.delete).toHaveBeenCalledTimes(2);
   });
+
+  it("quarantines a JSON 'null' payload row and still drains the good row (coderabbit #261)", async () => {
+    // JSON.parse('null') succeeds but yields null — without a shape check,
+    // data.toolName would throw outside quarantine and abort the drain.
+    const mockPendingOps = [
+      {
+        id: 'devicestep_null',
+        type: 'device_step',
+        conversation_id: 'conv_null',
+        payload: 'null',
+        created_at: 1725700000000,
+      },
+      {
+        id: 'devicestep_good',
+        type: 'device_step',
+        conversation_id: 'conv_good',
+        payload: JSON.stringify({
+          toolName: 'device_info',
+          status: 'executed',
+          observation: 'Battery: 85%',
+          timestamp: 1725700002000,
+        }),
+        created_at: 1725700002000,
+      },
+    ];
+
+    const mockWhere = jest.fn().mockReturnValue({
+      limit: jest.fn().mockResolvedValue(mockPendingOps),
+    });
+    (db!.select as jest.Mock).mockReturnValue({
+      from: jest.fn().mockReturnValue({ where: mockWhere }),
+    });
+
+    const mockDeleteWhere = jest.fn().mockResolvedValue(true);
+    (db!.delete as jest.Mock).mockReturnValue({
+      where: mockDeleteWhere,
+    });
+
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValue({
+        status: 'ok',
+        accepted: ['devicestep_good'],
+        processed: 1,
+      }),
+    });
+
+    const result = await drainDeviceStepSyncQueue(mockApiUrl, mockApiKey);
+
+    expect(result.syncedCount).toBe(1);
+    expect(result.failedCount).toBe(1);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const postedBody = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+    expect(postedBody.events.map((e: any) => e.id)).toEqual(['devicestep_good']);
+  });
 });

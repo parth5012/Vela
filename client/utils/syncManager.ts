@@ -29,12 +29,20 @@ export async function syncDatabase(apiUrl: string, apiKey: string): Promise<void
     payload: unknown;
   }[] = [];
   for (const op of pendingOps) {
+    let decoded: unknown = null;
     try {
+      decoded = JSON.parse(op.payload);
+      // Coderabbit #261: JSON.parse('null') succeeds but yields null, which
+      // would enter mappedOps and be POSTed to /api/sync/push whose payload
+      // contract requires a dictionary. Quarantine non-dictionary payloads.
+      if (typeof decoded !== 'object' || decoded === null || Array.isArray(decoded)) {
+        throw new Error('decoded payload is not a dictionary');
+      }
       mappedOps.push({
         id: op.id,
         type: op.type,
         conversation_id: op.conversation_id,
-        payload: JSON.parse(op.payload),
+        payload: decoded,
       });
     } catch (err) {
       console.warn('[Sync] Quarantining operation with corrupt payload:', op.id, err);

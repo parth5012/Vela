@@ -52,7 +52,7 @@ export function generateUlid(nowMs: number = Date.now()): string {
   return tsStr + randStr;
 }
 
-const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
+const ULID_RE = /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/;
 
 export function isUlid(id: string): boolean {
   return ULID_RE.test(id);
