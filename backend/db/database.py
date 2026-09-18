@@ -4,7 +4,13 @@ from db.session import get_db_session
 from db.client import DBClient
 
 class PostgresDB:
-    """Database client proxy that routes requests through SQLAlchemy to avoid DNS/HTTP API failures."""
+    """Database client proxy that routes requests through SQLAlchemy to avoid DNS/HTTP API failures.
+
+    Transaction rule (wayfinder T3, issue #251): ``get_db_session`` owns
+    commit-on-clean-exit, so methods below never call ``session.commit()``
+    and DB outages propagate to the caller (fail-loud) instead of returning
+    mock IDs that would poison Conversation/Experience foreign keys.
+    """
 
     def __init__(self):
         self.logger = StructuredLogger("PostgresDB")
@@ -16,11 +22,10 @@ class PostgresDB:
             with get_db_session() as session:
                 client = DBClient(session)
                 conv = client.get_or_create_conversation(telegram_chat_id)
-                session.commit()
                 return conv.id
         except Exception as e:
-            self.logger.error("Database query failed, returning fallback mock-uuid", error=str(e), telegram_chat_id=telegram_chat_id)
-            return "mock-conversation-uuid"
+            self.logger.error("Database query failed", error=str(e), telegram_chat_id=telegram_chat_id)
+            raise
 
     def store_oauth_tokens(self, conversation_id: str, provider: str, token_data: dict) -> bool:
         """Persist OAuth tokens. Returns True on success, raises on failure."""
@@ -29,7 +34,6 @@ class PostgresDB:
             with get_db_session() as session:
                 client = DBClient(session)
                 client.store_oauth_token(conversation_id, provider, token_data)
-                session.commit()
                 self.logger.info("Successfully saved OAuth tokens", conversation_id=conversation_id, provider=provider)
                 return True
         except Exception as e:
@@ -78,7 +82,6 @@ class PostgresDB:
             with get_db_session() as session:
                 client = DBClient(session)
                 client.set_system_setting(key, value)
-                session.commit()
                 return True
         except Exception as e:
             self.logger.error("Failed to update system setting", error=str(e), key=key)
@@ -90,11 +93,10 @@ class PostgresDB:
             with get_db_session() as session:
                 client = DBClient(session)
                 conv = client.get_or_create_discord_conversation(discord_channel_id)
-                session.commit()
                 return conv.id
         except Exception as e:
-            self.logger.error("Database query failed, returning fallback mock-uuid", error=str(e), discord_channel_id=discord_channel_id)
-            return "mock-conversation-uuid"
+            self.logger.error("Database query failed", error=str(e), discord_channel_id=discord_channel_id)
+            raise
 
     def save_experience(self, conversation_id: str, user_query: str, agent_response: str) -> str | None:
         self.logger.info("Saving experience via SQLAlchemy", conversation_id=conversation_id)
@@ -102,7 +104,6 @@ class PostgresDB:
             with get_db_session() as session:
                 client = DBClient(session)
                 exp = client.save_experience(conversation_id, user_query, agent_response)
-                session.commit()
                 return exp.id
         except Exception as e:
             self.logger.error("Failed to save experience", error=str(e), conversation_id=conversation_id)
@@ -115,7 +116,6 @@ class PostgresDB:
                 client = DBClient(session)
                 conv = client.update_conversation_active_skill(conversation_id, active_skill)
                 if conv:
-                    session.commit()
                     return True
                 return False
         except Exception as e:

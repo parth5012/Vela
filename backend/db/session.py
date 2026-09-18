@@ -46,7 +46,16 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 @contextmanager
 def get_db_session():
-    """Context manager for thread-safe SQLAlchemy database sessions."""
+    """Context manager for thread-safe SQLAlchemy database sessions.
+
+    TRANSACTION RULE (wayfinder T3, issue #251): this context OWNS the
+    transaction — a clean exit commits, any exception rolls back and
+    re-raises. Callers MUST NOT call ``session.commit()`` inside the block;
+    just mutate (``DBClient`` methods ``flush()`` only, never commit) and let
+    the context commit. Several call sites (e.g. briefing/check-in endpoints
+    in ``agent/main.py``) rely solely on this exit-commit, so removing it
+    would silently drop writes.
+    """
     db: Session = SessionLocal()
     try:
         yield db

@@ -1,8 +1,8 @@
 import uuid
 import json
 from sqlalchemy.orm import Session
-from db.models import Conversation, OAuthToken, MemoryVector, Experience, SystemPromptFragment, SkillsRegistry, SystemSetting, Briefing, CheckIn, EMBEDDING_DIMENSIONS
-from datetime import datetime, timedelta, UTC
+from db.models import Conversation, OAuthToken, MemoryVector, Experience, SystemPromptFragment, SkillsRegistry, SystemSetting, Briefing, CheckIn, EMBEDDING_DIMENSIONS, utcnow_naive
+from datetime import timedelta
 from utils.ulid import generate_ulid
 
 class DBClient:
@@ -79,7 +79,7 @@ class DBClient:
         token = self.session.query(OAuthToken).filter_by(conversation_id=conversation_id, provider=provider).first()
         if token:
             token.token = token_data
-            token.updated_at = datetime.now(UTC).replace(tzinfo=None)
+            token.updated_at = utcnow_naive()
         else:
             token = OAuthToken(conversation_id=conversation_id, provider=provider, token=token_data)
             self.session.add(token)
@@ -140,7 +140,7 @@ class DBClient:
         """
         conv = self.session.query(Conversation).filter_by(id=conversation_id).first()
         if conv:
-            conv.updated_at = datetime.now(UTC).replace(tzinfo=None)
+            conv.updated_at = utcnow_naive()
 
         exp_id = str(uuid.uuid4())
         exp = Experience(
@@ -176,7 +176,7 @@ class DBClient:
         frag = self.session.query(SystemPromptFragment).filter_by(key=key).first()
         if frag:
             frag.content = content
-            frag.updated_at = datetime.now(UTC).replace(tzinfo=None)
+            frag.updated_at = utcnow_naive()
         else:
             frag = SystemPromptFragment(key=key, content=content)
             self.session.add(frag)
@@ -204,7 +204,7 @@ class DBClient:
         conv = self.session.query(Conversation).filter_by(id=conversation_id).first()
         if conv:
             conv.title = title[:255] if title is not None else None
-            conv.updated_at = datetime.now(UTC).replace(tzinfo=None)
+            conv.updated_at = utcnow_naive()
             self.session.flush()
         return conv
 
@@ -213,7 +213,7 @@ class DBClient:
         conv = self.session.query(Conversation).filter_by(id=conversation_id).first()
         if conv:
             conv.active_skill = active_skill[:50] if active_skill else None
-            conv.updated_at = datetime.now(UTC).replace(tzinfo=None)
+            conv.updated_at = utcnow_naive()
             self.session.flush()
         return conv
 
@@ -227,7 +227,7 @@ class DBClient:
         setting = self.session.query(SystemSetting).filter_by(key=key).first()
         if setting:
             setting.value = value
-            setting.updated_at = datetime.now(UTC).replace(tzinfo=None)
+            setting.updated_at = utcnow_naive()
         else:
             setting = SystemSetting(key=key, value=value)
             self.session.add(setting)
@@ -315,7 +315,7 @@ class DBClient:
             "id": generate_ulid(),
             "text": text,
             "date_hint": date_hint,
-            "created_at": datetime.now(UTC).isoformat(),
+            "created_at": utcnow_naive().isoformat(),
         }
         items.append(item)
         self.set_system_setting("briefing_watch_items", json.dumps(items))
@@ -347,7 +347,7 @@ class DBClient:
         """Fetches recent Briefing records."""
         query = self.session.query(Briefing)
         if days > 0:
-            cutoff_date = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+            cutoff_date = (utcnow_naive() - timedelta(days=days)).strftime("%Y-%m-%d")
             query = query.filter(Briefing.date >= cutoff_date)
         return query.order_by(Briefing.date.desc(), Briefing.created_at.desc()).all()
 
@@ -371,7 +371,7 @@ class DBClient:
             .filter_by(conversation_id=conversation_id, date=date)
             .first()
         )
-        now = datetime.now(UTC).replace(tzinfo=None)
+        now = utcnow_naive()
         if existing:
             existing.mood = mood
             existing.energy = energy
@@ -405,7 +405,7 @@ class DBClient:
         if conversation_id:
             query = query.filter(CheckIn.conversation_id == conversation_id)
         if days > 0:
-            cutoff_date = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+            cutoff_date = (utcnow_naive() - timedelta(days=days)).strftime("%Y-%m-%d")
             query = query.filter(CheckIn.date >= cutoff_date)
         return query.order_by(CheckIn.date.desc(), CheckIn.created_at.desc()).all()
 

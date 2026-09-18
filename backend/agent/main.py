@@ -29,7 +29,7 @@ from pydantic import BaseModel, model_validator, Field, AliasChoices
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage
 from agent.graph import graph
-from db.models import Conversation, Experience, SyncMessage, ToolInvocation, Base
+from db.models import Conversation, Experience, SyncMessage, ToolInvocation, Base, utcnow_naive
 from fastapi import Response
 from utils.ulid import generate_ulid
 from utils.auth_gate import GLOBAL_OAUTH_CONVERSATION_ID
@@ -401,8 +401,9 @@ def update_thread_title(payload: TitlePayload):
             success = client.update_conversation_title(normalized_id, payload.title)
             if not success:
                 raise HTTPException(status_code=404, detail="Thread not found")
-            session.commit()
             return {"status": "success"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -420,8 +421,7 @@ def update_thread(thread_id: str, payload: UpdateThreadPayload):
                 client.update_conversation_title(normalized_id, payload.title)
             if payload.is_pinned is not None:
                 conv.is_pinned = payload.is_pinned
-                conv.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
-            session.commit()
+                conv.updated_at = utcnow_naive()
             return {"status": "success", "title": conv.title, "is_pinned": conv.is_pinned}
     except HTTPException:
         raise
@@ -453,8 +453,9 @@ def delete_thread(thread_id: str):
             success = client.delete_conversation(normalized_id)
             if not success:
                 raise HTTPException(status_code=404, detail="Thread not found")
-            session.commit()
             return {"status": "success"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -512,11 +513,9 @@ async def chat_message(payload: MessagePayload):
                 conv = session.query(Conversation).filter_by(id=normalized_id).first()
                 if not conv:
                     conv = client.create_client_conversation(agent=payload.agent, conversation_id=normalized_id)
-                    session.commit()
                 else:
                     if payload.agent != conv.agent:
                         conv.agent = payload.agent
-                        session.commit()
                 thread_uuid = conv.id
                 thread_title = conv.title
                 thread_agent = conv.agent
@@ -668,11 +667,9 @@ async def chat_message(payload: MessagePayload):
                         )
                         if last_exp:
                             last_exp.agent_response = full_response or ''
-                            session.commit()
                         else:
                             new_exp = Experience(conversation_id=normalized_id, user_query=initial_message, agent_response=full_response)
                             session.add(new_exp)
-                            session.commit()
                         
                         # Save to sync_messages for android_client sync
                         conv = session.query(Conversation).filter_by(id=normalized_id).first()
@@ -686,7 +683,6 @@ async def chat_message(payload: MessagePayload):
                                 created_at=int(time.time() * 1000)
                             )
                             session.add(sync_msg)
-                            session.commit()
 
                         logger.info("Experience record updated", conversation_id=normalized_id)
                 except Exception as e:
@@ -700,7 +696,6 @@ async def chat_message(payload: MessagePayload):
                 with get_db_session() as session:
                     client = DBClient(session)
                     client.update_conversation_title(thread_uuid, new_title)
-                    session.commit()
                 title_to_send = new_title
             else:
                 title_to_send = thread_title
@@ -769,7 +764,6 @@ def branch_thread(payload: BranchPayload):
             if not found_target:
                 raise HTTPException(status_code=404, detail="Message not found in parent thread")
             
-            session.commit()
             return {"status": "success"}
     except HTTPException:
         raise
@@ -796,9 +790,8 @@ def truncate_thread(thread_id: str, payload: TruncatePayload):
 
             conv = session.query(Conversation).filter_by(id=normalized_id).first()
             if conv:
-                conv.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                conv.updated_at = utcnow_naive()
 
-            session.commit()
             return {"status": "success"}
     except HTTPException:
         raise
@@ -829,7 +822,6 @@ def store_oauth_token(payload: ClientOAuthPayload):
             conv = session.query(Conversation).filter_by(id=payload.conversation_id).first()
             if not conv:
                 conv = client.create_client_conversation(conversation_id=payload.conversation_id)
-                session.commit()
 
             token_data = {
                 "access_token": payload.access_token,
@@ -838,7 +830,6 @@ def store_oauth_token(payload: ClientOAuthPayload):
                 "scopes": payload.scopes,
             }
             client.store_oauth_token(payload.conversation_id, "google", token_data)
-            session.commit()
 
         logger.info("OAuth tokens stored successfully", conversation_id=payload.conversation_id)
         return {"status": "success", "provider": "google"}
@@ -862,7 +853,6 @@ def revoke_oauth_token(payload: RevokePayload):
             ).first()
             if token_record:
                 session.delete(token_record)
-                session.commit()
                 logger.info("OAuth tokens revoked successfully", conversation_id=payload.conversation_id)
             return {"status": "success"}
     except Exception as e:
@@ -1578,7 +1568,6 @@ async def invoke_tool(
             status="running"
         )
         session.add(new_inv)
-        session.commit()
 
     from fastapi.concurrency import run_in_threadpool
     import asyncio
@@ -1634,7 +1623,6 @@ async def invoke_tool(
         if inv:
             inv.status = status_res
             inv.result = result_str
-            session.commit()
 
     with get_db_session() as session:
         conv = session.query(Conversation).filter_by(id=payload.conversation_id).first()
@@ -1648,7 +1636,6 @@ async def invoke_tool(
                 created_at=int(time.time() * 1000)
             )
             session.add(sync_msg)
-            session.commit()
 
     if status_res == "success":
         return {
@@ -1701,7 +1688,6 @@ def sync_push(payload: SyncPushPayload):
                     conversation_id=op.conversation_id,
                     source="android_client"
                 )
-                session.commit()
             if conv.source != "android_client":
                 rejected.append(op.id)
                 continue
@@ -1725,7 +1711,6 @@ def sync_push(payload: SyncPushPayload):
                     created_at=int(created_at)
                 )
                 session.add(new_msg)
-                session.commit()
 
             accepted.append(op.id)
             latest_ulid = op.id
@@ -1829,7 +1814,6 @@ def sync_device_steps(payload: DeviceStepsSyncPayload):
                 conversation_id=payload.conversation_id,
                 source="android_client",
             )
-            session.commit()
         elif conv.source != "android_client":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -1869,14 +1853,13 @@ def sync_device_steps(payload: DeviceStepsSyncPayload):
                         tool_name=ev.tool_name,
                         status=ev.status or "executed",
                         result=ev.observation,
-                        created_at=datetime.now(timezone.utc),
+                        created_at=utcnow_naive(),
                     )
                     session.add(tool_inv)
                 else:
                     existing_tool.status = ev.status or "executed"
                     existing_tool.result = ev.observation
 
-            session.commit()
             accepted.append(ev.id)
 
     return {
