@@ -489,6 +489,55 @@ class MessagePayload(BaseModel):
 
 from agent.concurrency import get_stream_semaphore
 
+
+def _persist_sse_turn_sync(
+    experience_id: str | None,
+    conversation_id: str | None,
+    user_query: str,
+    full_response: str,
+) -> bool:
+    """Blocking turn persistence: update the owned Experience row by ID.
+
+    T6 (issue #254): never queries "latest" rows (no
+    ``order_by(created_at.desc()).first()``), so concurrent/tool-call turns
+    cannot overwrite each other's history. The SyncMessage write keeps the
+    ``conv.source == "android_client"`` gate.
+
+    Runs under ``get_db_session`` (T3 transaction rule: the context owns the
+    commit, no inner commits). Returns True when the owned row was found.
+    """
+    if not experience_id or not conversation_id:
+        return False
+    with get_db_session() as session:
+        exp = session.query(Experience).filter_by(id=experience_id).first()
+        if exp is None:
+            # Turn-start row missing — write a replacement so the turn is
+            # never silently lost.
+            if full_response:
+                session.add(Experience(
+                    conversation_id=conversation_id,
+                    user_query=user_query,
+                    agent_response=full_response,
+                ))
+            found = False
+        else:
+            if full_response:
+                exp.agent_response = full_response
+            found = True
+
+        conv = session.query(Conversation).filter_by(id=conversation_id).first()
+        if conv is not None and conv.source == "android_client" and full_response:
+            sync_msg = SyncMessage(
+                id=generate_ulid(),
+                conversation_id=conversation_id,
+                role="assistant",
+                content=full_response,
+                provider="cloud",
+                created_at=int(time.time() * 1000)
+            )
+            session.add(sync_msg)
+    return found
+
 @app.post("/chat/message", dependencies=[Depends(verify_api_key)])
 async def chat_message(payload: MessagePayload):
     allowed_agents = [config.identifier for config in AGENT_REGISTRY.list_agents()]
@@ -501,9 +550,52 @@ async def chat_message(payload: MessagePayload):
     async def sse_generator():
         semaphore = get_stream_semaphore()
         await semaphore.acquire()
-        producer_started = False
         normalized_id = None
-        streaming_complete = False
+        full_response = ""
+        initial_message = payload.message
+        experience_id = None
+        persisted = False
+        released = False
+
+        def _release_once(reason: str) -> None:
+            nonlocal released
+            if released:
+                return
+            released = True
+            try:
+                semaphore.release()
+            except ValueError:
+                pass
+            logger.info("Semaphore released", thread_id=normalized_id, reason=reason)
+
+        async def _persist_once(reason: str) -> None:
+            """Shielded exactly-once turn persistence.
+
+            Runs the blocking DB write in a worker thread under
+            asyncio.shield(), so a client disconnect (cancel/close) cannot
+            drop the Experience/SyncMessage rows: the thread keeps running
+            to commit even if the waiter is cancelled.
+            """
+            nonlocal persisted
+            if persisted or not experience_id:
+                return
+            persisted = True
+            try:
+                await asyncio.shield(
+                    asyncio.to_thread(
+                        _persist_sse_turn_sync,
+                        experience_id,
+                        normalized_id,
+                        initial_message,
+                        full_response,
+                    )
+                )
+                logger.info("Experience turn persisted", conversation_id=normalized_id, reason=reason)
+            except BaseException as e:
+                logger.error("Failed to persist experience turn", error=str(e))
+                if isinstance(e, asyncio.CancelledError):
+                    raise
+
         try:
             # Retrieve or create thread
             normalized_id = normalize_thread_id(payload.thread_id)
@@ -520,6 +612,21 @@ async def chat_message(payload: MessagePayload):
                 thread_title = conv.title
                 thread_agent = conv.agent
 
+            # T6 (issue #254): create the Experience row at turn start so the
+            # turn owns its row by ID. T3 transaction rule: flush-only here,
+            # get_db_session owns the commit.
+            try:
+                with get_db_session() as session:
+                    exp_client = DBClient(session)
+                    exp_row = exp_client.save_experience(
+                        conversation_id=thread_uuid,
+                        user_query=initial_message,
+                        agent_response="",
+                    )
+                    experience_id = exp_row.id
+            except Exception as e:
+                logger.error("Failed to create experience row at turn start", error=str(e))
+                experience_id = None
 
             initial_state = {
                 "messages": [HumanMessage(content=payload.message)],
@@ -527,9 +634,9 @@ async def chat_message(payload: MessagePayload):
                 "next_node": "supervisor",
                 "agent": thread_agent
             }
-            initial_message = payload.message
+            if experience_id is not None:
+                initial_state["experience_id"] = experience_id
 
-            full_response = ""
             logger.info("Starting chat message", thread_id=normalized_id, agent=thread_agent)
             # Run graph.astream_events in a background producer task and queue the events.
             # This allows us to periodically yield SSE keep-alive pings to prevent Render timeouts
@@ -563,7 +670,6 @@ async def chat_message(payload: MessagePayload):
                         logger.error("Failed to trigger webview session evaluation", error=str(ex))
 
             producer_task = create_background_task(producer())
-            producer_started = True
 
             try:
                 while True:
@@ -644,6 +750,9 @@ async def chat_message(payload: MessagePayload):
                         yield f"data: {json.dumps({'type': 'content', 'delta': tool_end_tag})}\n\n"
             except asyncio.CancelledError:
                 logger.info("SSE generator cancelled by client disconnect. Agent will continue running in the background.")
+                # T6: disconnect must not drop the turn — shielded persist
+                # before propagating the cancellation.
+                await _persist_once("client-disconnect")
                 raise
             finally:
                 # We let the producer_task continue running to completion in the background
@@ -651,42 +760,11 @@ async def chat_message(payload: MessagePayload):
                 logger.info("SSE generator finished", thread_id=normalized_id)
                 # Release semaphore as soon as streaming is complete so new streams
                 # can start while post-processing (DB writes, title generation) happens.
-                streaming_complete = True
-                semaphore.release()
-                logger.info("Semaphore released after streaming complete", thread_id=normalized_id)
+                _release_once("streaming-complete")
 
-            # Update the latest Experience record with full_response if it contains tool calls or thoughts
-            if full_response:
-                try:
-                    with get_db_session() as session:
-                        last_exp = (
-                            session.query(Experience)
-                            .filter_by(conversation_id=normalized_id)
-                            .order_by(Experience.created_at.desc())
-                            .first()
-                        )
-                        if last_exp:
-                            last_exp.agent_response = full_response or ''
-                        else:
-                            new_exp = Experience(conversation_id=normalized_id, user_query=initial_message, agent_response=full_response)
-                            session.add(new_exp)
-                        
-                        # Save to sync_messages for android_client sync
-                        conv = session.query(Conversation).filter_by(id=normalized_id).first()
-                        if conv and conv.source == "android_client":
-                            sync_msg = SyncMessage(
-                                id=generate_ulid(),
-                                conversation_id=normalized_id,
-                                role="assistant",
-                                content=full_response,
-                                provider="cloud",
-                                created_at=int(time.time() * 1000)
-                            )
-                            session.add(sync_msg)
-
-                        logger.info("Experience record updated", conversation_id=normalized_id)
-                except Exception as e:
-                    logger.error("Failed to update database with full_response", error=str(e))
+            # Success path: update the owned Experience row by ID (never the
+            # "latest" row). Shielded so a late disconnect cannot drop it.
+            await _persist_once("stream-complete")
 
             # Generate a dynamic title if thread title is 'New Chat'
             if thread_title == "New Chat":
@@ -703,11 +781,16 @@ async def chat_message(payload: MessagePayload):
             # Send final completed event
             yield f"data: {json.dumps({'type': 'done', 'thread_title': title_to_send, 'agent': thread_agent})}\n\n"
         except BaseException:
-            # Ensure semaphore is released if streaming failed before explicit release above
-            # (e.g. CancelledError from client disconnect, or any other unexpected error)
-            if not streaming_complete:
-                semaphore.release()
-                logger.info("Semaphore released in sse_generator error handler", thread_id=normalized_id)
+            # Release the semaphore exactly once if streaming failed before
+            # the inner finally above (e.g. setup failure, GeneratorExit on
+            # close, or any other unexpected error), and make a best-effort
+            # shielded persist attempt on error paths (no-op if the turn was
+            # already persisted). Never yields — safe under GeneratorExit.
+            _release_once("error-handler")
+            try:
+                await _persist_once("error-path")
+            except BaseException:
+                pass
             raise
 
     return StreamingResponse(

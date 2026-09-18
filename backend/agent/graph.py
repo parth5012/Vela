@@ -7,7 +7,7 @@ from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import tools_condition, ToolNode
 from utils.llm import get_llm
 from db.session import get_db_session
-from db.models import Conversation
+from db.models import Conversation, Experience
 from skills import skills
 from tools import tools_list
 from agent.state import AgentState
@@ -196,26 +196,57 @@ async def chatbot_node(state: AgentState) -> dict:
     else:
         response_msg = AIMessage(content=f"Hello! I received your message: '{user_message}'. (Google API Key is not set, running in mock mode)")
 
-    # Save the interaction to the experiences table in database
-    # Only save if this is a final agent response (no intermediate tool calls)
+    # Save the interaction to the experiences table in database.
+    # T6 (issue #254) turn lifecycle: each user turn owns exactly one
+    # Experience row keyed by state["experience_id"].
+    # - SSE chat path: sse_generator creates the row at turn start and its ID
+    #   arrives in state; post-tool follow-up invocations reuse it.
+    # - Gateway paths (telegram/discord/voice): no ID in state, so the first
+    #   invocation creates the row and returns its ID for follow-ups.
+    # Updates always target the owned row BY ID — never
+    # order_by(created_at.desc()).first() — so tool-call turns (which skip
+    # content writes) can never overwrite a prior turn's agent_response.
+    # T3 transaction rule: no session.commit() here; get_db_session owns it.
     db_conv_id = state.get("db_conv_id")
     is_tool_call = bool(getattr(response_msg, "tool_calls", None))
-    if db_conv_id and db_conv_id != "conv-123" and not is_tool_call:
+    experience_id = state.get("experience_id")
+    if db_conv_id and db_conv_id != "conv-123":
         try:
-            # 1. Log interaction experience
             with get_db_session() as session:
                 from db.client import DBClient
                 client = DBClient(session)
-                client.save_experience(
-                     conversation_id=db_conv_id,
-                     user_query=user_message,
-                     agent_response=response_msg.content
-                )
-                session.commit()
-        except Exception:
-            pass
+                content = response_msg.content
+                content_str = content if isinstance(content, str) else ""
+                if experience_id:
+                    exp = session.query(Experience).filter_by(id=experience_id).first()
+                    if exp is not None:
+                        if not is_tool_call:
+                            exp.agent_response = content_str
+                    else:
+                        # Owned row missing — recreate it so the turn isn't lost.
+                        new_exp = client.save_experience(
+                            conversation_id=db_conv_id,
+                            user_query=user_message,
+                            agent_response=content_str,
+                        )
+                        experience_id = new_exp.id
+                else:
+                    # Turn start: every turn (including tool-call turns) gets
+                    # its own row; tool-call invocations store a placeholder
+                    # that the final invocation (or SSE stream end) fills in.
+                    new_exp = client.save_experience(
+                        conversation_id=db_conv_id,
+                        user_query=user_message,
+                        agent_response="" if is_tool_call else content_str,
+                    )
+                    experience_id = new_exp.id
+        except Exception as e:
+            logger.error("Failed to persist experience turn", error=str(e))
 
-    return {"messages": [response_msg], "next_node": END}
+    result = {"messages": [response_msg], "next_node": END}
+    if experience_id:
+        result["experience_id"] = experience_id
+    return result
 
 workflow = StateGraph(AgentState)
 workflow.add_node("supervisor", supervisor_node)
