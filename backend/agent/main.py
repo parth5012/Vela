@@ -1650,7 +1650,7 @@ async def invoke_tool(
     payload: ToolInvokePayload,
     api_key: str = Depends(verify_api_key)
 ):
-    if not check_rate_limit(api_key):
+    if not await asyncio.to_thread(check_rate_limit, api_key):
         raise HTTPException(status_code=429, detail="Rate limit exceeded. Max 10 calls/min.")
 
     from tools import tools_list
@@ -1696,7 +1696,6 @@ async def invoke_tool(
         session.add(new_inv)
 
     from fastapi.concurrency import run_in_threadpool
-    import asyncio
 
     status_res = "success"
     error_data = None
