@@ -4,8 +4,8 @@ from unittest.mock import patch, MagicMock
 import pytest
 from db.session import get_db_session
 from db.client import DBClient
-from db.models import SystemSetting, Briefing
-from cron.briefing import run_daily_briefing
+from db.models import MemoryVector, SystemSetting, Briefing
+from cron.briefing import _search_radar_memories, run_daily_briefing
 
 
 @pytest.fixture(autouse=True)
@@ -204,3 +204,141 @@ def test_run_daily_briefing_fcm_token_missing(mock_get_auth_service, mock_get_ll
         client = DBClient(session)
         marker = client.get_system_setting("briefing_sent_2026-08-30")
         assert marker is not None
+
+
+# ---------------------------------------------------------------------------
+# Wayfinder T7 — Cron bounds: radar must use the pgvector index, never a
+# Python full-scan. Query spies below fail loudly on unbounded .all().
+# ---------------------------------------------------------------------------
+
+class _RecordingQuery:
+    """Minimal query double recording order_by/limit/all usage."""
+
+    def __init__(self, rows):
+        self._rows = rows
+        self.order_by_called = False
+        self.limit_n = None
+        self.filter_count = 0
+        self.all_calls = 0
+
+    def filter(self, *args):
+        self.filter_count += 1
+        return self
+
+    def order_by(self, *args):
+        self.order_by_called = True
+        return self
+
+    def limit(self, n):
+        self.limit_n = n
+        return self
+
+    def all(self):
+        self.all_calls += 1
+        if self.limit_n is None and len(self._rows) > 1000:
+            raise MemoryError("unbounded .all() full load over OOM-scale rows")
+        if self.limit_n is not None:
+            return self._rows[: self.limit_n]
+        return list(self._rows)
+
+
+class _RecordingSession:
+    """Session double recording which models are queried."""
+
+    def __init__(self, rows):
+        self._rows = rows
+        self.queries = []
+
+    def query(self, model):
+        q = _RecordingQuery(self._rows)
+        self.queries.append((model, q))
+        return q
+
+
+class _FakeRow:
+    def __init__(self, content):
+        self.content = content
+
+
+def _fake_embeddings_module(vector):
+    mock_emb = MagicMock()
+    mock_emb.embed_query.return_value = vector
+    return mock_emb
+
+
+def test_radar_uses_indexed_order_by_limit_not_full_scan():
+    """Radar with 10k mocked vectors issues ORDER BY ... LIMIT 3 (no .all())."""
+    rows = [_FakeRow(f"memory {i}") for i in range(10_000)]
+    session = _RecordingSession(rows)
+    with patch("cron.briefing.get_embeddings",
+               return_value=_fake_embeddings_module([0.01] * 512)):
+        matched = _search_radar_memories(session, "watch text about mars mission")
+
+    assert matched == ["memory 0", "memory 1", "memory 2"]
+    assert len(session.queries) == 1
+    model, query = session.queries[0]
+    assert model is MemoryVector
+    assert query.order_by_called is True
+    assert query.limit_n == 3
+    assert query.all_calls == 1
+
+
+def test_radar_scopes_by_conversation_when_applicable():
+    """Radar query filters by conversation_id when the watch item carries one."""
+    rows = [_FakeRow("scoped memory")]
+    session = _RecordingSession(rows)
+    with patch("cron.briefing.get_embeddings",
+               return_value=_fake_embeddings_module([0.02] * 512)):
+        matched = _search_radar_memories(
+            session, "watch text", conversation_id="conv-123"
+        )
+
+    assert matched == ["scoped memory"]
+    _, query = session.queries[0]
+    assert query.filter_count >= 1
+    assert query.limit_n == 3
+
+
+def test_radar_ilike_fallback_on_embedding_failure():
+    """Embedding failure falls back to a bounded ILIKE query (limit 3)."""
+    rows = [_FakeRow("matching memory")]
+    session = _RecordingSession(rows)
+    with patch("cron.briefing.get_embeddings",
+               side_effect=RuntimeError("All embedding providers failed.")):
+        matched = _search_radar_memories(session, "matching")
+
+    assert matched == ["matching memory"]
+    _, query = session.queries[0]
+    assert query.order_by_called is False
+    assert query.filter_count >= 1
+    assert query.limit_n == 3
+    assert query.all_calls == 1
+
+
+@patch("cron.briefing.send_push")
+@patch("cron.briefing.get_llm")
+@patch("cron.briefing.get_authenticated_service")
+def test_run_daily_briefing_radar_pgvector_unavailable_falls_back(
+    mock_get_auth_service, mock_get_llm, mock_send_push
+):
+    """Embeddings OK but vector query unavailable (SQLite test env) stays green."""
+    mock_get_auth_service.return_value = (None, "no_auth")
+    mock_llm_instance = MagicMock()
+    mock_llm_instance.invoke.return_value.content = "Briefing summary."
+    mock_get_llm.return_value = mock_llm_instance
+    mock_send_push.return_value = True
+
+    with get_db_session() as session:
+        client = DBClient(session)
+        client.add_watch_item("Submit weekly progress report")
+
+    with patch("cron.briefing.get_embeddings",
+               return_value=_fake_embeddings_module([0.03] * 512)):
+        res = run_daily_briefing(today_date="2026-08-31")
+
+    assert res["status"] == "success"
+    with get_db_session() as session:
+        client = DBClient(session)
+        briefings = client.get_briefing_history(days=30)
+        assert len(briefings) == 1
+        assert briefings[0].sections_json["radar"][0]["matched_memories"] == []
