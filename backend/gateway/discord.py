@@ -30,7 +30,10 @@ class DiscordGateway:
             self.logger.info("Received Discord message", channel_id=message.channel.id, author=str(message.author))
             if message.content.startswith("v."):
                 try:
-                    conv_id = self.db.get_or_create_discord_conversation(message.channel.id)
+                    # T8: sync SQLAlchemy DB call off the gateway event loop.
+                    conv_id = await asyncio.to_thread(
+                        self.db.get_or_create_discord_conversation, message.channel.id
+                    )
                     
                     # Hardcode "personal assistant" agent — ignore any database-defined agent
                     inputs = {

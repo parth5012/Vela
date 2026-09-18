@@ -19,12 +19,18 @@ sys.path.insert(0, str(backend_dir))
 load_dotenv(backend_dir / ".env")
 load_dotenv(backend_dir.parent / ".env")
 
-from db.session import engine
+from db.session import engine, ensure_prod_schema
 from sqlalchemy import inspect, text
 
 
 def run_migrations():
     print(f"Connecting to database: {engine.url.render_as_string(hide_password=True)} ({engine.dialect.name})")
+
+    # T8: idempotent prod DDL guard FIRST — same ensure_prod_schema() the app
+    # lifespan calls, so both paths converge on db.models (no drift, no
+    # Alembic). This creates all missing tables on a clean DB; the blocks
+    # below only backfill legacy columns/constraints.
+    ensure_prod_schema(engine)
 
     inspector = inspect(engine)
     existing_tables = set(inspector.get_table_names())
@@ -96,12 +102,16 @@ def run_migrations():
     print("\nChecking 'system_settings'...")
     if "system_settings" not in existing_tables:
         print(" - Creating table 'system_settings'")
+        if engine.dialect.name == "postgresql":
+            updated_at_col = "updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL"
+        else:
+            updated_at_col = "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL"
         with engine.begin() as conn:
-            conn.execute(text("""
+            conn.execute(text(f"""
                 CREATE TABLE system_settings (
                     key VARCHAR(100) PRIMARY KEY,
                     value TEXT NOT NULL,
-                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+                    {updated_at_col}
                 );
             """))
     else:
@@ -139,6 +149,36 @@ def run_migrations():
     # 7. Conversations chat-ID columns to BIGINT on PostgreSQL (T2)
     print("\nChecking 'conversations' chat-ID column types...")
     migrate_chat_ids_bigint(engine)
+
+    # 8. Check-ins (T8 drift fix: lifespan created this table but migrate.py
+    # did not — a clean-DB migrate.py run left it missing. Kept in sync with
+    # the lifespan block; ensure_prod_schema above already covers it via
+    # create_all, this is the legacy backfill for pre-T8 databases.)
+    print("\nChecking 'check_ins'...")
+    inspector = inspect(engine)
+    if "check_ins" not in inspector.get_table_names():
+        print(" - Creating table 'check_ins'")
+        created_at_default = "timezone('utc'::text, now())" if engine.dialect.name == "postgresql" else "CURRENT_TIMESTAMP"
+        id_default = "DEFAULT gen_random_uuid()" if engine.dialect.name == "postgresql" else ""
+        with engine.begin() as conn:
+            conn.execute(text(f"""
+                CREATE TABLE check_ins (
+                    id UUID PRIMARY KEY {id_default},
+                    conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE NOT NULL,
+                    date VARCHAR(10) NOT NULL,
+                    mood INTEGER NOT NULL CHECK (mood >= 1 AND mood <= 5),
+                    energy INTEGER NOT NULL CHECK (energy >= 1 AND energy <= 5),
+                    win TEXT,
+                    carrying TEXT,
+                    note TEXT,
+                    source VARCHAR(50) DEFAULT 'android_client' NOT NULL,
+                    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT {created_at_default} NOT NULL,
+                    updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT {created_at_default} NOT NULL,
+                    CONSTRAINT uq_checkins_conversation_date UNIQUE (conversation_id, date)
+                );
+            """))
+    else:
+        print("  'check_ins' exists.")
 
     # Verification
     inspector = inspect(engine)
