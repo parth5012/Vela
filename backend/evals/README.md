@@ -88,3 +88,28 @@ The runner:
 - Executes the Supervisor graph and SSE generator with mock providers (no live API keys required).
 - Asserts route, tool call, and auth-gate responses.
 - Runs `evals.validate_sse.assert_valid_sse` to strictly enforce the SSE streaming contract.
+
+---
+
+## Continuous Integration & Nightly Grading
+
+1. **PR CI (`.github/workflows/ci.yml`)**:
+   - Runs `backend/tests/test_golden.py` using mocked LLM responses, Supabase pgvector, and OAuth state.
+   - Executes in under 5 minutes without requiring external secrets or live API keys.
+   - Enforces exact match on route, tool selection, auth redirection, and strict SSE schema.
+
+2. **Nightly Live Evaluation (`.github/workflows/eval-nightly.yml`)**:
+   - Executes scheduled daily runs against live models.
+   - Uses an independent OpenRouter LLM-as-a-Judge (`meta-llama/llama-3.3-70b-instruct`) implemented in `backend/evals/judge.py`.
+   - Passing threshold is judge score $\ge 4/5$.
+   - Strictly avoids Gemini self-grading.
+
+---
+
+## Maintenance & Incident Rule
+
+When a production router misroute or Android SSE streaming incident occurs:
+1. **Reproduce First**: Before closing the incident or applying fixes, add at least one new versioned eval case (`<family>_NNN`) to `backend/evals/golden.jsonl`.
+2. **Immutable IDs**: Case IDs are permanent and must never be deleted or reassigned.
+3. **Envelope Changes**: Any modifications to the schema envelope require incrementing `schema_version`.
+4. **Negative Verification**: Verify the new case fails on unpatched code and passes on the resolved implementation.
