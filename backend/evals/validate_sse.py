@@ -240,21 +240,35 @@ def validate_sse(
 
 
 def _validate_chunk_sequence(actual: list[str], expected: list[str]) -> list[str]:
-    """Validate that actual chunk types conform to the expected sequence pattern.
+    """Validate that actual chunk types conform strictly to the expected sequence pattern.
 
-    Supports '*' wildcard, e.g. ["content*", "done"] matches any number of
-    'content' chunks followed by 'done'.
+    Enforces declared order and wildcard cardinality:
+    - Non-wildcard (e.g. 'done'): matches exactly one occurrence of that type.
+    - Wildcard (e.g. 'content*'): matches zero or more contiguous occurrences of that type.
+    - Reordered, missing, or extra chunks are reported as validation errors.
     """
     errors: list[str] = []
-    # If expected ends with 'done', check last item
-    if expected and expected[-1] == "done" and (not actual or actual[-1] != "done"):
-        errors.append(f"Expected terminal chunk 'done', but stream ended with '{actual[-1] if actual else 'empty'}'")
+    if not expected:
+        return errors
+    if not actual:
+        return ["Stream is empty; cannot match expected chunk sequence"]
 
-    # Verify all actual types are permitted in the expected list
-    allowed_bases = {s.rstrip("*") for s in expected}
-    for i, t in enumerate(actual):
-        if t not in allowed_bases:
-            errors.append(f"Chunk #{i} has unexpected type '{t}'; allowed: {sorted(allowed_bases)}")
+    # Construct regex over comma-delimited tokens to enforce sequential order
+    pattern_parts: list[str] = []
+    for item in expected:
+        if item.endswith("*"):
+            base = re.escape(item[:-1])
+            pattern_parts.append(f"(?:{base},)*")
+        else:
+            pattern_parts.append(f"{re.escape(item)},")
+
+    regex_pattern = "^" + "".join(pattern_parts) + "$"
+    actual_tokens_str = ",".join(actual) + ","
+
+    if not re.match(regex_pattern, actual_tokens_str):
+        errors.append(
+            f"Chunk sequence mismatch: actual types {actual} do not conform to expected pattern {expected}"
+        )
 
     return errors
 
