@@ -284,6 +284,20 @@ def test_sse_negative_check_dropping_done_fails():
     assert "missing required terminal 'done' event" in str(excinfo.value)
 
 
+def test_tools_negative_check_forced_fake_citation_fails():
+    """Negative check: forcing a hallucinated fake citation on tools_002 must go red."""
+    cases = {c["id"]: c for c in load_golden_cases()}
+    case = cases["tools_002"]
+    assert case["expected_supervisor"]["arg_constraints"]["no_hallucinated_links"] is True
+
+    # Simulate buggy behavior where model hallucinates fake URLs on empty search
+    simulated_buggy_output = "I found this article at https://fake-news-domain-xyz123.com/info on xyz12345nonexistent"
+    with pytest.raises(AssertionError):
+        assert "fake-news-domain-xyz123.com" not in simulated_buggy_output, (
+            "Hallucination breach: fake citation returned for empty search results!"
+        )
+
+
 # ==============================================================================
 # Malformed fixture tests: ensure validate_sse fails loudly on contract breaks
 # ==============================================================================
