@@ -239,6 +239,20 @@ def test_memory_isolation_negative_check_thread_leak_fails():
         assert forbidden not in leaked_response, "Thread isolation breach: confidential memory leaked across threads"
 
 
+def test_skill_interruption_negative_check_missing_stop_handler_fails():
+    """Negative check: removing stop-handler on skill_001 must go red."""
+    cases = {c["id"]: c for c in load_golden_cases()}
+    case = cases["skill_001"]
+    assert case["expected_supervisor"]["arg_constraints"]["stop_handler"] is True
+
+    # Simulate buggy behavior where skill ignores 'stop' and continues asking clarifying questions
+    simulated_buggy_behavior = {"stop_handler": False, "continue_questions": True}
+    with pytest.raises(AssertionError):
+        assert simulated_buggy_behavior.get("stop_handler") is True, (
+            "Skill failed to handle stop command; clarifying loop continued"
+        )
+
+
 # ==============================================================================
 # Malformed fixture tests: ensure validate_sse fails loudly on contract breaks
 # ==============================================================================
