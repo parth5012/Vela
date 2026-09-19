@@ -115,6 +115,8 @@ def grade_with_openrouter_judge(
             if json_match:
                 parsed = json.loads(json_match.group(0))
                 score = int(parsed.get("score", 1))
+                if not 1 <= score <= 5:
+                    raise ValueError(f"Judge score outside valid range: {score}")
                 return {
                     "score": score,
                     "reasoning": parsed.get("reasoning", ""),
@@ -134,3 +136,117 @@ def grade_with_openrouter_judge(
         "reasoning": "Failed to parse judge evaluation JSON response.",
         "passed": False,
     }
+
+
+def run_nightly_live_eval(
+    model: str = DEFAULT_JUDGE_MODEL,
+    golden_path: str | None = None,
+) -> int:
+    """Execute live golden dataset cases and evaluate them with OpenRouter judge.
+
+    Returns:
+        0 if all evaluated cases pass with score >= 4, 1 if any fails.
+    """
+    from pathlib import Path
+
+    target_path = Path(golden_path) if golden_path else Path(__file__).resolve().parent / "golden.jsonl"
+    if not target_path.exists():
+        print(f"Error: Golden dataset not found at {target_path}")
+        return 1
+
+    cases = []
+    with open(target_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                cases.append(json.loads(line))
+
+    # Representative live evaluation subset covering core families
+    live_case_ids = {
+        "routing_001",
+        "route_002",
+        "route_003",
+        "route_007",
+        "route_009",
+        "route_010",
+        "memory_004",
+        "memory_010",
+        "skill_001",
+        "hostile_001",
+    }
+    subset = [c for c in cases if c["id"] in live_case_ids] or cases[:10]
+
+    print(f"--- Running Nightly Live Evaluation ({len(subset)} cases) ---")
+    print(f"Judge Model: {model} | Pass Threshold: {PASS_THRESHOLD}/5")
+
+    failed_cases = []
+
+    # Import FastAPI TestClient to get actual live/mock responses
+    try:
+        from fastapi.testclient import TestClient
+        from agent.main import app
+        client = TestClient(app)
+        api_key = os.getenv("VELA_API_KEY", "vela-eval-key")
+        headers = {"Authorization": f"Bearer {api_key}"}
+    except Exception as e:
+        print(f"Warning: could not initialize TestClient ({e}), falling back to direct grading")
+        client = None
+        headers = {}
+
+    for case in subset:
+        cid = case["id"]
+        inp = case["input"]
+        msg = inp["message"]
+        persona = inp.get("persona") or "personal assistant"
+        expected = case["expected_supervisor"]
+
+        actual_text = ""
+        if client:
+            try:
+                payload = {
+                    "thread_id": f"nightly-eval-{cid}",
+                    "message": msg,
+                    "agent": persona,
+                }
+                with client.stream("POST", "/chat/message", json=payload, headers=headers) as resp:
+                    if resp.status_code == 200:
+                        for line in resp.iter_lines():
+                            if line.startswith("data:"):
+                                try:
+                                    data = json.loads(line[5:].strip())
+                                    if data.get("type") == "content":
+                                        actual_text += str(data.get("delta", ""))
+                                except Exception:
+                                    pass
+            except Exception as e:
+                actual_text = f"Error generating response: {e}"
+
+        if not actual_text:
+            actual_text = f"Response to '{msg}'"
+
+        res = grade_with_openrouter_judge(
+            user_query=msg,
+            expected_behavior=expected,
+            actual_response=actual_text,
+            model=model,
+        )
+
+        status_symbol = "✅" if res["passed"] else "❌"
+        print(f"[{status_symbol}] {cid}: Score {res['score']}/5 | {res['reasoning']}")
+
+        if not res["passed"]:
+            failed_cases.append((cid, res))
+
+    print("-----------------------------------------------------------------")
+    if failed_cases:
+        print(f"FAILED: {len(failed_cases)} case(s) scored below threshold {PASS_THRESHOLD}")
+        return 1
+    else:
+        print(f"SUCCESS: All {len(subset)} evaluated cases passed with score >= {PASS_THRESHOLD}")
+        return 0
+
+
+if __name__ == "__main__":
+    import sys
+    judge_model_arg = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_JUDGE_MODEL
+    sys.exit(run_nightly_live_eval(model=judge_model_arg))

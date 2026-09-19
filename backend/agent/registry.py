@@ -285,5 +285,20 @@ _registry.register(AgentConfig(
     ],
 ))
 
+_registry.register(AgentConfig(
+    identifier="coder",
+    display_name="Coder",
+    description="Software engineering, debugging, and code authoring assistant.",
+    prompt_instructions="You are a software engineering specialist.",
+    compact_prompt_instructions="<persona><role>Coder</role></persona>",
+    tool_names=[
+        "run_python_code",
+        "web_search",
+        "save_user_memory",
+        "delete_user_memory",
+        "send_status_message",
+    ],
+))
+
 # Public singleton — import this wherever agent config is needed
 AGENT_REGISTRY: AgentRegistry = _registry

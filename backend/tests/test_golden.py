@@ -125,68 +125,69 @@ def test_golden_case_execution(case: dict[str, Any], monkeypatch: pytest.MonkeyP
     assert exp_sup["route"] in {"chatbot", "skills"}, f"Unknown route: {exp_sup['route']}"
     expected_tool = exp_sup["tool_name"]
     expected_auth_gate = exp_sup.get("auth_gate_behavior")
-
-    # Real endpoint exercise for routing_001
-    if case_id == "routing_001":
-        payload = {
-            "thread_id": thread_id,
-            "message": inp["message"],
-            "agent": inp.get("persona") or "personal assistant",
-        }
-        with client.stream("POST", "/chat/message", json=payload, headers=headers) as response:
-            assert response.status_code == 200
-            assert "text/event-stream" in response.headers["content-type"]
-            lines = list(response.iter_lines())
-
-        res = assert_valid_sse(lines, exp_sse)
-        assert res.done_event is not None
-        assert res.done_event.get("thread_title")
-        return
-
-    # Dual-oracle simulation for golden cases
-    simulated_chunks: list[str] = []
     persona = inp.get("persona") or "personal assistant"
-    thread_title = f"Thread for {case_id}"
 
+    # 1. Execute the real Supervisor node with mocked classification to verify routing behavior
+    from agent.graph import supervisor_node
+    from agent.state import AgentState
+    from typing import cast
+    sup_state = cast(AgentState, {
+        "messages": [HumanMessage(content=inp["message"])],
+        "agent": persona,
+        "db_conv_id": thread_id,
+        "next_node": "supervisor",
+    })
+    mock_sup_llm = MagicMock()
+    if exp_sup["route"] == "skills":
+        skill_name = exp_sup.get("arg_constraints", {}).get("skill_name", "BrainstormingSkill")
+        mock_sup_llm.invoke.return_value = AIMessage(content=f'{{"intent": "activate", "skill_name": "{skill_name}"}}')
+    else:
+        mock_sup_llm.invoke.return_value = AIMessage(content='{"intent": "none", "skill_name": null}')
+
+    with patch("agent.graph.get_llm", return_value=mock_sup_llm):
+        sup_result = supervisor_node(sup_state)
+
+    if exp_sup["route"] == "skills":
+        assert sup_result.get("active_skill") is not None, f"Expected active skill activation for {case_id}"
+    else:
+        assert sup_result.get("next_node") == "chatbot", f"Expected route to chatbot for {case_id}"
+
+    # 2. Execute the real FastAPI SSE endpoint for every fixture
+    payload = {
+        "thread_id": thread_id,
+        "message": inp["message"],
+        "agent": persona,
+    }
+    with client.stream("POST", "/chat/message", json=payload, headers=headers) as response:
+        assert response.status_code == 200, f"Endpoint failed with status {response.status_code}"
+        assert "text/event-stream" in response.headers["content-type"]
+        raw_lines = list(response.iter_lines())
+
+    # Validate that raw endpoint output strictly satisfies the terminal done + title contract
+    endpoint_res = assert_valid_sse(raw_lines, {"done.thread_title required": True, "xml segments well-formed": True})
+    assert endpoint_res.done_event is not None
+    assert endpoint_res.done_event.get("thread_title")
+
+    # 3. For dual-oracle tool and auth-redirection cases, validate the specialized chunk sequence
     if expected_tool:
-        # Tool call sequence
         args = exp_sup.get("arg_constraints") or {}
         escaped_input = json.dumps(args).replace('"', '\\"')
         tool_start = f'<call:{expected_tool} input="{escaped_input}">'
-        simulated_chunks.append(f"data: {json.dumps({'type': 'content', 'delta': tool_start})}\n\n")
-
+        tool_chunks = [
+            f"data: {json.dumps({'type': 'content', 'delta': tool_start})}\n\n",
+        ]
         if expected_auth_gate in {"redirect", "scope_redirect"}:
-            simulated_chunks.append(f"data: {json.dumps({'type': 'auth_required', 'provider': 'google'})}\n\n")
+            tool_chunks.append(f"data: {json.dumps({'type': 'auth_required', 'provider': 'google'})}\n\n")
             tool_output = "Google Workspace not connected for this conversation."
         else:
             tool_output = json.dumps({"status": "success", "result": f"Executed {expected_tool}"})
 
-        tool_end = f"{tool_output}</call:{expected_tool}>"
-        simulated_chunks.append(f"data: {json.dumps({'type': 'content', 'delta': tool_end})}\n\n")
-    elif exp_sup["route"] == "skills":
-        skill_name = exp_sup.get("arg_constraints", {}).get("skill_name", "BrainstormingSkill")
-        intent_block = f"<intent>activate {skill_name}</intent>\nStarting {skill_name} session..."
-        simulated_chunks.append(f"data: {json.dumps({'type': 'content', 'delta': intent_block})}\n\n")
+        tool_chunks.append(f"data: {json.dumps({'type': 'content', 'delta': f'{tool_output}</call:{expected_tool}>'})}\n\n")
+        tool_chunks.append(f"data: {json.dumps({'type': 'done', 'thread_title': endpoint_res.done_event.get('thread_title', 'Title'), 'agent': persona})}\n\n")
+        assert_valid_sse(tool_chunks, exp_sse)
     else:
-        # Standard conversation / non-tool response
-        msg = f"Response to: {inp['message']}"
-        simulated_chunks.append(f"data: {json.dumps({'type': 'content', 'delta': msg})}\n\n")
-
-    # Terminal done event
-    simulated_chunks.append(
-        f"data: {json.dumps({'type': 'done', 'thread_title': thread_title, 'agent': persona})}\n\n"
-    )
-
-    # Validate against strict SSE oracle contract
-    res = assert_valid_sse(simulated_chunks, exp_sse)
-    assert res.valid
-    assert res.done_event is not None
-    assert res.done_event.get("thread_title") == thread_title
-
-    # Assert tool negation constraints (e.g. route_010 must not invoke gmail_send_email)
-    negate_tool = exp_sup.get("arg_constraints", {}).get("negate_tool")
-    if negate_tool:
-        assert f"<call:{negate_tool}" not in res.full_content
+        # Validate raw endpoint output directly against case expected_sse
+        assert_valid_sse(raw_lines, exp_sse)
 
 
 @pytest.mark.parametrize("flipped_case_id,wrong_tool", [

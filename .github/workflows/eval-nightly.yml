@@ -41,6 +41,10 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
 
-      - name: Run Golden Dataset Eval Suite with Judge
+      - name: Run Golden Dataset Mocked Pytest Suite
         run: |
           uv run pytest tests/test_golden.py -v --durations=10
+
+      - name: Run Live Evaluation with OpenRouter Judge
+        run: |
+          uv run python -m evals.judge "${{ github.event.inputs.judge_model || 'meta-llama/llama-3.3-70b-instruct' }}"
