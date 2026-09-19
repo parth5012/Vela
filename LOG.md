@@ -16,6 +16,7 @@ Each entry:
 
 | Date | Status | What | Verified | Notes |
 |------|--------|------|----------|-------|
+| 2026-09-19 07:45 | Done | Resolved Ticket #274: Golden grading, CI wiring, ADR and glossary (Map #265 destination achieved!) | 88 Pytest tests passed in backend/tests/test_golden.py | Added OpenRouter judge, nightly CI workflow, ADR-0004, and CONTEXT.md glossary on branch eval/grading-docs |
 | 2026-09-19 07:35 | Done | Resolved Ticket #273: Golden cases: tool and infra failures (10) (part of Map #265) | 88 Pytest tests passed in backend/tests/test_golden.py | Appended tools_001..tools_010 to backend/evals/golden.jsonl, added hallucinated citation negative test on branch eval/tool-cases |
 | 2026-09-19 07:25 | Done | Resolved Ticket #272: Golden cases: Android SSE streaming regressions (10) (part of Map #265) | 79 Pytest tests passed in test_golden.py + test_sse_concurrency.py | Appended sse_001..sse_010 to backend/evals/golden.jsonl, added missing done negative test on branch eval/sse-cases |
 | 2026-09-19 07:15 | Done | Resolved Ticket #271: Golden cases: hostile, forgery, multilingual inputs (10) (part of Map #265) | 66 Pytest tests passed in backend/tests/test_golden.py | Appended hostile_001..hostile_010 to backend/evals/golden.jsonl, added XML forgery negative test on branch eval/hostile-cases |
