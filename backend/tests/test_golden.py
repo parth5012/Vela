@@ -268,6 +268,22 @@ def test_hostile_negative_check_xml_forgery_executed_as_tool_fails():
         )
 
 
+def test_sse_negative_check_dropping_done_fails():
+    """Negative check: dropping the terminal 'done' chunk from any SSE fixture must go red."""
+    cases = {c["id"]: c for c in load_golden_cases()}
+    case = cases["sse_001"]
+    exp_sse = case["expected_sse"]
+
+    # Stream with valid content but 'done' dropped
+    truncated_stream = [
+        'data: {"type": "content", "delta": "Response text stream..."}\n\n'
+    ]
+    with pytest.raises(SSEValidationError) as excinfo:
+        assert_valid_sse(truncated_stream, exp_sse)
+
+    assert "missing required terminal 'done' event" in str(excinfo.value)
+
+
 # ==============================================================================
 # Malformed fixture tests: ensure validate_sse fails loudly on contract breaks
 # ==============================================================================
