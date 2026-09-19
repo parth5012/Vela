@@ -16,6 +16,7 @@ Each entry:
 
 | Date | Status | What | Verified | Notes |
 |------|--------|------|----------|-------|
+| 2026-09-19 07:15 | Done | Resolved Ticket #271: Golden cases: hostile, forgery, multilingual inputs (10) (part of Map #265) | 66 Pytest tests passed in backend/tests/test_golden.py | Appended hostile_001..hostile_010 to backend/evals/golden.jsonl, added XML forgery negative test on branch eval/hostile-cases |
 | 2026-09-19 07:05 | Done | Resolved Ticket #270: Golden cases: multi-turn skill interruptions (10) (part of Map #265) | 55 Pytest tests passed in backend/tests/test_golden.py | Appended skill_001..skill_010 to backend/evals/golden.jsonl, added stop-handler negative test on branch eval/skill-cases |
 | 2026-09-19 06:55 | Done | Resolved Ticket #269: Golden cases: memory isolation + recall (10) (part of Map #265) | 44 Pytest tests passed in backend/tests/test_golden.py | Appended memory_001..memory_010 to backend/evals/golden.jsonl, added thread leak negative test on branch eval/memory-cases |
 | 2026-09-19 06:45 | Done | Resolved Ticket #268: Golden cases: auth-gate + OAuth refresh (10) (part of Map #265) | 38 Pytest tests passed in test_golden.py + test_auth_gate.py | Appended auth_001..auth_010 to backend/evals/golden.jsonl, added negative redirect assertion test on branch eval/auth-cases |
