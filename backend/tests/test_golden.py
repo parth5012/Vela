@@ -227,6 +227,18 @@ def test_auth_gate_negative_check_missing_redirect_assertion_fails():
         )
 
 
+def test_memory_isolation_negative_check_thread_leak_fails():
+    """Negative check: leaking content from Thread A into Thread B must trigger isolation failure."""
+    cases = {c["id"]: c for c in load_golden_cases()}
+    case = cases["memory_002"]
+    forbidden = case["expected_supervisor"]["arg_constraints"]["forbidden_content"]
+
+    # Leaked response containing forbidden content
+    leaked_response = f"Your salary discussed in Thread A is ${forbidden}."
+    with pytest.raises(AssertionError):
+        assert forbidden not in leaked_response, "Thread isolation breach: confidential memory leaked across threads"
+
+
 # ==============================================================================
 # Malformed fixture tests: ensure validate_sse fails loudly on contract breaks
 # ==============================================================================
