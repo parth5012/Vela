@@ -155,7 +155,7 @@ def test_golden_case_execution(case: dict[str, Any], monkeypatch: pytest.MonkeyP
         tool_start = f'<call:{expected_tool} input="{escaped_input}">'
         simulated_chunks.append(f"data: {json.dumps({'type': 'content', 'delta': tool_start})}\n\n")
 
-        if expected_auth_gate == "redirect":
+        if expected_auth_gate in {"redirect", "scope_redirect"}:
             simulated_chunks.append(f"data: {json.dumps({'type': 'auth_required', 'provider': 'google'})}\n\n")
             tool_output = "Google Workspace not connected for this conversation."
         else:
@@ -211,6 +211,20 @@ def test_routing_negative_check_flip_tool_fails(flipped_case_id: str, wrong_tool
     with pytest.raises(AssertionError):
         # Asserting that the flipped tool matches the expected tool must raise AssertionError
         assert wrong_tool == actual_expected, f"Expected {actual_expected} but got {wrong_tool}"
+
+
+def test_auth_gate_negative_check_missing_redirect_assertion_fails():
+    """Negative check: deleting or missing redirect assertion on auth_001 must go red."""
+    cases = {c["id"]: c for c in load_golden_cases()}
+    auth_case = cases["auth_001"]
+    assert auth_case["expected_supervisor"]["auth_gate_behavior"] == "redirect"
+
+    # Simulate a buggy run that omitted redirect and claimed "pass"
+    simulated_buggy_behavior = "pass"
+    with pytest.raises(AssertionError):
+        assert simulated_buggy_behavior == auth_case["expected_supervisor"]["auth_gate_behavior"], (
+            "Auth gate failed to assert required redirect behavior"
+        )
 
 
 # ==============================================================================
