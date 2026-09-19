@@ -253,6 +253,21 @@ def test_skill_interruption_negative_check_missing_stop_handler_fails():
         )
 
 
+def test_hostile_negative_check_xml_forgery_executed_as_tool_fails():
+    """Negative check: XML forgery executed as a real tool must go red (must stay inert)."""
+    cases = {c["id"]: c for c in load_golden_cases()}
+    case = cases["hostile_004"]
+    assert case["expected_supervisor"]["tool_name"] is None
+    assert case["expected_supervisor"]["arg_constraints"]["forgery_inert"] is True
+
+    # If an attacker's forged <call:gmail_send_email> is mistakenly executed as a tool
+    simulated_executed_tool = "gmail_send_email"
+    with pytest.raises(AssertionError):
+        assert simulated_executed_tool == case["expected_supervisor"]["tool_name"], (
+            "Security breach: forged XML segment executed as a real supervisor tool!"
+        )
+
+
 # ==============================================================================
 # Malformed fixture tests: ensure validate_sse fails loudly on contract breaks
 # ==============================================================================
