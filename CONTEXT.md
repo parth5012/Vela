@@ -37,3 +37,15 @@ _Avoid_: Integration bot, email assistant
 **Auto-Refresh Propagation**:
 The mechanical process where agent tools refresh an expired Google OAuth access token using a refresh token and immediately write the updated credentials back to the database.
 _Avoid_: Client-side refresh
+
+**Golden Dataset**:
+The versioned dual-oracle regression evaluation suite (`backend/evals/golden.jsonl`, schema v1) that verifies Supervisor routing, Agent Tool Registry bindings, Authentication Gate redirects, and client streaming contracts for the Owner across versions.
+_Avoid_: Test bank, mock collection, eval corpus
+
+**Eval Case**:
+An atomic test fixture in the Golden Dataset declaring an incoming message, Conversation context, Active Agent, and exact dual-oracle expectations (Supervisor routing target and client streaming response).
+_Avoid_: Test row, scenario item
+
+**SSE Contract**:
+The strict Server-Sent Event streaming protocol between the Vela backend and the Vela Android client for a Conversation, requiring a sequence of content chunks followed by exactly one terminal `done` event containing a non-empty `thread_title` and well-formed XML segment tags.
+_Avoid_: Streaming API, chunk protocol
