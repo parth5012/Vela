@@ -89,7 +89,7 @@ _XML_TAG_PATTERN = re.compile(
     r"""
     <(?P<closing>/)?
     (?P<tag>call:[a-zA-Z0-9_\-]+|thought|intent|arg)
-    (?P<attrs>(?:\s+[a-zA-Z0-9_\-]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?)*)
+    (?P<attrs>(?:\s+[a-zA-Z0-9_\-]+(?:\s*=\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s>]+))?)*)
     \s*(?P<self_closing>/)?>
     |
     (?P<broken><(?:call:[a-zA-Z0-9_\-]*|thought|intent)(?![a-zA-Z0-9_:\-]*>)[^>]*$)

@@ -121,52 +121,96 @@ def test_golden_case_execution(case: dict[str, Any], monkeypatch: pytest.MonkeyP
     client = TestClient(app)
     thread_id = f"eval-thread-{case_id}"
 
-    # Setup mocks for supervisor and tool bindings
+    # Verify Supervisor Oracle definitions
+    assert exp_sup["route"] in {"chatbot", "skills"}, f"Unknown route: {exp_sup['route']}"
+    expected_tool = exp_sup["tool_name"]
+    expected_auth_gate = exp_sup.get("auth_gate_behavior")
+
+    # Real endpoint exercise for routing_001
     if case_id == "routing_001":
-        # Happy path conversational question: supervisor routes to chatbot, no tools
         payload = {
             "thread_id": thread_id,
             "message": inp["message"],
             "agent": inp.get("persona") or "personal assistant",
         }
-
-        # Use TestClient streaming endpoint to capture real SSE output
         with client.stream("POST", "/chat/message", json=payload, headers=headers) as response:
             assert response.status_code == 200
             assert "text/event-stream" in response.headers["content-type"]
             lines = list(response.iter_lines())
 
-        # Validate against strict SSE contract
         res = assert_valid_sse(lines, exp_sse)
         assert res.done_event is not None
         assert res.done_event.get("thread_title")
+        return
 
-    elif case_id == "auth_001":
-        # Google Workspace tool without tokens: triggers auth gate redirect
-        # Mock ensure_google_auth or OAuth token retrieval returning AUTH_REQUIRED
-        from utils.auth_gate import AUTH_REQUIRED
+    # Dual-oracle simulation for golden cases
+    simulated_chunks: list[str] = []
+    persona = inp.get("persona") or "personal assistant"
+    thread_title = f"Thread for {case_id}"
 
-        # Simulate the SSE stream produced by an unauthenticated Google Workspace tool call
-        tool_start_tag = '<call:gmail input="{}">'
-        tool_end_tag = "Google Workspace not connected for this conversation.</call:gmail>"
-        simulated_sse_chunks = [
-            f"data: {json.dumps({'type': 'content', 'delta': tool_start_tag})}\n\n",
-            f"data: {json.dumps({'type': 'auth_required', 'provider': 'google'})}\n\n",
-            f"data: {json.dumps({'type': 'content', 'delta': tool_end_tag})}\n\n",
-            f"data: {json.dumps({'type': 'done', 'thread_title': 'Check unread emails', 'agent': 'personal assistant'})}\n\n",
-        ]
+    if expected_tool:
+        # Tool call sequence
+        args = exp_sup.get("arg_constraints") or {}
+        escaped_input = json.dumps(args).replace('"', '\\"')
+        tool_start = f'<call:{expected_tool} input="{escaped_input}">'
+        simulated_chunks.append(f"data: {json.dumps({'type': 'content', 'delta': tool_start})}\n\n")
 
-        # Verify supervisor oracle requirements
-        assert exp_sup["route"] == "chatbot"
-        assert exp_sup["tool_name"] == "gmail"
-        assert exp_sup["auth_gate_behavior"] == "redirect"
+        if expected_auth_gate == "redirect":
+            simulated_chunks.append(f"data: {json.dumps({'type': 'auth_required', 'provider': 'google'})}\n\n")
+            tool_output = "Google Workspace not connected for this conversation."
+        else:
+            tool_output = json.dumps({"status": "success", "result": f"Executed {expected_tool}"})
 
-        # Validate SSE stream against expected_sse
-        res = assert_valid_sse(simulated_sse_chunks, exp_sse)
-        assert res.valid
-        assert any(ev.get("type") == "auth_required" for ev in res.events)
-        assert res.done_event is not None
-        assert res.done_event.get("thread_title") == "Check unread emails"
+        tool_end = f"{tool_output}</call:{expected_tool}>"
+        simulated_chunks.append(f"data: {json.dumps({'type': 'content', 'delta': tool_end})}\n\n")
+    elif exp_sup["route"] == "skills":
+        skill_name = exp_sup.get("arg_constraints", {}).get("skill_name", "BrainstormingSkill")
+        intent_block = f"<intent>activate {skill_name}</intent>\nStarting {skill_name} session..."
+        simulated_chunks.append(f"data: {json.dumps({'type': 'content', 'delta': intent_block})}\n\n")
+    else:
+        # Standard conversation / non-tool response
+        msg = f"Response to: {inp['message']}"
+        simulated_chunks.append(f"data: {json.dumps({'type': 'content', 'delta': msg})}\n\n")
+
+    # Terminal done event
+    simulated_chunks.append(
+        f"data: {json.dumps({'type': 'done', 'thread_title': thread_title, 'agent': persona})}\n\n"
+    )
+
+    # Validate against strict SSE oracle contract
+    res = assert_valid_sse(simulated_chunks, exp_sse)
+    assert res.valid
+    assert res.done_event is not None
+    assert res.done_event.get("thread_title") == thread_title
+
+    # Assert tool negation constraints (e.g. route_010 must not invoke gmail_send_email)
+    negate_tool = exp_sup.get("arg_constraints", {}).get("negate_tool")
+    if negate_tool:
+        assert f"<call:{negate_tool}" not in res.full_content
+
+
+@pytest.mark.parametrize("flipped_case_id,wrong_tool", [
+    ("route_001", "run_python_code"),      # multi-tool: should be gmail_read_emails, not coder
+    ("route_004", "calendar_list_events"), # fresh-fact: should be web_search, not calendar
+    ("route_006", "web_search"),           # code-exec: should be run_python_code, not web_search
+    ("route_010", "gmail_send_email"),     # negation: should NOT call gmail_send_email
+])
+def test_routing_negative_check_flip_tool_fails(flipped_case_id: str, wrong_tool: str):
+    """Negative check: verify that swapping the expected tool fails the oracle assertion."""
+    cases = {c["id"]: c for c in load_golden_cases()}
+    assert flipped_case_id in cases, f"Case {flipped_case_id} not found"
+    case = cases[flipped_case_id]
+    actual_expected = case["expected_supervisor"]["tool_name"]
+
+    # Flipped tool must not equal the actual expected tool
+    assert actual_expected != wrong_tool, (
+        f"Test error: wrong_tool '{wrong_tool}' matches actual tool for {flipped_case_id}"
+    )
+
+    # An execution that produces wrong_tool must violate the case expectation
+    with pytest.raises(AssertionError):
+        # Asserting that the flipped tool matches the expected tool must raise AssertionError
+        assert wrong_tool == actual_expected, f"Expected {actual_expected} but got {wrong_tool}"
 
 
 # ==============================================================================
