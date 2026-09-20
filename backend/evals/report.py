@@ -213,10 +213,10 @@ def _detail_filename(suite: str, case_id: str) -> str:
     return f"{safe}.html"
 
 
-def _nav(current: str, generated_at: str | None) -> str:
+def _nav(current: str, generated_at: str | None, prefix: str = "") -> str:
     def link(href: str, label: str, key: str) -> str:
         cls = "cur" if current == key else ""
-        return f"<a class='{cls}' href='{href}'>{label}</a>"
+        return f"<a class='{cls}' href='{prefix}{href}'>{label}</a>"
     gen = f"<span class='gen'>Updated {_esc(generated_at or '—')}</span>" if generated_at else ""
     return (
         "<nav>"
@@ -417,7 +417,7 @@ def _render_detail(suite: str, case: dict[str, Any], generated_at: str | None) -
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
         "<title>" + cid_esc + " — Eval Case Detail</title><style>" + _CSS + "</style></head><body>"
-        + _nav("", generated_at) +
+        + _nav("", generated_at, "../") +
         "<div class='wrap'>"
         "<p><a href='../cases.html'>All cases</a> · <a href='../index.html'>Dashboard</a></p>"
         "<h1>" + cid_esc + " <span class='pill " + pill_cls + "'>" + pill_txt + "</span></h1>"
@@ -468,8 +468,14 @@ def write_html_report(suites: dict[str, Any], output_dir: Path | None = None) ->
 
     (out / "index.html").write_text(_render_index(suites, generated_at), encoding="utf-8")
     (out / "cases.html").write_text(_render_cases(suites, generated_at), encoding="utf-8")
+    written: set[str] = set()
     for suite, payload in suites.items():
         for case in payload.get("cases", []):
             fn = _detail_filename(suite, str(case.get("id", "unknown")))
+            written.add(fn)
             (cases_dir / fn).write_text(_render_detail(suite, case, generated_at), encoding="utf-8")
+    # Remove stale detail pages for cases that no longer exist.
+    for stale in cases_dir.glob("*.html"):
+        if stale.name not in written:
+            stale.unlink()
     return out / "index.html"
