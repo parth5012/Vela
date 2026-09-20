@@ -23,6 +23,14 @@ class DeviceAgentModule : Module() {
             }
             nodeMap.clear()
         }
+
+        /** Parses an "x,y" tap target into pixel coords, or null for @e refs. */
+        fun parseCoords(target: String): Pair<Float, Float>? {
+            if (target.startsWith("@e")) return null
+            val parts = target.split(",").mapNotNull { it.trim().toFloatOrNull() }
+            if (parts.size != 2) return null
+            return Pair(parts[0], parts[1])
+        }
     }
 
     override fun definition() = ModuleDefinition {
@@ -91,10 +99,82 @@ class DeviceAgentModule : Module() {
             val service = VelaAccessibilityService.instance
                 ?: throw IllegalStateException("Accessibility service is not running or disabled")
 
-            val node = nodeMap[target] ?: throw IllegalArgumentException("Target node not found: $target")
+            val normalized = action.lowercase()
+            val effectiveTarget = if (ref.isNotEmpty()) ref else target
 
-            when (action.lowercase()) {
-                "click" -> {
+            // Coordinate tap fallback: "540,960" with no @e node -> dispatchGesture.
+            // Lets Needle x,y outputs (device_click) act without a prior screen_read.
+            if ((normalized == "click" || normalized == "tap" || normalized == "tap_coords") && !nodeMap.containsKey(effectiveTarget)) {
+                val coords = parseCoords(effectiveTarget)
+                if (coords != null) {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                        val path = android.graphics.Path().apply { moveTo(coords.first, coords.second) }
+                        val stroke = android.accessibilityservice.GestureDescription.StrokeDescription(path, 0L, 50L)
+                        val gesture = android.accessibilityservice.GestureDescription.Builder().addStroke(stroke).build()
+                        val dispatched = service.dispatchGesture(gesture, null, null)
+                        return@AsyncFunction dispatched
+                    } else {
+                        throw IllegalArgumentException("Coordinate tap requires Android N+, got target: $effectiveTarget")
+                    }
+                }
+            }
+
+            // App launch / global keys / volume don't need an @e node.
+            if (normalized == "open_app" || normalized == "openapp" || normalized == "launch") {
+                val query = (if (value.isNotEmpty()) value else effectiveTarget).trim()
+                if (query.isEmpty()) throw IllegalArgumentException("open_app needs an app label or package")
+                val pm = service.packageManager
+                // Direct package launch first.
+                try {
+                    val launch = pm.getLaunchIntentForPackage(query)
+                    if (launch != null) {
+                        launch.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        service.startActivity(launch)
+                        return@AsyncFunction true
+                    }
+                } catch (_: Exception) { }
+                // Fallback: resolve by app label.
+                try {
+                    val apps = pm.getInstalledApplications(0)
+                    val match = apps.firstOrNull {
+                        val label = pm.getApplicationLabel(it)?.toString() ?: ""
+                        label.equals(query, ignoreCase = true) || it.packageName.equals(query, ignoreCase = true)
+                    }
+                    if (match != null) {
+                        val launch = pm.getLaunchIntentForPackage(match.packageName)
+                        if (launch != null) {
+                            launch.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            service.startActivity(launch)
+                            return@AsyncFunction true
+                        }
+                    }
+                } catch (_: Exception) { }
+                throw IllegalArgumentException("App not found: $query")
+            }
+
+            if (normalized == "press_key" || normalized == "presskey" || normalized == "key") {
+                val key = (if (value.isNotEmpty()) value else effectiveTarget).lowercase()
+                val global = when {
+                    key.contains("back") -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK
+                    key.contains("home") -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME
+                    key.contains("recent") || key.contains("overview") -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS
+                    else -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK
+                }
+                return@AsyncFunction service.performGlobalAction(global)
+            }
+
+            if (normalized == "set_volume" || normalized == "setvolume" || normalized == "volume") {
+                val levelStr = if (value.isNotEmpty()) value else effectiveTarget
+                val level = levelStr.trim().toIntOrNull() ?: throw IllegalArgumentException("set_volume needs level 0-15, got: $levelStr")
+                val audio = service.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+                audio.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, level.coerceIn(0, 15), 0)
+                return@AsyncFunction true
+            }
+
+            val node = nodeMap[effectiveTarget] ?: throw IllegalArgumentException("Target node not found: $effectiveTarget")
+
+            when (normalized) {
+                "click", "tap" -> {
                     var temp: AccessibilityNodeInfo? = node
                     var clicked = false
                     while (temp != null && !clicked) {
@@ -113,10 +193,15 @@ class DeviceAgentModule : Module() {
                     arguments.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value)
                     node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
                 }
-                "scrollforward" -> {
-                    node.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+                "scrollforward", "scroll", "swipe", "scroll_forward" -> {
+                    val dir = value.lowercase()
+                    if (dir.contains("back")) {
+                        node.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
+                    } else {
+                        node.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+                    }
                 }
-                "scrollbackward" -> {
+                "scrollbackward", "scroll_backward" -> {
                     node.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
                 }
                 "focus" -> {

@@ -55,6 +55,7 @@ export const ALLOWED_DEVICE_TOOLS = new Set([
   'device_info',
   'device_screenshot',
   'device_click',
+  'device_tap',
   'device_type',
   'device_scroll',
   'device_swipe',
@@ -117,6 +118,14 @@ export function parseToolCall(text: string): ParsedToolCall | null {
                   value = String(args.query);
                 } else if (args.input !== undefined) {
                   value = String(args.input);
+                } else if (args.key !== undefined) {
+                  value = String(args.key);
+                } else if (args.level !== undefined) {
+                  value = String(args.level);
+                } else if (args.direction !== undefined) {
+                  value = String(args.direction);
+                } else if (args.app !== undefined && target === undefined) {
+                  value = String(args.app);
                 }
 
                 return {
@@ -330,17 +339,22 @@ export async function runLocalAgentLoop(
       });
 
       // 2. Execute device action
+      let stepDbStatus: 'executed' | 'blocked' = 'executed';
       try {
         observation = await executeDeviceAction(
           toolCall.toolName,
           toolCall.target,
           toolCall.value
         );
+        if (observation === 'Action failed') {
+          stepDbStatus = 'blocked';
+        }
       } catch (err: any) {
         observation = `Execution error: ${err?.message || String(err)}`;
+        stepDbStatus = 'blocked';
       }
 
-      await logDeviceStepToDb(conversationId, step, toolCall, observation, 'executed');
+      await logDeviceStepToDb(conversationId, step, toolCall, observation, stepDbStatus);
 
       options.onEvent?.({
         type: 'tool_observation',

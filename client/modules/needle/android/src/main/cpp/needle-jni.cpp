@@ -1,5 +1,7 @@
 #include <jni.h>
 #include <string>
+#include <cstring>
+#include <cctype>
 #include <vector>
 #include <android/log.h>
 #include "needle.h"
@@ -17,7 +19,8 @@ Java_com_vela_client_needle_NeedleNative_nativeInit(
     JNIEnv* env,
     jobject /* this */,
     jstring jWeightsPath,
-    jint contextSize
+    jint contextSize,
+    jstring jToolsJson
 ) {
     if (!jWeightsPath) {
         LOGE("nativeInit: jWeightsPath is null");
@@ -27,16 +30,24 @@ Java_com_vela_client_needle_NeedleNative_nativeInit(
     if (!weightsPath) {
         return JNI_FALSE;
     }
-    LOGI("nativeInit called with weightsPath=%s contextSize=%d", weightsPath, contextSize);
+    const char* toolsJson = jToolsJson ? env->GetStringUTFChars(jToolsJson, nullptr) : nullptr;
+    const char* toolsArg = (toolsJson && toolsJson[0] != '\0') ? toolsJson : "[]";
+    // contextSize has no slot in needle_init(system_prompt, tools_json,
+    // tool_index_path) — it is honored JS-side (localContextSize/maxTokens +
+    // RAM estimates) and logged here for traceability.
+    (void)contextSize;
+    LOGI("nativeInit called with weightsPath=%s contextSize=%d toolsLen=%zu", weightsPath, contextSize, strlen(toolsArg));
 
 #if HAVE_NEEDLE_SO
-    int rc = needle_init("", "[]", weightsPath);
+    int rc = needle_init("", toolsArg, weightsPath);
     env->ReleaseStringUTFChars(jWeightsPath, weightsPath);
+    if (jToolsJson && toolsJson) env->ReleaseStringUTFChars(jToolsJson, toolsJson);
     g_initialized = (rc == 0);
     return g_initialized ? JNI_TRUE : JNI_FALSE;
 #else
     LOGI("HAVE_NEEDLE_SO is 0; initializing mock fallback engine");
     env->ReleaseStringUTFChars(jWeightsPath, weightsPath);
+    if (jToolsJson && toolsJson) env->ReleaseStringUTFChars(jToolsJson, toolsJson);
     g_initialized = true;
     return JNI_TRUE;
 #endif
@@ -84,7 +95,21 @@ Java_com_vela_client_needle_NeedleNative_nativeComplete(
     if (jToolsJson && toolsJson) env->ReleaseStringUTFChars(jToolsJson, toolsJson);
 
     std::string response;
-    if (promptStr.find("click") != std::string::npos || promptStr.find("tap") != std::string::npos) {
+    std::string lower = promptStr;
+    for (auto& c : lower) c = tolower((unsigned char)c);
+    if (lower.find("open") != std::string::npos && lower.find("app") != std::string::npos) {
+        response = "{\"name\": \"device_open_app\", \"arguments\": {\"app\": \"Settings\"}, \"confidence\": 0.93}";
+    } else if (lower.find("scroll") != std::string::npos || lower.find("swipe") != std::string::npos) {
+        response = "{\"name\": \"device_scroll\", \"arguments\": {\"target\": \"@e0\", \"direction\": \"forward\"}, \"confidence\": 0.93}";
+    } else if (lower.find("back") != std::string::npos || lower.find("home") != std::string::npos || lower.find("press") != std::string::npos || lower.find("key") != std::string::npos) {
+        response = "{\"name\": \"device_press_key\", \"arguments\": {\"key\": \"back\"}, \"confidence\": 0.92}";
+    } else if (lower.find("volume") != std::string::npos) {
+        response = "{\"name\": \"device_set_volume\", \"arguments\": {\"level\": \"5\"}, \"confidence\": 0.92}";
+    } else if (lower.find("screenshot") != std::string::npos) {
+        response = "{\"name\": \"device_screenshot\", \"arguments\": {}, \"confidence\": 0.95}";
+    } else if (lower.find("info") != std::string::npos || lower.find("device") != std::string::npos || lower.find("battery") != std::string::npos) {
+        response = "{\"name\": \"device_info\", \"arguments\": {}, \"confidence\": 0.95}";
+    } else if (promptStr.find("click") != std::string::npos || promptStr.find("tap") != std::string::npos) {
         response = "{\"name\": \"device_click\", \"arguments\": {\"x\": 540, \"y\": 1120}, \"confidence\": 0.96}";
     } else if (promptStr.find("type") != std::string::npos || promptStr.find("text") != std::string::npos) {
         response = "{\"name\": \"device_type\", \"arguments\": {\"text\": \"Hello\"}, \"confidence\": 0.94}";

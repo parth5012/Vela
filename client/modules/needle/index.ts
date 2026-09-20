@@ -41,11 +41,13 @@ export const NeedleModule = {
     }
   },
 
-  async init(weightsPath: string, contextSize: number = 256): Promise<boolean> {
+  async init(weightsPath: string, contextSize: number = 256, toolsJson?: string): Promise<boolean> {
     if (!nativeModule) {
-      return true; // Mock mode
+      // Honest mock: no native runtime, so init reports failure and lets
+      // localLlm fall back to the labeled "[Mock mode]" generator.
+      return false;
     }
-    return nativeModule.init(weightsPath, contextSize);
+    return nativeModule.init(weightsPath, contextSize, toolsJson ?? '');
   },
 
   async complete(
@@ -54,9 +56,11 @@ export const NeedleModule = {
     maxTokens: number = 128
   ): Promise<NeedleCompletionResult> {
     if (!nativeModule) {
+      const mockJson =
+        '{"name": "device_screen_read", "arguments": {}, "confidence": 0.95}';
       return {
-        text: '{"name": "device_screen_read", "arguments": {}, "confidence": 0.95}',
-        toolCalls: '{"name": "device_screen_read", "arguments": {}, "confidence": 0.95}',
+        text: `[Mock mode — the local model is NOT running] ${mockJson}`,
+        toolCalls: mockJson,
       };
     }
     return nativeModule.complete(prompt, toolsJson || '', maxTokens);
