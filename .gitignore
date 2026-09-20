@@ -29,3 +29,5 @@ client/google-services.json
 dist/
 *.apk
 client/e2e/results/
+# Generated eval HTML report (regenerated on every eval run)
+backend/evals/report/
