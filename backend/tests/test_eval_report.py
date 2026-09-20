@@ -116,3 +116,30 @@ def test_save_suite_results_merges_suites(tmp_path, monkeypatch):
     assert "suite_b" in data["suites"]
     # HTML regenerated on each save
     assert (tmp_path / "index.html").exists()
+
+
+def test_detail_page_nav_links_are_root_relative(tmp_path):
+    """Detail pages live under cases/, so their nav must use ../ prefix."""
+    from evals.report import write_html_report
+
+    suites = {"nightly_live": {"summary": {}, "cases": _sample_cases()[:1]}}
+    write_html_report(suites, output_dir=tmp_path)
+
+    detail = (tmp_path / "cases" / "nightly_live-routing_001.html").read_text(encoding="utf-8")
+    assert "href='../index.html'" in detail
+    assert "href='../cases.html'" in detail
+    assert "href='cases/index.html'" not in detail
+
+
+def test_regeneration_removes_stale_detail_pages(tmp_path):
+    from evals.report import write_html_report
+
+    suites = {"nightly_live": {"summary": {}, "cases": _sample_cases()}}
+    write_html_report(suites, output_dir=tmp_path)
+    stale = tmp_path / "cases" / "nightly_live-routing_001.html"
+    assert stale.exists()
+
+    reduced = {"nightly_live": {"summary": {}, "cases": _sample_cases()[1:]}}
+    write_html_report(reduced, output_dir=tmp_path)
+    assert not stale.exists()
+    assert (tmp_path / "cases" / "nightly_live-hostile_001.html").exists()
