@@ -97,21 +97,33 @@ Java_com_vela_client_needle_NeedleNative_nativeComplete(
     std::string response;
     std::string lower = promptStr;
     for (auto& c : lower) c = tolower((unsigned char)c);
-    if (lower.find("open") != std::string::npos && lower.find("app") != std::string::npos) {
+    // Match intent against the Owner request only: wrapped automation prompts
+    // embed the full tool catalog (e.g. "device_open_app", "Tap a node") and
+    // the screen tree, which would otherwise trip every keyword branch.
+    std::string intent = lower;
+    const std::string kOwnerTag = "owner request:";
+    size_t ownerPos = lower.find(kOwnerTag);
+    if (ownerPos != std::string::npos) {
+        size_t start = ownerPos + kOwnerTag.size();
+        size_t screenPos = lower.find("\nscreen:", start);
+        intent = lower.substr(start, screenPos == std::string::npos
+            ? std::string::npos : screenPos - start);
+    }
+    if (intent.find("open") != std::string::npos && intent.find("app") != std::string::npos) {
         response = "{\"name\": \"device_open_app\", \"arguments\": {\"app\": \"Settings\"}, \"confidence\": 0.93}";
-    } else if (lower.find("scroll") != std::string::npos || lower.find("swipe") != std::string::npos) {
+    } else if (intent.find("scroll") != std::string::npos || intent.find("swipe") != std::string::npos) {
         response = "{\"name\": \"device_scroll\", \"arguments\": {\"target\": \"@e0\", \"direction\": \"forward\"}, \"confidence\": 0.93}";
-    } else if (lower.find("back") != std::string::npos || lower.find("home") != std::string::npos || lower.find("press") != std::string::npos || lower.find("key") != std::string::npos) {
+    } else if (intent.find("back") != std::string::npos || intent.find("home") != std::string::npos || intent.find("press") != std::string::npos || intent.find("key") != std::string::npos) {
         response = "{\"name\": \"device_press_key\", \"arguments\": {\"key\": \"back\"}, \"confidence\": 0.92}";
-    } else if (lower.find("volume") != std::string::npos) {
+    } else if (intent.find("volume") != std::string::npos) {
         response = "{\"name\": \"device_set_volume\", \"arguments\": {\"level\": \"5\"}, \"confidence\": 0.92}";
-    } else if (lower.find("screenshot") != std::string::npos) {
+    } else if (intent.find("screenshot") != std::string::npos) {
         response = "{\"name\": \"device_screenshot\", \"arguments\": {}, \"confidence\": 0.95}";
-    } else if (lower.find("info") != std::string::npos || lower.find("device") != std::string::npos || lower.find("battery") != std::string::npos) {
+    } else if (intent.find("info") != std::string::npos || intent.find("device") != std::string::npos || intent.find("battery") != std::string::npos) {
         response = "{\"name\": \"device_info\", \"arguments\": {}, \"confidence\": 0.95}";
-    } else if (promptStr.find("click") != std::string::npos || promptStr.find("tap") != std::string::npos) {
+    } else if (intent.find("click") != std::string::npos || intent.find("tap") != std::string::npos) {
         response = "{\"name\": \"device_click\", \"arguments\": {\"x\": 540, \"y\": 1120}, \"confidence\": 0.96}";
-    } else if (promptStr.find("type") != std::string::npos || promptStr.find("text") != std::string::npos) {
+    } else if (intent.find("type") != std::string::npos || intent.find("text") != std::string::npos) {
         response = "{\"name\": \"device_type\", \"arguments\": {\"text\": \"Hello\"}, \"confidence\": 0.94}";
     } else {
         response = "{\"name\": \"device_screen_read\", \"arguments\": {}, \"confidence\": 0.95}";

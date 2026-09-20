@@ -158,7 +158,7 @@ class DeviceAgentModule : Module() {
                     key.contains("back") -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK
                     key.contains("home") -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME
                     key.contains("recent") || key.contains("overview") -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS
-                    else -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK
+                    else -> throw IllegalArgumentException("Unsupported key: $key")
                 }
                 return@AsyncFunction service.performGlobalAction(global)
             }
@@ -171,7 +171,14 @@ class DeviceAgentModule : Module() {
                 return@AsyncFunction true
             }
 
-            val node = nodeMap[effectiveTarget] ?: throw IllegalArgumentException("Target node not found: $effectiveTarget")
+            val node = if (
+                effectiveTarget.isEmpty() &&
+                normalized in setOf("settext", "input", "type")
+            ) {
+                nodeMap.values.firstOrNull { it.isFocused }
+            } else {
+                nodeMap[effectiveTarget]
+            } ?: throw IllegalArgumentException("Target node not found: $effectiveTarget")
 
             when (normalized) {
                 "click", "tap" -> {
