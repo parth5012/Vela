@@ -76,6 +76,41 @@ The eval suite partitions ~70 cases across 7 distinct edge families:
 
 ## Validation & Verification
 
+### HTML Report (`backend/evals/report/`)
+
+Every eval run regenerates a static HTML site — no extra flags needed:
+
+- `pytest tests/test_golden.py` → conftest hook saves the `golden_mocked` suite.
+- `python -m evals.judge` → `run_nightly_live_eval` saves the `nightly_live` suite.
+
+Each writer merges only its own suite into `report/results.json`, so the two
+suites coexist. Output files:
+
+```
+backend/evals/report/
+    index.html          # dashboard: totals, pass rate, avg judge score, by-family, failures
+    cases.html          # compact filterable list; click a row for its detail page
+    cases/<suite>-<id>.html  # per-case detail: input, expected, actual response,
+                             # judge score + reasoning, run metadata
+    results.json        # machine-readable source of truth
+```
+
+Open it locally with:
+
+```bash
+# after any eval run
+python -m http.server --directory backend/evals/report 8080
+# then visit http://localhost:8080
+```
+
+Programmatic use:
+
+```python
+from evals.report import build_summary, save_suite_results, write_html_report
+```
+
+### Validation & Verification
+
 All test cases are exercised via `backend/tests/test_golden.py`:
 
 ```bash

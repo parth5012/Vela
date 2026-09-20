@@ -48,3 +48,10 @@ jobs:
       - name: Run Live Evaluation with OpenRouter Judge
         run: |
           uv run python -m evals.judge "${{ github.event.inputs.judge_model || 'meta-llama/llama-3.3-70b-instruct' }}"
+
+      - name: Upload HTML eval report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-html-report
+          path: backend/evals/report/

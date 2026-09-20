@@ -147,7 +147,10 @@ def run_nightly_live_eval(
     Returns:
         0 if all evaluated cases pass with score >= 4, 1 if any fails.
     """
+    import time
     from pathlib import Path
+
+    started = time.monotonic()
 
     target_path = Path(golden_path) if golden_path else Path(__file__).resolve().parent / "golden.jsonl"
     if not target_path.exists():
@@ -180,13 +183,16 @@ def run_nightly_live_eval(
     print(f"Judge Model: {model} | Pass Threshold: {PASS_THRESHOLD}/5")
 
     failed_cases = []
+    report_cases: list[dict[str, Any]] = []
 
     # Import FastAPI TestClient to get actual live/mock responses
     try:
         from fastapi.testclient import TestClient
         from agent.main import app
         client = TestClient(app)
-        api_key = os.getenv("VELA_API_KEY", "vela-eval-key")
+        # NOTE: fallback must match agent/main.py's server-side default ("vela5012")
+        # so in-process TestClient auth agrees when VELA_API_KEY is unset.
+        api_key = os.getenv("VELA_API_KEY", "vela5012")
         headers = {"Authorization": f"Bearer {api_key}"}
     except Exception as e:
         print(f"Warning: could not initialize TestClient ({e}), falling back to direct grading")
@@ -199,6 +205,7 @@ def run_nightly_live_eval(
         msg = inp["message"]
         persona = inp.get("persona") or "personal assistant"
         expected = case["expected_supervisor"]
+        case_started = time.monotonic()
 
         actual_text = ""
         if client:
@@ -234,8 +241,42 @@ def run_nightly_live_eval(
         status_symbol = "✅" if res["passed"] else "❌"
         print(f"[{status_symbol}] {cid}: Score {res['score']}/5 | {res['reasoning']}")
 
+        report_cases.append({
+            "id": cid,
+            "family": case.get("family", "unknown"),
+            "suite": "nightly_live",
+            "status": "passed" if res["passed"] else "failed",
+            "score": res.get("score"),
+            "reasoning": res.get("reasoning", ""),
+            "passed": bool(res.get("passed")),
+            "mocked": bool(res.get("mocked", False)),
+            "judge_model": model,
+            "message": msg,
+            "persona": persona,
+            "thread_history": inp.get("thread_history", []),
+            "auth_state": inp.get("auth_state", {}),
+            "expected": expected,
+            "expected_sse": case.get("expected_sse"),
+            "actual_response": actual_text[:8000],
+            "duration_s": round(time.monotonic() - case_started, 2),
+            "error": res.get("error"),
+        })
+
         if not res["passed"]:
             failed_cases.append((cid, res))
+
+    duration_s = round(time.monotonic() - started, 2)
+    try:
+        from evals.report import save_suite_results
+        report_path = save_suite_results(
+            "nightly_live",
+            report_cases,
+            judge_model=model,
+            duration_s=duration_s,
+        )
+        print(f"HTML eval report updated: {report_path}")
+    except Exception as e:
+        print(f"Warning: failed to write HTML eval report ({e})")
 
     print("-----------------------------------------------------------------")
     if failed_cases:
