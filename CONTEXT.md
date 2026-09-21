@@ -49,3 +49,16 @@ _Avoid_: Test row, scenario item
 **SSE Contract**:
 The strict Server-Sent Event streaming protocol between the Vela backend and the Vela Android client for a Conversation, requiring a sequence of content chunks followed by exactly one terminal `done` event containing a non-empty `thread_title` and well-formed XML segment tags.
 _Avoid_: Streaming API, chunk protocol
+
+**Message Timestamp**:
+The localized presentation of a message's creation time (`created_at`), pinned to the message bubble footer.
+_Avoid_: Message clock, bubble time label
+
+**Date Divider**:
+A centered, non-interactive visual badge separating messages between different calendar days in a conversation feed.
+_Avoid_: Day pill, date header, calendar section
+
+**Day Cluster**:
+A contiguous sequence of messages sent within the same calendar day in the Owner's local timezone.
+_Avoid_: Daily block, message date group
+
