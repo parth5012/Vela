@@ -13,6 +13,7 @@ exports[`BubbleFooter renders the formatted timestamp for an assistant bubble wi
   }
 >
   <Text
+    accessibilityLabel="Sent at 10:42 AM"
     style={
       [
         {

@@ -16,7 +16,11 @@ export interface DateDividerPillProps {
 
 export default function DateDividerPill({ label, colors }: DateDividerPillProps) {
   return (
-    <View style={styles.container}>
+    <View
+      style={styles.container}
+      accessibilityRole="header"
+      accessibilityLabel={`Date divider: ${label}`}
+    >
       <View
         style={[
           styles.pill,
