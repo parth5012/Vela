@@ -2,6 +2,7 @@ import { db } from './client';
 import { threads, messages, operationLog } from './schema';
 import { eq, asc, desc } from 'drizzle-orm';
 import { useChatStore, Thread, Message } from '../store/useChatStore';
+import { parseSafeDate } from '../utils/date';
 
 /**
  * Local-first chat repository.
@@ -36,7 +37,7 @@ function toMessageRow(conversationId: string, message: Message) {
     role: message.role,
     content: message.content,
     provider: 'local',
-    created_at: message.created_at ? Date.parse(message.created_at) || Date.now() : Date.now(),
+    created_at: message.created_at ? (parseSafeDate(message.created_at)?.getTime() ?? Date.now()) : Date.now(),
     pending: false,
     server_id: null as string | null,
   };
@@ -53,11 +54,12 @@ function fromThreadRow(row: any): Thread {
 }
 
 function fromMessageRow(row: any): Message {
+  const rawMs = Number(row.created_at);
   return {
     id: row.id,
     role: row.role,
     content: row.content,
-    created_at: row.created_at ? new Date(Number(row.created_at)).toISOString() : undefined,
+    created_at: Number.isFinite(rawMs) && rawMs > 0 ? new Date(rawMs).toISOString() : undefined,
   };
 }
 
