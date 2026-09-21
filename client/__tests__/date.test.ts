@@ -63,6 +63,40 @@ describe('parseSafeDate', () => {
   });
 });
 
+describe('parseSafeDate impossible calendar dates', () => {
+  it('rejects February 30 in UTC, naive, and offset shapes', () => {
+    expect(parseSafeDate('2026-02-30T10:42:00.000Z')).toBeNull();
+    expect(parseSafeDate('2026-02-30T10:42:00')).toBeNull();
+    expect(parseSafeDate('2026-02-30T10:42:00+02:00')).toBeNull();
+  });
+
+  it('rejects Feb 29 on non-leap years but accepts it on leap years', () => {
+    expect(parseSafeDate('2023-02-29T00:00:00Z')).toBeNull();
+    const leap = parseSafeDate('2024-02-29T00:00:00Z');
+    expect(leap).not.toBeNull();
+    expect(leap!.toISOString()).toBe('2024-02-29T00:00:00.000Z');
+  });
+
+  it('rejects out-of-range month, day, and time fields', () => {
+    expect(parseSafeDate('2026-13-01T00:00:00Z')).toBeNull();
+    expect(parseSafeDate('2026-00-10T00:00:00Z')).toBeNull();
+    expect(parseSafeDate('2026-01-32T00:00:00Z')).toBeNull();
+    expect(parseSafeDate('2026-01-01T25:00:00Z')).toBeNull();
+    expect(parseSafeDate('2026-01-01T10:61:00Z')).toBeNull();
+    expect(parseSafeDate('2026-02-30')).toBeNull();
+  });
+
+  it('still accepts valid dates in every supported shape', () => {
+    expect(parseSafeDate('2026-09-21T10:42:00.1234567Z')).not.toBeNull();
+    expect(parseSafeDate('2024-02-29T23:59:59+05:30')).not.toBeNull();
+    expect(parseSafeDate('2026-09-21')).not.toBeNull();
+  });
+
+  it('formatTimestamp returns null for impossible dates', () => {
+    expect(formatTimestamp('2026-02-30T10:42:00Z')).toBeNull();
+  });
+});
+
 describe('formatTimestamp', () => {
   it('formats a valid ISO string into local HH:MM', () => {
     const formatted = formatTimestamp('2026-09-21T10:42:00.000Z');
