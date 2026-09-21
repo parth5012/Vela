@@ -195,3 +195,11 @@ Ready for dispatch to coding agents:
 4. **Ticket D: Test Suite & End-to-End Verification**
    - Add snapshot / render tests in `client/__tests__/chatTimestamps.test.ts`.
    - Verify `maintainVisibleContentPosition` scroll stability and talkback accessibility labels (`accessibilityLabel="Sent at 10:42 AM"`).
+
+---
+
+## 6. Verification — Ticket #287 (2026-09-21)
+
+- A11y: `BubbleFooter` timestamp carries `accessibilityLabel="Sent at <time>"`; `DateDividerPill` outer container has `accessibilityRole="header"` + `accessibilityLabel="Date divider: <label>"`. No visual/token changes.
+- Integration: `client/__tests__/chatTimestampsIntegration.test.tsx` (6 tests) covers the `buildChatFeedItems` → `renderFeedItem` pipeline mirroring `index.tsx` (full `index.tsx` render rejected: Expo Router/store mock hell). Scenarios: multi-day divider sequence, streaming dot on/off, invalid timestamps (no crash, no "Invalid Date"), TalkBack labels, key/divider-id scroll invariants.
+- Results: `npx jest --runInBand` → 59 suites / 473 tests pass, 0 failures. `npx eslint` on touched files clean. `npx tsc --noEmit` → only pre-existing TS2688 (missing `@types/node`, unrelated to these files).
