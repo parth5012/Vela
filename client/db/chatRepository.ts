@@ -55,11 +55,12 @@ function fromThreadRow(row: any): Thread {
 
 function fromMessageRow(row: any): Message {
   const rawMs = Number(row.created_at);
+  const timeMs = Number.isFinite(rawMs) && rawMs > 0 ? new Date(rawMs).getTime() : NaN;
   return {
     id: row.id,
     role: row.role,
     content: row.content,
-    created_at: Number.isFinite(rawMs) && rawMs > 0 ? new Date(rawMs).toISOString() : undefined,
+    created_at: Number.isFinite(timeMs) ? new Date(timeMs).toISOString() : undefined,
   };
 }
 

@@ -183,7 +183,7 @@ Ready for dispatch to coding agents:
    - Write Jest unit tests in `client/__tests__/date.test.ts`.
 
 2. **Ticket B: Bubble Footer Component & Streaming Lifecycle**
-   - Create `client/components/chat/BubbleFooter.tsx` accepting `created_at`, `isUser`, `isStreaming`, `aurora`, and `colors`.
+   - Create `client/components/chat/BubbleFooter.tsx` accepting `createdAt`, `isUser`, `isStreaming`, `aurora`, and `colors`.
    - Integrate `BubbleFooter` inside `styles.bubble` in `client/app/index.tsx`.
    - Add pulsating animation during active stream turns.
 
