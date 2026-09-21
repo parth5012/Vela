@@ -31,6 +31,8 @@ import { useChatStore, Message, Thread } from '../store/useChatStore';
 import { useAurora } from '../hooks/useAurora';
 import RichText from '../components/chat/RichText';
 import BubbleFooter from '../components/chat/BubbleFooter';
+import DateDividerPill from '../components/chat/DateDividerPill';
+import { buildChatFeedItems } from '../utils/chatFeed';
 import { streamAgentResponse } from '../utils/sse';
 import { queueMessageForSync } from '../db/chatRepository';
 import CollapsibleBlock from '../components/chat/CollapsibleBlock';
@@ -566,8 +568,8 @@ export default function ChatScreen() {
     }
   }, [lastMsg?.content, activeThreadId]);
 
-  const reversedMessages = useMemo(() => {
-    return [...activeMessages].reverse();
+  const reversedChatItems = useMemo(() => {
+    return buildChatFeedItems(activeMessages);
   }, [activeMessages]);
 
   const handleCopyText = useCallback(async (text: string) => {
@@ -1422,12 +1424,12 @@ export default function ChatScreen() {
           ) : (
             <FlatList
               ref={flatListRef}
-              data={reversedMessages}
+              data={reversedChatItems}
               inverted
               onScroll={handleScroll}
               scrollEventThrottle={16}
               contentContainerStyle={styles.messagesList}
-              keyExtractor={(item) => item.id}
+              keyExtractor={(item) => item.type === 'date_divider' ? item.id : item.message.id}
               removeClippedSubviews={false}
               maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
               getItemLayout={undefined}
@@ -1436,12 +1438,16 @@ export default function ChatScreen() {
               updateCellsBatchingPeriod={50}
               initialNumToRender={6}
               renderItem={({ item }) => {
-                const isUser = item.role === 'user';
-                const showActionBar = activeMenuMessage?.id === item.id;
+                if (item.type === 'date_divider') {
+                  return <DateDividerPill label={item.label} colors={colors} />;
+                }
+                const message = item.message;
+                const isUser = message.role === 'user';
+                const showActionBar = activeMenuMessage?.id === message.id;
 
                 // Hooks are illegal inside this callback (plain function, not a
                 // component) — use the module-level cache instead of useMemo.
-                const { segments, headerSegments, bubbleContent, sources } = getCachedParse(item.content, isUser);
+                const { segments, headerSegments, bubbleContent, sources } = getCachedParse(message.content, isUser);
 
                 return (
                   <View style={[styles.messageRow, isUser ? styles.userRow : styles.assistantRow]}>
@@ -1453,7 +1459,7 @@ export default function ChatScreen() {
                       )}
 
                       <Pressable
-                        onLongPress={() => !isCurrentThreadStreaming && setActiveMenuMessage(item)}
+                        onLongPress={() => !isCurrentThreadStreaming && setActiveMenuMessage(message)}
                         style={({ pressed }) => [
                           styles.bubble,
                           isUser ? styles.userBubble : styles.assistantBubble,
@@ -1470,15 +1476,15 @@ export default function ChatScreen() {
 
                         {isUser ? (
                           <Text style={[styles.messageText, { color: aurora.onAccent, fontSize: sizes.text }]}>
-                            {item.content}
+                            {message.content}
                           </Text>
-                        ) : showRawMap[item.id] ? (
+                        ) : showRawMap[message.id] ? (
                           <Text style={[styles.rawText, { color: colors.text, fontSize: sizes.text }]}>
-                            {item.content}
+                            {message.content}
                           </Text>
                         ) : bubbleContent.length === 0 ? (
                           <RichText
-                            content={item.content || '…'}
+                            content={message.content || '…'}
                             colors={colors}
                             sizes={sizes}
                             accentHex={accentHex}
@@ -1504,9 +1510,9 @@ export default function ChatScreen() {
                           </View>
                         )}
                         <BubbleFooter
-                          createdAt={item.created_at}
+                          createdAt={message.created_at}
                           isUser={isUser}
-                          isStreaming={!isUser && isCurrentThreadStreaming && activeMessages[activeMessages.length - 1]?.id === item.id}
+                          isStreaming={!isUser && isCurrentThreadStreaming && activeMessages[activeMessages.length - 1]?.id === message.id}
                           aurora={aurora}
                           colors={colors}
                         />
@@ -1538,7 +1544,7 @@ export default function ChatScreen() {
                       )}
                     </View>
 
-                    {!isUser && isCurrentThreadStreaming && activeMessages[activeMessages.length - 1]?.id === item.id && (
+                    {!isUser && isCurrentThreadStreaming && activeMessages[activeMessages.length - 1]?.id === message.id && (
                       <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12, gap: 4 }}>
                         <ActivityIndicator size="small" color={aurora.acc1} />
                         <Text style={{ color: aurora.acc2, fontSize: sizes.sub - 1, fontWeight: 'bold' }}>
@@ -1549,32 +1555,32 @@ export default function ChatScreen() {
 
                     {showActionBar && (
                       <View style={styles.actionBar}>
-                        <Pressable style={styles.actionBtn} onPress={() => handleCopyText(item.content)}>
+                        <Pressable style={styles.actionBtn} onPress={() => handleCopyText(message.content)}>
                           <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Copy</Text>
                         </Pressable>
                 {!isUser && (
                   <>
-                    <Pressable style={styles.actionBtn} onPress={() => setViewerContent(item.content)}>
+                      <Pressable style={styles.actionBtn} onPress={() => setViewerContent(message.content)}>
                       <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>View</Text>
                     </Pressable>
-                    <Pressable style={styles.actionBtn} onPress={() => handleCopyCodeBlocks(item.content)}>
+                      <Pressable style={styles.actionBtn} onPress={() => handleCopyCodeBlocks(message.content)}>
                               <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Code</Text>
                             </Pressable>
-                            <Pressable style={styles.actionBtn} onPress={() => handleRegenerate(item)}>
+                            <Pressable style={styles.actionBtn} onPress={() => handleRegenerate(message)}>
                               <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Retry</Text>
                             </Pressable>
-                            <Pressable style={styles.actionBtn} onPress={() => toggleRaw(item.id)}>
+                            <Pressable style={styles.actionBtn} onPress={() => toggleRaw(message.id)}>
                               <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Raw</Text>
                             </Pressable>
                           </>
                         )}
-                        <Pressable style={styles.actionBtn} onPress={() => handleBranch(item)}>
+                        <Pressable style={styles.actionBtn} onPress={() => handleBranch(message)}>
                           <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Branch</Text>
                         </Pressable>
-                        <Pressable style={styles.actionBtn} onPress={() => handleDownloadMd(item)}>
+                        <Pressable style={styles.actionBtn} onPress={() => handleDownloadMd(message)}>
                           <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Download</Text>
                         </Pressable>
-                        <Pressable style={styles.actionBtn} onPress={() => handleShowInfo(item)}>
+                        <Pressable style={styles.actionBtn} onPress={() => handleShowInfo(message)}>
                           <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Info</Text>
                         </Pressable>
                       </View>

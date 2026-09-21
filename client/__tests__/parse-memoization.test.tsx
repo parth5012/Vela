@@ -22,8 +22,10 @@ describe('parse memoization guard (wayfinder #143)', () => {
   const renderItem = source.slice(source.indexOf('renderItem={'));
 
   it('uses the module-level parse cache per message inside renderItem', () => {
+    // #286: FlatList items are ChatFeedItem unions, so the narrowed message
+    // variable is `message` (was `item` before the divider refactor).
     expect(renderItem).toMatch(
-      /getCachedParse\(item\.content, isUser\)/
+      /getCachedParse\((item|message)\.content, isUser\)/
     );
   });
 
