@@ -30,6 +30,7 @@ import { useConfigStore } from '../store/useConfigStore';
 import { useChatStore, Message, Thread } from '../store/useChatStore';
 import { useAurora } from '../hooks/useAurora';
 import RichText from '../components/chat/RichText';
+import BubbleFooter from '../components/chat/BubbleFooter';
 import { streamAgentResponse } from '../utils/sse';
 import { queueMessageForSync } from '../db/chatRepository';
 import CollapsibleBlock from '../components/chat/CollapsibleBlock';
@@ -1502,6 +1503,13 @@ export default function ChatScreen() {
                             })}
                           </View>
                         )}
+                        <BubbleFooter
+                          createdAt={item.created_at}
+                          isUser={isUser}
+                          isStreaming={!isUser && isCurrentThreadStreaming && activeMessages[activeMessages.length - 1]?.id === item.id}
+                          aurora={aurora}
+                          colors={colors}
+                        />
                       </Pressable>
 
                       {!isUser && (
