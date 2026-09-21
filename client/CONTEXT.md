@@ -47,3 +47,10 @@ Verify signatures with `javap` on the AAR's `classes.jar` before upgrading again
 
 **Caveat:** `client/android/` is gitignored, so this dependency lives only on
 disk and is lost on `expo prebuild --clean`. It belongs in an Expo config plugin.
+
+## Chat Interface
+
+- **Message Timestamp** — the localized presentation of a message's creation time (`created_at`), pinned to the message bubble footer.
+- **Date Divider** — a centered, non-interactive visual badge separating messages between different calendar days in a conversation feed.
+- **Day Cluster** — a contiguous sequence of messages sent within the same calendar day in the Owner's local timezone.
+
