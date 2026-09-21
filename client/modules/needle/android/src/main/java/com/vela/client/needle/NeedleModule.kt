@@ -23,10 +23,10 @@ class NeedleModule : Module() {
             }
         }
 
-        AsyncFunction("init") { weightsPath: String, contextSize: Int ->
+        AsyncFunction("init") { weightsPath: String, contextSize: Int, toolsJson: String? ->
             val future = executor.submit<Boolean> {
                 try {
-                    val success = NeedleNative.nativeInit(weightsPath, contextSize)
+                    val success = NeedleNative.nativeInit(weightsPath, contextSize, toolsJson)
                     isInitialized = success
                     success
                 } catch (e: Throwable) {

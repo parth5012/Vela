@@ -74,6 +74,7 @@ export function classifyAction(
   if (toolName === 'device_set_volume') return 'set_volume';
   if (toolName === 'device_type') return 'type';
   if (toolName === 'device_tap') return 'tap';
+  if (toolName === 'device_click') return 'tap';
 
   return 'tap'; // Default fallback
 }
@@ -123,22 +124,26 @@ export async function evaluateSafety(
   const category = classifyAction(toolName, target, value);
   let tier = permissions[category] || 'auto';
 
-  // Sensitive word check on input values (avoid fragile target element string matching)
+  // Sensitive word check on target + value so coordinate-only taps
+  // ("540,960" with empty value) can't bypass the confirm escalation.
   if (tier === 'auto') {
+    const targetLower = target ? target.toLowerCase() : '';
     const valueLower = value ? value.toLowerCase() : '';
     const sensitiveWords = ['delete', 'buy', 'pay', 'purchase', 'send', 'call', 'remove', 'clear'];
-    const hasSensitiveWord = sensitiveWords.some(word => valueLower.includes(word));
+    const hasSensitiveWord = sensitiveWords.some(
+      (word) => valueLower.includes(word) || targetLower.includes(word)
+    );
     
     if (hasSensitiveWord) {
       tier = 'confirm';
     }
   }
 
-  // Deny path: Return immediately containing clear user policy block reason
+  // Deny path: Return immediately containing clear Owner policy block reason
   if (tier === 'deny') {
     return {
       status: 'error',
-      result: `Blocked by user policy: Action category "${getCategoryLabel(category)}" is set to Blocked (Deny).`
+      result: `Blocked by Owner policy: Action category "${getCategoryLabel(category)}" is set to Blocked (Deny).`
     };
   }
 
