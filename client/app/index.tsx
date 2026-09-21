@@ -959,6 +959,7 @@ export default function ChatScreen() {
       id: assistantMsgId,
       role: 'assistant',
       content: '',
+      created_at: new Date().toISOString(),
     });
 
     setStreamingThread(activeThreadId, true);
