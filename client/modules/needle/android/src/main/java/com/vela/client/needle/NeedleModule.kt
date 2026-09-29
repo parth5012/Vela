@@ -23,17 +23,32 @@ class NeedleModule : Module() {
             }
         }
 
-        AsyncFunction("init") { weightsPath: String, contextSize: Int ->
+        AsyncFunction("init") { weightsPath: String, contextSize: Int, systemPrompt: String?, toolIndexPath: String? ->
             val future = executor.submit<Boolean> {
                 try {
-                    val success = NeedleNative.nativeInit(weightsPath, contextSize)
+                    val success = NeedleNative.nativeInit(weightsPath, contextSize, systemPrompt, toolIndexPath)
                     isInitialized = success
                     success
                 } catch (e: Throwable) {
+                    isInitialized = false
                     false
                 }
             }
-            future.get()
+            val success = future.get()
+            if (!success) {
+                // Surface needle_last_error() through the app's existing error
+                // path: localLlm catches the rejection and records the reason as
+                // the honest mock-fallback message (no pretending).
+                val detail = try {
+                    NeedleNative.nativeLastError()
+                } catch (t: Throwable) {
+                    null
+                }
+                if (detail != null) {
+                    throw Exception(detail)
+                }
+            }
+            success
         }
 
         AsyncFunction("complete") { prompt: String, toolsJson: String?, maxTokens: Int? ->
