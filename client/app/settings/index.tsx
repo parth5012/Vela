@@ -40,6 +40,7 @@ const GROUPS: CategoryGroup[] = [
     title: 'Local AI',
     rows: [
       { icon: '📱', label: 'Local Mode & Models', hint: 'On-device inference, downloads', route: '/settings/local-ai' },
+      { icon: '🧾', label: 'JSON Extraction', hint: 'Schema in, typed JSON out — on-device', route: '/settings/extract' },
     ],
   },
   {

@@ -13,7 +13,9 @@ object NeedleNative {
         weightsPath: String,
         contextSize: Int,
         systemPrompt: String?,
-        toolIndexPath: String?
+        toolIndexPath: String?,
+        // #298: tools_json for needle_init — the schema-as-only-tool declaration.
+        toolsJson: String?
     ): Boolean
     external fun nativeComplete(prompt: String, toolsJson: String?, maxTokens: Int): String?
     external fun nativeReset(): Boolean
