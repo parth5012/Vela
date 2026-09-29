@@ -201,6 +201,80 @@ describe('Needle Agent & Local Subsystem E2E Integration Suite', () => {
       expect(eventTypes).toContain('step_complete');
       expect(eventTypes).toContain('done');
     });
+
+    // #295 — real accelerated-engine payload instead of the flat mock shape.
+    const REAL_ENVELOPE =
+      '{"type":"call","function_calls":[{"name":"device_screen_read","arguments":{}}],' +
+      '"reasoning":"Reading the screen answers this.","confidence":0.91}';
+
+    const REAL_REFUSAL =
+      '{"type":"call","function_calls":[],"reasoning":"I will not do that.",' +
+      '"confidence":0.12}';
+
+    it('runs the real engine envelope (type:call + function_calls[]) end to end', async () => {
+      async function* streamStep1() {
+        yield REAL_ENVELOPE;
+      }
+      async function* streamStep2() {
+        yield 'I have inspected the screen: Wi-Fi is currently connected.';
+      }
+
+      jest.spyOn(localLlm, 'streamLocalLlmResponse')
+        .mockReturnValueOnce(streamStep1() as any)
+        .mockReturnValueOnce(streamStep2() as any);
+
+      jest.spyOn(safetyManager, 'evaluateSafety').mockResolvedValue({
+        status: 'success',
+        result: 'allowed',
+      });
+      jest.spyOn(deviceActionExecutor, 'executeDeviceAction').mockResolvedValue(
+        'Screen hierarchy: Settings > Wi-Fi: Connected'
+      );
+
+      const events: any[] = [];
+      const result = await runLocalAgentLoop('Check my Wi-Fi state', {
+        conversationId: 'conv_e2e_envelope',
+        onEvent: (ev) => events.push(ev),
+      });
+
+      expect(result.completed).toBe(true);
+      expect(result.totalSteps).toBe(2);
+      expect(result.steps[0].toolCall?.toolName).toBe('device_screen_read');
+      expect(result.steps[0].observation).toContain('Wi-Fi: Connected');
+
+      const start = events.find((e) => e.type === 'tool_start');
+      expect(start.reasoning).toBe('Reading the screen answers this.');
+      expect(start.confidence).toBe(0.91);
+      expect(start.lowConfidence).toBe(false);
+    });
+
+    it('treats empty function_calls [] as an explicit refusal (no tool executed)', async () => {
+      async function* refusalStream() {
+        yield REAL_REFUSAL;
+      }
+
+      jest.spyOn(localLlm, 'streamLocalLlmResponse')
+        .mockReturnValueOnce(refusalStream() as any);
+
+      const safetySpy = jest.spyOn(safetyManager, 'evaluateSafety');
+      const executeSpy = jest.spyOn(deviceActionExecutor, 'executeDeviceAction');
+
+      const events: any[] = [];
+      const result = await runLocalAgentLoop('Do something refused', {
+        conversationId: 'conv_e2e_refusal',
+        onEvent: (ev) => events.push(ev),
+      });
+
+      expect(executeSpy).not.toHaveBeenCalled();
+      expect(safetySpy).not.toHaveBeenCalled();
+      expect(result.completed).toBe(true);
+      expect(result.totalSteps).toBe(1);
+      expect(result.steps[0].observation).toBe('I will not do that.');
+      expect(events.map((e) => e.type)).toEqual(
+        expect.arrayContaining(['refusal', 'done'])
+      );
+      expect(events.map((e) => e.type)).not.toContain('tool_start');
+    });
   });
 
   describe('3. Offline Step Synchronization with Backend', () => {

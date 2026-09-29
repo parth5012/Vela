@@ -3,6 +3,7 @@ import { initLlama, LlamaContext } from 'llama.rn';
 import { useConfigStore } from '../store/useConfigStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NeedleModule from '../modules/needle';
+import type { NeedleStreamEvent } from '../modules/needle';
 
 /** Event name emitted by GemmaReactNativeModule for streamed generation. */
 const GEMMA_STREAM_EVENT = 'GemmaLlmStream';
@@ -440,14 +441,44 @@ export async function* streamLocalLlmResponse(
         }
       };
 
-      sub = NeedleModule.addListener((event: any) => {
+      // #295 F2: the native side now emits exactly one payload event per
+      // completion, but a stale/legacy build may still send `token` and then
+      // `tool_call`/`refusal` carrying the same JSON. Never queue the same
+      // payload twice, so the agent loop sees the envelope exactly once.
+      // (Tokens are only compared against payloads, never against each other,
+      // so legitimately repeated plain tokens still stream through.)
+      let lastToken = '';
+      let lastPayload = '';
+      const sameText = (a: string, b: string) => b.trim() !== '' && a.trim() === b.trim();
+
+      sub = NeedleModule.addListener((event: NeedleStreamEvent) => {
         if (event.type === 'token' && event.token) {
           hasReceivedStreamTokens = true;
-          queue.push(event.token);
+          if (!sameText(event.token, lastPayload)) {
+            lastToken = event.token;
+            queue.push(event.token);
+          }
           notify();
         } else if (event.type === 'tool_call' && event.data) {
+          // #295: `data` is either the flat mock call or the real engine envelope
+          // ({type:'call', function_calls, reasoning, confidence}). Forward it
+          // verbatim so reasoning + confidence survive into parseToolCall.
           hasReceivedStreamTokens = true;
-          queue.push(event.data);
+          if (!sameText(event.data, lastToken) && !sameText(event.data, lastPayload)) {
+            lastPayload = event.data;
+            queue.push(event.data);
+          }
+          notify();
+        } else if (event.type === 'refusal') {
+          // #295: the engine answered with an empty function_calls [] — a refusal
+          // to call a tool. Forward the envelope/reason as text so the agent loop
+          // can flag it; no tool_call event is ever raised for this case.
+          hasReceivedStreamTokens = true;
+          const payload = event.data || event.reasoning;
+          if (payload && !sameText(payload, lastToken) && !sameText(payload, lastPayload)) {
+            lastPayload = payload;
+            queue.push(payload);
+          }
           notify();
         } else if (event.type === 'done') {
           finished = true;

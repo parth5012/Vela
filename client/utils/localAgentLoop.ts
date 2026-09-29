@@ -12,6 +12,15 @@ export interface ParsedToolCall {
   arguments?: Record<string, any>;
   raw: string;
   format: 'needle_json' | 'xml';
+  /** Engine rationale emitted alongside the call (real envelope shape, #295). */
+  reasoning?: string;
+  /** Engine confidence in [0,1]; absent for the flat mock and XML shapes. */
+  confidence?: number;
+  /**
+   * Set (with `toolName: ''`) when the engine refused to call a tool, i.e. the
+   * real shape arrived with an empty `function_calls: []`. Never a tool call.
+   */
+  refusal?: string;
 }
 
 export interface AgentTurnStep {
@@ -25,7 +34,7 @@ export interface AgentTurnStep {
 }
 
 export interface AgentTurnEvent {
-  type: 'token' | 'tool_start' | 'tool_executing' | 'tool_observation' | 'step_complete' | 'done' | 'error';
+  type: 'token' | 'tool_start' | 'tool_executing' | 'tool_observation' | 'step_complete' | 'done' | 'error' | 'refusal';
   token?: string;
   toolName?: string;
   target?: string;
@@ -33,6 +42,9 @@ export interface AgentTurnEvent {
   observation?: string;
   step?: number;
   error?: string;
+  reasoning?: string;
+  confidence?: number;
+  lowConfidence?: boolean;
 }
 
 export interface LocalAgentLoopOptions {
@@ -64,7 +76,31 @@ export const ALLOWED_DEVICE_TOOLS = new Set([
 ]);
 
 /**
+ * Confidence gate for local tool calls.
+ *
+ * PLACEHOLDER DEFAULT — the act / confirm / refuse UX is still "not yet
+ * specified" on the wayfinder map (#289). This is plumbing only: calls below
+ * the threshold are flagged via `lowConfidence` on the `tool_start` event and
+ * are not blocked, so no product behaviour is decided here yet. The neutral
+ * default is 0.5 (midpoint of the engine's [0,1] confidence head).
+ */
+export const LOCAL_TOOL_CALL_CONFIDENCE_THRESHOLD = 0.5;
+
+/** Reason used when the engine refuses (`function_calls: []`) without a rationale. */
+const TOOL_CALL_REFUSAL_FALLBACK = 'The model declined to call a tool (function_calls: []).';
+
+/**
  * Parses raw text from local LLM to detect Needle JSON or XML tool calls.
+ *
+ * Understands both wire shapes (#295):
+ *  - real engine envelope: `{type:'call', function_calls:[{name, arguments}], reasoning, confidence}`
+ *  - flat mock fallback:   `{name, arguments, confidence}`
+ * An envelope with an empty `function_calls: []` is a refusal, not a call.
+ * The `function_calls` envelope is matched first, so it wins over any flat
+ * `name` in the same object; `{type:'call'}` without a `function_calls` array
+ * matches neither branch (it is not a refusal).
+ * When an envelope lists several calls only the first is used (multi-call
+ * dispatch is out of scope for #295).
  */
 export function parseToolCall(text: string): ParsedToolCall | null {
   if (!text) return null;
@@ -97,6 +133,41 @@ export function parseToolCall(text: string): ParsedToolCall | null {
             const candidate = text.substring(startIdx, i + 1);
             try {
               const parsed = JSON.parse(candidate);
+
+              // Real engine envelope takes precedence over a flat `name` in the
+              // same object (#295 F3): an adversarial/legacy
+              // `{name:'device_click', function_calls:[]}` must refuse, not run.
+              // Only an explicit `function_calls` array can be a call or a
+              // refusal — `{type:'call'}` with no array is neither.
+              if (parsed && Array.isArray(parsed.function_calls)) {
+                const calls: any[] = parsed.function_calls;
+                const reasoning =
+                  typeof parsed.reasoning === 'string' ? parsed.reasoning : undefined;
+                const confidence =
+                  typeof parsed.confidence === 'number' ? parsed.confidence : undefined;
+
+                if (calls.length === 0) {
+                  return {
+                    toolName: '',
+                    raw: candidate,
+                    format: 'needle_json',
+                    refusal: reasoning?.trim() || TOOL_CALL_REFUSAL_FALLBACK,
+                    reasoning,
+                    confidence,
+                  };
+                }
+
+                const first = calls[0];
+                if (first && typeof first.name === 'string') {
+                  // Re-enter the flat path so target/value mapping stays in one place.
+                  const flat = parseToolCall(JSON.stringify(first));
+                  if (flat) {
+                    return { ...flat, raw: candidate, reasoning, confidence };
+                  }
+                }
+              }
+
+              // Flat mock fallback: {name, arguments, confidence}
               if (parsed && typeof parsed.name === 'string') {
                 const args = parsed.arguments || {};
                 let target: string | undefined;
@@ -126,6 +197,9 @@ export function parseToolCall(text: string): ParsedToolCall | null {
                   arguments: args,
                   raw: candidate,
                   format: 'needle_json',
+                  reasoning: typeof parsed.reasoning === 'string' ? parsed.reasoning : undefined,
+                  confidence:
+                    typeof parsed.confidence === 'number' ? parsed.confidence : undefined,
                 };
               }
             } catch {
@@ -256,12 +330,45 @@ export async function runLocalAgentLoop(
       break;
     }
 
+    // #295: the engine refused to call a tool (empty function_calls). No tool is
+    // executed, no name is fabricated — the turn ends with an explicit refusal.
+    if (toolCall.refusal) {
+      steps.push({
+        step,
+        prompt: currentPrompt,
+        response: stepResponse,
+        toolCall,
+        observation: toolCall.refusal,
+      });
+      finalResponse = stepResponse;
+      completed = true;
+      options.onEvent?.({
+        type: 'refusal',
+        observation: toolCall.refusal,
+        reasoning: toolCall.reasoning,
+        confidence: toolCall.confidence,
+        step,
+      });
+      options.onEvent?.({
+        type: 'done',
+        step,
+      });
+      break;
+    }
+
     // Tool detected in model response
     options.onEvent?.({
       type: 'tool_start',
       toolName: toolCall.toolName,
       target: toolCall.target,
       value: toolCall.value,
+      reasoning: toolCall.reasoning,
+      confidence: toolCall.confidence,
+      // Flag only: the act/confirm/refuse UX (#289) is not decided yet, so a
+      // below-threshold call still runs exactly as before.
+      lowConfidence:
+        toolCall.confidence !== undefined &&
+        toolCall.confidence < LOCAL_TOOL_CALL_CONFIDENCE_THRESHOLD,
       step,
     });
 
