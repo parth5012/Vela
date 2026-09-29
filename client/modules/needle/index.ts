@@ -1,9 +1,11 @@
 import { requireNativeModule, EventEmitter, Subscription } from 'expo-modules-core';
 
 export interface NeedleStreamEvent {
-  type: 'token' | 'tool_call' | 'done';
+  type: 'token' | 'tool_call' | 'refusal' | 'done';
   token?: string;
   data?: string;
+  reasoning?: string;
+  confidence?: number;
 }
 
 export interface NeedleCompletionResult {

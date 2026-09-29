@@ -96,6 +96,107 @@ describe('localLlm NeedleEngine (.cact) integration', () => {
     expect(tokens.join('')).toContain('device_screen_read');
   });
 
+  // #295 — the native tool_call / refusal events are driven straight into the
+  // stream; `complete` is parked so only the emitted events reach the consumer.
+  const REAL_ENVELOPE =
+    '{"type":"call","function_calls":[{"name":"device_screen_read","arguments":{}}],' +
+    '"reasoning":"Need the screen first.","confidence":0.9}';
+  const REAL_REFUSAL =
+    '{"type":"call","function_calls":[],"reasoning":"I will not do that.","confidence":0.1}';
+
+  async function collectEvents(events: any[]): Promise<string> {
+    const generator = streamLocalLlmResponse('Read current screen');
+    const tokens: string[] = [];
+    const finished = (async () => {
+      for await (const token of generator) {
+        tokens.push(token);
+      }
+    })();
+    // The generator body registers the NeedleModule listener synchronously on
+    // its first next(), so events emitted here reach it before completion.
+    for (const event of events) {
+      (NeedleModule as any)._emitStream(event);
+    }
+    await finished;
+    return tokens.join('');
+  }
+
+  it('forwards the real tool_call envelope (reasoning + confidence) into the stream', async () => {
+    await initializeLocalModel();
+    (NeedleModule.complete as jest.Mock).mockReturnValue(new Promise(() => {}));
+
+    const text = await collectEvents([
+      {
+        type: 'tool_call',
+        data: REAL_ENVELOPE,
+        reasoning: 'Need the screen first.',
+        confidence: 0.9,
+      },
+      { type: 'done' },
+    ]);
+
+    expect(text).toBe(REAL_ENVELOPE);
+  });
+
+  it('forwards an empty function_calls refusal as text, never as a tool_call', async () => {
+    await initializeLocalModel();
+    (NeedleModule.complete as jest.Mock).mockReturnValue(new Promise(() => {}));
+
+    const text = await collectEvents([
+      { type: 'refusal', data: REAL_REFUSAL, reasoning: 'I will not do that.', confidence: 0.1 },
+      { type: 'done' },
+    ]);
+
+    expect(text).toBe(REAL_REFUSAL);
+  });
+
+  // #295 F2: a legacy/stale native build may still emit `token` and then the
+  // payload event carrying the same JSON. The queued stream must contain the
+  // payload exactly once, or the agent loop sees the envelope twice.
+  it('queues a token + tool_call sequence exactly once', async () => {
+    await initializeLocalModel();
+    (NeedleModule.complete as jest.Mock).mockReturnValue(new Promise(() => {}));
+
+    const text = await collectEvents([
+      { type: 'token', token: REAL_ENVELOPE },
+      {
+        type: 'tool_call',
+        data: REAL_ENVELOPE,
+        reasoning: 'Need the screen first.',
+        confidence: 0.9,
+      },
+      { type: 'done' },
+    ]);
+
+    expect(text.split(REAL_ENVELOPE).length - 1).toBe(1);
+  });
+
+  it('queues a token + refusal sequence exactly once', async () => {
+    await initializeLocalModel();
+    (NeedleModule.complete as jest.Mock).mockReturnValue(new Promise(() => {}));
+
+    const text = await collectEvents([
+      { type: 'token', token: REAL_REFUSAL },
+      { type: 'refusal', data: REAL_REFUSAL, reasoning: 'I will not do that.', confidence: 0.1 },
+      { type: 'done' },
+    ]);
+
+    expect(text.split(REAL_REFUSAL).length - 1).toBe(1);
+  });
+
+  it('still streams legitimately repeated plain tokens', async () => {
+    await initializeLocalModel();
+    (NeedleModule.complete as jest.Mock).mockReturnValue(new Promise(() => {}));
+
+    const text = await collectEvents([
+      { type: 'token', token: 'ha ' },
+      { type: 'token', token: 'ha ' },
+      { type: 'done' },
+    ]);
+
+    expect(text).toBe('ha ha ');
+  });
+
   it('unloads NeedleModule and cleans up memory on unloadLocalModel()', async () => {
     await initializeLocalModel();
     expect(isLocalModelLoaded).toBe(true);
