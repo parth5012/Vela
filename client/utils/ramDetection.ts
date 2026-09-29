@@ -22,6 +22,15 @@ export function calculateEstimatedPeakRam(
   return Math.round(modelSizeBytes * multiplier + kvCache);
 }
 
+/**
+ * Size-driven tier status: peak RAM (size * FORMAT_RAM_MULTIPLIERS[format] +
+ * contextSize * KV_CACHE_BYTES_PER_TOKEN) as a fraction of device RAM.
+ * <50% recommended, 50-75% borderline, >75% unsupported.
+ *
+ * The shipping `.cact` sizes (needle2 13,737,807 B, needle3 35,335,380 B,
+ * research #292) stay 'recommended' at every realistic tier — including with
+ * needle3's 8192-token context (#296). No needle-specific branch is needed.
+ */
 export function getDynamicModelStatusForRam(
   modelSizeBytes: number,
   format: string,
@@ -74,6 +83,14 @@ export async function detectRamBytes(): Promise<number> {
  *
  * *Mid-tier also covers task-variant names (without GGUF suffix) for 1.5B models.
  * Keep strings in sync with LOCAL_MODELS to prevent drift.
+ *
+ * TODO(follow-up ladder map, after #289): only the shipping `.cact` files are
+ * tiered here — `needle2.cact` (13,737,807 B) and the full 20-layer
+ * `needle3.cact` (35,335,380 B), per HF trees verified in research #292.
+ * The 4/8/12-layer Needle-3 ladder slices are deferred (#290) and their sizes
+ * are UNVERIFIED — the upstream README's "8-29 MB" range does not match the
+ * shipped 35.3 MB file (#292) and must not be encoded here. Add ladder rows to
+ * this table (and lock them with tests) once real slices are published.
  */
 export function getModelStatusForRam(modelName: string, ramBytes: number): ModelRecommendationStatus {
   const ramGB = ramBytes / (1024 * 1024 * 1024);
@@ -117,6 +134,12 @@ export function getModelStatusForRam(modelName: string, ramBytes: number): Model
  * - Mid  (4.5-7.5):  Qwen2.5 0.5B,      ctx 2048, max 512
  * - High (>=7.5 GB): Qwen2.5 1.5B (GGUF), ctx 4096, max 1024
  * High-tier prefers Qwen2.5 1.5B (GGUF) (~1.06 GB) over TinyLlama 1.1B for quality at similar footprint.
+ *
+ * Needle entries (Needle-2 45M / Needle-3 (20-layer)) are never returned as a
+ * tier preset: they are 'recommended' on every tier via getModelStatusForRam
+ * (so the picker never hides them), but this function keeps returning the chat
+ * presets above. Needle session RAM is TBC (#292) — do not invent a number to
+ * promote a needle row here.
  */
 export function getOptimalSettingsForRam(ramBytes: number): {
   modelName: string;

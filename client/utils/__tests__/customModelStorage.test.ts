@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
 import {
   sniffMagicBytes,
+  sniffNeedleVariant,
   preflightUrlMagicBytes,
   validateFileMagicBytes,
   getCustomModels,
@@ -67,6 +68,107 @@ describe('customModelStorage', () => {
     it('returns null for unknown magic bytes', () => {
       const bytes = new Uint8Array([0x00, 0x01, 0x02, 0x03]);
       expect(sniffMagicBytes(bytes)).toBeNull();
+    });
+  });
+
+  // #296 — per-version reporting. Research #292: 0x05E12A83 = needle2,
+  // 0x05E12A84 = needle3 (LE 83 2A E1 05 / 84 2A E1 05). Both are valid .cact,
+  // but preflight/validate must report WHICH needle variant, not lump them.
+  describe('per-version .cact magic reporting (#296)', () => {
+    const NEEDLE2_HEADER = [0x83, 0x2a, 0xe1, 0x05, 0x01, 0x00];
+    const NEEDLE3_HEADER = [0x84, 0x2a, 0xe1, 0x05, 0x01, 0x00];
+    const realFetch = global.fetch;
+
+    afterEach(() => {
+      (global as any).fetch = realFetch;
+    });
+
+    const mockPreflightResponse = (header: number[], contentLength: number) => {
+      const value = new Uint8Array(header);
+      (global as any).fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 206,
+        headers: {
+          get: (key: string) =>
+            key.toLowerCase() === 'content-range' ? `bytes 0-15/${contentLength}` : null,
+        },
+        body: {
+          getReader: () => ({
+            read: async () => ({ value }),
+            cancel: jest.fn(),
+          }),
+        },
+      });
+    };
+
+    it('distinguishes needle2 (0x05E12A83) from needle3 (0x05E12A84)', () => {
+      expect(sniffNeedleVariant(new Uint8Array(NEEDLE2_HEADER))).toBe('needle2');
+      expect(sniffNeedleVariant(new Uint8Array(NEEDLE3_HEADER))).toBe('needle3');
+      expect(sniffMagicBytes(new Uint8Array(NEEDLE2_HEADER))).toBe('cact');
+      expect(sniffMagicBytes(new Uint8Array(NEEDLE3_HEADER))).toBe('cact');
+    });
+
+    it('reports a null variant for gguf, task, unknown, and short headers', () => {
+      expect(sniffNeedleVariant(new Uint8Array([0x47, 0x47, 0x55, 0x46]))).toBeNull();
+      expect(sniffNeedleVariant(new Uint8Array([0x50, 0x4b, 0x03, 0x04]))).toBeNull();
+      expect(sniffNeedleVariant(new Uint8Array([0x00, 0x01, 0x02, 0x03]))).toBeNull();
+      expect(sniffNeedleVariant(new Uint8Array([0x83, 0x2a]))).toBeNull();
+    });
+
+    it('preflightUrlMagicBytes reports needle3 (0x84) distinctly, with size', async () => {
+      mockPreflightResponse(NEEDLE3_HEADER, 35335380);
+      const res = await preflightUrlMagicBytes('https://example.com/needle3.cact');
+      expect(res.valid).toBe(true);
+      expect(res.format).toBe('cact');
+      expect(res.variant).toBe('needle3');
+      expect(res.contentLength).toBe(35335380);
+    });
+
+    it('preflightUrlMagicBytes reports needle2 (0x83) distinctly, with size', async () => {
+      mockPreflightResponse(NEEDLE2_HEADER, 13737807);
+      const res = await preflightUrlMagicBytes('https://example.com/needle2.cact');
+      expect(res.valid).toBe(true);
+      expect(res.format).toBe('cact');
+      expect(res.variant).toBe('needle2');
+      expect(res.contentLength).toBe(13737807);
+    });
+
+    it('preflightUrlMagicBytes reports a null variant for non-cact headers', async () => {
+      mockPreflightResponse([0x47, 0x47, 0x55, 0x46], 9000);
+      const res = await preflightUrlMagicBytes('https://example.com/model.gguf');
+      expect(res.valid).toBe(true);
+      expect(res.format).toBe('gguf');
+      expect(res.variant).toBeNull();
+    });
+
+    it('validateFileMagicBytes reports needle2 vs needle3 distinctly', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValueOnce(
+        Buffer.from(NEEDLE2_HEADER).toString('base64')
+      );
+      const v2 = await validateFileMagicBytes('file:///mock/needle2.cact');
+      expect(v2.format).toBe('cact');
+      expect(v2.variant).toBe('needle2');
+      expect(v2.valid).toBe(true);
+
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValueOnce(
+        Buffer.from(NEEDLE3_HEADER).toString('base64')
+      );
+      const v3 = await validateFileMagicBytes('file:///mock/needle3.cact');
+      expect(v3.format).toBe('cact');
+      expect(v3.variant).toBe('needle3');
+      expect(v3.valid).toBe(true);
+    });
+
+    it('validateFileMagicBytes reports a null variant for unreadable/unknown files', async () => {
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValueOnce('');
+      const empty = await validateFileMagicBytes('file:///mock/empty.cact');
+      expect(empty).toEqual({ format: null, variant: null, valid: false });
+
+      (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValueOnce(
+        Buffer.from([0x00, 0x01, 0x02, 0x03]).toString('base64')
+      );
+      const unknown = await validateFileMagicBytes('file:///mock/unknown.bin');
+      expect(unknown).toEqual({ format: null, variant: null, valid: false });
     });
   });
 

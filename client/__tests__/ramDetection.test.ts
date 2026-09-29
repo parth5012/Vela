@@ -5,6 +5,7 @@ import {
   getModelStatusForRam,
   getOptimalSettingsForRam,
 } from '../utils/ramDetection';
+import { LOCAL_MODELS } from '../utils/localLlm';
 
 describe('ramDetection', () => {
   describe('getModelStatusForRam', () => {
@@ -111,6 +112,66 @@ describe('ramDetection', () => {
     it('marks Phi-4 Mini as recommended on high memory tier', () => {
       const ram8GB = 8 * 1024 * 1024 * 1024;
       expect(getModelStatusForRam('Phi-4 Mini (GGUF)', ram8GB)).toBe('recommended');
+    });
+
+    // #296 — every tier preset must itself be 'recommended' on that tier, so
+    // "Apply recommendation" never proposes a row the picker would flag.
+    it('returns a preset that is recommended on its own tier', () => {
+      const GB = 1024 * 1024 * 1024;
+      for (const ramGB of [2, 4, 6, 8]) {
+        const rec = getOptimalSettingsForRam(ramGB * GB);
+        expect(getModelStatusForRam(rec.modelName, ramGB * GB)).toBe('recommended');
+      }
+    });
+  });
+
+  // #296 — tiers for the .cact files that actually ship. Map decision #290:
+  // only needle2.cact + the full 20-layer needle3.cact exist; the 8-29 MB
+  // ladder slices are deferred and their sizes are UNVERIFIED (#292), so no
+  // slice sizes are encoded here.
+  describe('Needle shipping sizes across RAM tiers (#296)', () => {
+    const GB = 1024 * 1024 * 1024;
+    // Exact HF tree sizes verified in research #292 (as-of 2026-09-29):
+    // needle2.cact = 13,737,807 B, needle3.cact = 35,335,380 B.
+    const NEEDLE2_BYTES = 13737807;
+    const NEEDLE3_BYTES = 35335380;
+
+    it('rates the real needle2/needle3 sizes recommended on 2/4/6/8 GB devices', () => {
+      for (const ramGB of [2, 4, 6, 8]) {
+        // ctx per LOCAL_MODELS: needle2 2048, needle3 8192 (#292/#294).
+        expect(getDynamicModelStatusForRam(NEEDLE2_BYTES, 'cact', ramGB * GB, 2048)).toBe(
+          'recommended'
+        );
+        expect(getDynamicModelStatusForRam(NEEDLE3_BYTES, 'cact', ramGB * GB, 8192)).toBe(
+          'recommended'
+        );
+      }
+    });
+
+    it('derives needle sizes from LOCAL_MODELS (single source of truth)', () => {
+      for (const name of ['Needle-2 45M', 'Needle-3 (20-layer)']) {
+        const model = LOCAL_MODELS.find((m) => m.name === name);
+        expect(model).toBeDefined();
+        // `size` strings are "~0.014 GB" / "~0.035 GB" — parsed as GB, never MB
+        // (same digit-match the free-space guard uses at local-ai.tsx:424).
+        const sizeMatch = model!.size.match(/([\d.]+)/);
+        const sizeBytes = sizeMatch ? parseFloat(sizeMatch[1]) * GB : NaN;
+        expect(sizeBytes).toBeGreaterThan(0);
+        expect(
+          getDynamicModelStatusForRam(sizeBytes, model!.format, 2 * GB, model!.contextSize)
+        ).toBe('recommended');
+      }
+    });
+
+    it('never hides a needle entry on the dynamic path (never unsupported)', () => {
+      for (const ramGB of [2, 3, 4, 6, 8]) {
+        expect(getDynamicModelStatusForRam(NEEDLE2_BYTES, 'cact', ramGB * GB, 2048)).not.toBe(
+          'unsupported'
+        );
+        expect(getDynamicModelStatusForRam(NEEDLE3_BYTES, 'cact', ramGB * GB, 8192)).not.toBe(
+          'unsupported'
+        );
+      }
     });
   });
 });
