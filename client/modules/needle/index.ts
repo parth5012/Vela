@@ -47,12 +47,21 @@ export const NeedleModule = {
     weightsPath: string,
     contextSize: number = 256,
     systemPrompt?: string,
-    toolIndexPath?: string
+    toolIndexPath?: string,
+    // #298: tools_json is baked into the engine's static prefix at init —
+    // the JSON-extraction screen passes the Owner's schema as the ONLY tool.
+    toolsJson?: string
   ): Promise<boolean> {
     if (!nativeModule) {
       return true; // Mock mode
     }
-    return nativeModule.init(weightsPath, contextSize, systemPrompt ?? '', toolIndexPath ?? '');
+    return nativeModule.init(
+      weightsPath,
+      contextSize,
+      systemPrompt ?? '',
+      toolIndexPath ?? '',
+      toolsJson ?? ''
+    );
   },
 
   async complete(

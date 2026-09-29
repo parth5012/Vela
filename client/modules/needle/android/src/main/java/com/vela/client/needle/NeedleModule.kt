@@ -23,10 +23,14 @@ class NeedleModule : Module() {
             }
         }
 
-        AsyncFunction("init") { weightsPath: String, contextSize: Int, systemPrompt: String?, toolIndexPath: String? ->
+        // #298: toolsJson is the statically-declared tool array baked into the
+        // engine prefix by needle_init — the JSON-extraction screen passes the
+        // Owner's schema as the ONLY tool. Empty/absent keeps the chat default
+        // ("[]", tools travel in the prompt).
+        AsyncFunction("init") { weightsPath: String, contextSize: Int, systemPrompt: String?, toolIndexPath: String?, toolsJson: String? ->
             val future = executor.submit<Boolean> {
                 try {
-                    val success = NeedleNative.nativeInit(weightsPath, contextSize, systemPrompt, toolIndexPath)
+                    val success = NeedleNative.nativeInit(weightsPath, contextSize, systemPrompt, toolIndexPath, toolsJson)
                     isInitialized = success
                     success
                 } catch (e: Throwable) {

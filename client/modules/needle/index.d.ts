@@ -20,7 +20,8 @@ export interface NeedleNative {
     weightsPath: string,
     contextSize?: number,
     systemPrompt?: string,
-    toolIndexPath?: string
+    toolIndexPath?: string,
+    toolsJson?: string
   ): Promise<boolean>;
   complete(prompt: string, toolsJson?: string, maxTokens?: number): Promise<NeedleCompletionResult>;
   reset(): Promise<boolean>;

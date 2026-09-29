@@ -94,7 +94,8 @@ Java_com_vela_client_needle_NeedleNative_nativeInit(
     jstring jWeightsPath,
     jint contextSize,
     jstring jSystemPrompt,
-    jstring jToolIndexPath
+    jstring jToolIndexPath,
+    jstring jToolsJson
 ) {
     if (!jWeightsPath) {
         LOGE("nativeInit: jWeightsPath is null");
@@ -108,7 +109,11 @@ Java_com_vela_client_needle_NeedleNative_nativeInit(
     }
     const char* systemPrompt = jSystemPrompt ? env->GetStringUTFChars(jSystemPrompt, nullptr) : nullptr;
     const char* toolIndexPath = jToolIndexPath ? env->GetStringUTFChars(jToolIndexPath, nullptr) : nullptr;
-    LOGI("nativeInit weightsPath=%s contextSize=%d", weightsPath, contextSize);
+    // #298: statically-declared tools travel as JSON; empty/absent keeps the
+    // chat default ("[]"). CheckJNI-safe: only released when non-null.
+    const char* toolsJson = jToolsJson ? env->GetStringUTFChars(jToolsJson, nullptr) : nullptr;
+    LOGI("nativeInit weightsPath=%s contextSize=%d hasTools=%d", weightsPath, contextSize,
+         (toolsJson && toolsJson[0] != '\0') ? 1 : 0);
 
     g_last_error.clear();
 
@@ -127,6 +132,7 @@ Java_com_vela_client_needle_NeedleNative_nativeInit(
         env->ReleaseStringUTFChars(jWeightsPath, weightsPath);
         if (jSystemPrompt && systemPrompt) env->ReleaseStringUTFChars(jSystemPrompt, systemPrompt);
         if (jToolIndexPath && toolIndexPath) env->ReleaseStringUTFChars(jToolIndexPath, toolIndexPath);
+        if (jToolsJson && toolsJson) env->ReleaseStringUTFChars(jToolsJson, toolsJson);
         return JNI_FALSE;
     }
 
@@ -137,14 +143,17 @@ Java_com_vela_client_needle_NeedleNative_nativeInit(
         env->ReleaseStringUTFChars(jWeightsPath, weightsPath);
         if (jSystemPrompt && systemPrompt) env->ReleaseStringUTFChars(jSystemPrompt, systemPrompt);
         if (jToolIndexPath && toolIndexPath) env->ReleaseStringUTFChars(jToolIndexPath, toolIndexPath);
+        if (jToolsJson && toolsJson) env->ReleaseStringUTFChars(jToolsJson, toolsJson);
         return JNI_FALSE;
     }
 
     const char* sys = (systemPrompt && systemPrompt[0] != '\0') ? systemPrompt : "";
-    // Statically-declared tools are baked into the engine's prefix at init time.
-    // The app currently declares none at init (tools travel in the prompt);
-    // wiring the app's tool schemas in here is ticket #277's scope.
-    const char* tools = "[]";
+    // Statically-declared tools are baked into the engine's prefix at init
+    // time. #298 wires the caller's tool JSON in here (the JSON-extraction
+    // screen passes the Owner's schema as the ONLY tool, so the decode grammar
+    // guarantees conformance); an empty/absent declaration keeps the chat
+    // default "[]" (tools travel in the prompt).
+    const char* tools = (toolsJson && toolsJson[0] != '\0') ? toolsJson : "[]";
     // tool_index_path is a documented upstream no-op on needle3.cact (no
     // contrastive head ships); the parameter is still wired through so behavior
     // does not change if upstream starts honouring it.
@@ -157,6 +166,7 @@ Java_com_vela_client_needle_NeedleNative_nativeInit(
         env->ReleaseStringUTFChars(jWeightsPath, weightsPath);
         if (jSystemPrompt && systemPrompt) env->ReleaseStringUTFChars(jSystemPrompt, systemPrompt);
         if (jToolIndexPath && toolIndexPath) env->ReleaseStringUTFChars(jToolIndexPath, toolIndexPath);
+        if (jToolsJson && toolsJson) env->ReleaseStringUTFChars(jToolsJson, toolsJson);
         return JNI_FALSE;
     }
 
@@ -167,6 +177,7 @@ Java_com_vela_client_needle_NeedleNative_nativeInit(
     env->ReleaseStringUTFChars(jWeightsPath, weightsPath);
     if (jSystemPrompt && systemPrompt) env->ReleaseStringUTFChars(jSystemPrompt, systemPrompt);
     if (jToolIndexPath && toolIndexPath) env->ReleaseStringUTFChars(jToolIndexPath, toolIndexPath);
+    if (jToolsJson && toolsJson) env->ReleaseStringUTFChars(jToolsJson, toolsJson);
     return JNI_TRUE;
 #else
     LOGI("HAVE_NEEDLE_ENGINE is 0; initializing honest mock fallback engine");
@@ -176,6 +187,7 @@ Java_com_vela_client_needle_NeedleNative_nativeInit(
     env->ReleaseStringUTFChars(jWeightsPath, weightsPath);
     if (jSystemPrompt && systemPrompt) env->ReleaseStringUTFChars(jSystemPrompt, systemPrompt);
     if (jToolIndexPath && toolIndexPath) env->ReleaseStringUTFChars(jToolIndexPath, toolIndexPath);
+    if (jToolsJson && toolsJson) env->ReleaseStringUTFChars(jToolsJson, toolsJson);
     return JNI_TRUE;
 #endif
 }
