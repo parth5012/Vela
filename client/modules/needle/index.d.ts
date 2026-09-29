@@ -16,7 +16,12 @@ export interface NeedleCompletionResult {
 export interface NeedleNative {
   isAvailable(): boolean;
   hasNativeLibrary(): boolean;
-  init(weightsPath: string, contextSize?: number): Promise<boolean>;
+  init(
+    weightsPath: string,
+    contextSize?: number,
+    systemPrompt?: string,
+    toolIndexPath?: string
+  ): Promise<boolean>;
   complete(prompt: string, toolsJson?: string, maxTokens?: number): Promise<NeedleCompletionResult>;
   reset(): Promise<boolean>;
   unload(): Promise<void>;

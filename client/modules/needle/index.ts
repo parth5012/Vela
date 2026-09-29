@@ -43,11 +43,16 @@ export const NeedleModule = {
     }
   },
 
-  async init(weightsPath: string, contextSize: number = 256): Promise<boolean> {
+  async init(
+    weightsPath: string,
+    contextSize: number = 256,
+    systemPrompt?: string,
+    toolIndexPath?: string
+  ): Promise<boolean> {
     if (!nativeModule) {
       return true; // Mock mode
     }
-    return nativeModule.init(weightsPath, contextSize);
+    return nativeModule.init(weightsPath, contextSize, systemPrompt ?? '', toolIndexPath ?? '');
   },
 
   async complete(
