@@ -56,7 +56,7 @@ const NETWORK_OPTIONS = [
 /**
  * Wayfinder #173 Audit — Local AI Rows
  * Model rows: LOCAL_MODELS filtered by getModelStatusForRam (recommended/borderline/unsupported) — filtered when showUnsupportedModels=false.
- * Cactus Needle 45M is 'recommended' on <4.5GB and 4.5-7.5GB tiers (ramDetection.ts), so it is
+ * Needle rows (format cact: Needle-2 45M, Needle-3 (20-layer)) are 'recommended' on <4.5GB and 4.5-7.5GB tiers (ramDetection.ts), so they are
  * never hidden when showUnsupportedModels=false — no duplicated tier logic here, just the shared helper.
  * Download state: useConfigStore localModelDownloadProgress nullable; isDownloading = progress!==null; isActiveDownloading = isSelected && progress!==null.
  * Progress lives inline under filename when isActiveDownloading (View h8 radius4 bg rgba(255,255,255,0.08) + fill aurora.acc1 width `${progress}%`) plus global Card fallback when isDownloading.
@@ -365,10 +365,10 @@ export default function LocalAiScreen() {
       return;
     }
     // Wayfinder #230 / #232: block-with-warning on mock Needle runtime (never silent mock).
-    // CodeReview #234: gate covers built-in Needle row AND any custom .cact model
+    // CodeReview #234: gate covers every built-in Needle row (format cact:
+    // Needle-2 45M, Needle-3 (20-layer)) AND any custom .cact model
     // (custom .cact models run through the Needle engine, so they bypass silently otherwise).
     const isNeedleModel =
-      localModelName === 'Cactus Needle 45M' ||
       LOCAL_MODELS.find((m) => m.name === localModelName)?.format === 'cact' ||
       customModels.find((m) => m.name === localModelName)?.format === 'cact';
     if (isNeedleModel && !needleHasNative) {
@@ -781,7 +781,7 @@ export default function LocalAiScreen() {
         </View>
         {!needleHasNative ? (
           <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, lineHeight: 16, marginTop: 6 }}>
-            Native Needle library not detected in this build. Loading Cactus Needle 45M is blocked with a warning — mock output is never served silently.
+            Native Needle library not detected in this build. Loading a Needle model (.cact) is blocked with a warning — mock output is never served silently.
           </Text>
         ) : null}
       </Card>
@@ -868,7 +868,7 @@ export default function LocalAiScreen() {
                       {statusText}
                     </Text>
                   </View>
-                  {model.name === 'Cactus Needle 45M' ? (
+                  {model.format === 'cact' ? (
                     <View
                       style={{ backgroundColor: 'rgba(0,0,0,0.3)', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, borderWidth: 1, borderColor: needleHasNative ? '#10b981' : '#fb923c' }}
                       accessibilityRole="text"
@@ -891,7 +891,7 @@ export default function LocalAiScreen() {
                 <Text style={{ color: colors.textDark, fontSize: sizes.sub - 1, marginTop: 4, fontFamily: 'monospace' }}>
                   {model.filename}
                 </Text>
-                {model.name === 'Cactus Needle 45M' && !needleHasNative ? (
+                {model.format === 'cact' && !needleHasNative ? (
                   <Text style={{ color: '#fb923c', fontSize: sizes.sub - 1, marginTop: 4, fontWeight: '600' }}>
                     Mock fallback active — loading is blocked until the native library is packaged.
                   </Text>

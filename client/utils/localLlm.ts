@@ -90,6 +90,12 @@ export interface LocalModelSpec {
   filename: string;
   /** 'task' = MediaPipe LiteRT `.task` bundle, 'gguf' = llama.cpp GGUF via llama.rn */
   format: 'task' | 'gguf' | 'cact';
+  /**
+   * Model's maximum context window in tokens (upstream config.json).
+   * Metadata for the picker; runtime ctx still comes from
+   * `useConfigStore.localContextSize`.
+   */
+  contextSize?: number;
 }
 
 /**
@@ -108,13 +114,22 @@ export interface LocalModelSpec {
  */
 export const LOCAL_MODELS: LocalModelSpec[] = [
   {
-    name: 'Cactus Needle 45M',
-    size: '0.04GB',
-    description: 'Ultra-fast on-device action & tool routing model (Needle Engine)',
-    downloadUrl:
-      'https://huggingface.co/cactus-ai/needle-45m/resolve/main/needle-45m.cact',
-    filename: 'needle-45m.cact',
+    name: 'Needle-2 45M',
+    size: '~0.014 GB',
+    description: 'Ultra-fast on-device action & tool routing model (Needle Engine, 2048 context)',
+    downloadUrl: 'https://huggingface.co/Cactus-Compute/needle2/resolve/main/needle2.cact',
+    filename: 'needle2.cact',
     format: 'cact',
+    contextSize: 2048,
+  },
+  {
+    name: 'Needle-3 (20-layer)',
+    size: '~0.035 GB',
+    description: 'Needle-3 full 20-layer model (Needle Engine, 8192 context)',
+    downloadUrl: 'https://huggingface.co/Cactus-Compute/needle3/resolve/main/needle3.cact',
+    filename: 'needle3.cact',
+    format: 'cact',
+    contextSize: 8192,
   },
   {
     name: 'Qwen2.5 0.5B',

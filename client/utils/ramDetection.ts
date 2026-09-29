@@ -60,7 +60,8 @@ export async function detectRamBytes(): Promise<number> {
  *
  * | Model                    | Size     | <4.5 GB   | 4.5-7.5 GB | >=7.5 GB  |
  * |--------------------------|----------|------------|------------|-----------|
- * | Cactus Needle 45M          | ~0.04 GB | recommended| recommended| recommended|
+ * | Needle-2 45M             | ~0.014 GB| recommended| recommended| recommended|
+ * | Needle-3 (20-layer)      | ~0.035 GB| recommended| recommended| recommended|
  * | SmolLM 135M              | ~0.16 GB | recommended| supported*| recommended|
  * | Qwen2.5 0.5B             | ~0.52 GB | borderline | recommended| recommended|
  * | Llama 3.2 1B (GGUF)      | ~0.81 GB | unsupported| recommended| recommended|
@@ -78,12 +79,18 @@ export function getModelStatusForRam(modelName: string, ramBytes: number): Model
   const ramGB = ramBytes / (1024 * 1024 * 1024);
 
   if (ramGB < 4.5) {
-    if (modelName === 'Cactus Needle 45M' || modelName === 'SmolLM 135M') return 'recommended';
+    if (
+      modelName === 'Needle-2 45M' ||
+      modelName === 'Needle-3 (20-layer)' ||
+      modelName === 'SmolLM 135M'
+    )
+      return 'recommended';
     if (modelName === 'Qwen2.5 0.5B') return 'borderline';
     return 'unsupported';
   } else if (ramGB < 7.5) {
     if (
-      modelName === 'Cactus Needle 45M' ||
+      modelName === 'Needle-2 45M' ||
+      modelName === 'Needle-3 (20-layer)' ||
       modelName === 'Qwen2.5 0.5B' ||
       modelName === 'Llama 3.2 1B (GGUF)'
     )
