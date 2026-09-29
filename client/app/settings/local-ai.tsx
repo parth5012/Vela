@@ -31,6 +31,7 @@ import {
   CustomModelRecord,
   CustomModelDownloadProgress,
   SupportedModelFormat,
+  NeedleVariant,
 } from '../../utils/customModelStorage';
 import {
   AuroraScreen,
@@ -162,6 +163,7 @@ export default function LocalAiScreen() {
   const [preflightResult, setPreflightResult] = useState<{
     valid: boolean;
     format: SupportedModelFormat | null;
+    variant?: NeedleVariant | null;
     contentLength?: number;
     error?: string;
   } | null>(null);
@@ -249,7 +251,7 @@ export default function LocalAiScreen() {
         setCustomFormat(res.format);
       }
     } catch (err: any) {
-      setPreflightResult({ valid: false, format: null, error: err?.message });
+      setPreflightResult({ valid: false, format: null, variant: null, error: err?.message });
     } finally {
       setIsPreflighting(false);
     }
@@ -1323,7 +1325,7 @@ export default function LocalAiScreen() {
                   >
                     <Text style={{ color: preflightResult.valid ? '#34d399' : '#f87171', fontWeight: '600' }}>
                       {preflightResult.valid
-                        ? `Valid format: ${preflightResult.format?.toUpperCase()} (${preflightResult.contentLength ? (preflightResult.contentLength / (1024 * 1024)).toFixed(1) + ' MB' : 'Size unknown'})`
+                        ? `Valid format: ${preflightResult.format?.toUpperCase()}${preflightResult.variant ? ` · ${preflightResult.variant}` : ''} (${preflightResult.contentLength ? (preflightResult.contentLength / (1024 * 1024)).toFixed(1) + ' MB' : 'Size unknown'})`
                         : `Validation error: ${preflightResult.error || 'Invalid magic bytes'}`}
                     </Text>
                   </View>

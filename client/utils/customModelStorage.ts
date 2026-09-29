@@ -3,6 +3,13 @@ import * as FileSystem from 'expo-file-system';
 
 export type SupportedModelFormat = 'cact' | 'gguf' | 'task';
 
+/**
+ * Which Needle release a `.cact` header belongs to (#292/#296):
+ * `0x05E12A83` = needle2, `0x05E12A84` = needle3. Non-`.cact` formats have
+ * no variant (null).
+ */
+export type NeedleVariant = 'needle2' | 'needle3';
+
 export interface CustomModelRecord {
   id: string;
   name: string;
@@ -40,10 +47,10 @@ const RESUME_PREFIX = 'download_resume_';
 const activeDownloads = new Map<string, FileSystem.DownloadResumable>();
 
 /**
- * Sniffs first bytes of a binary buffer to detect model format.
- * Returns 'cact', 'gguf', 'task', or null if invalid/unknown.
+ * Identifies which Needle release a `.cact` header belongs to (#296).
+ * Returns 'needle2', 'needle3', or null when the header is not a `.cact` tag.
  */
-export function sniffMagicBytes(bytes: Uint8Array): SupportedModelFormat | null {
+export function sniffNeedleVariant(bytes: Uint8Array): NeedleVariant | null {
   if (!bytes || bytes.length < 4) {
     return null;
   }
@@ -57,7 +64,7 @@ export function sniffMagicBytes(bytes: Uint8Array): SupportedModelFormat | null 
     bytes[2] === 0xe1 &&
     bytes[3] === 0x05
   ) {
-    return 'cact';
+    return 'needle2';
   }
   if (
     bytes[0] === 0x84 &&
@@ -65,6 +72,22 @@ export function sniffMagicBytes(bytes: Uint8Array): SupportedModelFormat | null 
     bytes[2] === 0xe1 &&
     bytes[3] === 0x05
   ) {
+    return 'needle3';
+  }
+  return null;
+}
+
+/**
+ * Sniffs first bytes of a binary buffer to detect model format.
+ * Returns 'cact', 'gguf', 'task', or null if invalid/unknown.
+ * Use sniffNeedleVariant for needle2-vs-needle3 reporting within 'cact'.
+ */
+export function sniffMagicBytes(bytes: Uint8Array): SupportedModelFormat | null {
+  if (!bytes || bytes.length < 4) {
+    return null;
+  }
+
+  if (sniffNeedleVariant(bytes)) {
     return 'cact';
   }
 
@@ -96,11 +119,13 @@ export function sniffMagicBytes(bytes: Uint8Array): SupportedModelFormat | null 
 /**
  * Preflights a remote URL using HTTP Range: bytes=0-15 to sniff magic bytes
  * before downloading large multi-gigabyte models.
+ * `variant` reports needle2 vs needle3 for `.cact` headers (#296), null otherwise.
  */
 export async function preflightUrlMagicBytes(
   url: string
 ): Promise<{
   format: SupportedModelFormat | null;
+  variant: NeedleVariant | null;
   valid: boolean;
   contentLength?: number;
   error?: string;
@@ -108,10 +133,15 @@ export async function preflightUrlMagicBytes(
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      return { format: null, valid: false, error: 'URL must use http or https protocol' };
+      return {
+        format: null,
+        variant: null,
+        valid: false,
+        error: 'URL must use http or https protocol',
+      };
     }
   } catch {
-    return { format: null, valid: false, error: 'Invalid URL format' };
+    return { format: null, variant: null, valid: false, error: 'Invalid URL format' };
   }
 
   const controller = new AbortController();
@@ -130,6 +160,7 @@ export async function preflightUrlMagicBytes(
     if (!response.ok && response.status !== 206) {
       return {
         format: null,
+        variant: null,
         valid: false,
         error: `HTTP status ${response.status} fetching preflight range header`,
       };
@@ -147,6 +178,7 @@ export async function preflightUrlMagicBytes(
       if (cl && parseInt(cl, 10) > 1024 * 1024 && response.status === 200) {
         return {
           format: null,
+          variant: null,
           valid: false,
           error: 'Server does not support partial range preflight',
         };
@@ -156,6 +188,7 @@ export async function preflightUrlMagicBytes(
     }
 
     const detectedFormat = sniffMagicBytes(bytes);
+    const detectedVariant = sniffNeedleVariant(bytes);
 
     let contentLength: number | undefined;
     const contentRange = response.headers.get('content-range');
@@ -173,6 +206,7 @@ export async function preflightUrlMagicBytes(
 
     return {
       format: detectedFormat,
+      variant: detectedVariant,
       valid: detectedFormat !== null,
       contentLength,
     };
@@ -180,6 +214,7 @@ export async function preflightUrlMagicBytes(
     clearTimeout(timeoutId);
     return {
       format: null,
+      variant: null,
       valid: false,
       error: err?.message || 'Network error during preflight request',
     };
@@ -188,14 +223,19 @@ export async function preflightUrlMagicBytes(
 
 /**
  * Validates magic bytes of an existing local file.
+ * `variant` reports needle2 vs needle3 for `.cact` headers (#296), null otherwise.
  */
 export async function validateFileMagicBytes(
   filePath: string
-): Promise<{ format: SupportedModelFormat | null; valid: boolean }> {
+): Promise<{
+  format: SupportedModelFormat | null;
+  variant: NeedleVariant | null;
+  valid: boolean;
+}> {
   try {
     const info = await FileSystem.getInfoAsync(filePath);
     if (!info.exists) {
-      return { format: null, valid: false };
+      return { format: null, variant: null, valid: false };
     }
 
     // Read first chunk in base64
@@ -206,7 +246,7 @@ export async function validateFileMagicBytes(
     });
 
     if (!base64Data) {
-      return { format: null, valid: false };
+      return { format: null, variant: null, valid: false };
     }
 
     const binaryString = atob(base64Data);
@@ -216,9 +256,10 @@ export async function validateFileMagicBytes(
     }
 
     const format = sniffMagicBytes(bytes);
-    return { format, valid: format !== null };
+    const variant = sniffNeedleVariant(bytes);
+    return { format, variant, valid: format !== null };
   } catch {
-    return { format: null, valid: false };
+    return { format: null, variant: null, valid: false };
   }
 }
 
