@@ -35,10 +35,24 @@ describe('ramDetection', () => {
       expect(getModelStatusForRam('Qwen2.5 1.5B', ram8GB)).toBe('recommended');
     });
 
-    it("marks 'Cactus Needle 45M' as recommended on 2GB, 3GB, 4GB, 6GB, and 8GB RAM devices", () => {
+    it("marks 'Needle-2 45M' and 'Needle-3 (20-layer)' as recommended on 2GB, 3GB, 4GB, 6GB, and 8GB RAM devices", () => {
       const GB = 1024 * 1024 * 1024;
-      for (const ramGB of [2, 3, 4, 6, 8]) {
-        expect(getModelStatusForRam('Cactus Needle 45M', ramGB * GB)).toBe('recommended');
+      for (const name of ['Needle-2 45M', 'Needle-3 (20-layer)']) {
+        for (const ramGB of [2, 3, 4, 6, 8]) {
+          expect(getModelStatusForRam(name, ramGB * GB)).toBe('recommended');
+        }
+      }
+    });
+
+    // #294 — the settings picker hides 'unsupported' rows unless
+    // showUnsupportedModels is on; both needle rows must stay visible by
+    // default (low tier, the 6 GB fallback tier, and the high tier).
+    it('keeps both needle rows visible in the picker (never unsupported)', () => {
+      const GB = 1024 * 1024 * 1024;
+      for (const name of ['Needle-2 45M', 'Needle-3 (20-layer)']) {
+        expect(getModelStatusForRam(name, 4 * GB)).not.toBe('unsupported');
+        expect(getModelStatusForRam(name, 6 * GB)).not.toBe('unsupported');
+        expect(getModelStatusForRam(name, 8 * GB)).not.toBe('unsupported');
       }
     });
 

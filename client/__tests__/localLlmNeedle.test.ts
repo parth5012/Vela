@@ -9,6 +9,7 @@ import {
   isLocalModelLoaded,
   streamLocalLlmResponse,
 } from '../utils/localLlm';
+import { sniffMagicBytes } from '../utils/customModelStorage';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
@@ -49,10 +50,10 @@ describe('localLlm NeedleEngine (.cact) integration', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     await unloadLocalModel();
-    useConfigStore.setState({ localModelName: 'Cactus Needle 45M' });
+    useConfigStore.setState({ localModelName: 'Needle-2 45M' });
     await AsyncStorage.setItem(
-      'local_model_downloaded_Cactus Needle 45M_path',
-      'file:///data/local/tmp/needle-45m.cact'
+      'local_model_downloaded_Needle-2 45M_path',
+      'file:///data/local/tmp/needle2.cact'
     );
   });
 
@@ -60,27 +61,77 @@ describe('localLlm NeedleEngine (.cact) integration', () => {
     await unloadLocalModel();
   });
 
-  it('includes Cactus Needle 45M with format cact in LOCAL_MODELS', () => {
-    const needleModel = LOCAL_MODELS.find((m) => m.format === 'cact');
-    expect(needleModel).toBeDefined();
-    expect(needleModel?.name).toBe('Cactus Needle 45M');
-    expect(needleModel?.filename).toContain('.cact');
+  it('includes Needle-2 45M and Needle-3 (20-layer) with format cact in LOCAL_MODELS', () => {
+    const needleModels = LOCAL_MODELS.filter((m) => m.format === 'cact');
+    expect(needleModels.map((m) => m.name)).toEqual(['Needle-2 45M', 'Needle-3 (20-layer)']);
+    for (const model of needleModels) {
+      expect(model.filename).toContain('.cact');
+    }
   });
 
-  it('matches the needle-45m.cact spec exactly (filename + HF URL)', () => {
-    const needleModel = LOCAL_MODELS.find((m) => m.name === 'Cactus Needle 45M');
-    expect(needleModel).toBeDefined();
-    expect(needleModel?.filename).toBe('needle-45m.cact');
-    expect(needleModel?.format).toBe('cact');
-    expect(needleModel?.downloadUrl).toContain('cactus-ai/needle-45m');
-    expect(needleModel?.downloadUrl.endsWith('needle-45m.cact')).toBe(true);
+  // #294 — researched upstream facts (issue #292): live Cactus-Compute repos,
+  // exact file sizes, and config.json context (ticket text's "ctx 256" was
+  // needle2's sliding window, not a context length).
+  it('matches the needle2/needle3 specs exactly (filename + HF URL + size + ctx)', () => {
+    const needle2 = LOCAL_MODELS.find((m) => m.name === 'Needle-2 45M');
+    expect(needle2).toBeDefined();
+    expect(needle2?.filename).toBe('needle2.cact');
+    expect(needle2?.format).toBe('cact');
+    expect(needle2?.downloadUrl).toBe(
+      'https://huggingface.co/Cactus-Compute/needle2/resolve/main/needle2.cact'
+    );
+    expect(needle2?.size).toMatch(/GB$/);
+    expect(needle2?.contextSize).toBe(2048);
+
+    const needle3 = LOCAL_MODELS.find((m) => m.name === 'Needle-3 (20-layer)');
+    expect(needle3).toBeDefined();
+    expect(needle3?.filename).toBe('needle3.cact');
+    expect(needle3?.format).toBe('cact');
+    expect(needle3?.downloadUrl).toBe(
+      'https://huggingface.co/Cactus-Compute/needle3/resolve/main/needle3.cact'
+    );
+    expect(needle3?.size).toMatch(/GB$/);
+    expect(needle3?.contextSize).toBe(8192);
+  });
+
+  // Guard: the old needle-45m HF repo is dead (HTTP 401). Every .cact entry
+  // must resolve against the live Cactus-Compute repos instead.
+  it('keeps zero references to the dead needle-45m repo (HTTP 401)', () => {
+    const cactModels = LOCAL_MODELS.filter((m) => m.format === 'cact');
+    expect(cactModels.length).toBeGreaterThan(0);
+    for (const m of cactModels) {
+      expect(m.downloadUrl.startsWith('https://huggingface.co/Cactus-Compute/')).toBe(true);
+      expect(m.filename.includes('needle-45m')).toBe(false);
+    }
+    expect(LOCAL_MODELS.some((m) => m.downloadUrl.includes('needle-45m'))).toBe(false);
+  });
+
+  // #294 — both listings must be loadable by the shared magic-byte sniffer:
+  // needle2.cact starts 83 2A E1 05 (tag 0x05E12A83), needle3.cact starts
+  // 84 2A E1 05 (tag 0x05E12A84); both are declared format 'cact'.
+  it('ties both needle entries to their .cact magic bytes', () => {
+    expect(sniffMagicBytes(new Uint8Array([0x83, 0x2a, 0xe1, 0x05]))).toBe('cact');
+    expect(sniffMagicBytes(new Uint8Array([0x84, 0x2a, 0xe1, 0x05]))).toBe('cact');
+    expect(LOCAL_MODELS.find((m) => m.name === 'Needle-2 45M')?.format).toBe('cact');
+    expect(LOCAL_MODELS.find((m) => m.name === 'Needle-3 (20-layer)')?.format).toBe('cact');
+  });
+
+  it('resolves useConfigStore.localModelName exactly for both needle entries', () => {
+    for (const name of ['Needle-2 45M', 'Needle-3 (20-layer)']) {
+      useConfigStore.setState({ localModelName: name });
+      const resolved = LOCAL_MODELS.find(
+        (m) => m.name === useConfigStore.getState().localModelName
+      );
+      expect(resolved).toBeDefined();
+      expect(resolved?.format).toBe('cact');
+    }
   });
 
   it('initializes NeedleModule when .cact model is configured', async () => {
     await initializeLocalModel();
     expect(isLocalModelLoaded).toBe(true);
     expect(NeedleModule.init).toHaveBeenCalledWith(
-      '/data/local/tmp/needle-45m.cact',
+      '/data/local/tmp/needle2.cact',
       expect.any(Number)
     );
   });

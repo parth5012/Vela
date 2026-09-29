@@ -230,11 +230,20 @@ export const useConfigStore = create<ConfigState>()(
       // persisted `localModelName` pointing at a removed model must be reset —
       // otherwise the stale name never matches LOCAL_MODELS and local mode
       // silently falls back to mock responses.
-      version: 1,
+      // v2 (#294): 'Cactus Needle 45M' was hard-migrated to the live
+      // Cactus-Compute needle2/needle3 entries (its old HF URL is dead,
+      // HTTP 401) — reset the removed name the same way.
+      version: 2,
       migrate: (persistedState: any, fromVersion: number) => {
-        if (fromVersion < 1 && persistedState) {
-          const retired = ['Gemma 2B', 'Phi-3 Mini', 'Llama 3 8B'];
-          if (retired.includes(persistedState.localModelName)) {
+        if (persistedState) {
+          if (fromVersion < 1) {
+            const retired = ['Gemma 2B', 'Phi-3 Mini', 'Llama 3 8B'];
+            if (retired.includes(persistedState.localModelName)) {
+              persistedState.localModelName = 'DeepSeek-R1 1.5B (GGUF)';
+              persistedState.isLocalMode = false;
+            }
+          }
+          if (fromVersion < 2 && persistedState.localModelName === 'Cactus Needle 45M') {
             persistedState.localModelName = 'DeepSeek-R1 1.5B (GGUF)';
             persistedState.isLocalMode = false;
           }

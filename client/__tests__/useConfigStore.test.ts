@@ -106,6 +106,37 @@ describe('useConfigStore', () => {
     expect(updatedState.detectedRamBytes).toBe(4000000000);
   });
 
+  // #294 — 'Cactus Needle 45M' was hard-migrated to the live Cactus-Compute
+  // needle2/needle3 entries (its old HF URL is dead, HTTP 401). A
+  // persisted v1 selection of the removed name must fall back to the default,
+  // never crash or leave local mode pointing at a model that no longer exists.
+  it('resets a persisted stale "Cactus Needle 45M" selection on rehydrate (v1 → v2 migrate)', async () => {
+    const AsyncStorage = require('@react-native-async-storage/async-storage');
+    await AsyncStorage.setItem(
+      'vela-config-storage',
+      JSON.stringify({
+        state: {
+          ...useConfigStore.getState(),
+          localModelName: 'Cactus Needle 45M',
+          isLocalMode: true,
+        },
+        version: 1,
+      })
+    );
+
+    await useConfigStore.persist.rehydrate();
+
+    expect(useConfigStore.getState().localModelName).toBe('DeepSeek-R1 1.5B (GGUF)');
+    expect(useConfigStore.getState().isLocalMode).toBe(false);
+
+    // Cleanup: drop the seeded payload and restore defaults for later tests.
+    await AsyncStorage.removeItem('vela-config-storage');
+    useConfigStore.setState({
+      localModelName: 'DeepSeek-R1 1.5B (GGUF)',
+      isLocalMode: false,
+    });
+  });
+
   it('should default tap/type/swipe device permissions to confirm (audit fix regression guard)', () => {
     const perms = useConfigStore.getState().deviceAgentPermissions;
     // These three were downgraded from 'auto' to 'confirm' in the audit fix:
