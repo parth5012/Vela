@@ -24,6 +24,8 @@ export interface NeedleNative {
     toolsJson?: string
   ): Promise<boolean>;
   complete(prompt: string, toolsJson?: string, maxTokens?: number): Promise<NeedleCompletionResult>;
+  /** #299: needle_embed — null when unavailable (no native module / engine). */
+  embed(text: string): Promise<number[] | null>;
   reset(): Promise<boolean>;
   unload(): Promise<void>;
   addListener(listener: (event: NeedleStreamEvent) => void): Subscription;

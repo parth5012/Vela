@@ -36,6 +36,13 @@
       "when": 1789655933664,
       "tag": "0004_checkin_offline_queue",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1790716981466,
+      "tag": "0005_message_vectors",
+      "breakpoints": true
     }
   ]
 }

@@ -138,6 +138,20 @@ class NeedleModule : Module() {
             future.get()
         }
 
+        AsyncFunction("embed") { input: String ->
+            // #299: needle_embed plumbing. null means "no vector" — the engine
+            // is a mock, uninitialized, or a Needle 2 build — so the JS side
+            // degrades to FTS5-only instead of receiving fabricated data.
+            val future = executor.submit<FloatArray?> {
+                try {
+                    NeedleNative.nativeEmbed(input)
+                } catch (e: Throwable) {
+                    null
+                }
+            }
+            future.get()
+        }
+
         AsyncFunction("reset") {
             val future = executor.submit<Boolean> {
                 try {

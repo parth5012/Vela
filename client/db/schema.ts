@@ -36,6 +36,22 @@ export type InsertMessageEntity = typeof messages.$inferInsert;
 export type OperationLogEntity = typeof operationLog.$inferSelect;
 export type InsertOperationLogEntity = typeof operationLog.$inferInsert;
 
+// #299: side table for per-message needle_embed vectors. Kept out of
+// `messages` so the FTS5 content table and its triggers stay untouched.
+// `model` records provenance — the shipped needle3.cact vectors come from the
+// confidence head's probe pool and are NOT contrastively trained (#290).
+export const messageVectors = sqliteTable('message_vectors', {
+  message_id: text('message_id')
+    .primaryKey()
+    .references(() => messages.id, { onDelete: 'cascade' }),
+  embedding: text('embedding').notNull(),
+  model: text('model').notNull(),
+  created_at: integer('created_at').notNull(),
+});
+
+export type MessageVectorEntity = typeof messageVectors.$inferSelect;
+export type InsertMessageVectorEntity = typeof messageVectors.$inferInsert;
+
 export const tasks = sqliteTable('tasks', {
   id: text('id').primaryKey(),
   title: text('title').notNull(),

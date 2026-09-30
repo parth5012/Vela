@@ -25,7 +25,8 @@ object NeedleNative {
     // needle_last_error() text for the most recent engine failure, or null.
     external fun nativeLastError(): String?
 
-    // needle_embed() plumbing only (#299 wires the feature); null when the
-    // linked engine is a mock or a Needle 2 build.
+    // needle_embed() (#299): unit-norm vector from the confidence head's
+    // probe pool (NOT contrastively trained, see #290), or null when the
+    // linked engine is a mock, uninitialized, or a Needle 2 build.
     external fun nativeEmbed(input: String): FloatArray?
 }

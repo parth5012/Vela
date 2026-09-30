@@ -9,6 +9,7 @@ describe('Needle Expo Module', () => {
     expect(typeof NeedleModule.unload).toBe('function');
     expect(typeof NeedleModule.hasNativeLibrary).toBe('function');
     expect(typeof NeedleModule.addListener).toBe('function');
+    expect(typeof NeedleModule.embed).toBe('function');
   });
 
   it('initializes and completes in fallback / test mode', async () => {
@@ -36,5 +37,12 @@ describe('Needle Expo Module', () => {
     expect(sub).toBeDefined();
     expect(typeof sub.remove).toBe('function');
     sub.remove();
+  });
+
+  // #299: needle_embed has no mock implementation — without the native module
+  // (Jest / dev client without the engine) embed must answer null, never a
+  // fabricated vector.
+  it('returns null from embed when the native module is unavailable', async () => {
+    await expect(NeedleModule.embed('train delay')).resolves.toBeNull();
   });
 });

@@ -14,8 +14,9 @@ jest.mock('drizzle-orm/expo-sqlite/migrator', () => ({
   migrate: jest.fn(async () => Promise.resolve()),
 }));
 
-import { threads, messages, operationLog, tasks, taskRuns } from '../db/schema';
+import { threads, messages, operationLog, tasks, taskRuns, messageVectors } from '../db/schema';
 import db, { initializeDatabase } from '../db/client';
+import { applyMigrations, migrationKeys, migrationTags } from './helpers/sqliteMigrations';
 
 describe('Database client schema', () => {
   it('should define correct tables schema', () => {
@@ -68,5 +69,79 @@ describe('Database client schema', () => {
     const { migrate } = require('drizzle-orm/expo-sqlite/migrator');
     await initializeDatabase();
     expect(migrate).toHaveBeenCalled();
+  });
+});
+
+describe('message_vectors schema (#299)', () => {
+  it('defines the side table for per-message vectors', () => {
+    expect(messageVectors).toBeDefined();
+    expect(messageVectors.message_id).toBeDefined();
+    expect(messageVectors.embedding).toBeDefined();
+    expect(messageVectors.model).toBeDefined();
+    expect(messageVectors.created_at).toBeDefined();
+  });
+
+  it('keys vectors by message id with provenance columns', () => {
+    expect(messageVectors.message_id.primary).toBe(true);
+    expect(messageVectors.message_id.notNull).toBe(true);
+    expect(messageVectors.embedding.notNull).toBe(true);
+    expect(messageVectors.model.notNull).toBe(true);
+    expect(messageVectors.created_at.notNull).toBe(true);
+  });
+
+  it('registers migration 0005 in the drizzle bundle and journal', () => {
+    const keys = migrationKeys();
+    expect(keys).toContain('m0005');
+    expect(keys[keys.length - 1]).toBe('m0005');
+
+    const tags = migrationTags();
+    expect(tags[tags.length - 1]).toMatch(/^0005_/);
+  });
+
+  it('creates message_vectors in the 0005 migration SQL', () => {
+    const sql = (require('../db/migrations/migrations').default.migrations.m0005 as string) || '';
+    expect(sql).toContain('CREATE TABLE `message_vectors`');
+    expect(sql).toContain('REFERENCES `messages`');
+    expect(sql).toMatch(/ON DELETE cascade/i);
+  });
+});
+
+describe('migrations apply to a real SQLite database (#299)', () => {
+  it('applies 0000..0005 in order and cascades vector rows when a message is deleted', () => {
+    const { DatabaseSync } = require('node:sqlite');
+    const sqlite = new DatabaseSync(':memory:');
+    // expo-sqlite enables foreign keys by default; mirror that here so the
+    // cascade declared in migration 0005 is actually enforceable.
+    sqlite.exec('PRAGMA foreign_keys = ON');
+    applyMigrations(sqlite);
+
+    sqlite
+      .prepare(
+        'INSERT INTO threads (id, title, persona, updated_at, is_pinned) VALUES (?, ?, ?, ?, ?)'
+      )
+      .run('t1', 'title', 'personal assistant', '2026-01-01', 0);
+    sqlite
+      .prepare(
+        'INSERT INTO messages (id, conversation_id, role, content, provider, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+      )
+      .run('m1', 't1', 'user', 'the railway was delayed', 'local', 1);
+
+    const insertVector = sqlite.prepare(
+      'INSERT INTO message_vectors (message_id, embedding, model, created_at) VALUES (?, ?, ?, ?) ' +
+        'ON CONFLICT(message_id) DO UPDATE SET embedding = excluded.embedding, model = excluded.model, created_at = excluded.created_at'
+    );
+    insertVector.run('m1', JSON.stringify([1, 0, 0]), 'needle3-probe-pool', 1);
+    // Second write for the same message upserts instead of failing on the PK.
+    insertVector.run('m1', JSON.stringify([1, 0, 1]), 'needle3-probe-pool', 2);
+
+    const rows = sqlite
+      .prepare('SELECT embedding FROM message_vectors WHERE message_id = ?')
+      .all('m1') as { embedding: string }[];
+    expect(rows).toHaveLength(1);
+    expect(JSON.parse(rows[0].embedding)).toEqual([1, 0, 1]);
+
+    sqlite.prepare('DELETE FROM messages WHERE id = ?').run('m1');
+    const after = sqlite.prepare('SELECT * FROM message_vectors').all();
+    expect(after).toHaveLength(0);
   });
 });
