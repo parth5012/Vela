@@ -99,7 +99,14 @@ export async function executeDeviceAction(
       }
       case 'device_screenshot': {
         const uri = await DeviceAgentNative.takeScreenshot();
-        return { outcome: 'executed', observation: uri || 'file://mock/screenshot.png' };
+        // An empty capture is a failed capture — never a fabricated path.
+        if (!uri) {
+          return {
+            outcome: 'failed',
+            observation: 'Action failed: screenshot capture returned no data.',
+          };
+        }
+        return { outcome: 'executed', observation: uri };
       }
       default: {
         let action = 'click';
