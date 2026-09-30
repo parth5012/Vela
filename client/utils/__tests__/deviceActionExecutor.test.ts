@@ -69,6 +69,18 @@ describe('executeDeviceAction outcomes (#308)', () => {
     expect(result.observation).toBe('Action failed');
   });
 
+  it('reports indeterminate when a mutating action throws after being dispatched', async () => {
+    mockHolder.mod = { performAction: jest.fn().mockRejectedValue(new Error('bridge died')) };
+
+    const result = await executeDeviceAction('device_click', '500,1000');
+
+    expect(result.outcome).toBe('indeterminate');
+    expect(result.observation).toContain('UNKNOWN');
+    expect(result.observation).toContain('before repeating');
+    expect(result.observation).not.toMatch(/Executed/);
+    expect(result.observation.toLowerCase()).not.toContain('not executed');
+  });
+
   it('reports executed when the native action succeeds', async () => {
     mockHolder.mod = {
       performAction: jest.fn().mockResolvedValue(true),

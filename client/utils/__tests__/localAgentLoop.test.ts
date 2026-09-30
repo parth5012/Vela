@@ -286,6 +286,34 @@ describe('localAgentLoop', () => {
       expect(events.find((e) => e.type === 'tool_observation').error).toBeUndefined();
     });
 
+    it('records an indeterminate outcome distinctly from a clean failure', async () => {
+      const [first, second] = toolThenAnswer();
+      (localLlm.streamLocalLlmResponse as jest.Mock)
+        .mockReturnValueOnce(first)
+        .mockReturnValueOnce(second);
+      (safetyManager.evaluateSafety as jest.Mock).mockResolvedValue({
+        status: 'success',
+        result: 'allowed',
+      });
+      (deviceActionExecutor.executeDeviceAction as jest.Mock).mockResolvedValue({
+        outcome: 'indeterminate',
+        observation: 'Action result UNKNOWN: device_click may already have taken effect.',
+      });
+
+      const events: any[] = [];
+      const result = await runLocalAgentLoop('Click Settings', {
+        onEvent: (e) => events.push(e),
+      });
+
+      expect(result.steps[0].executionStatus).toBe('indeterminate');
+      expect(loggedStatus(0)).toBe('indeterminate');
+      const observationEvent = events.find((e) => e.type === 'tool_observation');
+      expect(observationEvent.error).toBeTruthy();
+      const nextPrompt = (localLlm.streamLocalLlmResponse as jest.Mock).mock
+        .calls[1][0] as string;
+      expect(nextPrompt).toContain('may already have taken effect');
+    });
+
     it('keeps a safety block logged as blocked', async () => {
       async function* toolStream() {
         yield '{"name": "device_open_app", "arguments": {"app": "Superuser Root"}}';
