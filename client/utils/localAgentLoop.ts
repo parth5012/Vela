@@ -474,7 +474,7 @@ export async function runLocalAgentLoop(
         toolName: toolCall.toolName,
         observation,
         step,
-        ...(action.outcome === 'failed' || action.outcome === 'unavailable'
+        ...(action.outcome !== 'executed' && action.outcome !== 'simulated'
           ? { error: observation }
           : {}),
       });

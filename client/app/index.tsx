@@ -561,7 +561,7 @@ export default function ChatScreen() {
                   parsedInput.value
                 );
                 result = action.observation;
-                if (action.outcome === 'failed' || action.outcome === 'unavailable') {
+                if (action.outcome !== 'executed' && action.outcome !== 'simulated') {
                   status = 'error';
                 }
               } catch (e: any) {

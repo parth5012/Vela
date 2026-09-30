@@ -3,30 +3,35 @@ import DeviceAgentNative from '../modules/device-agent';
 import { useConfigStore } from '../store/useConfigStore';
 
 /**
- * #308: what actually happened to the action. These are four different states
- * and callers must not have to parse a string to tell them apart:
+ * The five distinct states an action can end in. Callers must not have to
+ * parse a string to tell them apart:
  *
- * - `executed`    — the native agent really did it.
- * - `simulated`   — no native agent here (non-Android); mock text is labelled.
- * - `failed`      — the agent was reachable but the action did not happen.
- * - `unavailable` — the agent is not loaded at all (PR #300 made a failed
- *                   `requireNativeModule` non-fatal, so the module is `null`);
- *                   nothing was attempted, and nothing must be recorded as run.
+ * - `executed`      — the native agent really did it.
+ * - `simulated`     — no native agent here (non-Android); mock text is labelled.
+ * - `failed`        — the agent was reachable and the action is confirmed not
+ *                     to have happened (it reported failure, or the exception
+ *                     came from a read-only tool that changes no state).
+ * - `unavailable`   — the agent is not loaded at all (PR #300 made a failed
+ *                     `requireNativeModule` non-fatal, so the module is
+ *                     `null`); nothing was attempted, and nothing must be
+ *                     recorded as run.
+ * - `indeterminate` — a mutating call was dispatched and then threw, so the
+ *                     device may already have changed. Never reported as a
+ *                     clean failure: retrying blindly could act twice.
  */
-export type DeviceActionOutcome = 'executed' | 'simulated' | 'failed' | 'unavailable';
+export type DeviceActionOutcome =
+  | 'executed'
+  | 'simulated'
+  | 'failed'
+  | 'unavailable'
+  | 'indeterminate';
 
 export interface DeviceActionResult {
   outcome: DeviceActionOutcome;
   observation: string;
 }
 
-function unavailable(toolName: string, reason: string): DeviceActionResult {
-  return {
-    outcome: 'unavailable',
-    observation: `Action NOT executed: device agent capability unavailable for ${toolName} — ${reason}. No device state was changed.`,
-  };
-}
-
+/** Which native method must exist for `toolName` to be runnable at all. */
 function requiredNativeMethod(toolName: string): string {
   if (toolName === 'device_screen_read') return 'getScreenTree';
   if (toolName === 'device_info') return 'getDeviceInfo';
@@ -35,7 +40,29 @@ function requiredNativeMethod(toolName: string): string {
 }
 
 /**
- * Executes a device agent tool via the native module.
+ * True for tools that change device state (everything routed through
+ * `performAction`). Derived from the dispatch path rather than a hand-kept
+ * list, so a new mutating tool is classified correctly by default.
+ */
+function isMutating(toolName: string): boolean {
+  return requiredNativeMethod(toolName) === 'performAction';
+}
+
+/**
+ * Builds the outcome for a capability that is simply not there. Kept separate
+ * so no caller can dress an unexecuted action up as a fallback execution.
+ */
+function unavailable(toolName: string, reason: string): DeviceActionResult {
+  return {
+    outcome: 'unavailable',
+    observation: `Action NOT executed: device agent capability unavailable for ${toolName} — ${reason}. No device state was changed.`,
+  };
+}
+
+/**
+ * Executes a device agent tool via the native module and reports which of the
+ * five outcomes above actually occurred. Never claims an action ran unless it
+ * ran.
  */
 export async function executeDeviceAction(
   toolName: string,
@@ -93,6 +120,15 @@ export async function executeDeviceAction(
     }
   } catch (e: any) {
     console.warn(`[executeDeviceAction] Native error executing ${toolName}:`, e);
+    // #309 review: a mutating call that throws after being dispatched may
+    // already have changed the device. Report that honestly instead of
+    // claiming a confirmed non-execution and inviting a blind retry.
+    if (isMutating(toolName)) {
+      return {
+        outcome: 'indeterminate',
+        observation: `Action result UNKNOWN: ${toolName} was dispatched to the device agent and then threw (target: ${target}, value: ${value}), so it may already have taken effect. Verify device state before repeating it. Error detail: ${e?.message || e}`,
+      };
+    }
     return {
       outcome: 'failed',
       observation: `Action failed: the device agent could not run ${toolName} (target: ${target}, value: ${value}). Error detail: ${e?.message || e}`,
