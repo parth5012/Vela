@@ -7,7 +7,10 @@ jest.mock('../utils/safetyManager', () => ({
 }));
 
 jest.mock('../utils/deviceActionExecutor', () => ({
-  executeDeviceAction: jest.fn(async () => 'Screen hierarchy: Settings > Wi-Fi: Connected'),
+  executeDeviceAction: jest.fn(async () => ({
+    outcome: 'executed',
+    observation: 'Screen hierarchy: Settings > Wi-Fi: Connected',
+  })),
 }));
 
 jest.mock('../db/client', () => ({

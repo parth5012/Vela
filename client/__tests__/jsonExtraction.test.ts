@@ -17,7 +17,7 @@ jest.mock('../utils/safetyManager', () => ({
 }));
 
 jest.mock('../utils/deviceActionExecutor', () => ({
-  executeDeviceAction: jest.fn(async () => 'observation'),
+  executeDeviceAction: jest.fn(async () => ({ outcome: 'executed', observation: 'observation' })),
 }));
 
 jest.mock('../db/client', () => ({
