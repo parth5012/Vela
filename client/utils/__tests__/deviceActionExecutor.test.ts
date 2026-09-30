@@ -69,6 +69,17 @@ describe('executeDeviceAction outcomes (#308)', () => {
     expect(result.observation).toBe('Action failed');
   });
 
+  it('reports failed instead of fabricating a path when the screenshot is empty', async () => {
+    mockHolder.mod = { takeScreenshot: jest.fn().mockResolvedValue('') };
+
+    const result = await executeDeviceAction('device_screenshot');
+
+    expect(result.outcome).toBe('failed');
+    expect(result.observation).toContain('screenshot');
+    expect(result.observation).not.toContain('file://mock/screenshot.png');
+    expect(result.observation).not.toMatch(/Executed/);
+  });
+
   it('reports indeterminate when a mutating action throws after being dispatched', async () => {
     mockHolder.mod = { performAction: jest.fn().mockRejectedValue(new Error('bridge died')) };
 
