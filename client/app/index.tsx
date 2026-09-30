@@ -552,7 +552,18 @@ export default function ChatScreen() {
 
             if (status === 'success') {
               try {
-                result = await executeDeviceAction(item.toolName, parsedInput.target, parsedInput.value);
+                // #308: the executor says what actually happened — an action
+                // the agent could not run is an error, not a success, and its
+                // observation says so instead of claiming execution.
+                const action = await executeDeviceAction(
+                  item.toolName,
+                  parsedInput.target,
+                  parsedInput.value
+                );
+                result = action.observation;
+                if (action.outcome === 'failed' || action.outcome === 'unavailable') {
+                  status = 'error';
+                }
               } catch (e: any) {
                 status = 'error';
                 result = `Execution exception: ${e?.message || e}`;

@@ -177,9 +177,10 @@ describe('Needle Agent & Local Subsystem E2E Integration Suite', () => {
         result: 'allowed',
       });
 
-      jest.spyOn(deviceActionExecutor, 'executeDeviceAction').mockResolvedValue(
-        'Screen hierarchy: Settings > Wi-Fi: Connected'
-      );
+      jest.spyOn(deviceActionExecutor, 'executeDeviceAction').mockResolvedValue({
+        outcome: 'executed',
+        observation: 'Screen hierarchy: Settings > Wi-Fi: Connected',
+      });
 
       const events: any[] = [];
       const result = await runLocalAgentLoop('Check my Wi-Fi state', {
@@ -227,9 +228,10 @@ describe('Needle Agent & Local Subsystem E2E Integration Suite', () => {
         status: 'success',
         result: 'allowed',
       });
-      jest.spyOn(deviceActionExecutor, 'executeDeviceAction').mockResolvedValue(
-        'Screen hierarchy: Settings > Wi-Fi: Connected'
-      );
+      jest.spyOn(deviceActionExecutor, 'executeDeviceAction').mockResolvedValue({
+        outcome: 'executed',
+        observation: 'Screen hierarchy: Settings > Wi-Fi: Connected',
+      });
 
       const events: any[] = [];
       const result = await runLocalAgentLoop('Check my Wi-Fi state', {

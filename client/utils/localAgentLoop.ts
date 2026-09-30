@@ -1,6 +1,6 @@
 import { streamLocalLlmResponse } from './localLlm';
 import { evaluateSafety } from './safetyManager';
-import { executeDeviceAction } from './deviceActionExecutor';
+import { executeDeviceAction, DeviceActionOutcome, DeviceActionResult } from './deviceActionExecutor';
 import { db } from '../db/client';
 import { operationLog } from '../db/schema';
 import { generateUlid } from './syncIds';
@@ -31,6 +31,12 @@ export interface AgentTurnStep {
   safetyStatus?: 'success' | 'error';
   safetyMessage?: string;
   observation?: string;
+  /**
+   * #308: what actually happened to the device action. Distinct from
+   * `safetyStatus` — safety can allow a call that then fails to execute or
+   * finds no native capability at all. Absent when no action was attempted.
+   */
+  executionStatus?: DeviceActionOutcome | 'blocked';
 }
 
 export interface AgentTurnEvent {
@@ -239,14 +245,18 @@ export function parseToolCall(text: string): ParsedToolCall | null {
 }
 
 /**
- * Logs an executed or blocked device action to SQLite operationLog for offline synchronization.
+ * Logs a device action to SQLite operationLog for offline synchronization.
+ *
+ * `status` is the real outcome (#308): `executed` only when the action really
+ * ran; `failed`/`unavailable` when it did not; `simulated` for mock mode;
+ * `blocked` when safety stopped it before execution.
  */
 async function logDeviceStepToDb(
   conversationId: string,
   step: number,
   toolCall: ParsedToolCall,
   observation: string,
-  status: 'executed' | 'blocked'
+  status: DeviceActionOutcome | 'blocked'
 ): Promise<void> {
   if (!db) return;
   try {
@@ -411,12 +421,14 @@ export async function runLocalAgentLoop(
     let observation: string;
     let safetyStatus: 'success' | 'error';
     let safetyMessage: string | undefined;
+    let executionStatus: DeviceActionOutcome | 'blocked' | undefined;
 
     if (safety.status === 'error') {
       safetyStatus = 'error';
       safetyMessage = safety.result;
       observation = `Action blocked by safety policy: ${safety.result}`;
 
+      executionStatus = 'blocked';
       await logDeviceStepToDb(conversationId, step, toolCall, observation, 'blocked');
 
       options.onEvent?.({
@@ -436,24 +448,35 @@ export async function runLocalAgentLoop(
         step,
       });
 
-      // 2. Execute device action
+      // 2. Execute device action. #308: the executor reports what actually
+      // happened. An unavailable or failed action is recorded and fed back as
+      // "did not execute" — never as a success, and never silently.
+      let action: DeviceActionResult;
       try {
-        observation = await executeDeviceAction(
+        action = await executeDeviceAction(
           toolCall.toolName,
           toolCall.target,
           toolCall.value
         );
       } catch (err: any) {
-        observation = `Execution error: ${err?.message || String(err)}`;
+        action = {
+          outcome: 'failed',
+          observation: `Execution error: ${err?.message || String(err)}`,
+        };
       }
+      observation = action.observation;
+      executionStatus = action.outcome;
 
-      await logDeviceStepToDb(conversationId, step, toolCall, observation, 'executed');
+      await logDeviceStepToDb(conversationId, step, toolCall, observation, action.outcome);
 
       options.onEvent?.({
         type: 'tool_observation',
         toolName: toolCall.toolName,
         observation,
         step,
+        ...(action.outcome === 'failed' || action.outcome === 'unavailable'
+          ? { error: observation }
+          : {}),
       });
     }
 
@@ -465,6 +488,7 @@ export async function runLocalAgentLoop(
       safetyStatus,
       safetyMessage,
       observation,
+      executionStatus,
     });
 
     options.onEvent?.({

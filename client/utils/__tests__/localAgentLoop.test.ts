@@ -18,7 +18,16 @@ jest.mock('../../modules/device-agent', () => ({
 jest.mock('../localLlm');
 jest.mock('../safetyManager');
 jest.mock('../deviceActionExecutor');
-jest.mock('../../db/client', () => ({ db: null }));
+
+// #308: a real (fake) db so the executed/failed/unavailable distinction that
+// reaches operationLog can be asserted instead of skipped by the `!db` guard.
+const mockDbValues = jest.fn().mockResolvedValue(undefined);
+const mockDbInsert = jest.fn(() => ({ values: mockDbValues }));
+jest.mock('../../db/client', () => ({
+  get db() {
+    return { insert: mockDbInsert };
+  },
+}));
 
 describe('localAgentLoop', () => {
   beforeEach(() => {
@@ -89,9 +98,10 @@ describe('localAgentLoop', () => {
         result: 'allowed',
       });
 
-      (deviceActionExecutor.executeDeviceAction as jest.Mock).mockResolvedValue(
-        'Screen tree: Settings > Network > Wi-Fi'
-      );
+      (deviceActionExecutor.executeDeviceAction as jest.Mock).mockResolvedValue({
+        outcome: 'executed',
+        observation: 'Screen tree: Settings > Network > Wi-Fi',
+      });
 
       const events: any[] = [];
       const result = await runLocalAgentLoop('What is on my screen?', {
@@ -122,7 +132,10 @@ describe('localAgentLoop', () => {
 
       (localLlm.streamLocalLlmResponse as jest.Mock).mockImplementation(() => endlessToolStream());
       (safetyManager.evaluateSafety as jest.Mock).mockResolvedValue({ status: 'success', result: 'allowed' });
-      (deviceActionExecutor.executeDeviceAction as jest.Mock).mockResolvedValue('Screen tree mock');
+      (deviceActionExecutor.executeDeviceAction as jest.Mock).mockResolvedValue({
+        outcome: 'executed',
+        observation: 'Screen tree mock',
+      });
 
       const result = await runLocalAgentLoop('Infinite task', { maxSteps: 5 });
       expect(result.totalSteps).toBe(5);
@@ -171,6 +184,127 @@ describe('localAgentLoop', () => {
       expect(result.steps[0].observation).toContain('Unknown device tool');
       expect(result.totalSteps).toBe(2);
       expect(result.completed).toBe(true);
+    });
+  });
+
+  // #308 — execution-outcome integrity: a capability that never ran must never
+  // be recorded, reported, or fed back to the model as an execution.
+  describe('execution outcome recording (#308)', () => {
+    function toolThenAnswer() {
+      async function* toolStream() {
+        yield '{"name": "device_click", "arguments": {"x": 500, "y": 1000}}';
+      }
+      async function* answerStream() {
+        yield 'Clicked the Settings icon.';
+      }
+      return [toolStream(), answerStream()];
+    }
+
+    const loggedStatus = (call: number) => {
+      const row = mockDbValues.mock.calls[call][0] as { payload: string };
+      return JSON.parse(row.payload).status as string;
+    };
+
+    it('records unavailable capability as not executed and tells the model so', async () => {
+      const [first, second] = toolThenAnswer();
+      (localLlm.streamLocalLlmResponse as jest.Mock)
+        .mockReturnValueOnce(first)
+        .mockReturnValueOnce(second);
+      (safetyManager.evaluateSafety as jest.Mock).mockResolvedValue({
+        status: 'success',
+        result: 'allowed',
+      });
+      (deviceActionExecutor.executeDeviceAction as jest.Mock).mockResolvedValue({
+        outcome: 'unavailable',
+        observation: 'Action NOT executed: device agent capability unavailable.',
+      });
+
+      const events: any[] = [];
+      const result = await runLocalAgentLoop('Click Settings', {
+        onEvent: (e) => events.push(e),
+      });
+
+      expect(result.steps[0].executionStatus).toBe('unavailable');
+      expect(mockDbInsert).toHaveBeenCalledTimes(1);
+      expect(loggedStatus(0)).toBe('unavailable');
+
+      const observationEvent = events.find((e) => e.type === 'tool_observation');
+      expect(observationEvent.error).toBeTruthy();
+      expect(observationEvent.observation).toContain('NOT executed');
+
+      const nextPrompt = (localLlm.streamLocalLlmResponse as jest.Mock).mock
+        .calls[1][0] as string;
+      expect(nextPrompt).toContain('NOT executed');
+      expect(nextPrompt).not.toContain('Observation: Success');
+    });
+
+    it('records a native failure as failed, not executed', async () => {
+      const [first, second] = toolThenAnswer();
+      (localLlm.streamLocalLlmResponse as jest.Mock)
+        .mockReturnValueOnce(first)
+        .mockReturnValueOnce(second);
+      (safetyManager.evaluateSafety as jest.Mock).mockResolvedValue({
+        status: 'success',
+        result: 'allowed',
+      });
+      (deviceActionExecutor.executeDeviceAction as jest.Mock).mockResolvedValue({
+        outcome: 'failed',
+        observation: 'Action failed: accessibility permission is off.',
+      });
+
+      const events: any[] = [];
+      const result = await runLocalAgentLoop('Click Settings', {
+        onEvent: (e) => events.push(e),
+      });
+
+      expect(result.steps[0].executionStatus).toBe('failed');
+      expect(loggedStatus(0)).toBe('failed');
+      expect(events.find((e) => e.type === 'tool_observation').error).toBeTruthy();
+    });
+
+    it('still records a real success as executed', async () => {
+      const [first, second] = toolThenAnswer();
+      (localLlm.streamLocalLlmResponse as jest.Mock)
+        .mockReturnValueOnce(first)
+        .mockReturnValueOnce(second);
+      (safetyManager.evaluateSafety as jest.Mock).mockResolvedValue({
+        status: 'success',
+        result: 'allowed',
+      });
+      (deviceActionExecutor.executeDeviceAction as jest.Mock).mockResolvedValue({
+        outcome: 'executed',
+        observation: 'Success',
+      });
+
+      const events: any[] = [];
+      const result = await runLocalAgentLoop('Click Settings', {
+        onEvent: (e) => events.push(e),
+      });
+
+      expect(result.steps[0].executionStatus).toBe('executed');
+      expect(loggedStatus(0)).toBe('executed');
+      expect(events.find((e) => e.type === 'tool_observation').error).toBeUndefined();
+    });
+
+    it('keeps a safety block logged as blocked', async () => {
+      async function* toolStream() {
+        yield '{"name": "device_open_app", "arguments": {"app": "Superuser Root"}}';
+      }
+      async function* answerStream() {
+        yield 'No.';
+      }
+      (localLlm.streamLocalLlmResponse as jest.Mock)
+        .mockReturnValueOnce(toolStream())
+        .mockReturnValueOnce(answerStream());
+      (safetyManager.evaluateSafety as jest.Mock).mockResolvedValue({
+        status: 'error',
+        result: 'Root app access denied',
+      });
+
+      await runLocalAgentLoop('Open root app');
+
+      expect(deviceActionExecutor.executeDeviceAction).not.toHaveBeenCalled();
+      expect(loggedStatus(0)).toBe('blocked');
     });
   });
 });
