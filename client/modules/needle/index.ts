@@ -83,6 +83,25 @@ export const NeedleModule = {
     return nativeModule.reset();
   },
 
+  /**
+   * #299: needle_embed — unit-norm vector from the confidence head's probe
+   * pool of the loaded engine (NOT a contrastively trained embedding, see
+   * #290). Returns null when the native module is missing (Jest/web), the
+   * engine is not initialized, or the build predates Needle 3 — never a
+   * fabricated vector.
+   */
+  async embed(text: string): Promise<number[] | null> {
+    if (!nativeModule || typeof nativeModule.embed !== 'function') return null;
+    if (!text) return null;
+    try {
+      const out = await nativeModule.embed(text);
+      if (!Array.isArray(out) || out.length === 0) return null;
+      return out.map((value: unknown) => Number(value));
+    } catch {
+      return null;
+    }
+  },
+
   async unload(): Promise<void> {
     if (!nativeModule) return;
     return nativeModule.unload();
