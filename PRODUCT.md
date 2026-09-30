@@ -62,6 +62,8 @@ Not yet verified (recorded, not claimed):
 
 Not yet run. This is exactly what a human must execute to prove the native Needle path, because the environment used to build this map has no Android toolchain (see "Not yet verified" above). Steps 1–3 prove the build; 4–7 prove the runtime; 8 is the outstanding gate for wayfinder #299.
 
+Steps 1–3, plus the toolchain prerequisites (NDK 27.1.12297006, CMake 3.22.1+, SDK 34, JDK 17), the configure-log lines that prove `HAVE_NEEDLE_ENGINE=1`, the expected failure modes, and the emulator-vs-arm64 caveat are written up as a runnable checklist in **`docs/android-build-verification.md`** — that is the file to follow on a machine that has Android Studio.
+
 1. `cd client && npx expo prebuild --clean` — regenerate the gitignored `android/` tree.
 2. `cd client/android && ./gradlew assembleDebug` — the first CMake configure runs `modules/needle/scripts/fetch-engine.js`, which downloads the pinned `libneedle.a` archives into `modules/needle/android/engine/<model>/<abi>/` and re-verifies every SHA256 against `modules/needle/scripts/engine.lock.json`. A pin mismatch, missing `node`, or unsupported ABI fails closed to `HAVE_NEEDLE_ENGINE=0` (honest mock stub still builds). Engine selection is link-time, default `needle3` (`-DNEEDLE_ENGINE_MODEL=needle2` to link needle2 instead).
 3. `adb install -r client/android/app/build/outputs/apk/debug/app-debug.apk` (dev package `com.parth5012.client.dev`). Installing the app itself needs no approval; installing anything else does (see policy below).
