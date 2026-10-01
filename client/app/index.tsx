@@ -50,6 +50,7 @@ import { parseAndExecuteTools } from '../utils/toolProxy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { evaluateSafety, classifyAction } from '../utils/safetyManager';
 import { executeDeviceAction, sendDeviceResponse } from '../utils/deviceActionExecutor';
+import { isShizukuTool } from '../utils/shizuku';
 import {
   checkPermission,
   getRationale,
@@ -523,18 +524,22 @@ export default function ChatScreen() {
             // it is missing, surface the in-app permission prompt (unless the
             // user denied it this session) instead of executing, and answer the
             // pending tool call so the agent loop is not left hanging.
-            const accessibilityStatus = await checkPermission('accessibility');
-            if (accessibilityStatus !== 'granted') {
-              if (shouldPrompt('accessibility', sessionDeniedPermissionsRef.current)) {
-                setPermissionPrompt('accessibility');
+            // Shizuku allowlisted ops don't touch accessibility at all — they
+            // gate on Shizuku readiness inside the executor.
+            if (!isShizukuTool(item.toolName)) {
+              const accessibilityStatus = await checkPermission('accessibility');
+              if (accessibilityStatus !== 'granted') {
+                if (shouldPrompt('accessibility', sessionDeniedPermissionsRef.current)) {
+                  setPermissionPrompt('accessibility');
+                }
+                await sendDeviceResponse(
+                  conversationId,
+                  taskToken,
+                  'error',
+                  'Blocked: the Accessibility permission is required for this action.'
+                );
+                return;
               }
-              await sendDeviceResponse(
-                conversationId,
-                taskToken,
-                'error',
-                'Blocked: the Accessibility permission is required for this action.'
-              );
-              return;
             }
 
             // Run safety check

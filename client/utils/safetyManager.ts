@@ -75,6 +75,16 @@ export function classifyAction(
   if (toolName === 'device_type') return 'type';
   if (toolName === 'device_tap') return 'tap';
 
+  // 4. Shizuku allowlisted privileged tools (utils/shizuku.ts) — each lands in
+  // an explicit tier; none may inherit the default 'tap' bucket.
+  if (toolName === 'device_app_permission_grant' || toolName === 'device_app_permission_revoke')
+    return 'permission_toggles';
+  if (toolName === 'device_setting_put') return 'settings_changes';
+  if (toolName === 'device_app_force_stop' || toolName === 'device_app_set_state')
+    return 'root_shizuku';
+  if (toolName === 'device_app_clear_data') return 'deletions';
+  if (toolName === 'device_app_install' || toolName === 'device_app_uninstall') return 'sideloads';
+
   return 'tap'; // Default fallback
 }
 

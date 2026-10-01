@@ -5,13 +5,25 @@ import expo.modules.kotlin.modules.ModuleDefinition
 import android.graphics.Bitmap
 import android.view.accessibility.AccessibilityNodeInfo
 import android.accessibilityservice.AccessibilityService
+import android.content.ComponentName
+import android.content.ServiceConnection
+import android.content.pm.PackageManager
+import android.os.IBinder
 import java.io.File
 import java.io.FileOutputStream
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
+import rikka.shizuku.Shizuku
 
 class DeviceAgentModule : Module() {
 
     companion object {
         val nodeMap = mutableMapOf<String, AccessibilityNodeInfo>()
+        private const val SHIZUKU_PERMISSION_REQUEST_CODE = 4401
+        private const val SHIZUKU_MANAGER_PACKAGE = "moe.shizuku.manager"
+        private const val BIND_TIMEOUT_SECONDS = 10L
+        private const val PERMISSION_WAIT_SECONDS = 60L
 
         fun clearNodeMap() {
             for (node in nodeMap.values) {
@@ -182,6 +194,140 @@ class DeviceAgentModule : Module() {
                 )
             } else {
                 promise.reject("UNSUPPORTED_VERSION", "Screenshot requires Android R (API 30) or above", null)
+            }
+        }
+
+        // --- Shizuku privileged bridge (allowlisted ops only) -------------
+
+        AsyncFunction("getShizukuStatus") {
+            val context = appContext.reactContext
+            val installed = try {
+                context?.packageManager?.getPackageInfo(SHIZUKU_MANAGER_PACKAGE, 0) != null
+            } catch (e: Exception) {
+                false
+            }
+            val serverRunning = shizukuAlive()
+            val uid = try {
+                if (serverRunning) Shizuku.getUid() else -1
+            } catch (e: Throwable) {
+                -1
+            }
+            mapOf(
+                "installed" to installed,
+                "serverRunning" to serverRunning,
+                "permissionGranted" to shizukuGranted(),
+                "uid" to uid
+            )
+        }
+
+        AsyncFunction("requestShizukuPermission") {
+            when {
+                !shizukuAlive() -> "server_stopped"
+                shizukuGranted() -> "already_granted"
+                try {
+                    Shizuku.shouldShowRequestPermissionRationale()
+                } catch (e: Throwable) {
+                    false
+                } -> "denied_permanently"
+                else -> {
+                    val latch = CountDownLatch(1)
+                    val result = AtomicReference("timeout")
+                    val listener =
+                        Shizuku.OnRequestPermissionResultListener { code, grantResult ->
+                            if (code == SHIZUKU_PERMISSION_REQUEST_CODE) {
+                                result.set(
+                                    if (grantResult == PackageManager.PERMISSION_GRANTED) "granted"
+                                    else "denied"
+                                )
+                                latch.countDown()
+                            }
+                        }
+                    Shizuku.addRequestPermissionResultListener(listener)
+                    try {
+                        Shizuku.requestPermission(SHIZUKU_PERMISSION_REQUEST_CODE)
+                        latch.await(PERMISSION_WAIT_SECONDS, TimeUnit.SECONDS)
+                    } finally {
+                        Shizuku.removeRequestPermissionResultListener(listener)
+                    }
+                    result.get()
+                }
+            }
+        }
+
+        AsyncFunction("runPrivilegedOp") { op: String, args: List<String> ->
+            callShizukuOp(op, args)
+        }
+    }
+
+    private fun shizukuAlive(): Boolean = try {
+        Shizuku.pingBinder()
+    } catch (e: Throwable) {
+        false
+    }
+
+    private fun shizukuGranted(): Boolean = try {
+        shizukuAlive() && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+    } catch (e: Throwable) {
+        false
+    }
+
+    /**
+     * Binds the Shizuku user service for one call and runs exactly one
+     * allowlisted op. Returns "exit=<code>\n<output>" — readiness problems
+     * come back as exit 125 (a confirmed non-execution), while a RemoteException
+     * from execOp propagates so the executor can report it as indeterminate.
+     */
+    private fun callShizukuOp(op: String, args: List<String>): String {
+        val context = appContext.reactContext
+            ?: return "exit=125\nApp context unavailable"
+        if (!shizukuAlive()) return "exit=125\nShizuku server is not running"
+        if (!shizukuGranted()) return "exit=125\nShizuku permission not granted"
+        val serverVersion = try {
+            Shizuku.getVersion()
+        } catch (e: Throwable) {
+            0
+        }
+        if (serverVersion < 11) return "exit=125\nShizuku server too old (v11+ required)"
+
+        val serviceArgs = Shizuku.UserServiceArgs(ComponentName(context, ShizukuOpsService::class.java))
+            .daemon(false)
+            .processNameSuffix("shizukuops")
+            .tag("vela-shizuku-ops")
+            .version(1)
+
+        val connected = CountDownLatch(1)
+        val binderRef = AtomicReference<IBinder?>(null)
+        val connection = object : ServiceConnection {
+            override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+                // Written before countDown(): visible after await() (happens-before).
+                binderRef.set(service)
+                connected.countDown()
+            }
+
+            override fun onServiceDisconnected(name: ComponentName?) {
+                // Per-call binding; a drop shows up as a dead binder below.
+            }
+        }
+
+        try {
+            Shizuku.bindUserService(serviceArgs, connection)
+        } catch (e: Throwable) {
+            return "exit=125\nFailed to start the Shizuku user service: ${e.message}"
+        }
+        try {
+            if (!connected.await(BIND_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                return "exit=125\nTimed out starting the Shizuku user service"
+            }
+            val binder = binderRef.get()
+                ?: return "exit=125\nShizuku user service connected without a binder"
+            if (!binder.pingBinder()) return "exit=125\nShizuku user service binder is dead"
+            val service = IShizukuOps.Stub.asInterface(binder)
+            return service.execOp(op, args.toTypedArray())
+        } finally {
+            try {
+                Shizuku.unbindUserService(serviceArgs, connection, true)
+            } catch (e: Throwable) {
+                // Best-effort: non-daemon services die with the app process.
             }
         }
     }
