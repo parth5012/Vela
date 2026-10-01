@@ -139,6 +139,43 @@ describe('executeDeviceAction: Shizuku allowlisted ops', () => {
     expect(result.observation).not.toMatch(/Executed/);
   });
 
+  // CodeRabbit review #332: a timeout (124) means the command STARTED, so the
+  // device may already have changed — reporting plain "failed" invites a
+  // blind retry of a mutating op.
+  it('reports indeterminate when a dispatched op times out (exit=124)', async () => {
+    mockHolder.mod = readyModule({
+      runPrivilegedOp: jest
+        .fn()
+        .mockResolvedValue('exit=124\nCommand timed out after 15s: pm clear com.a'),
+    });
+
+    const result = await executeDeviceAction('device_app_clear_data', 'com.a');
+
+    expect(result.outcome).toBe('indeterminate');
+    expect(result.observation).toContain('timed out');
+    expect(result.observation).toMatch(/before repeating/i);
+    expect(result.observation).toContain('Command timed out after 15s');
+  });
+
+  // Pre-dispatch service rejections (126 rejected / 127 not started) must stay
+  // honest "failed" outcomes, with the service's reason preserved.
+  it('reports failed with the service reason for exit=126 and exit=127', async () => {
+    mockHolder.mod = readyModule({
+      runPrivilegedOp: jest
+        .fn()
+        .mockResolvedValueOnce('exit=126\nop not allowlisted')
+        .mockResolvedValueOnce('exit=127\nFailed to start /system/bin/pm: exec failed'),
+    });
+
+    const rejected = await executeDeviceAction('device_app_force_stop', 'com.a');
+    const notStarted = await executeDeviceAction('device_app_force_stop', 'com.a');
+
+    expect(rejected.outcome).toBe('failed');
+    expect(rejected.observation).toContain('op not allowlisted');
+    expect(notStarted.outcome).toBe('failed');
+    expect(notStarted.observation).toContain('Failed to start');
+  });
+
   it('reports failed WITHOUT dispatching when the op arguments are malformed', async () => {
     mockHolder.mod = readyModule();
 

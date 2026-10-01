@@ -41,12 +41,12 @@ class ShizukuOpsService : IShizukuOps.Stub {
         val command = try {
             buildCommand(op, args)
         } catch (e: SecurityException) {
-            return "$REJECTED_EXIT\n${e.message}"
+            return "exit=$REJECTED_EXIT\n${e.message}"
         }
         return try {
             runCommand(command)
         } catch (e: Exception) {
-            "$NOT_STARTED_EXIT\nFailed to start ${command.firstOrNull()}: ${e.message}"
+            "exit=$NOT_STARTED_EXIT\nFailed to start ${command.firstOrNull()}: ${e.message}"
         }
     }
 
@@ -144,7 +144,7 @@ class ShizukuOpsService : IShizukuOps.Stub {
             if (!process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
                 process.destroyForcibly()
                 collector.join(2000)
-                return "$TIMEOUT_EXIT\nCommand timed out after ${COMMAND_TIMEOUT_SECONDS}s: ${command.first()}"
+                return "exit=$TIMEOUT_EXIT\nCommand timed out after ${COMMAND_TIMEOUT_SECONDS}s: ${command.first()}"
             }
             collector.join(2000)
             return "exit=${process.exitValue()}\n${buffer.toString("UTF-8")}"

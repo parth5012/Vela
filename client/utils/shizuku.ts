@@ -8,7 +8,7 @@
  */
 
 export interface ShizukuStatus {
-  /** The Shizuku manager app (moe.shizuku.manager) is installed. */
+  /** The Shizuku manager app (moe.shizuku.privileged.api) is installed. */
   installed: boolean;
   /** Shizuku.pingBinder() answered — the privileged server is running. */
   serverRunning: boolean;
