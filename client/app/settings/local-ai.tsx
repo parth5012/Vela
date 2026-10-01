@@ -66,8 +66,9 @@ const NETWORK_OPTIONS = [
  * Wayfinder #230 — Needle engine pill: NeedleModule.hasNativeLibrary() true → 'Accelerated' (#10b981), false → 'Mock Fallback' (#fb923c) block-with-warning, never silent mock.
  */
 export default function LocalAiScreen() {
-  const isLocalMode = useConfigStore((s) => s.isLocalMode);
-  const setIsLocalMode = useConfigStore((s) => s.setIsLocalMode);
+  const connectionMode = useConfigStore((s) => s.connectionMode);
+  const setConnectionMode = useConfigStore((s) => s.setConnectionMode);
+  const isLocalMode = connectionMode === 'local';
   const localModelName = useConfigStore((s) => s.localModelName);
   const setLocalModelName = useConfigStore((s) => s.setLocalModelName);
   const localModelDownloadProgress = useConfigStore((s) => s.localModelDownloadProgress);
@@ -610,7 +611,7 @@ export default function LocalAiScreen() {
             }
             Alert.alert('Model Deleted', `${localModelName} has been removed from storage.`);
             if (isLocalMode) {
-              setIsLocalMode(false);
+              setConnectionMode('server');
             }
           },
         },
@@ -758,7 +759,7 @@ export default function LocalAiScreen() {
         <PillGroup
           options={MODE_OPTIONS}
           value={isLocalMode ? 'local' : 'cloud'}
-          onChange={(v) => setIsLocalMode(v === 'local')}
+          onChange={(v) => setConnectionMode(v === 'local' ? 'local' : 'server')}
         />
         <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, lineHeight: 16 }}>
           Local mode uses {localModelName || 'the selected model'} entirely on-device. A mock fallback is always labeled as a mock.

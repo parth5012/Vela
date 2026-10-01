@@ -238,11 +238,12 @@ export default function ChatScreen() {
   const userSystemPrompt = useConfigStore((state) => state.systemPrompt);
 
   // Local mode states
-  const isLocalMode = useConfigStore((state) => state.isLocalMode);
+  const connectionMode = useConfigStore((state) => state.connectionMode);
+  const setConnectionMode = useConfigStore((state) => state.setConnectionMode);
+  const isLocalMode = connectionMode === 'local';
   const localModelName = useConfigStore((state) => state.localModelName);
   const localModelDownloadProgress = useConfigStore((state) => state.localModelDownloadProgress);
   const wifiOnlyDownload = useConfigStore((state) => state.wifiOnlyDownload);
-  const setIsLocalMode = useConfigStore((state) => state.setIsLocalMode);
   const setLocalModelDownloadProgress = useConfigStore((state) => state.setLocalModelDownloadProgress);
 
   // Chat State
@@ -1239,7 +1240,7 @@ export default function ChatScreen() {
       // Check if model already downloaded
       const isDownloaded = await AsyncStorage.getItem(localModelStorageKey(localModelName));
       if (isDownloaded === 'true') {
-        setIsLocalMode(true);
+        setConnectionMode('local');
         return;
       }
 
@@ -1268,7 +1269,7 @@ export default function ChatScreen() {
 
       // Warn/Prompt about cellular if wifiOnlyDownload is active
       const downloadModel = async () => {
-        setIsLocalMode(true);
+        setConnectionMode('local');
         try {
           const modelDir = `${FileSystem.documentDirectory}models/`;
           const modelUri = `${modelDir}${selectedModel.filename}`;
@@ -1315,7 +1316,7 @@ export default function ChatScreen() {
         } catch (downloadError: any) {
           console.error('[handleToggleLocalMode] Download failed:', downloadError);
           setLocalModelDownloadProgress(null);
-          setIsLocalMode(false);
+          setConnectionMode('server');
           Alert.alert('Download Failed', `Failed to download ${localModelName}: ${downloadError.message || 'Network error'}.`);
         }
       };
@@ -1333,7 +1334,7 @@ export default function ChatScreen() {
         await downloadModel();
       }
     } else {
-      setIsLocalMode(false);
+      setConnectionMode('server');
     }
   };
 
