@@ -223,6 +223,19 @@ async function executeShizukuOp(
   if (parsed.exitCode === 0) {
     return { outcome: 'executed', observation: parsed.output || `Success: ${spec.op} completed` };
   }
+  // Timeout (124): the command STARTED but did not finish, so the device may
+  // already be in a partially-changed state — a plain "failed" would invite a
+  // blind retry of a mutating op (CodeRabbit review on PR #332).
+  if (parsed.exitCode === 124) {
+    return {
+      outcome: 'indeterminate',
+      observation: `Action result UNKNOWN: ${spec.op}(${spec.args.join(
+        ', '
+      )}) started on the device but the Shizuku service timed out before it completed, so it may have partially run. Service output: ${
+        parsed.output || '(none)'
+      } — verify device state before repeating it.`,
+    };
+  }
   return {
     outcome: 'failed',
     observation: `Action failed: ${spec.op} exited with code ${parsed.exitCode}. ${parsed.output}`.trim(),

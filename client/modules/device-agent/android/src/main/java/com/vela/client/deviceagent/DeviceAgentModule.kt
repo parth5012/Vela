@@ -21,7 +21,10 @@ class DeviceAgentModule : Module() {
     companion object {
         val nodeMap = mutableMapOf<String, AccessibilityNodeInfo>()
         private const val SHIZUKU_PERMISSION_REQUEST_CODE = 4401
-        private const val SHIZUKU_MANAGER_PACKAGE = "moe.shizuku.manager"
+        // applicationId of the Shizuku manager app — NOT its Gradle namespace
+        // 'moe.shizuku.manager' (manager/build.gradle: applicationId
+        // "moe.shizuku.privileged.api"); PackageManager only resolves the former.
+        private const val SHIZUKU_MANAGER_PACKAGE = "moe.shizuku.privileged.api"
         private const val BIND_TIMEOUT_SECONDS = 10L
         private const val PERMISSION_WAIT_SECONDS = 60L
 

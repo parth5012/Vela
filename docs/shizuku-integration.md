@@ -111,7 +111,9 @@ the reboot caveat, and the capability list with policy tiers.
   Shizuku-API README) and `execOp(String, in String[]) = 2`.
 - `src/main/AndroidManifest.xml` declares `rikka.shizuku.ShizukuProvider`
   (`${applicationId}.shizuku`, resolves per dev/prod variant) and a
-  `<queries>` entry for `moe.shizuku.manager` (status detection on Android 11+).
+  `<queries>` entry for `moe.shizuku.privileged.api` — the manager's
+  `applicationId` (not its Gradle namespace `moe.shizuku.manager`) — for
+  status detection on Android 11+.
 - `consumer-rules.pro` keeps `ShizukuOpsService` + `IShizukuOps`: the Shizuku
   server instantiates the service **by name via reflection**, which R8 would
   otherwise rename.
@@ -128,16 +130,19 @@ Native always returns `"exit=<code>\n<output>"`:
 | exit | Meaning | Executor outcome |
 |---|---|---|
 | 0 | success | `executed` (observation = output) |
-| 124 | command timed out | `failed` |
+| 124 | command **started** but timed out | `indeterminate` — may have partially run; verify before retry |
 | 125 | not ready / bind failed (nothing ran) | `failed` |
-| 126 | op/args rejected by Kotlin allowlist | `failed` |
-| 127 | binary failed to start | `failed` |
+| 126 | op/args rejected by Kotlin allowlist (nothing ran) | `failed` with service reason |
+| 127 | binary failed to start (nothing ran) | `failed` with service reason |
 | ≠0 | command ran, non-zero exit | `failed` with output |
 | *(throw from `execOp`)* | binder died mid-call | `indeterminate` — may have run; verify before retry |
 
 Pre-dispatch problems are deliberately **plain results, never exceptions**, so
 they can never be misreported as `indeterminate` (which would invite a blind
-retry on the Owner's phone).
+retry on the Owner's phone). A timeout is the one failure that *is* reported
+as `indeterminate`: the process was started, so state may already have changed.
+(CodeRabbit review on PR #332 caught 124 initially mapping to `failed`, and
+the 126/127/124 strings missing their `exit=` prefix.)
 
 ## 7. What shell uid can and cannot do
 

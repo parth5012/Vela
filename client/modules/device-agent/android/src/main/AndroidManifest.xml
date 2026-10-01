@@ -2,9 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!-- Package visibility (Android 11+): lets getShizukuStatus() see whether
-         the Shizuku manager app is installed. -->
+         the Shizuku manager app is installed. applicationId, not the Gradle
+         namespace 'moe.shizuku.manager'. -->
     <queries>
-        <package android:name="moe.shizuku.manager" />
+        <package android:name="moe.shizuku.privileged.api" />
     </queries>
 
     <application>
