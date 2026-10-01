@@ -18,6 +18,8 @@ describe('ramDetection', () => {
 
     it('correctly classifies models for mid memory devices (4.5 - 7.5 GB)', () => {
       const ram6GB = 6 * 1024 * 1024 * 1024;
+      expect(getModelStatusForRam('Cactus Needle 45M', ram6GB)).toBe('recommended');
+      expect(getModelStatusForRam('SmolLM 135M', ram6GB)).toBe('recommended');
       expect(getModelStatusForRam('Qwen2.5 0.5B', ram6GB)).toBe('recommended');
       expect(getModelStatusForRam('Llama 3.2 1B (GGUF)', ram6GB)).toBe('recommended');
       expect(getModelStatusForRam('TinyLlama 1.1B', ram6GB)).toBe('borderline');

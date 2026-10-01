@@ -13,11 +13,14 @@ describe('Needle Expo Module', () => {
 
   it('initializes and completes in fallback / test mode', async () => {
     const initResult = await NeedleModule.init('/data/local/tmp/model.cact', 256);
-    expect(initResult).toBe(true);
+    // Honest mock: no native runtime in Jest, so init reports false and the
+    // caller falls back to the labeled mock generator.
+    expect(initResult).toBe(false);
 
     const result = await NeedleModule.complete('Read current screen', '[]');
     expect(result).toBeDefined();
     expect(result.text).toBeDefined();
+    expect(result.text).toContain('Mock mode');
     expect(result.toolCalls).toBeDefined();
 
     const parsed = JSON.parse(result.toolCalls!);

@@ -9,7 +9,7 @@ object NeedleNative {
         }
     }
 
-    external fun nativeInit(weightsPath: String, contextSize: Int): Boolean
+    external fun nativeInit(weightsPath: String, contextSize: Int, toolsJson: String?): Boolean
     external fun nativeComplete(prompt: String, toolsJson: String?, maxTokens: Int): String?
     external fun nativeReset(): Boolean
     external fun nativeFree(): Boolean

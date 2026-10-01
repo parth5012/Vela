@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import DeviceAgentNative from '../modules/device-agent';
 import { useConfigStore } from '../store/useConfigStore';
+import { parseNeedleCoords } from './needleDeviceTools';
 
 /**
  * Safely executes a device agent tool via the native module.
@@ -28,24 +29,55 @@ export async function executeDeviceAction(
         const uri = await DeviceAgentNative.takeScreenshot();
         return uri || 'file://mock/screenshot.png';
       }
-      default: {
-        let action = 'click';
-        if (toolName === 'device_type') action = 'type';
-        else if (toolName === 'device_scroll') action = 'scrollforward';
-        else if (toolName === 'device_swipe') action = 'scrollforward';
-        else if (toolName === 'device_press_key') action = 'click';
-        else if (toolName === 'device_set_volume') action = 'click';
-
+      case 'device_click':
+      case 'device_tap': {
+        // target is "@e3" (preferred) or typed "x,y" coords from Needle JSON.
+        const targetRef = target || '';
+        if (targetRef && !targetRef.startsWith('@e') && !parseNeedleCoords(targetRef)) {
+          throw new Error(`Invalid tap target "${targetRef}". Use an @e ref or "x,y".`);
+        }
+        const success = await DeviceAgentNative.performAction('click', targetRef, '', '');
+        return success ? 'Success' : 'Action failed';
+      }
+      case 'device_type': {
         const targetRef = target || '';
         const val = value || '';
-        
-        const success = await DeviceAgentNative.performAction(action, targetRef, val, '');
+        const success = await DeviceAgentNative.performAction('type', targetRef, val, '');
         return success ? 'Success' : 'Action failed';
+      }
+      case 'device_scroll':
+      case 'device_swipe': {
+        const targetRef = target || '@e0';
+        const val = value || '';
+        const success = await DeviceAgentNative.performAction('scroll', targetRef, val, '');
+        return success ? 'Success' : 'Action failed';
+      }
+      case 'device_press_key': {
+        const key = value || target || 'back';
+        const success = await DeviceAgentNative.performAction('press_key', '', key, '');
+        return success ? 'Success' : 'Action failed';
+      }
+      case 'device_set_volume': {
+        const level = value || target || '';
+        const success = await DeviceAgentNative.performAction('set_volume', '', level, '');
+        return success ? 'Success' : 'Action failed';
+      }
+      case 'device_open_app': {
+        const app = value || target || '';
+        const success = await DeviceAgentNative.performAction('open_app', app, app, '');
+        return success ? 'Success' : 'Action failed';
+      }
+      default: {
+        throw new Error(`Unknown device tool "${toolName}".`);
       }
     }
   } catch (e: any) {
     console.warn(`[executeDeviceAction] Native error executing ${toolName}:`, e);
-    return `[Fallback] Executed ${toolName} with target: ${target}, value: ${value}. Error detail: ${e?.message || e}`;
+    throw new Error(
+      `Device action "${toolName}" failed${target ? ` on target ${target}` : ''}${
+        value ? ` with value ${value}` : ''
+      }: ${e?.message || e}`
+    );
   }
 }
 

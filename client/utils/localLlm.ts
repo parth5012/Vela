@@ -3,12 +3,53 @@ import { initLlama, LlamaContext } from 'llama.rn';
 import { useConfigStore } from '../store/useConfigStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NeedleModule from '../modules/needle';
+import {
+  NEEDLE_DEVICE_TOOLS_JSON,
+  buildNeedleAutomationPrompt,
+} from './needleDeviceTools';
 
 /** Event name emitted by GemmaReactNativeModule for streamed generation. */
 const GEMMA_STREAM_EVENT = 'GemmaLlmStream';
 
 /** Upper bound on a single generation before we give up and fall back. */
 const NATIVE_STREAM_TIMEOUT_MS = 120000;
+
+interface TokenStreamState {
+  finished: boolean;
+  failure: Error | null;
+}
+
+/**
+ * Shared queue-drain loop for the Needle / llama.cpp / MediaPipe streamers.
+ * Yields queued tokens, surfaces async failures, stops on done, and enforces
+ * the generation deadline. `waitOnce` resolves on the next native event (or a
+ * short poll fallback) — supplied by the caller so engine wiring stays local.
+ */
+async function* drainTokenStream(
+  queue: string[],
+  state: TokenStreamState,
+  onToken: ((token: string) => void) | undefined,
+  deadline: number,
+  timeoutMessage: string,
+  waitOnce: () => Promise<void>
+): AsyncGenerator<string, void, unknown> {
+  while (true) {
+    while (queue.length > 0) {
+      const token = queue.shift() as string;
+      onToken?.(token);
+      yield token;
+    }
+
+    if (state.failure) throw state.failure;
+    if (state.finished) break;
+
+    if (Date.now() > deadline) {
+      throw new Error(timeoutMessage);
+    }
+
+    await waitOnce();
+  }
+}
 
 type GemmaStreamEvent =
   | { type: 'token'; token?: string }
@@ -28,6 +69,9 @@ let llamaContext: LlamaContext | null = null;
 
 /** Name of the model currently loaded into RAM, or null when nothing is loaded. */
 let loadedModelName: string | null = null;
+
+/** Format of the loaded model (cact | gguf | task), so custom .cact models route to Needle. */
+let loadedModelFormat: 'cact' | 'gguf' | 'task' | null = null;
 
 type LoadedStateListener = () => void;
 const loadedStateListeners = new Set<LoadedStateListener>();
@@ -255,11 +299,12 @@ export async function initializeLocalModel(throwOnFallback: boolean = false): Pr
     try {
       const cleanPath = modelPath.startsWith('file://') ? modelPath.slice(7) : modelPath;
       const ctxSize = useConfigStore.getState().localContextSize || 256;
-      const success = await NeedleModule.init(cleanPath, ctxSize);
+      const success = await NeedleModule.init(cleanPath, ctxSize, NEEDLE_DEVICE_TOOLS_JSON);
       if (!success) {
         throw new Error('NeedleModule initialization returned false');
       }
       loadedModelName = localModelName;
+      loadedModelFormat = 'cact';
       notifyLoadedStateChanged();
     } catch (error: any) {
       try {
@@ -269,6 +314,7 @@ export async function initializeLocalModel(throwOnFallback: boolean = false): Pr
   }
 
   loadedModelName = null;
+      loadedModelFormat = null;
       notifyLoadedStateChanged();
       const reason = error?.message || String(error);
       console.warn('NeedleModule initialization failed, using mock fallback:', reason);
@@ -299,10 +345,12 @@ export async function initializeLocalModel(throwOnFallback: boolean = false): Pr
           }
         );
         loadedModelName = localModelName;
+        loadedModelFormat = 'gguf';
         notifyLoadedStateChanged();
       } catch (error: any) {
         llamaContext = null;
         loadedModelName = null;
+        loadedModelFormat = null;
         notifyLoadedStateChanged();
         const reason = error?.message || String(error);
         console.warn('llama.rn initialization failed, using mock fallback:', reason);
@@ -338,11 +386,13 @@ export async function initializeLocalModel(throwOnFallback: boolean = false): Pr
       const cleanPath = modelPath.startsWith('file://') ? modelPath.slice(7) : modelPath;
       await GemmaNative.initializeLocalModel(cleanPath);
       loadedModelName = localModelName;
+      loadedModelFormat = 'task';
       notifyLoadedStateChanged();
     } catch (error: any) {
       const reason = error?.message || String(error);
       console.warn('Native local LLM initialization failed, using mock fallback:', reason);
       loadedModelName = null;
+      loadedModelFormat = null;
       notifyLoadedStateChanged();
       useFallback = true;
       localLlmFallbackReason = reason;
@@ -394,6 +444,7 @@ export async function unloadLocalModel(): Promise<void> {
   }
 
   loadedModelName = null;
+  loadedModelFormat = null;
   isLocalModelLoaded = false;
   useFallback = false;
   localLlmFallbackReason = null;
@@ -417,19 +468,18 @@ export async function* streamLocalLlmResponse(
     throw new Error('Local model not loaded. Call initializeLocalModel() first.');
   }
 
-  const isCactModel = loadedModelName ? (
+  const isCactModel = loadedModelFormat === 'cact' || (loadedModelName ? (
     LOCAL_MODELS.find(m => m.name === loadedModelName)?.format === 'cact' ||
     loadedModelName.toLowerCase().endsWith('.cact') ||
     loadedModelName.includes('Needle')
-  ) : false;
+  ) : false);
 
   if (!useFallback && isCactModel) {
     let sub: any = null;
     try {
       const queue: string[] = [];
-      let finished = false;
+      const state: TokenStreamState = { finished: false, failure: null };
       let hasReceivedStreamTokens = false;
-      let failure: Error | null = null;
       let wake: (() => void) | null = null;
 
       const notify = () => {
@@ -450,43 +500,41 @@ export async function* streamLocalLlmResponse(
           queue.push(event.data);
           notify();
         } else if (event.type === 'done') {
-          finished = true;
+          state.finished = true;
           notify();
         }
       });
 
-      NeedleModule.complete(prompt).then((res) => {
+      NeedleModule.complete(
+        buildNeedleAutomationPrompt(prompt),
+        NEEDLE_DEVICE_TOOLS_JSON,
+        useConfigStore.getState().localMaxTokens || 128
+      ).then((res) => {
         if (!hasReceivedStreamTokens && queue.length === 0 && res.text) {
           queue.push(res.text);
         }
-        finished = true;
+        state.finished = true;
         notify();
       }).catch((err) => {
-        failure = err;
+        state.failure = err;
         notify();
       });
 
       const deadline = Date.now() + NATIVE_STREAM_TIMEOUT_MS;
-
-      while (true) {
-        while (queue.length > 0) {
-          const token = queue.shift() as string;
-          onToken?.(token);
-          yield token;
-        }
-
-        if (failure) throw failure;
-        if (finished && queue.length === 0) break;
-
-        if (Date.now() > deadline) {
-          throw new Error(`Needle streaming timed out after ${NATIVE_STREAM_TIMEOUT_MS / 1000}s`);
-        }
-
-        await new Promise<void>((resolve) => {
+      const waitOnce = () =>
+        new Promise<void>((resolve) => {
           wake = resolve;
           setTimeout(notify, 250);
         });
-      }
+
+      yield* drainTokenStream(
+        queue,
+        state,
+        onToken,
+        deadline,
+        `Needle streaming timed out after ${NATIVE_STREAM_TIMEOUT_MS / 1000}s`,
+        waitOnce
+      );
 
       return;
     } catch (error: any) {
@@ -503,8 +551,7 @@ export async function* streamLocalLlmResponse(
   if (!useFallback && llamaContext) {
     try {
       const queue: string[] = [];
-      let finished = false;
-      let failure: Error | null = null;
+      const state: TokenStreamState = { finished: false, failure: null };
       let wake: (() => void) | null = null;
 
       const notify = () => {
@@ -532,39 +579,31 @@ export async function* streamLocalLlmResponse(
 
       completionPromise.then(
         () => {
-          finished = true;
+          state.finished = true;
           notify();
         },
         (error) => {
-          failure = error instanceof Error ? error : new Error(String(error));
-          finished = true;
+          state.failure = error instanceof Error ? error : new Error(String(error));
+          state.finished = true;
           notify();
         }
       );
 
       const deadline = Date.now() + NATIVE_STREAM_TIMEOUT_MS;
-
-      while (true) {
-        while (queue.length > 0) {
-          const token = queue.shift() as string;
-          onToken?.(token);
-          yield token;
-        }
-
-        if (failure) throw failure;
-        if (finished) break;
-
-        if (Date.now() > deadline) {
-          throw new Error(
-            `Native streaming timed out after ${NATIVE_STREAM_TIMEOUT_MS / 1000}s`
-          );
-        }
-
-        await new Promise<void>((resolve) => {
+      const waitOnce = () =>
+        new Promise<void>((resolve) => {
           wake = resolve;
           setTimeout(notify, 250);
         });
-      }
+
+      yield* drainTokenStream(
+        queue,
+        state,
+        onToken,
+        deadline,
+        `Native streaming timed out after ${NATIVE_STREAM_TIMEOUT_MS / 1000}s`,
+        waitOnce
+      );
 
       return;
     } catch (error: any) {
@@ -585,8 +624,7 @@ export async function* streamLocalLlmResponse(
       const emitter = new NativeEventEmitter(GemmaNative);
 
       const queue: string[] = [];
-      let finished = false;
-      let failure: Error | null = null;
+      const state: TokenStreamState = { finished: false, failure: null };
       let wake: (() => void) | null = null;
 
       const notify = () => {
@@ -601,10 +639,10 @@ export async function* streamLocalLlmResponse(
             queue.push(event.token);
           }
         } else if (event?.type === 'done') {
-          finished = true;
+          state.finished = true;
         } else if (event?.type === 'error') {
-          failure = new Error(event.message || 'Native generation error');
-          finished = true;
+          state.failure = new Error(event.message || 'Native generation error');
+          state.finished = true;
         }
         notify();
       });
@@ -614,29 +652,21 @@ export async function* streamLocalLlmResponse(
       await GemmaNative.streamLlmResponse(prompt);
 
       const deadline = Date.now() + NATIVE_STREAM_TIMEOUT_MS;
-
-      while (true) {
-        while (queue.length > 0) {
-          const token = queue.shift() as string;
-          onToken?.(token);
-          yield token;
-        }
-
-        if (failure) throw failure;
-        if (finished) break;
-
-        if (Date.now() > deadline) {
-          throw new Error(
-            `Native streaming timed out after ${NATIVE_STREAM_TIMEOUT_MS / 1000}s`
-          );
-        }
-
-        // Wait for the next event rather than polling hot.
-        await new Promise<void>((resolve) => {
+      const waitOnce = () =>
+        new Promise<void>((resolve) => {
           wake = resolve;
           setTimeout(notify, 250);
         });
-      }
+
+      // Wait for events via the shared drain loop rather than polling hot.
+      yield* drainTokenStream(
+        queue,
+        state,
+        onToken,
+        deadline,
+        `Native streaming timed out after ${NATIVE_STREAM_TIMEOUT_MS / 1000}s`,
+        waitOnce
+      );
 
       return;
     } catch (error: any) {

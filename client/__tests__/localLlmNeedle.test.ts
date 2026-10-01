@@ -81,7 +81,8 @@ describe('localLlm NeedleEngine (.cact) integration', () => {
     expect(isLocalModelLoaded).toBe(true);
     expect(NeedleModule.init).toHaveBeenCalledWith(
       '/data/local/tmp/needle-45m.cact',
-      expect.any(Number)
+      expect.any(Number),
+      expect.stringContaining('device_screen_read')
     );
   });
 

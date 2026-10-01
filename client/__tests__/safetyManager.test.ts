@@ -46,7 +46,7 @@ describe('Safety Manager Helper', () => {
       // default: passwords_otps is 'deny'
       const res = await evaluateSafety('device_type', 'Enter password', 'secret_password_123');
       expect(res.status).toBe('error');
-      expect(res.result).toContain('Blocked by user policy');
+      expect(res.result).toContain('Blocked by Owner policy');
     });
 
     it('should upgrade auto action to confirm when sensitive word matched in value', async () => {
@@ -59,6 +59,23 @@ describe('Safety Manager Helper', () => {
 
       try {
         const res = await evaluateSafety('device_scroll', undefined, 'delete my account');
+        expect(mockRequest).toHaveBeenCalled();
+        expect(res.status).toBe('success');
+      } finally {
+        useSafetyStore.setState({ requestApproval: originalRequest });
+      }
+    });
+
+    it('should upgrade auto action to confirm when sensitive word matched in target', async () => {
+      const mockRequest = jest.fn().mockImplementation(() =>
+        Promise.resolve({ status: 'success', result: 'Approved' })
+      );
+      const { useSafetyStore } = require('../store/useSafetyStore');
+      const originalRequest = useSafetyStore.getState().requestApproval;
+      useSafetyStore.setState({ requestApproval: mockRequest });
+
+      try {
+        const res = await evaluateSafety('device_scroll', 'delete my account', undefined);
         expect(mockRequest).toHaveBeenCalled();
         expect(res.status).toBe('success');
       } finally {
