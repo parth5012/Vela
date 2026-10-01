@@ -54,7 +54,7 @@ function Badge({ label, color }: { label: string; color: string }) {
 }
 
 export default function ExtractScreen() {
-  const isLocalMode = useConfigStore((s) => s.isLocalMode);
+  const isLocalMode = useConfigStore((s) => s.connectionMode === 'local');
   const localModelName = useConfigStore((s) => s.localModelName);
   const { colors, sizes } = useAurora();
 

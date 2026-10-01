@@ -10,6 +10,62 @@ export interface SuggestionStarter {
   persona: string;
 }
 
+export type ConnectionMode = 'server' | 'local' | 'cloud';
+export type ProviderSlug = 'gemini' | 'openai' | 'anthropic' | 'openrouter' | 'groq' | 'custom';
+
+export interface CloudProviderConfig {
+  model: string;
+  baseUrl?: string;
+}
+
+export const PROVIDER_SLUGS: ProviderSlug[] = [
+  'gemini',
+  'openai',
+  'anthropic',
+  'openrouter',
+  'groq',
+  'custom',
+];
+
+export const DEFAULT_CLOUD_PROVIDERS: Record<ProviderSlug, CloudProviderConfig> = {
+  gemini: { model: 'gemini-1.5-flash' },
+  openai: { model: 'gpt-4o-mini' },
+  anthropic: { model: 'claude-3-5-sonnet-20241022' },
+  openrouter: { model: 'anthropic/claude-3.5-sonnet' },
+  groq: { model: 'llama-3.3-70b-versatile' },
+  custom: { model: '', baseUrl: '' },
+};
+
+export const getCloudKeyStorageKey = (provider: ProviderSlug) => `vela-key-${provider}`;
+
+export const computeIsConfigured = (state: {
+  connectionMode: ConnectionMode;
+  apiUrl?: string;
+  apiKey?: string;
+  localModelName?: string;
+  activeCloudProvider?: ProviderSlug;
+  cloudProviders?: Record<ProviderSlug, CloudProviderConfig>;
+  cloudApiKeys?: Partial<Record<ProviderSlug, string>>;
+}): boolean => {
+  if (state.connectionMode === 'server') {
+    return Boolean(state.apiUrl && state.apiKey);
+  }
+  if (state.connectionMode === 'local') {
+    return Boolean(state.localModelName);
+  }
+  if (state.connectionMode === 'cloud') {
+    const provider = state.activeCloudProvider || 'gemini';
+    const config = state.cloudProviders?.[provider];
+    const model = config?.model;
+    const key = state.cloudApiKeys?.[provider];
+    if (provider === 'custom') {
+      return Boolean(model && key && config?.baseUrl?.trim());
+    }
+    return Boolean(model && key);
+  }
+  return false;
+};
+
 export type PermissionTier = 'auto' | 'confirm' | 'deny';
 
 export type OSPermission = 'notifications' | 'camera' | 'microphone' | 'storage' | 'accessibility' | 'background';
@@ -69,8 +125,19 @@ interface ConfigState {
   osPermissions: Record<OSPermission, OSPermissionStatus>;
   setOSPermission: (perm: OSPermission, status: OSPermissionStatus) => void;
   
-  // Local mode configuration settings
-  isLocalMode: boolean;
+  // Connection and provider modes
+  connectionMode: ConnectionMode;
+  setConnectionMode: (mode: ConnectionMode) => void;
+  cloudProviders: Record<ProviderSlug, CloudProviderConfig>;
+  setCloudProviderConfig: (provider: ProviderSlug, config: Partial<CloudProviderConfig>) => void;
+  activeCloudProvider: ProviderSlug;
+  setActiveCloudProvider: (provider: ProviderSlug) => void;
+  cloudApiKeys: Partial<Record<ProviderSlug, string>>;
+  setCloudApiKey: (provider: ProviderSlug, key: string) => Promise<void>;
+  deleteCloudApiKey: (provider: ProviderSlug) => Promise<void>;
+  loadCloudApiKeys: () => Promise<void>;
+
+  // Local model configuration settings
   localModelDownloadProgress: number | null;
   wifiOnlyDownload: boolean;
   localModelName: string;
@@ -78,7 +145,6 @@ interface ConfigState {
   localMaxTokens: number;
   localConfigAutoApplied: boolean;
   detectedRamBytes: number | null;
-  setIsLocalMode: (val: boolean) => void;
   setLocalModelDownloadProgress: (val: number | null) => void;
   setWifiOnlyDownload: (val: boolean) => void;
   setLocalModelName: (val: string) => void;
@@ -141,19 +207,28 @@ export const useConfigStore = create<ConfigState>()(
         background: 'undetermined',
       } as Record<OSPermission, OSPermissionStatus>,
       
+      // Defaults for connection mode
+      connectionMode: 'server',
+      cloudProviders: DEFAULT_CLOUD_PROVIDERS,
+      activeCloudProvider: 'gemini',
+      cloudApiKeys: {},
+
       // Defaults for local mode
-      isLocalMode: false,
       localModelDownloadProgress: null,
       wifiOnlyDownload: true,
       // Must match a `name` in LOCAL_MODELS (utils/localLlm.ts)
       localModelName: 'DeepSeek-R1 1.5B (GGUF)',
-    localContextSize: 2048,
-    localMaxTokens: 512,
-    localConfigAutoApplied: false,
-    detectedRamBytes: null,
+      localContextSize: 2048,
+      localMaxTokens: 512,
+      localConfigAutoApplied: false,
+      detectedRamBytes: null,
 
       setConfig: (url, key) => {
-        set({ apiUrl: url, apiKey: key, isConfigured: true });
+        set((state) => ({
+          apiUrl: url,
+          apiKey: key,
+          isConfigured: computeIsConfigured({ ...state, apiUrl: url, apiKey: key }),
+        }));
         if (Platform.OS !== 'web') {
           SecureStore.setItemAsync(SECURE_KEY, key).catch((err) => {
             console.error('[useConfigStore] Failed to save apiKey in SecureStore:', err);
@@ -173,9 +248,17 @@ export const useConfigStore = create<ConfigState>()(
           modelName: 'gemini-1.5-pro',
           defaultPersona: 'personal assistant',
           userName: 'Parth',
-          isLocalMode: false,
+          connectionMode: 'server',
+          cloudProviders: DEFAULT_CLOUD_PROVIDERS,
+          activeCloudProvider: 'gemini',
+          cloudApiKeys: {},
           localModelDownloadProgress: null,
           wifiOnlyDownload: true,
+          localModelName: 'DeepSeek-R1 1.5B (GGUF)',
+          localContextSize: 2048,
+          localMaxTokens: 512,
+          localConfigAutoApplied: false,
+          detectedRamBytes: null,
           suggestionStarters: [
             { label: '👩🏫 Teach Concept', text: 'Teach intuition behind binary search trace example', persona: 'teacher' },
             { label: '📊 Data Analyst', text: 'Analyze key features 2026 FIFA World Cup matches', persona: 'analyst' },
@@ -186,6 +269,9 @@ export const useConfigStore = create<ConfigState>()(
           SecureStore.deleteItemAsync(SECURE_KEY).catch((err) => {
             console.error('[useConfigStore] Failed to delete apiKey in SecureStore:', err);
           });
+          for (const slug of PROVIDER_SLUGS) {
+            SecureStore.deleteItemAsync(getCloudKeyStorageKey(slug)).catch(() => {});
+          }
         }
       },
       setHasHydrated: (val) => set({ hasHydrated: val }),
@@ -198,13 +284,13 @@ export const useConfigStore = create<ConfigState>()(
       setDefaultPersona: (defaultPersona) => set({ defaultPersona }),
       setUserName: (userName) => set({ userName }),
       setSuggestionStarters: (suggestionStarters) => set({ suggestionStarters }),
-  setDeviceAgentPermission: (action, tier) =>
-    set((state) => ({
-      deviceAgentPermissions: {
-        ...state.deviceAgentPermissions,
-        [action]: tier,
-      },
-    })),
+      setDeviceAgentPermission: (action, tier) =>
+        set((state) => ({
+          deviceAgentPermissions: {
+            ...state.deviceAgentPermissions,
+            [action]: tier,
+          },
+        })),
       setOSPermission: (perm, status) =>
         set((state) => ({
           osPermissions: {
@@ -213,15 +299,94 @@ export const useConfigStore = create<ConfigState>()(
           },
         })),
       
+      // Settors for connection & cloud mode
+      setConnectionMode: (connectionMode) =>
+        set((state) => ({
+          connectionMode,
+          isConfigured: computeIsConfigured({ ...state, connectionMode }),
+        })),
+      setCloudProviderConfig: (provider, config) =>
+        set((state) => {
+          const updated = {
+            ...state.cloudProviders,
+            [provider]: {
+              ...state.cloudProviders[provider],
+              ...config,
+            },
+          };
+          return {
+            cloudProviders: updated,
+            isConfigured: computeIsConfigured({ ...state, cloudProviders: updated }),
+          };
+        }),
+      setActiveCloudProvider: (activeCloudProvider) =>
+        set((state) => ({
+          activeCloudProvider,
+          isConfigured: computeIsConfigured({ ...state, activeCloudProvider }),
+        })),
+      setCloudApiKey: async (provider, key) => {
+        if (Platform.OS !== 'web') {
+          await SecureStore.setItemAsync(getCloudKeyStorageKey(provider), key);
+        }
+        set((state) => {
+          const updatedKeys = {
+            ...state.cloudApiKeys,
+            [provider]: key,
+          };
+          return {
+            cloudApiKeys: updatedKeys,
+            isConfigured: computeIsConfigured({ ...state, cloudApiKeys: updatedKeys }),
+          };
+        });
+      },
+      deleteCloudApiKey: async (provider) => {
+        if (Platform.OS !== 'web') {
+          await SecureStore.deleteItemAsync(getCloudKeyStorageKey(provider));
+        }
+        set((state) => {
+          const updatedKeys = { ...state.cloudApiKeys };
+          delete updatedKeys[provider];
+          return {
+            cloudApiKeys: updatedKeys,
+            isConfigured: computeIsConfigured({ ...state, cloudApiKeys: updatedKeys }),
+          };
+        });
+      },
+      loadCloudApiKeys: async () => {
+        if (Platform.OS === 'web') return;
+        const entries = await Promise.all(
+          PROVIDER_SLUGS.map(async (slug) => {
+            try {
+              const val = await SecureStore.getItemAsync(getCloudKeyStorageKey(slug));
+              return [slug, val] as const;
+            } catch (e) {
+              console.error(`[useConfigStore] Failed loading cloud key for ${slug}:`, e);
+              return [slug, null] as const;
+            }
+          })
+        );
+        const keys: Partial<Record<ProviderSlug, string>> = {};
+        for (const [slug, val] of entries) {
+          if (val) keys[slug] = val;
+        }
+        set((state) => ({
+          cloudApiKeys: keys,
+          isConfigured: computeIsConfigured({ ...state, cloudApiKeys: keys }),
+        }));
+      },
+
       // Settors for local mode
-      setIsLocalMode: (isLocalMode) => set({ isLocalMode }),
       setLocalModelDownloadProgress: (localModelDownloadProgress) => set({ localModelDownloadProgress }),
       setWifiOnlyDownload: (wifiOnlyDownload) => set({ wifiOnlyDownload }),
-      setLocalModelName: (localModelName) => set({ localModelName }),
-    setLocalContextSize: (localContextSize) => set({ localContextSize }),
-    setLocalMaxTokens: (localMaxTokens) => set({ localMaxTokens }),
-    setLocalConfigAutoApplied: (localConfigAutoApplied) => set({ localConfigAutoApplied }),
-    setDetectedRamBytes: (detectedRamBytes) => set({ detectedRamBytes })
+      setLocalModelName: (localModelName) =>
+        set((state) => ({
+          localModelName,
+          isConfigured: computeIsConfigured({ ...state, localModelName }),
+        })),
+      setLocalContextSize: (localContextSize) => set({ localContextSize }),
+      setLocalMaxTokens: (localMaxTokens) => set({ localMaxTokens }),
+      setLocalConfigAutoApplied: (localConfigAutoApplied) => set({ localConfigAutoApplied }),
+      setDetectedRamBytes: (detectedRamBytes) => set({ detectedRamBytes })
     }),
     {
       name: 'vela-config-storage',
@@ -233,7 +398,9 @@ export const useConfigStore = create<ConfigState>()(
       // v2 (#294): 'Cactus Needle 45M' was hard-migrated to the live
       // Cactus-Compute needle2/needle3 entries (its old HF URL is dead,
       // HTTP 401) — reset the removed name the same way.
-      version: 2,
+      // v3 (#313 / #333): connectionMode ('server' | 'local' | 'cloud') replaces
+      // isLocalMode, adding cloudProviders and activeCloudProvider.
+      version: 3,
       migrate: (persistedState: any, fromVersion: number) => {
         if (persistedState) {
           if (fromVersion < 1) {
@@ -247,14 +414,25 @@ export const useConfigStore = create<ConfigState>()(
             persistedState.localModelName = 'DeepSeek-R1 1.5B (GGUF)';
             persistedState.isLocalMode = false;
           }
+          if (fromVersion < 3) {
+            persistedState.connectionMode = persistedState.isLocalMode ? 'local' : 'server';
+            delete persistedState.isLocalMode;
+            if (!persistedState.cloudProviders) {
+              persistedState.cloudProviders = DEFAULT_CLOUD_PROVIDERS;
+            }
+            if (!persistedState.activeCloudProvider) {
+              persistedState.activeCloudProvider = 'gemini';
+            }
+            persistedState.isConfigured = computeIsConfigured(persistedState);
+          }
         }
         return persistedState;
       },
       partialize: (state) => {
         // Exclude hasHydrated (session state). securely store apiKey on native
-        const { hasHydrated, ...rest } = state;
+        const { hasHydrated, cloudApiKeys, ...rest } = state;
         if (Platform.OS === 'web') {
-          return rest;
+          return { ...rest, cloudApiKeys };
         }
         return {
           ...rest,
@@ -266,21 +444,52 @@ export const useConfigStore = create<ConfigState>()(
           state?.setHasHydrated(true);
           return;
         }
-        // Native: load apiKey from SecureStore after AsyncStorage rehydrated.
+        // Native: load apiKey and cloudApiKeys from SecureStore after AsyncStorage rehydrated.
         if (Platform.OS !== 'web') {
-          SecureStore.getItemAsync(SECURE_KEY)
-            .then((secureKey) => {
-              if (secureKey) {
-                useConfigStore.setState({ apiKey: secureKey });
+          const loadKeys = async () => {
+            try {
+              const [secureKey, cloudKeyEntries] = await Promise.all([
+                SecureStore.getItemAsync(SECURE_KEY).catch((err) => {
+                  console.error('[useConfigStore] Failed loading server apiKey:', err);
+                  return null;
+                }),
+                Promise.all(
+                  PROVIDER_SLUGS.map(async (slug) => {
+                    try {
+                      const k = await SecureStore.getItemAsync(getCloudKeyStorageKey(slug));
+                      return [slug, k] as const;
+                    } catch (e) {
+                      console.error(`[useConfigStore] Failed loading cloud key for ${slug}:`, e);
+                      return [slug, null] as const;
+                    }
+                  })
+                ),
+              ]);
+
+              const cloudKeys: Partial<Record<ProviderSlug, string>> = {};
+              for (const [slug, k] of cloudKeyEntries) {
+                if (k) cloudKeys[slug] = k;
               }
-            })
-            .catch((err) => {
+
+              useConfigStore.setState((s) => {
+                const apiKey = secureKey ?? s.apiKey;
+                return {
+                  apiKey,
+                  cloudApiKeys: cloudKeys,
+                  isConfigured: computeIsConfigured({ ...s, apiKey, cloudApiKeys: cloudKeys }),
+                };
+              });
+            } catch (err) {
               console.error('[useConfigStore] SecureStore load error:', err);
-            })
-            .finally(() => {
+            } finally {
               hydratedState.setHasHydrated(true);
-            });
+            }
+          };
+          loadKeys();
         } else {
+          useConfigStore.setState((s) => ({
+            isConfigured: computeIsConfigured(s),
+          }));
           hydratedState.setHasHydrated(true);
         }
       }

@@ -72,10 +72,115 @@ describe('useConfigStore', () => {
     expect(updatedState.modelName).toBe('gemini-1.5-flash');
   });
 
+  it('should initialize default values for connection mode and cloud providers', () => {
+    const state = useConfigStore.getState();
+    expect(state.connectionMode).toBe('server');
+    expect(state.activeCloudProvider).toBe('gemini');
+    expect(state.cloudProviders.gemini).toBeDefined();
+    expect(state.cloudProviders.gemini.model).toBe('gemini-1.5-flash');
+    expect(state.cloudProviders.openai.model).toBe('gpt-4o-mini');
+  });
+
+  it('should allow updating connection mode and cloud provider settings', async () => {
+    const state = useConfigStore.getState();
+    state.setConnectionMode('cloud');
+    state.setActiveCloudProvider('anthropic');
+    state.setCloudProviderConfig('anthropic', { model: 'claude-3-7-sonnet' });
+    await state.setCloudApiKey('anthropic', 'sk-ant-test');
+
+    const updatedState = useConfigStore.getState();
+    expect(updatedState.connectionMode).toBe('cloud');
+    expect(updatedState.activeCloudProvider).toBe('anthropic');
+    expect(updatedState.cloudProviders.anthropic.model).toBe('claude-3-7-sonnet');
+    expect(updatedState.cloudApiKeys.anthropic).toBe('sk-ant-test');
+    expect(mockSecureStore['vela-key-anthropic']).toBe('sk-ant-test');
+
+    await state.deleteCloudApiKey('anthropic');
+    expect(useConfigStore.getState().cloudApiKeys.anthropic).toBeUndefined();
+    expect(mockSecureStore['vela-key-anthropic']).toBeUndefined();
+  });
+
+  it('migrates legacy isLocalMode === true to connectionMode local in v3 migrate', async () => {
+    const AsyncStorage = require('@react-native-async-storage/async-storage');
+    const { connectionMode, ...legacyState } = useConfigStore.getState();
+
+    await AsyncStorage.setItem(
+      'vela-config-storage',
+      JSON.stringify({
+        state: {
+          ...legacyState,
+          isLocalMode: true,
+        },
+        version: 2,
+      })
+    );
+
+    await useConfigStore.persist.rehydrate();
+    expect(useConfigStore.getState().connectionMode).toBe('local');
+
+    await AsyncStorage.removeItem('vela-config-storage');
+    useConfigStore.getState().clearConfig();
+  });
+
+  it('migrates legacy isLocalMode === false to connectionMode server in v3 migrate', async () => {
+    const AsyncStorage = require('@react-native-async-storage/async-storage');
+    const { connectionMode, ...legacyState } = useConfigStore.getState();
+
+    await AsyncStorage.setItem(
+      'vela-config-storage',
+      JSON.stringify({
+        state: {
+          ...legacyState,
+          isLocalMode: false,
+        },
+        version: 2,
+      })
+    );
+
+    await useConfigStore.persist.rehydrate();
+    expect(useConfigStore.getState().connectionMode).toBe('server');
+
+    await AsyncStorage.removeItem('vela-config-storage');
+    useConfigStore.getState().clearConfig();
+  });
+
+  it('evaluates isConfigured correctly for each connection mode', async () => {
+    const state = useConfigStore.getState();
+
+    // server mode: requires apiUrl and apiKey
+    state.setConnectionMode('server');
+    expect(useConfigStore.getState().isConfigured).toBe(false);
+    state.setConfig('https://example.com', 'server-key');
+    expect(useConfigStore.getState().isConfigured).toBe(true);
+
+    // local mode: requires localModelName
+    state.setConnectionMode('local');
+    expect(useConfigStore.getState().isConfigured).toBe(true);
+    state.setLocalModelName('');
+    expect(useConfigStore.getState().isConfigured).toBe(false);
+    state.setLocalModelName('DeepSeek-R1 1.5B (GGUF)');
+    expect(useConfigStore.getState().isConfigured).toBe(true);
+
+    // cloud mode: requires active provider model and apiKey
+    state.setConnectionMode('cloud');
+    state.setActiveCloudProvider('gemini');
+    expect(useConfigStore.getState().isConfigured).toBe(false);
+    await state.setCloudApiKey('gemini', 'gemini-key');
+    expect(useConfigStore.getState().isConfigured).toBe(true);
+
+    // custom provider: requires baseUrl in addition to model and apiKey
+    state.setActiveCloudProvider('custom');
+    state.setCloudProviderConfig('custom', { model: 'llama-3' });
+    await state.setCloudApiKey('custom', 'custom-key');
+    expect(useConfigStore.getState().isConfigured).toBe(false); // missing baseUrl
+    state.setCloudProviderConfig('custom', { baseUrl: 'https://custom.llm/v1' });
+    expect(useConfigStore.getState().isConfigured).toBe(true);
+  });
+
   it('should initialize default values for local mode config', () => {
     const state = useConfigStore.getState();
     expect(state.localModelName).toBe('DeepSeek-R1 1.5B (GGUF)');
-    expect(state.isLocalMode).toBe(false);
+    expect(state.connectionMode).toBe('server');
     expect(state.localModelDownloadProgress).toBeNull();
     expect(state.wifiOnlyDownload).toBe(true);
     expect(state.localContextSize).toBe(2048);
@@ -87,7 +192,7 @@ describe('useConfigStore', () => {
   it('should allow updating local mode config via setters', () => {
     const state = useConfigStore.getState();
     state.setLocalModelName('Phi-3 Mini');
-    state.setIsLocalMode(true);
+    state.setConnectionMode('local');
     state.setLocalModelDownloadProgress(50);
     state.setWifiOnlyDownload(false);
     state.setLocalContextSize(1024);
@@ -97,7 +202,7 @@ describe('useConfigStore', () => {
 
     const updatedState = useConfigStore.getState();
     expect(updatedState.localModelName).toBe('Phi-3 Mini');
-    expect(updatedState.isLocalMode).toBe(true);
+    expect(updatedState.connectionMode).toBe('local');
     expect(updatedState.localModelDownloadProgress).toBe(50);
     expect(updatedState.wifiOnlyDownload).toBe(false);
     expect(updatedState.localContextSize).toBe(1024);
@@ -127,13 +232,13 @@ describe('useConfigStore', () => {
     await useConfigStore.persist.rehydrate();
 
     expect(useConfigStore.getState().localModelName).toBe('DeepSeek-R1 1.5B (GGUF)');
-    expect(useConfigStore.getState().isLocalMode).toBe(false);
+    expect(useConfigStore.getState().connectionMode).toBe('server');
 
     // Cleanup: drop the seeded payload and restore defaults for later tests.
     await AsyncStorage.removeItem('vela-config-storage');
     useConfigStore.setState({
       localModelName: 'DeepSeek-R1 1.5B (GGUF)',
-      isLocalMode: false,
+      connectionMode: 'server',
     });
   });
 
