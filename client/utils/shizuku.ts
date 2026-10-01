@@ -118,7 +118,7 @@ export function buildShizukuOp(
       return { op: 'clear_data', args: [target] };
 
     case 'device_app_install':
-      if (!target || !target.endsWith('.apk')) return null;
+      if (!target || !target.startsWith('/') || !target.endsWith('.apk')) return null;
       return { op: 'install', args: [target] };
 
     case 'device_app_uninstall':

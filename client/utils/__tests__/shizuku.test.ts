@@ -111,6 +111,10 @@ describe('buildShizukuOp', () => {
       op: 'install',
       args: ['/sdcard/app.apk'],
     });
+    // Native requires an absolute path (ShizukuOpsService "install"); reject
+    // relative ones before dispatch instead of letting exit=126 swallow them.
+    expect(buildShizukuOp('device_app_install', 'app.apk')).toBeNull();
+    expect(buildShizukuOp('device_app_install', '/sdcard/app')).toBeNull();
     expect(buildShizukuOp('device_app_uninstall', 'com.a')).toEqual({
       op: 'uninstall',
       args: ['com.a'],

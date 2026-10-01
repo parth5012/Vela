@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, Linking } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import DeviceAgentNative from '../../modules/device-agent';
@@ -90,11 +90,21 @@ export default function ShizukuSetupScreen() {
     }, [refresh])
   );
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
   const state: ShizukuState | 'unknown' = status ? deriveShizukuState(status) : 'unknown';
+
+  // Plain helpers instead of nested ternaries (OCR review, PR #332).
+  const statusText = () => {
+    if (status) return describeShizukuState(state as ShizukuState);
+    if (checking) return 'Reading Shizuku status…';
+    return 'Could not read Shizuku status. Tap Recheck status.';
+  };
+
+  const privilege = (() => {
+    if (!status || !status.serverRunning || status.uid < 0) return null;
+    if (status.uid === 0) return 'root (uid 0)';
+    if (status.uid === 2000) return 'ADB / shell (uid 2000)';
+    return `uid ${status.uid}`;
+  })();
 
   const handleRequestPermission = async () => {
     if (!DeviceAgentNative?.requestShizukuPermission) return;
@@ -123,16 +133,11 @@ export default function ShizukuSetupScreen() {
     return (
       <>
         <Text style={[styles.body, { color: colors.textMuted, fontSize: sizes.sub }]}>
-          {status
-            ? describeShizukuState(state as ShizukuState)
-            : checking
-              ? 'Reading Shizuku status…'
-              : 'Could not read Shizuku status. Tap Recheck status.'}
+          {statusText()}
         </Text>
-        {status && status.serverRunning && status.uid >= 0 ? (
+        {privilege ? (
           <Text style={[styles.body, { color: colors.textMuted, fontSize: sizes.sub }]}>
-            Server privilege:{' '}
-            {status.uid === 0 ? 'root (uid 0)' : status.uid === 2000 ? 'ADB / shell (uid 2000)' : `uid ${status.uid}`}
+            Server privilege: {privilege}
           </Text>
         ) : null}
 
@@ -155,9 +160,6 @@ export default function ShizukuSetupScreen() {
             {requestResult ? (
               <Text style={[styles.result, { color: colors.textMuted, fontSize: sizes.sub - 1 }]}>
                 Last request: {requestResult}
-                {requestResult === 'denied_permanently'
-                  ? ' — open the Shizuku app and allow Vela manually (denied twice).'
-                  : ''}
                 {requestResult === 'server_stopped'
                   ? ' — start Shizuku first (step 4).'
                   : ''}

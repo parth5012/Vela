@@ -227,11 +227,10 @@ class DeviceAgentModule : Module() {
             when {
                 !shizukuAlive() -> "server_stopped"
                 shizukuGranted() -> "already_granted"
-                try {
-                    Shizuku.shouldShowRequestPermissionRationale()
-                } catch (e: Throwable) {
-                    false
-                } -> "denied_permanently"
+                // No rationale screen in Vela: go straight to the prompt. The
+                // shouldShowRequestPermissionRationale() mapping was inverted
+                // (true = "denied once, can still prompt", not "permanently
+                // denied") and blocked every re-request after the first deny.
                 else -> {
                     val latch = CountDownLatch(1)
                     val result = AtomicReference("timeout")

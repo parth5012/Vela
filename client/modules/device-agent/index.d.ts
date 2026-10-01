@@ -9,7 +9,7 @@ interface DeviceAgentNative {
   getShizukuStatus(): Promise<ShizukuStatus>;
   /**
    * Opens the Shizuku permission dialog for Vela. Resolves with what happened:
-   * 'requested' | 'already_granted' | 'server_stopped' | 'denied_permanently' | 'failed: ...'
+   * 'granted' | 'denied' | 'timeout' | 'already_granted' | 'server_stopped' | 'failed: ...'
    */
   requestShizukuPermission(): Promise<string>;
   /**
