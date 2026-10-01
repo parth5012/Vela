@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Package visibility (Android 11+): lets getShizukuStatus() see whether
+         the Shizuku manager app is installed. -->
+    <queries>
+        <package android:name="moe.shizuku.manager" />
+    </queries>
+
+    <application>
+        <!-- Required to acquire the Shizuku binder (Shizuku-API demo manifest).
+             ${applicationId} resolves per variant (dev/prod) at app merge. -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:enabled="true"
+            android:exported="true"
+            android:multiprocess="false"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+    </application>
+</manifest>

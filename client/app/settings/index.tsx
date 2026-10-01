@@ -20,6 +20,7 @@ const GROUPS: CategoryGroup[] = [
     title: 'Permissions',
     rows: [
       { icon: '🛡️', label: 'Permissions', hint: 'App & agent permissions', route: '/settings/permissions' },
+      { icon: '🔌', label: 'Shizuku Setup', hint: 'Privileged ops · pairing guide', route: '/settings/shizuku' },
     ],
   },
   {

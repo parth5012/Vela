@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useConfigStore, PermissionTier, DeviceAgentPermissions } from '../../store/useConfigStore';
 import {
   AuroraScreen,
@@ -54,6 +55,7 @@ export default function DeviceAgentPermissionsScreen() {
   const permissions = useConfigStore((s) => s.deviceAgentPermissions);
   const setPermission = useConfigStore((s) => s.setDeviceAgentPermission);
   const { colors, sizes } = useAurora();
+  const router = useRouter();
 
   const renderSection = (title: string, subtitle: string, items: PermissionItem[]) => {
     return (
@@ -91,6 +93,19 @@ export default function DeviceAgentPermissionsScreen() {
       title="Device Agent Permissions"
       subtitle="Configure how Vela acts on your phone automatically, prompts for authorization, or stands blocked."
     >
+      <Card style={styles.card}>
+        <Pressable
+          onPress={() => router.push('/settings/shizuku')}
+          accessibilityRole="button"
+          accessibilityLabel="Open Shizuku setup guide"
+        >
+          <Label>Shizuku Setup →</Label>
+          <Text style={[styles.description, { color: colors.textMuted, fontSize: sizes.sub }]}>
+            Grant/revoke permissions, write settings, force-stop, enable/disable, clear data,
+            install/uninstall — connect Shizuku first.
+          </Text>
+        </Pressable>
+      </Card>
       {renderSection('Low Risk Actions', 'Actions allowed to run with minimal intervention by default.', LOW_RISK_ACTIONS)}
       {renderSection('Medium Risk Actions', 'Actions generally requiring confirm prompts by default.', MEDIUM_RISK_ACTIONS)}
       {renderSection('High Risk Actions', 'Actions completely blocked by default for system security.', HIGH_RISK_ACTIONS)}

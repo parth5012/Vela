@@ -189,3 +189,166 @@ async def device_info(conversation_id: str) -> str:
         return result
     else:
         return f"Error executing device action: {result}"
+
+# --- Shizuku allowlisted privileged operations -----------------------------
+# These eight tools are the complete privileged surface (see
+# docs/shizuku-integration.md). They require the Shizuku server to be running
+# and permission granted in the Vela client; otherwise the client answers with
+# a "not ready" error that is returned to the agent verbatim.
+
+@tool
+async def device_app_permission_grant(conversation_id: str, package: str, permission: str) -> str:
+    """Grants a runtime permission to an app via Shizuku (requires Shizuku permission granted).
+
+    Args:
+        conversation_id: The active conversation UUID.
+        package: Target package name (e.g. com.example.app).
+        permission: Full permission name (e.g. android.permission.CAMERA).
+    """
+    status, result = await wait_for_client_event(
+        conversation_id=conversation_id,
+        action="app_permission_grant",
+        target=package,
+        value=permission
+    )
+    if status == "success":
+        return result
+    else:
+        return f"Error executing device action: {result}"
+
+@tool
+async def device_app_permission_revoke(conversation_id: str, package: str, permission: str) -> str:
+    """Revokes a runtime permission from an app via Shizuku (requires Shizuku permission granted).
+
+    Args:
+        conversation_id: The active conversation UUID.
+        package: Target package name (e.g. com.example.app).
+        permission: Full permission name (e.g. android.permission.CAMERA).
+    """
+    status, result = await wait_for_client_event(
+        conversation_id=conversation_id,
+        action="app_permission_revoke",
+        target=package,
+        value=permission
+    )
+    if status == "success":
+        return result
+    else:
+        return f"Error executing device action: {result}"
+
+@tool
+async def device_setting_put(conversation_id: str, namespace: str, key: str, value: str) -> str:
+    """Writes a system/secure/global setting via Shizuku (requires Shizuku permission granted).
+
+    Args:
+        conversation_id: The active conversation UUID.
+        namespace: One of: system, secure, global.
+        key: Setting key (e.g. font_scale).
+        value: New value (e.g. 1.2).
+    """
+    status, result = await wait_for_client_event(
+        conversation_id=conversation_id,
+        action="setting_put",
+        target=f"{namespace}/{key}",
+        value=value
+    )
+    if status == "success":
+        return result
+    else:
+        return f"Error executing device action: {result}"
+
+@tool
+async def device_app_force_stop(conversation_id: str, package: str) -> str:
+    """Force-stops a running app via Shizuku (requires Shizuku permission granted).
+
+    Args:
+        conversation_id: The active conversation UUID.
+        package: Target package name (e.g. com.example.app).
+    """
+    status, result = await wait_for_client_event(
+        conversation_id=conversation_id,
+        action="app_force_stop",
+        target=package,
+        value=None
+    )
+    if status == "success":
+        return result
+    else:
+        return f"Error executing device action: {result}"
+
+@tool
+async def device_app_set_state(conversation_id: str, package: str, state: str) -> str:
+    """Enables or disables an app's components via Shizuku (requires Shizuku permission granted).
+
+    Args:
+        conversation_id: The active conversation UUID.
+        package: Target package name (e.g. com.example.app).
+        state: Either 'enabled' or 'disabled'.
+    """
+    status, result = await wait_for_client_event(
+        conversation_id=conversation_id,
+        action="app_set_state",
+        target=package,
+        value=state
+    )
+    if status == "success":
+        return result
+    else:
+        return f"Error executing device action: {result}"
+
+@tool
+async def device_app_clear_data(conversation_id: str, package: str) -> str:
+    """Clears an app's data (destructive) via Shizuku (requires Shizuku permission granted).
+
+    Args:
+        conversation_id: The active conversation UUID.
+        package: Target package name (e.g. com.example.app).
+    """
+    status, result = await wait_for_client_event(
+        conversation_id=conversation_id,
+        action="app_clear_data",
+        target=package,
+        value=None
+    )
+    if status == "success":
+        return result
+    else:
+        return f"Error executing device action: {result}"
+
+@tool
+async def device_app_install(conversation_id: str, apk_path: str) -> str:
+    """Installs an APK from device storage via Shizuku (requires Shizuku permission granted).
+
+    Args:
+        conversation_id: The active conversation UUID.
+        apk_path: Absolute path to the APK on the device (e.g. /sdcard/Download/app.apk).
+    """
+    status, result = await wait_for_client_event(
+        conversation_id=conversation_id,
+        action="app_install",
+        target=apk_path,
+        value=None
+    )
+    if status == "success":
+        return result
+    else:
+        return f"Error executing device action: {result}"
+
+@tool
+async def device_app_uninstall(conversation_id: str, package: str) -> str:
+    """Uninstalls an app (destructive) via Shizuku (requires Shizuku permission granted).
+
+    Args:
+        conversation_id: The active conversation UUID.
+        package: Target package name (e.g. com.example.app).
+    """
+    status, result = await wait_for_client_event(
+        conversation_id=conversation_id,
+        action="app_uninstall",
+        target=package,
+        value=None
+    )
+    if status == "success":
+        return result
+    else:
+        return f"Error executing device action: {result}"

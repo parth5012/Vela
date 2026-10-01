@@ -1,6 +1,13 @@
 import { Platform } from 'react-native';
 import DeviceAgentNative from '../modules/device-agent';
 import { useConfigStore } from '../store/useConfigStore';
+import {
+  buildShizukuOp,
+  deriveShizukuState,
+  describeShizukuState,
+  isShizukuTool,
+  parseOpResult,
+} from './shizuku';
 
 /**
  * The five distinct states an action can end in. Callers must not have to
@@ -36,16 +43,19 @@ function requiredNativeMethod(toolName: string): string {
   if (toolName === 'device_screen_read') return 'getScreenTree';
   if (toolName === 'device_info') return 'getDeviceInfo';
   if (toolName === 'device_screenshot') return 'takeScreenshot';
+  if (isShizukuTool(toolName)) return 'runPrivilegedOp';
   return 'performAction';
 }
 
 /**
  * True for tools that change device state (everything routed through
- * `performAction`). Derived from the dispatch path rather than a hand-kept
- * list, so a new mutating tool is classified correctly by default.
+ * `performAction` or the privileged Shizuku service). Derived from the
+ * dispatch path rather than a hand-kept list, so a new mutating tool is
+ * classified correctly by default.
  */
 function isMutating(toolName: string): boolean {
-  return requiredNativeMethod(toolName) === 'performAction';
+  const method = requiredNativeMethod(toolName);
+  return method === 'performAction' || method === 'runPrivilegedOp';
 }
 
 /**
@@ -85,6 +95,13 @@ export async function executeDeviceAction(
   const requiredMethod = requiredNativeMethod(toolName);
   if (typeof (DeviceAgentNative as any)[requiredMethod] !== 'function') {
     return unavailable(toolName, `the module does not provide ${requiredMethod}()`);
+  }
+
+  // Shizuku allowlisted ops validate arguments and Shizuku readiness BEFORE
+  // any dispatch, so a pre-dispatch problem can never be reported as
+  // "indeterminate" (which would invite a blind retry on the device).
+  if (isShizukuTool(toolName)) {
+    return executeShizukuOp(toolName, target, value);
   }
 
   try {
@@ -141,6 +158,75 @@ export async function executeDeviceAction(
       observation: `Action failed: the device agent could not run ${toolName} (target: ${target}, value: ${value}). Error detail: ${e?.message || e}`,
     };
   }
+}
+
+/**
+ * Runs one allowlisted Shizuku operation. Every failure before the
+ * `runPrivilegedOp` dispatch is a confirmed non-execution; only a throw after
+ * dispatch is reported as indeterminate.
+ */
+async function executeShizukuOp(
+  toolName: string,
+  target?: string,
+  value?: string
+): Promise<DeviceActionResult> {
+  const spec = buildShizukuOp(toolName, target, value);
+  if (!spec) {
+    return {
+      outcome: 'failed',
+      observation: `Action failed: invalid arguments for ${toolName} (target: ${target}, value: ${value}). Not dispatched — no device state was changed.`,
+    };
+  }
+
+  const native = DeviceAgentNative as any;
+  if (typeof native.getShizukuStatus !== 'function') {
+    return unavailable(toolName, 'the module does not provide getShizukuStatus()');
+  }
+
+  let status;
+  try {
+    status = await native.getShizukuStatus();
+  } catch (e: any) {
+    return {
+      outcome: 'failed',
+      observation: `Action NOT executed: could not read Shizuku status (${e?.message || e}). No device state was changed.`,
+    };
+  }
+
+  const state = deriveShizukuState(status);
+  if (state !== 'ready') {
+    return unavailable(
+      toolName,
+      `Shizuku is not ready: ${describeShizukuState(state)}. Open Vela Settings → Shizuku Setup to connect it.`
+    );
+  }
+
+  let raw: string;
+  try {
+    raw = await native.runPrivilegedOp(spec.op, spec.args);
+  } catch (e: any) {
+    return {
+      outcome: 'indeterminate',
+      observation: `Action result UNKNOWN: ${spec.op}(${spec.args.join(
+        ', '
+      )}) was dispatched to the Shizuku service and then threw, so it may already have taken effect. Verify device state before repeating it. Error detail: ${e?.message || e}`,
+    };
+  }
+
+  const parsed = parseOpResult(raw);
+  if (!parsed) {
+    return {
+      outcome: 'failed',
+      observation: `Action failed: the Shizuku service returned an unparseable result for ${spec.op}; success was not confirmed. Raw: ${String(raw).slice(0, 200)}`,
+    };
+  }
+  if (parsed.exitCode === 0) {
+    return { outcome: 'executed', observation: parsed.output || `Success: ${spec.op} completed` };
+  }
+  return {
+    outcome: 'failed',
+    observation: `Action failed: ${spec.op} exited with code ${parsed.exitCode}. ${parsed.output}`.trim(),
+  };
 }
 
 /**
