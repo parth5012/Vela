@@ -1,11 +1,20 @@
 """Unit tests for the daily morning briefing cron job (backend/cron/briefing.py)."""
 
+from datetime import date
 from unittest.mock import patch, MagicMock
 import pytest
 from db.session import get_db_session
 from db.client import DBClient
 from db.models import MemoryVector, SystemSetting, Briefing
 from cron.briefing import _search_radar_memories, run_daily_briefing
+
+# These tests used to hardcode 2026-08-30/31 while asserting through
+# get_briefing_history(days=30), whose cutoff is (now - 30d). Past
+# 2026-10-01 the cutoff moved past the fixture date, so every one of them
+# started failing with `assert 0 == 1` even though nothing in the code
+# changed. Derive the briefing date from today so it always sits inside the
+# history window.
+BRIEFING_DATE = date.today().isoformat()
 
 
 @pytest.fixture(autouse=True)
@@ -32,8 +41,8 @@ def test_run_daily_briefing_full_success(mock_get_auth_service, mock_get_llm, mo
         "items": [
             {
                 "summary": "Team Sync Meeting",
-                "start": {"dateTime": "2026-08-30T10:00:00Z"},
-                "end": {"dateTime": "2026-08-30T10:30:00Z"},
+                "start": {"dateTime": f"{BRIEFING_DATE}T10:00:00Z"},
+                "end": {"dateTime": f"{BRIEFING_DATE}T10:30:00Z"},
             }
         ]
     }
@@ -72,10 +81,10 @@ def test_run_daily_briefing_full_success(mock_get_auth_service, mock_get_llm, mo
 
     mock_send_push.return_value = True
 
-    res = run_daily_briefing(today_date="2026-08-30")
+    res = run_daily_briefing(today_date=BRIEFING_DATE)
 
     assert res["status"] == "success"
-    assert res["date"] == "2026-08-30"
+    assert res["date"] == BRIEFING_DATE
     assert "Team Sync" in res["summary_text"]
     assert res["push_sent"] is True
 
@@ -83,10 +92,10 @@ def test_run_daily_briefing_full_success(mock_get_auth_service, mock_get_llm, mo
         client = DBClient(session)
         briefings = client.get_briefing_history(days=30)
         assert len(briefings) == 1
-        assert briefings[0].date == "2026-08-30"
+        assert briefings[0].date == BRIEFING_DATE
         assert briefings[0].summary_text == res["summary_text"]
 
-        marker = client.get_system_setting("briefing_sent_2026-08-30")
+        marker = client.get_system_setting(f"briefing_sent_{BRIEFING_DATE}")
         assert marker is not None
 
     mock_send_push.assert_called_once_with(
@@ -103,9 +112,9 @@ def test_run_daily_briefing_dedup_skip(mock_get_auth_service, mock_get_llm, mock
     """Test that running briefing a second time on the same date skips execution."""
     with get_db_session() as session:
         client = DBClient(session)
-        client.set_system_setting("briefing_sent_2026-08-30", "2026-08-30T07:00:00Z")
+        client.set_system_setting(f"briefing_sent_{BRIEFING_DATE}", f"{BRIEFING_DATE}T07:00:00Z")
 
-    res = run_daily_briefing(today_date="2026-08-30")
+    res = run_daily_briefing(today_date=BRIEFING_DATE)
 
     assert res["status"] == "skipped"
     assert res["reason"] == "already_sent"
@@ -122,7 +131,7 @@ def test_run_daily_briefing_disabled_skip(mock_get_auth_service, mock_get_llm, m
         client = DBClient(session)
         client.set_system_setting("briefing_enabled", "false")
 
-    res = run_daily_briefing(today_date="2026-08-30")
+    res = run_daily_briefing(today_date=BRIEFING_DATE)
 
     assert res["status"] == "skipped"
     assert res["reason"] == "briefing_disabled"
@@ -142,10 +151,10 @@ def test_run_daily_briefing_oauth_failure_fallback(mock_get_auth_service, mock_g
     mock_get_llm.return_value = mock_llm_instance
     mock_send_push.return_value = True
 
-    res = run_daily_briefing(today_date="2026-08-30")
+    res = run_daily_briefing(today_date=BRIEFING_DATE)
 
     assert res["status"] == "success"
-    assert res["date"] == "2026-08-30"
+    assert res["date"] == BRIEFING_DATE
 
     with get_db_session() as session:
         client = DBClient(session)
@@ -161,7 +170,7 @@ def test_run_daily_briefing_llm_failure_fallback(mock_get_auth_service, mock_get
     """Test raw bulleted list digest fallback when LLM fails or returns empty."""
     mock_cal_service = MagicMock()
     mock_cal_service.events().list().execute.return_value = {
-        "items": [{"summary": "Standup", "start": {"dateTime": "2026-08-30T09:00:00Z"}}]
+        "items": [{"summary": "Standup", "start": {"dateTime": f"{BRIEFING_DATE}T09:00:00Z"}}]
     }
     mock_get_auth_service.side_effect = lambda api, conversation_id="", api_version="v1": (
         (mock_cal_service, None) if api == "calendar" else (None, "err")
@@ -170,10 +179,10 @@ def test_run_daily_briefing_llm_failure_fallback(mock_get_auth_service, mock_get
     mock_get_llm.side_effect = Exception("LLM rate limit / timeout")
     mock_send_push.return_value = True
 
-    res = run_daily_briefing(today_date="2026-08-30")
+    res = run_daily_briefing(today_date=BRIEFING_DATE)
 
     assert res["status"] == "success"
-    assert "Daily Briefing for 2026-08-30:" in res["summary_text"]
+    assert f"Daily Briefing for {BRIEFING_DATE}:" in res["summary_text"]
     assert "Standup" in res["summary_text"]
 
     with get_db_session() as session:
@@ -195,14 +204,14 @@ def test_run_daily_briefing_fcm_token_missing(mock_get_auth_service, mock_get_ll
 
     mock_send_push.return_value = False
 
-    res = run_daily_briefing(today_date="2026-08-30")
+    res = run_daily_briefing(today_date=BRIEFING_DATE)
 
     assert res["status"] == "success"
     assert res["push_sent"] is False
 
     with get_db_session() as session:
         client = DBClient(session)
-        marker = client.get_system_setting("briefing_sent_2026-08-30")
+        marker = client.get_system_setting(f"briefing_sent_{BRIEFING_DATE}")
         assert marker is not None
 
 
@@ -334,7 +343,7 @@ def test_run_daily_briefing_radar_pgvector_unavailable_falls_back(
 
     with patch("cron.briefing.get_embeddings",
                return_value=_fake_embeddings_module([0.03] * 512)):
-        res = run_daily_briefing(today_date="2026-08-31")
+        res = run_daily_briefing(today_date=BRIEFING_DATE)
 
     assert res["status"] == "success"
     with get_db_session() as session:
