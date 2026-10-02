@@ -16,6 +16,7 @@ import {
   clearChatLocal,
   isLocalDbAvailable,
 } from '../db/chatRepository';
+import type { SkillId } from '../utils/skillPrompts';
 
 // Trailing debounce (ms) for persisting streaming assistant content: tokens
 // arrive frequently during a stream, so we only write the final content once
@@ -102,6 +103,7 @@ interface ChatState {
   renameThread: (id: string, newTitle: string) => void;
   togglePinThread: (id: string) => void;
   setThreadPersona: (threadId: string, persona: string) => void;
+  setThreadSkill: (threadId: string, skillId: SkillId | null) => void;
   addMessage: (threadId: string, message: Message) => void;
   appendToken: (threadId: string, token: string) => void;
   removeLastEmptyAssistant: (threadId: string) => void;
@@ -322,6 +324,15 @@ export const useChatStore = create<ChatState>()(
       setThreadPersona: (threadId, persona) => {
         set((state) => ({
           threads: state.threads.map((t) => t.id === threadId ? { ...t, persona } : t)
+        }));
+        const updated = useChatStore.getState().threads.find((t) => t.id === threadId);
+        if (updated) saveThread(updated).catch(() => {});
+      },
+      setThreadSkill: (threadId, skillId) => {
+        set((state) => ({
+          threads: state.threads.map((t) =>
+            t.id === threadId ? { ...t, active_skill: skillId } : t
+          ),
         }));
         const updated = useChatStore.getState().threads.find((t) => t.id === threadId);
         if (updated) saveThread(updated).catch(() => {});
