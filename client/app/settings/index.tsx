@@ -12,7 +12,8 @@ const GROUPS: CategoryGroup[] = [
   {
     title: 'Connection & Accounts',
     rows: [
-      { icon: '⚡', label: 'Server & API Key', hint: 'URL, key, test connection', route: '/settings/connection' },
+      { icon: '⚡', label: 'Server & API Key', hint: 'URL, key, connection mode', route: '/settings/connection' },
+      { icon: '☁️', label: 'Cloud Providers', hint: 'Gemini, OpenAI, Claude, OpenRouter, Groq', route: '/settings/cloud-providers' },
       { icon: '🔑', label: 'Google Workspace', hint: 'Gmail · Calendar · Drive', route: '/settings/connection' },
     ],
   },
