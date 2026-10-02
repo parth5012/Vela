@@ -89,13 +89,14 @@ describe('message_vectors schema (#299)', () => {
     expect(messageVectors.created_at.notNull).toBe(true);
   });
 
-  it('registers migration 0005 in the drizzle bundle and journal', () => {
+  it('registers migration 0006 in the drizzle bundle and journal', () => {
     const keys = migrationKeys();
     expect(keys).toContain('m0005');
-    expect(keys[keys.length - 1]).toBe('m0005');
+    expect(keys).toContain('m0006');
+    expect(keys[keys.length - 1]).toBe('m0006');
 
     const tags = migrationTags();
-    expect(tags[tags.length - 1]).toMatch(/^0005_/);
+    expect(tags[tags.length - 1]).toMatch(/^0006_/);
   });
 
   it('creates message_vectors in the 0005 migration SQL', () => {
@@ -103,6 +104,11 @@ describe('message_vectors schema (#299)', () => {
     expect(sql).toContain('CREATE TABLE `message_vectors`');
     expect(sql).toContain('REFERENCES `messages`');
     expect(sql).toMatch(/ON DELETE cascade/i);
+  });
+
+  it('adds active_skill to threads in the 0006 migration SQL', () => {
+    const sql = (require('../db/migrations/migrations').default.migrations.m0006 as string) || '';
+    expect(sql).toContain('ALTER TABLE `threads` ADD `active_skill`');
   });
 });
 
