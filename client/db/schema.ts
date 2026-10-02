@@ -6,6 +6,7 @@ export const threads = sqliteTable('threads', {
   persona: text('persona').default('personal assistant').notNull(),
   updated_at: text('updated_at').notNull(),
   is_pinned: integer('is_pinned', { mode: 'boolean' }).default(false).notNull(),
+  active_skill: text('active_skill'),
 });
 
 export const messages = sqliteTable('messages', {
