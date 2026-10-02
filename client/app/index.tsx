@@ -506,6 +506,19 @@ export default function ChatScreen() {
     return true;
   }, [addMessage, setThreadSkill]);
 
+  const activeThreadSkill = useMemo(() => {
+    if (!activeThreadId) return null;
+    const thread = threads.find((t) => t.id === activeThreadId);
+    return (thread?.active_skill as SkillId | undefined) || null;
+  }, [activeThreadId, threads]);
+
+  const handleDeactivateSkill = useCallback(() => {
+    if (!activeThreadId) return;
+    // Reuses the shared helper so the /stop user turn is recorded (roles
+    // alternate) and the confirmation matches the slash-command path.
+    handleSkillCommand(activeThreadId, '/stop');
+  }, [activeThreadId, handleSkillCommand]);
+
   React.useEffect(() => {
     if (!lastMsg || lastMsg.role !== 'assistant' || !activeThreadId) return;
 
@@ -1914,6 +1927,24 @@ export default function ChatScreen() {
         )}
       </View>
 
+      {/* Active skill indicator */}
+      {activeThreadId && activeThreadSkill && (
+        <Pressable
+          style={({ pressed }) => [
+            styles.skillIndicator,
+            { backgroundColor: aurora.acc1 + '1A', borderColor: aurora.acc1 },
+            pressed && { opacity: 0.7 }
+          ]}
+          onPress={handleDeactivateSkill}
+          accessibilityRole="button"
+          accessibilityLabel="Deactivate skill"
+        >
+          <Text style={[styles.skillIndicatorText, { color: aurora.acc1, fontSize: sizes.sub }]}>
+            {SKILL_METADATA[activeThreadSkill].icon} {SKILL_METADATA[activeThreadSkill].name} · tap to stop
+          </Text>
+        </Pressable>
+      )}
+
       {/* Unifying Input container at bottom */}
       <View
         style={[
@@ -2251,6 +2282,18 @@ const styles = StyleSheet.create({
   downloadProgressText: {
     fontSize: 12,
     fontWeight: '500',
+  },
+  skillIndicator: {
+    marginHorizontal: 12,
+    marginTop: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    alignSelf: 'flex-start',
+  },
+  skillIndicatorText: {
+    fontWeight: '600',
   },
   inputContainer: {
     flexDirection: 'row',
