@@ -49,6 +49,8 @@ import { compileLocalPrompt } from '../utils/promptCompiler';
 import { parseAndExecuteTools } from '../utils/toolProxy';
 import { streamCloudResponse } from '../utils/providers';
 import { buildContextMessages } from '../utils/providers/context';
+import { isSkillCommand, SKILL_PROMPTS, SKILL_METADATA } from '../utils/skillPrompts';
+import type { SkillId } from '../utils/skillPrompts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { evaluateSafety, classifyAction } from '../utils/safetyManager';
 import { executeDeviceAction, sendDeviceResponse } from '../utils/deviceActionExecutor';
@@ -261,6 +263,7 @@ export default function ChatScreen() {
   const renameThread = useChatStore((state) => state.renameThread);
   const togglePinThread = useChatStore((state) => state.togglePinThread);
   const setThreadPersona = useChatStore((state) => state.setThreadPersona);
+  const setThreadSkill = useChatStore((state) => state.setThreadSkill);
   const createThread = useChatStore((state) => state.createThread);
   const addMessage = useChatStore((state) => state.addMessage);
   const appendToken = useChatStore((state) => state.appendToken);
@@ -679,9 +682,15 @@ export default function ChatScreen() {
           ? `${userSystemPrompt}\n\n${personaPrompt}`
           : (personaPrompt || userSystemPrompt);
 
+        // Inject active skill prompt if set (standalone mode)
+        const threadSkill = activeThread?.active_skill as SkillId | undefined;
+        const skillAugmented = threadSkill && SKILL_PROMPTS[threadSkill]
+          ? `${systemPromptCombined}\n\n# Active Skill Instructions\n${SKILL_PROMPTS[threadSkill]}`
+          : systemPromptCombined;
+
         // 2. Compile prompt using LLM native chat template
         const compiledPrompt = compileLocalPrompt({
-          systemPrompt: systemPromptCombined,
+          systemPrompt: skillAugmented,
           history: currentHistory,
           query: userQuery,
           compactInstructions: "Format calls as <call name=\"tool\">PARAMS</call>.",
@@ -805,6 +814,12 @@ export default function ChatScreen() {
       ? `${userSystemPrompt}\n\n${personaPrompt}`
       : (personaPrompt || userSystemPrompt);
 
+    // Inject active skill prompt if set (standalone mode)
+    const cloudThreadSkill = activeThread?.active_skill as SkillId | undefined;
+    const cloudSkillAugmented = cloudThreadSkill && SKILL_PROMPTS[cloudThreadSkill]
+      ? `${systemPromptCombined}\n\n# Active Skill Instructions\n${SKILL_PROMPTS[cloudThreadSkill]}`
+      : systemPromptCombined;
+
     const controller = new AbortController();
     abortControllersRef.current[threadId] = controller;
 
@@ -816,7 +831,7 @@ export default function ChatScreen() {
         apiKey,
         model: providerConfig?.model || 'gemini-1.5-flash',
         baseUrl: providerConfig?.baseUrl,
-        systemPrompt: systemPromptCombined,
+        systemPrompt: cloudSkillAugmented,
         temperature: config.temperature,
         messages: contextMessages,
         signal: controller.signal,
@@ -914,6 +929,47 @@ export default function ChatScreen() {
     }
 
     if (!input.trim()) return;
+
+    // Skill slash command handling (standalone modes only)
+    if (connectionMode !== 'server' && activeThreadId) {
+      const skillCmd = isSkillCommand(input.trim());
+      if (skillCmd) {
+        Keyboard.dismiss();
+        setInput('');
+        if (skillCmd.type === 'activate') {
+          setThreadSkill(activeThreadId, skillCmd.skillId);
+          const meta = SKILL_METADATA[skillCmd.skillId];
+          addMessage(activeThreadId, {
+            id: generateId('msg_assistant'),
+            role: 'assistant',
+            content: `${meta.icon} **${meta.name}** activated. ${meta.description}.\n\nType \`/stop\` to deactivate.`,
+            created_at: new Date().toISOString(),
+          });
+        } else {
+          const currentThread = threads.find((t) => t.id === activeThreadId);
+          const wasActive = currentThread?.active_skill;
+          setThreadSkill(activeThreadId, null);
+          if (wasActive) {
+            const meta = SKILL_METADATA[wasActive as SkillId];
+            addMessage(activeThreadId, {
+              id: generateId('msg_assistant'),
+              role: 'assistant',
+              content: `${meta?.icon ?? '⏹️'} **${meta?.name ?? 'Skill'}** deactivated.`,
+              created_at: new Date().toISOString(),
+            });
+          } else {
+            addMessage(activeThreadId, {
+              id: generateId('msg_assistant'),
+              role: 'assistant',
+              content: '⏹️ No skill was active.',
+              created_at: new Date().toISOString(),
+            });
+          }
+        }
+        return;
+      }
+    }
+
     if (connectionMode === 'server' && (!apiUrl || !apiKey)) {
       Alert.alert('Configuration Required', 'Please configure API URL and Key in Settings.');
       return;
@@ -1059,6 +1115,7 @@ export default function ChatScreen() {
     isLocalMode,
     connectionMode,
     triggerAutoScroll,
+    setThreadSkill,
   ]);
 
   const handleRegenerate = useCallback(async (message: Message) => {
@@ -1243,6 +1300,33 @@ export default function ChatScreen() {
 
     const newThreadId = generateUUID();
     const agent = personaId || selectedAgent;
+
+    // Skill slash command handling in welcome screen (standalone modes only)
+    if (connectionMode !== 'server') {
+      const skillCmd = isSkillCommand(textToSend.trim());
+      if (skillCmd) {
+        createThread('New Conversation', newThreadId, agent);
+        setInput('');
+        if (skillCmd.type === 'activate') {
+          setThreadSkill(newThreadId, skillCmd.skillId);
+          const meta = SKILL_METADATA[skillCmd.skillId];
+          addMessage(newThreadId, {
+            id: generateId('msg_assistant'),
+            role: 'assistant',
+            content: `${meta.icon} **${meta.name}** activated. ${meta.description}.\n\nType \`/stop\` to deactivate.`,
+            created_at: new Date().toISOString(),
+          });
+        } else {
+          addMessage(newThreadId, {
+            id: generateId('msg_assistant'),
+            role: 'assistant',
+            content: '⏹️ No skill was active.',
+            created_at: new Date().toISOString(),
+          });
+        }
+        return;
+      }
+    }
 
     createThread('New Conversation', newThreadId, agent);
     setInput('');
