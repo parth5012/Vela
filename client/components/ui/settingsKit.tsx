@@ -264,6 +264,39 @@ export function DangerButton({
   );
 }
 
+export function SecondaryButton({
+  label,
+  onPress,
+  disabled,
+  accessibilityLabel,
+}: {
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+  accessibilityLabel?: string;
+}) {
+  const { colors, sizes } = useAurora();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel || label}
+      style={({ pressed }) => [
+        styles.secondary,
+        {
+          borderColor: colors.glassBorder,
+          backgroundColor: 'rgba(255, 255, 255, 0.08)',
+        },
+        pressed && { opacity: 0.7 },
+        disabled && { opacity: 0.4 },
+      ]}
+      onPress={onPress}
+      disabled={disabled}
+    >
+      <Text style={[styles.secondaryText, { color: colors.text, fontSize: sizes.text }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
 /**
  * Wayfinder #173 Audit — settingsKit / Shell Polish
  * AuroraScreen headerTitle weight 600 (not 700/900 except VELA logo) via headerTitle fontWeight 600 — matches _layout formatter rule.
@@ -398,6 +431,18 @@ const styles = StyleSheet.create({
     minHeight: 48,
   },
   primaryText: {
+    fontWeight: '600',
+  },
+  secondary: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
+  },
+  secondaryText: {
     fontWeight: '600',
   },
   danger: {
