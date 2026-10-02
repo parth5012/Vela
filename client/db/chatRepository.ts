@@ -27,6 +27,7 @@ function toThreadRow(thread: Thread) {
     persona: thread.persona || 'personal assistant',
     updated_at: thread.updated_at,
     is_pinned: thread.is_pinned ?? false,
+    active_skill: thread.active_skill ?? null,
   };
 }
 
@@ -50,6 +51,7 @@ function fromThreadRow(row: any): Thread {
     persona: row.persona,
     updated_at: row.updated_at,
     is_pinned: !!row.is_pinned,
+    active_skill: row.active_skill ?? undefined,
   };
 }
 
@@ -77,6 +79,7 @@ export async function saveThread(thread: Thread): Promise<void> {
         persona: row.persona,
         updated_at: row.updated_at,
         is_pinned: row.is_pinned,
+        active_skill: row.active_skill,
       },
     });
 }

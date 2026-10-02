@@ -87,6 +87,7 @@ export interface Thread {
   updated_at: string;
   is_pinned?: boolean;
   persona?: string;
+  active_skill?: string | null;
 }
 
 interface ChatState {
