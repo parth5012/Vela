@@ -1,3 +1,4 @@
+import '@stardazed/streams-text-encoding';
 import { useEffect } from 'react';
 import { useRouter, useSegments, useRootNavigationState, Slot } from 'expo-router';
 import { Drawer } from 'expo-router/drawer';

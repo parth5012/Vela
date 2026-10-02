@@ -47,6 +47,8 @@ import { useGoogleAuthStore } from '../store/useGoogleAuthStore';
 import { initializeLocalModel, isLocalModelLoaded, streamLocalLlmResponse, isLocalLlmDown, localModelStorageKey, LOCAL_MODELS } from '../utils/localLlm';
 import { compileLocalPrompt } from '../utils/promptCompiler';
 import { parseAndExecuteTools } from '../utils/toolProxy';
+import { streamCloudResponse } from '../utils/providers';
+import { buildContextMessages } from '../utils/providers/context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { evaluateSafety, classifyAction } from '../utils/safetyManager';
 import { executeDeviceAction, sendDeviceResponse } from '../utils/deviceActionExecutor';
@@ -238,9 +240,10 @@ export default function ChatScreen() {
   const suggestionStarters = useConfigStore((state) => state.suggestionStarters);
   const userSystemPrompt = useConfigStore((state) => state.systemPrompt);
 
-  // Local mode states
+  // Local and cloud mode states
   const connectionMode = useConfigStore((state) => state.connectionMode);
   const setConnectionMode = useConfigStore((state) => state.setConnectionMode);
+  const activeCloudProvider = useConfigStore((state) => state.activeCloudProvider);
   const isLocalMode = connectionMode === 'local';
   const localModelName = useConfigStore((state) => state.localModelName);
   const localModelDownloadProgress = useConfigStore((state) => state.localModelDownloadProgress);
@@ -781,6 +784,105 @@ export default function ChatScreen() {
     }
   };
 
+  const streamCloudChatResponse = async (
+    threadId: string,
+    historyList: Message[]
+  ) => {
+    const config = useConfigStore.getState();
+    const provider = config.activeCloudProvider || 'gemini';
+    const providerConfig = config.cloudProviders?.[provider];
+    const apiKey = config.cloudApiKeys?.[provider] || '';
+
+    const activeThread = threads.find((t) => t.id === threadId);
+    const selectedAgentId = activeThread?.persona || 'personal assistant';
+    const activePersona = personas.find((p) => p.id === selectedAgentId);
+    let personaPrompt = activePersona?.compact_prompt_instructions || activePersona?.compactPromptInstructions;
+    if (!personaPrompt) {
+      personaPrompt = COMPACT_PERSONAS_INSTRUCTIONS[selectedAgentId] || '';
+    }
+
+    const systemPromptCombined = userSystemPrompt && userSystemPrompt !== 'You are an autonomous research agent.'
+      ? `${userSystemPrompt}\n\n${personaPrompt}`
+      : (personaPrompt || userSystemPrompt);
+
+    const controller = new AbortController();
+    abortControllersRef.current[threadId] = controller;
+
+    const contextMessages = buildContextMessages(historyList, { maxMessages: 30 });
+
+    try {
+      await streamCloudResponse({
+        provider,
+        apiKey,
+        model: providerConfig?.model || 'gemini-1.5-flash',
+        baseUrl: providerConfig?.baseUrl,
+        systemPrompt: systemPromptCombined,
+        temperature: config.temperature,
+        messages: contextMessages,
+        signal: controller.signal,
+        onToken: (chunk) => {
+          pendingTokensMapRef.current[threadId] = (pendingTokensMapRef.current[threadId] || '') + chunk;
+          if (!throttleTimersRef.current[threadId]) {
+            throttleTimersRef.current[threadId] = setInterval(() => {
+              if (!useChatStore.getState().isThreadStreaming(threadId)) {
+                cleanUpThrottleAndHeal(threadId);
+                return;
+              }
+              if (pendingTokensMapRef.current[threadId]) {
+                appendToken(threadId, pendingTokensMapRef.current[threadId]);
+                pendingTokensMapRef.current[threadId] = '';
+              }
+            }, 100);
+          }
+        },
+        onDone: () => {
+          setStreamingThread(threadId, false);
+          delete abortControllersRef.current[threadId];
+          cleanUpThrottleAndHeal(threadId);
+          useChatStore.getState().removeLastEmptyAssistant(threadId);
+        },
+        onError: (error: any) => {
+          setStreamingThread(threadId, false);
+          delete abortControllersRef.current[threadId];
+          cleanUpThrottleAndHeal(threadId);
+          useChatStore.getState().removeLastEmptyAssistant(threadId);
+          const errText = `⚠️ **[${provider.toUpperCase()} Error]** ${error?.message || 'Cloud inference failed.'}`;
+          const cur = useChatStore.getState().messages[threadId] || [];
+          const last = cur[cur.length - 1];
+          if (last?.role === 'assistant') {
+            appendToken(threadId, `\n\n${errText}`);
+          } else {
+            addMessage(threadId, {
+              id: generateId('msg_assistant'),
+              role: 'assistant',
+              content: errText,
+              created_at: new Date().toISOString(),
+            });
+          }
+        },
+      });
+    } catch (e: any) {
+      console.error('[Cloud Stream Error]:', e);
+      setStreamingThread(threadId, false);
+      delete abortControllersRef.current[threadId];
+      cleanUpThrottleAndHeal(threadId);
+      useChatStore.getState().removeLastEmptyAssistant(threadId);
+      const errText = `⚠️ **[${provider.toUpperCase()} Error]** ${e?.message || 'Cloud inference failed.'}`;
+      const cur = useChatStore.getState().messages[threadId] || [];
+      const last = cur[cur.length - 1];
+      if (last?.role === 'assistant') {
+        appendToken(threadId, `\n\n${errText}`);
+      } else {
+        addMessage(threadId, {
+          id: generateId('msg_assistant'),
+          role: 'assistant',
+          content: errText,
+          created_at: new Date().toISOString(),
+        });
+      }
+    }
+  };
+
   const handleSend = useCallback(async () => {
     if (!activeThreadId) return;
 
@@ -812,9 +914,17 @@ export default function ChatScreen() {
     }
 
     if (!input.trim()) return;
-    if (!isLocalMode && (!apiUrl || !apiKey)) {
+    if (connectionMode === 'server' && (!apiUrl || !apiKey)) {
       Alert.alert('Configuration Required', 'Please configure API URL and Key in Settings.');
       return;
+    }
+    if (connectionMode === 'cloud') {
+      const activeProvider = useConfigStore.getState().activeCloudProvider || 'gemini';
+      const key = useConfigStore.getState().cloudApiKeys?.[activeProvider];
+      if (!key) {
+        Alert.alert('Configuration Required', `Please configure API key for ${activeProvider} in Settings.`);
+        return;
+      }
     }
 
     Keyboard.dismiss();
@@ -847,6 +957,11 @@ export default function ChatScreen() {
 
     if (isLocalMode) {
       await streamLocalResponse(activeThreadId, userText, [...originalHistory, { id: userMsgId, role: 'user', content: userText }]);
+      return;
+    }
+
+    if (connectionMode === 'cloud') {
+      await streamCloudChatResponse(activeThreadId, [...originalHistory, { id: userMsgId, role: 'user', content: userText }]);
       return;
     }
 
@@ -942,6 +1057,7 @@ export default function ChatScreen() {
     setThreads,
     cleanUpThrottleAndHeal,
     isLocalMode,
+    connectionMode,
     triggerAutoScroll,
   ]);
 
@@ -986,6 +1102,11 @@ export default function ChatScreen() {
 
     if (isLocalMode) {
       await streamLocalResponse(activeThreadId, userPrompt, [...originalHistoryForRegen, { id: generateId('msg_user'), role: 'user', content: userPrompt }]);
+      return;
+    }
+
+    if (connectionMode === 'cloud') {
+      await streamCloudChatResponse(activeThreadId, [...originalHistoryForRegen, { id: generateId('msg_user'), role: 'user', content: userPrompt }]);
       return;
     }
 
@@ -1081,6 +1202,7 @@ export default function ChatScreen() {
     setThreads,
     cleanUpThrottleAndHeal,
     isLocalMode,
+    connectionMode,
   ]);
 
   const handleBranch = useCallback(async (message: Message) => {
@@ -1104,9 +1226,17 @@ export default function ChatScreen() {
 
   const handleSendWelcome = useCallback(async (textToSend: string, personaId?: string) => {
     if (!textToSend.trim()) return;
-    if (!isLocalMode && (!apiUrl || !apiKey)) {
+    if (connectionMode === 'server' && (!apiUrl || !apiKey)) {
       Alert.alert('Configuration Required', 'Please configure API URL and Key in Settings.');
       return;
+    }
+    if (connectionMode === 'cloud') {
+      const activeProvider = useConfigStore.getState().activeCloudProvider || 'gemini';
+      const key = useConfigStore.getState().cloudApiKeys?.[activeProvider];
+      if (!key) {
+        Alert.alert('Configuration Required', `Please configure API key for ${activeProvider} in Settings.`);
+        return;
+      }
     }
 
     Keyboard.dismiss();
@@ -1140,6 +1270,11 @@ export default function ChatScreen() {
 
     if (isLocalMode) {
       await streamLocalResponse(newThreadId, textToSend.trim(), [{ id: userMsgId, role: 'user', content: textToSend.trim() }]);
+      return;
+    }
+
+    if (connectionMode === 'cloud') {
+      await streamCloudChatResponse(newThreadId, [{ id: userMsgId, role: 'user', content: textToSend.trim() }]);
       return;
     }
 
@@ -1221,6 +1356,7 @@ export default function ChatScreen() {
     setStreamingThread,
     cleanUpThrottleAndHeal,
     isLocalMode,
+    connectionMode,
     triggerAutoScroll,
   ]);
 
@@ -1683,7 +1819,7 @@ export default function ChatScreen() {
           onPress={handleToggleLocalMode}
         >
           <Text style={[styles.switcherLabel, { color: colors.text }]}>
-            Engine: {isLocalMode ? `🤖 Local (${localModelName})` : `☁️ Cloud (${modelName || 'Gemini'})`}
+            Engine: {connectionMode === 'local' ? `🤖 Local (${localModelName})` : connectionMode === 'cloud' ? `☁️ Cloud (${activeCloudProvider || 'gemini'})` : `🖥️ Server (${modelName || 'Gemini'})`}
           </Text>
         </Pressable>
         {localModelDownloadProgress !== null && (
