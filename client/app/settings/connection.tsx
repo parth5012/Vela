@@ -1,11 +1,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Text, Keyboard, View, Switch, Pressable, ActivityIndicator } from 'react-native';
+import { Text, Keyboard, View, Switch, Pressable, ActivityIndicator, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useConfigStore, ConnectionMode } from '../../store/useConfigStore';
 import { useBrowserStore } from '../../store/useBrowserStore';
 import { syncHistoryWithBackend } from '../../utils/history';
 import { getAllCookies, clearAll } from '../../utils/cookieSync';
+import {
+  getUnsyncedLocalCount,
+  syncStandaloneDataToBackend,
+  subscribeToStandaloneSync,
+  StandaloneSyncStatus,
+} from '../../utils/syncManager';
 import GoogleWorkspaceCard from '../../components/ui/GoogleWorkspaceCard';
 import {
   AuroraScreen,
@@ -34,6 +40,49 @@ export default function ConnectionScreen() {
   const apiKey = useConfigStore((s) => s.apiKey);
   const setConfig = useConfigStore((s) => s.setConfig);
   const { colors, sizes, aurora } = useAurora();
+
+  const [syncStatus, setSyncStatus] = useState<StandaloneSyncStatus>({
+    isSyncing: false,
+    message: null,
+    pushedCount: 0,
+  });
+
+  useEffect(() => {
+    const unsub = subscribeToStandaloneSync(setSyncStatus);
+    return unsub;
+  }, []);
+
+  const handleModeChange = async (newMode: ConnectionMode) => {
+    if (newMode === 'server' && connectionMode !== 'server') {
+      try {
+        const unsyncedCount = await getUnsyncedLocalCount();
+        if (unsyncedCount > 0 && apiUrl && apiKey) {
+          Alert.alert(
+            'Sync Local Data to Server?',
+            `You have ${unsyncedCount} standalone message${unsyncedCount === 1 ? '' : 's'}. Would you like to sync them to your server now?`,
+            [
+              {
+                text: 'Not Now',
+                style: 'cancel',
+                onPress: () => setConnectionMode('server'),
+              },
+              {
+                text: 'Sync to Server',
+                onPress: () => {
+                  setConnectionMode('server');
+                  void syncStandaloneDataToBackend(apiUrl, apiKey);
+                },
+              },
+            ]
+          );
+          return;
+        }
+      } catch {
+        // fallback to direct switch
+      }
+    }
+    setConnectionMode(newMode);
+  };
 
   const [url, setUrl] = useState(apiUrl);
   const [key, setKey] = useState(apiKey);
@@ -146,12 +195,25 @@ export default function ConnectionScreen() {
       title="Connection & Mode"
       subtitle="Configure how Vela connects: self-hosted backend server, on-device local AI, or direct cloud APIs."
     >
+      {(syncStatus.isSyncing || Boolean(syncStatus.message)) && (
+        <Card style={{ borderColor: aurora.acc1, borderWidth: 1, backgroundColor: 'rgba(255, 255, 255, 0.05)' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            {syncStatus.isSyncing ? (
+              <ActivityIndicator size="small" color={aurora.acc1} />
+            ) : null}
+            <Text style={{ color: colors.text, fontSize: sizes.sub, flex: 1 }}>
+              {syncStatus.message || 'Syncing conversations with server...'}
+            </Text>
+          </View>
+        </Card>
+      )}
+
       <Card>
         <Label>Connection Mode</Label>
         <PillGroup
           options={MODE_OPTIONS}
           value={connectionMode}
-          onChange={(m) => setConnectionMode(m as ConnectionMode)}
+          onChange={(m) => handleModeChange(m as ConnectionMode)}
         />
         <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, marginTop: 8 }}>
           {connectionMode === 'server'
@@ -236,6 +298,16 @@ export default function ConnectionScreen() {
           loading={isTesting}
           disabled={isTesting}
         />
+
+        {apiUrl && apiKey ? (
+          <View style={{ marginTop: 12 }}>
+            <SecondaryButton
+              label={syncStatus.isSyncing ? 'Syncing...' : 'Sync Standalone Data to Server'}
+              onPress={() => syncStandaloneDataToBackend(apiUrl, apiKey)}
+              disabled={syncStatus.isSyncing}
+            />
+          </View>
+        ) : null}
       </Card>
 
       <Card>

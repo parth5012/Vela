@@ -83,4 +83,48 @@ describe('Cloud Providers and Connection Settings Screens', () => {
       component.unmount();
     });
   });
+
+  it('prompts user to sync local standalone data when switching to server mode', async () => {
+    const { Alert } = require('react-native');
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    const syncManager = require('../utils/syncManager');
+    jest.spyOn(syncManager, 'getUnsyncedLocalCount').mockResolvedValueOnce(3);
+
+    useConfigStore.setState({
+      connectionMode: 'cloud',
+      apiUrl: 'https://api.vela.run',
+      apiKey: 'test-key',
+    });
+
+    let component: any;
+    await act(async () => {
+      component = renderer.create(<ConnectionScreen />);
+      await Promise.resolve();
+    });
+
+    const root = component.root;
+    // Find Server pill
+    const serverPillText = root.find(
+      (node: any) => node.type === 'Text' && node.children.includes('🖥️ Server')
+    );
+    let serverPill = serverPillText;
+    while (serverPill && !serverPill.props.onPress) {
+      serverPill = serverPill.parent;
+    }
+
+    await act(async () => {
+      await serverPill.props.onPress();
+    });
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Sync Local Data to Server?',
+      expect.stringContaining('3 standalone messages'),
+      expect.any(Array)
+    );
+
+    act(() => {
+      component.unmount();
+    });
+    alertSpy.mockRestore();
+  });
 });
