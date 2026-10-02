@@ -1928,7 +1928,7 @@ export default function ChatScreen() {
       </View>
 
       {/* Active skill indicator */}
-      {activeThreadId && activeThreadSkill && (
+      {activeThreadId && activeThreadSkill && SKILL_METADATA[activeThreadSkill] && connectionMode !== 'server' && (
         <Pressable
           style={({ pressed }) => [
             styles.skillIndicator,
