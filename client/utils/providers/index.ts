@@ -69,10 +69,14 @@ export function getLanguageModel(
       return groq(modelName);
     }
     case 'custom': {
+      let normalizedBaseUrl = (baseUrl || '').trim().replace(/\/+$/, '');
+      if (normalizedBaseUrl && !/^https?:\/\//i.test(normalizedBaseUrl)) {
+        normalizedBaseUrl = `https://${normalizedBaseUrl}`;
+      }
       const custom = createOpenAICompatible({
         name: 'custom',
         apiKey,
-        baseURL: baseUrl || '',
+        baseURL: normalizedBaseUrl,
         fetch: customFetch,
       });
       return custom(modelName);

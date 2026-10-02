@@ -47,7 +47,7 @@ export function buildContextMessages(
   }
 
   // Strict APIs (Anthropic/Gemini) reject history starting with an assistant message
-  while (result.length > 1 && result[0].role === 'assistant') {
+  while (result.length > 0 && result[0].role === 'assistant') {
     result.shift();
   }
 
