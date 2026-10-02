@@ -1,8 +1,175 @@
 import { db } from '../db/client';
 import { operationLog, threads, messages } from '../db/schema';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, isNull, or } from 'drizzle-orm';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { markMessageSynced } from '../db/chatRepository';
+import { markMessageSynced, hydrateChatFromLocalDb } from '../db/chatRepository';
+
+export interface StandaloneSyncStatus {
+  isSyncing: boolean;
+  message: string | null;
+  pushedCount: number;
+}
+
+let syncStatus: StandaloneSyncStatus = {
+  isSyncing: false,
+  message: null,
+  pushedCount: 0,
+};
+
+const listeners = new Set<(status: StandaloneSyncStatus) => void>();
+
+export function getStandaloneSyncStatus(): StandaloneSyncStatus {
+  return { ...syncStatus };
+}
+
+export function subscribeToStandaloneSync(
+  listener: (status: StandaloneSyncStatus) => void
+): () => void {
+  listeners.add(listener);
+  listener(getStandaloneSyncStatus());
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function updateSyncStatus(patch: Partial<StandaloneSyncStatus>) {
+  syncStatus = { ...syncStatus, ...patch };
+  listeners.forEach((cb) => cb(getStandaloneSyncStatus()));
+}
+
+const cleanUrl = (rawUrl: string): string => {
+  let formatted = (rawUrl || '').trim();
+  if (!/^https?:\/\//i.test(formatted)) {
+    formatted = 'https://' + formatted;
+  }
+  return formatted.replace(/\/+$/, '');
+};
+
+export async function getUnsyncedLocalCount(): Promise<number> {
+  if (!db) return 0;
+  try {
+    const rows = await db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(or(isNull(messages.server_id), eq(messages.pending, true)));
+    return rows.length;
+  } catch (e) {
+    console.warn('[getUnsyncedLocalCount] Error:', e);
+    return 0;
+  }
+}
+
+export async function syncStandaloneDataToBackend(
+  apiUrl: string,
+  apiKey: string
+): Promise<{ pushedCount: number; success: boolean }> {
+  if (!db) {
+    return { pushedCount: 0, success: false };
+  }
+
+  const normalizedApiUrl = cleanUrl(apiUrl);
+
+  updateSyncStatus({
+    isSyncing: true,
+    message: 'Preparing standalone messages for upload...',
+    pushedCount: 0,
+  });
+
+  try {
+    const unsynced = await db
+      .select()
+      .from(messages)
+      .where(or(isNull(messages.server_id), eq(messages.pending, true)));
+
+    if (unsynced.length === 0) {
+      // Nothing to push, just pull remote changes
+      updateSyncStatus({ message: 'Synchronizing remote conversations...' });
+      await syncDatabase(normalizedApiUrl, apiKey);
+      await hydrateChatFromLocalDb();
+      updateSyncStatus({
+        isSyncing: false,
+        message: 'All conversations up to date.',
+        pushedCount: 0,
+      });
+      return { pushedCount: 0, success: true };
+    }
+
+    updateSyncStatus({
+      message: `Uploading ${unsynced.length} local messages...`,
+    });
+
+    let totalPushed = 0;
+    const CHUNK_SIZE = 50;
+
+    for (let i = 0; i < unsynced.length; i += CHUNK_SIZE) {
+      const chunk = unsynced.slice(i, i + CHUNK_SIZE);
+      const operations = chunk.map((m) => ({
+        id: m.id,
+        type: 'message',
+        conversation_id: m.conversation_id,
+        payload: {
+          role: m.role,
+          content: m.content,
+          provider: 'android_client',
+          created_at: m.created_at,
+          origin: 'standalone',
+        },
+      }));
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+      const res = await fetch(`${normalizedApiUrl}/api/sync/push`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ operations }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        throw new Error(`Sync push failed with HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      const accepted: string[] = data.accepted || [];
+
+      if (accepted.length > 0) {
+        await Promise.all(accepted.map((opId) => markMessageSynced(opId, opId)));
+        await db.delete(operationLog).where(inArray(operationLog.id, accepted));
+      }
+      totalPushed += accepted.length;
+    }
+
+    // Now pull remote changes and hydrate store
+    updateSyncStatus({
+      message: `Pushed ${totalPushed} messages. Merging remote updates...`,
+      pushedCount: totalPushed,
+    });
+
+    await syncDatabase(normalizedApiUrl, apiKey);
+    await hydrateChatFromLocalDb();
+
+    updateSyncStatus({
+      isSyncing: false,
+      message: `Synced ${totalPushed} messages successfully.`,
+      pushedCount: totalPushed,
+    });
+
+    return { pushedCount: totalPushed, success: true };
+  } catch (err: any) {
+    console.error('[syncStandaloneDataToBackend] Error:', err);
+    updateSyncStatus({
+      isSyncing: false,
+      message: `Sync error: ${err?.message || 'Upload failed'}`,
+    });
+    return { pushedCount: 0, success: false };
+  }
+}
 
 export async function syncDatabase(apiUrl: string, apiKey: string): Promise<void> {
   if (!db) {
@@ -118,6 +285,16 @@ export async function syncDatabase(apiUrl: string, apiKey: string): Promise<void
         const threadId = op.conversation_id;
         const msgPayload = op.payload;
 
+        if (
+          !msgPayload ||
+          typeof msgPayload !== 'object' ||
+          !('role' in msgPayload) ||
+          !('content' in msgPayload)
+        ) {
+          console.warn('[Sync] Skipping corrupt pull operation:', op.id);
+          continue;
+        }
+
         // Check if thread exists in local SQLite threads
         const existingThreads = await db.select().from(threads).where(eq(threads.id, threadId));
         if (existingThreads.length === 0) {
@@ -134,7 +311,11 @@ export async function syncDatabase(apiUrl: string, apiKey: string): Promise<void
         // Insert or update message in local SQLite messages. Messages pulled
         // from the backend are already acknowledged, so pending=false and
         // server_id=op.id.
-        const existingMessages = await db.select().from(messages).where(eq(messages.id, op.id));
+        // Idempotent union deduplication: match on local id OR server_id.
+        const existingMessages = await db
+          .select()
+          .from(messages)
+          .where(or(eq(messages.id, op.id), eq(messages.server_id, op.id)));
         if (existingMessages.length === 0) {
           await db.insert(messages).values({
             id: op.id,
@@ -156,7 +337,7 @@ export async function syncDatabase(apiUrl: string, apiKey: string): Promise<void
               pending: false,
               server_id: op.id,
             })
-            .where(eq(messages.id, op.id));
+            .where(or(eq(messages.id, op.id), eq(messages.server_id, op.id)));
         }
       }
     }
