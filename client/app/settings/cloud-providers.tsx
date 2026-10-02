@@ -103,8 +103,9 @@ export default function CloudProvidersScreen() {
 
   const loadProviderForm = useCallback(
     async (slug: ProviderSlug) => {
-      const currentConfig = cloudProviders[slug] || DEFAULT_CLOUD_PROVIDERS[slug];
-      const key = cloudApiKeys[slug] || '';
+      const state = useConfigStore.getState();
+      const currentConfig = state.cloudProviders[slug] || DEFAULT_CLOUD_PROVIDERS[slug];
+      const key = state.cloudApiKeys[slug] || '';
       if (!isMounted.current) return;
       activeFetchSlug.current = slug;
       setKeyInput(key);
@@ -124,7 +125,7 @@ export default function CloudProvidersScreen() {
         }
       }
     },
-    [cloudProviders, cloudApiKeys]
+    []
   );
 
   useEffect(() => {

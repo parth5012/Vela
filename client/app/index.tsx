@@ -1457,7 +1457,10 @@ export default function ChatScreen() {
         } catch (downloadError: any) {
           console.error('[handleToggleLocalMode] Download failed:', downloadError);
           setLocalModelDownloadProgress(null);
-          setConnectionMode('server');
+          const fallbackMode: ConnectionMode = useConfigStore.getState().cloudApiKeys?.[useConfigStore.getState().activeCloudProvider || 'gemini']
+            ? 'cloud'
+            : 'server';
+          setConnectionMode(fallbackMode);
           Alert.alert('Download Failed', `Failed to download ${localModelName}: ${downloadError.message || 'Network error'}.`);
         }
       };
@@ -1475,7 +1478,10 @@ export default function ChatScreen() {
         await downloadModel();
       }
     } else {
-      setConnectionMode('server');
+      const fallbackMode: ConnectionMode = useConfigStore.getState().cloudApiKeys?.[useConfigStore.getState().activeCloudProvider || 'gemini']
+        ? 'cloud'
+        : 'server';
+      setConnectionMode(fallbackMode);
     }
   };
 

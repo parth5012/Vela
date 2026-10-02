@@ -611,7 +611,10 @@ export default function LocalAiScreen() {
             }
             Alert.alert('Model Deleted', `${localModelName} has been removed from storage.`);
             if (isLocalMode) {
-              setConnectionMode('server');
+              const fallback = useConfigStore.getState().cloudApiKeys?.[useConfigStore.getState().activeCloudProvider || 'gemini']
+                ? 'cloud'
+                : 'server';
+              setConnectionMode(fallback);
             }
           },
         },
@@ -759,7 +762,16 @@ export default function LocalAiScreen() {
         <PillGroup
           options={MODE_OPTIONS}
           value={isLocalMode ? 'local' : 'cloud'}
-          onChange={(v) => setConnectionMode(v === 'local' ? 'local' : 'server')}
+          onChange={(v) => {
+            if (v === 'local') {
+              setConnectionMode('local');
+            } else {
+              const hasCloud = Boolean(
+                useConfigStore.getState().cloudApiKeys?.[useConfigStore.getState().activeCloudProvider || 'gemini']
+              );
+              setConnectionMode(hasCloud ? 'cloud' : 'server');
+            }
+          }}
         />
         <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, lineHeight: 16 }}>
           Local mode uses {localModelName || 'the selected model'} entirely on-device. A mock fallback is always labeled as a mock.
