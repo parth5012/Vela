@@ -14,8 +14,11 @@ interface DeviceAgentNative {
   requestShizukuPermission(): Promise<string>;
   /**
    * Executes ONE allowlisted privileged operation inside the Shizuku user
-   * service (shell/root uid). Returns "<exit code>\n<output>". Throws when
-   * Shizuku is not ready or the op is not on the allowlist.
+   * service (shell/root uid). Returns "exit=<code>\n<output>": readiness
+   * problems come back as exit 125 (a confirmed non-execution), allowlist
+   * rejections as 126, start failures as 127, timeouts as 124. Only a
+   * RemoteException from the service propagates — the executor reports
+   * that as indeterminate.
    */
   runPrivilegedOp(op: string, args: string[]): Promise<string>;
 }
