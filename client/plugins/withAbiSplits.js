@@ -14,22 +14,38 @@ const SPLITS_BLOCK = [
   '            universalApk = false // keep false: universal is ~2x size; use per-ABI APKs (arm64 for phones, x86_64 for emulators) via scripts/install-apk.ps1',
   '        }',
   '    }',
+  '    compileOptions {',
+  '        coreLibraryDesugaringEnabled true',
+  '    }',
 ].join('\n');
 
 function addSplitsBlock(contents) {
-  if (/splits\s*\{/.test(contents)) {
-    return contents;
+  let updated = contents;
+  if (!/splits\s*\{/.test(updated)) {
+    const match = updated.match(/^(\s*)android\s*\{/m);
+    if (match) {
+      const indent = match[1];
+      const block = SPLITS_BLOCK
+        .split('\n')
+        .map((line) => (line.trim() ? indent + line : line))
+        .join('\n');
+      updated = updated.replace(match[0], match[0] + '\n' + block);
+    }
+  } else if (!/coreLibraryDesugaringEnabled/.test(updated)) {
+    updated = updated.replace(
+      /android\s*\{/,
+      'android {\n    compileOptions {\n        coreLibraryDesugaringEnabled true\n    }'
+    );
   }
-  const match = contents.match(/^(\s*)android\s*\{/m);
-  if (!match) {
-    return contents;
+
+  if (!/coreLibraryDesugaring\b/.test(updated)) {
+    updated = updated.replace(
+      /dependencies\s*\{/,
+      'dependencies {\n    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.4"'
+    );
   }
-  const indent = match[1];
-  const block = SPLITS_BLOCK
-    .split('\n')
-    .map((line) => (line.trim() ? indent + line : line))
-    .join('\n');
-  return contents.replace(match[0], match[0] + '\n' + block);
+
+  return updated;
 }
 
 function upsertProperty(entries, key, value) {
