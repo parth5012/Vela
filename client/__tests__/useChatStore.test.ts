@@ -20,6 +20,18 @@ describe('useChatStore', () => {
     useConfigStore.getState().clearConfig();
   });
 
+  it('new threads read the configured default agent, not the last thread agent (#357)', () => {
+    useConfigStore.getState().setDefaultAgent('analyst');
+
+    const store = useChatStore.getState();
+    store.createThread('Last Thread', 'last-thread', 'teacher');
+    store.createThread('New Conversation', 'new-thread');
+
+    expect(useChatStore.getState().threads.find((t) => t.id === 'last-thread')!.agent).toBe('teacher');
+    expect(useConfigStore.getState().defaultAgent).toBe('analyst');
+    expect(useChatStore.getState().threads.find((t) => t.id === 'new-thread')!.agent).toBe('analyst');
+  });
+
   it('should handle creating, selecting, and deleting threads with correct fallback active selection', () => {
     const store = useChatStore.getState();
     expect(store.threads.length).toBe(0);

@@ -10,7 +10,7 @@ import { AuroraScreen, Card, PrimaryButton } from '../components/ui/settingsKit'
 import { useAurora } from '../hooks/useAurora';
 import { calculateNextRun } from '../utils/backgroundTasks';
 import { isUserVisibleTask } from '../utils/checkinScheduler';
-import { DEFAULT_PERSONAS } from '../utils/personas';
+import { useAgents } from '../hooks/useAgents';
 
 const generateId = () => {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -37,7 +37,8 @@ export default function TasksScreen() {
   const [formRecurrence, setFormRecurrence] = useState<'15m' | '1h' | '12h' | '24h' | 'weekly'>('24h');
   const [formPrompt, setFormPrompt] = useState('');
   const [formAgent, setFormAgent] = useState('personal assistant');
-  const [personas, setPersonas] = useState(DEFAULT_PERSONAS);
+  // #357: shared DB-backed agent selector — no local copy, no second fetch.
+  const agents = useAgents();
 
   // Detail/Run History State
   const [selectedTask, setSelectedTask] = useState<TaskEntity | null>(null);
@@ -48,33 +49,6 @@ export default function TasksScreen() {
   useEffect(() => {
     loadTasks();
   }, []);
-
-  useEffect(() => {
-    if (apiUrl && apiKey) {
-      const fetchPersonas = async () => {
-        try {
-          const res = await fetch(`${apiUrl}/chat/personas`, {
-            headers: { Authorization: `Bearer ${apiKey}` },
-          });
-          if (res.ok) {
-            const data = await res.json();
-            const mapped = data.map((p: any) => {
-              let icon = '🤖';
-              if (p.id === 'teacher') icon = '👩🏫';
-              else if (p.id === 'analyst') icon = '📊';
-              else if (p.id === 'prompt builder') icon = '✍️';
-              const fallback = DEFAULT_PERSONAS.find((d) => d.id === p.id);
-              return { ...p, icon: p.icon || fallback?.icon || icon };
-            });
-            setPersonas(mapped);
-          }
-        } catch (err) {
-          console.error('[fetchPersonas] Failed:', err);
-        }
-      };
-      fetchPersonas();
-    }
-  }, [apiUrl, apiKey]);
 
   const loadTasks = async () => {
     try {
@@ -499,7 +473,7 @@ export default function TasksScreen() {
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.textMuted }]}>Trigger Agent</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recurrencePills}>
-                {personas.map((p) => (
+                {agents.map((p) => (
                   <Pressable
                     key={p.id}
                     onPress={() => setFormAgent(p.id)}
@@ -513,7 +487,7 @@ export default function TasksScreen() {
                     </Text>
                   </Pressable>
                 ))}
-                {formAgent && !personas.some((p) => p.id === formAgent) ? (
+                {formAgent && !agents.some((p) => p.id === formAgent) ? (
                   <Pressable
                     onPress={() => setFormAgent(formAgent)}
                     style={[

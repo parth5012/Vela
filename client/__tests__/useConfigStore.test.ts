@@ -269,7 +269,7 @@ describe('useConfigStore', () => {
 
   it('should update suggestion starters correctly', () => {
     useConfigStore.getState().setSuggestionStarters([
-      { label: 'Test Label', text: 'Test text', persona: 'teacher' }
+      { label: 'Test Label', text: 'Test text', agent: 'teacher' }
     ]);
     expect(useConfigStore.getState().suggestionStarters.length).toBe(1);
     expect(useConfigStore.getState().suggestionStarters[0].label).toBe('Test Label');

@@ -72,7 +72,9 @@ const generateUUID = () => {
   });
 };
 
-import { DEFAULT_PERSONAS, COMPACT_PERSONAS_INSTRUCTIONS } from '../utils/personas';
+import { resolveCompactInstructions, resolveNewThreadAgent } from '../utils/agents';
+import { overlayRemoteAgents } from '../db/agentRepository';
+import { useAgents } from '../hooks/useAgents';
 import { generateUlid } from '../utils/syncIds';
 
 const QUOTES = [
@@ -238,6 +240,7 @@ export default function ChatScreen() {
   const apiKey = useConfigStore((state) => state.apiKey);
   const modelName = useConfigStore((state) => state.modelName);
   const defaultAgent = useConfigStore((state) => state.defaultAgent);
+  const setDefaultAgent = useConfigStore((state) => state.setDefaultAgent);
   const userName = useConfigStore((state) => state.userName);
   const suggestionStarters = useConfigStore((state) => state.suggestionStarters);
   const userSystemPrompt = useConfigStore((state) => state.systemPrompt);
@@ -262,7 +265,7 @@ export default function ChatScreen() {
   const deleteThread = useChatStore((state) => state.deleteThread);
   const renameThread = useChatStore((state) => state.renameThread);
   const togglePinThread = useChatStore((state) => state.togglePinThread);
-  const setThreadPersona = useChatStore((state) => state.setThreadPersona);
+  const setThreadAgent = useChatStore((state) => state.setThreadAgent);
   const setThreadSkill = useChatStore((state) => state.setThreadSkill);
   const createThread = useChatStore((state) => state.createThread);
   const addMessage = useChatStore((state) => state.addMessage);
@@ -274,8 +277,13 @@ export default function ChatScreen() {
 
   // Local/UI States
   const [input, setInput] = useState('');
-  const [personas, setPersonas] = useState(DEFAULT_PERSONAS);
-  const [selectedAgent, setSelectedAgent] = useState(defaultAgent);
+  // #357: agents come from the shared DB-backed selector (no local copy).
+  const agents = useAgents();
+  const currentThread = useMemo(
+    () => threads.find((t) => t.id === activeThreadId),
+    [threads, activeThreadId]
+  );
+  const currentAgentId = currentThread?.agent || defaultAgent;
   const [welcomeQuote, setWelcomeQuote] = useState(QUOTES[0]);
   const [welcomeGreeting, setWelcomeGreeting] = useState('Hello');
   const [showRawMap, setShowRawMap] = useState<Record<string, boolean>>({});
@@ -294,7 +302,7 @@ export default function ChatScreen() {
   // Refs
   const flatListRef = React.useRef<FlatList | null>(null);
   const lastOffsetY = React.useRef(0);
-  const isPersonaBarVisible = React.useRef(true);
+  const isAgentBarVisible = React.useRef(true);
 
   const triggerAutoScroll = useCallback(() => {
     if (lastOffsetY.current < 120) {
@@ -303,7 +311,7 @@ export default function ChatScreen() {
       }, 50);
     }
   }, []);
-  const personaBarHeight = React.useRef(new Animated.Value(58)).current;
+  const agentBarHeight = React.useRef(new Animated.Value(58)).current;
 
   const pendingTokensMapRef = React.useRef<Record<string, string>>({});
   const throttleTimersRef = React.useRef<Record<string, any>>({});
@@ -342,26 +350,26 @@ export default function ChatScreen() {
     const diff = currentOffset - lastOffsetY.current;
 
     if (currentOffset > 30) {
-      if (diff > 10 && isPersonaBarVisible.current) {
-        // Scrolling down: Hide persona bar
-        isPersonaBarVisible.current = false;
-        Animated.timing(personaBarHeight, {
+      if (diff > 10 && isAgentBarVisible.current) {
+        // Scrolling down: Hide agent bar
+        isAgentBarVisible.current = false;
+        Animated.timing(agentBarHeight, {
           toValue: 0,
           duration: 180,
           useNativeDriver: false,
         }).start();
-      } else if (diff < -10 && !isPersonaBarVisible.current) {
-        // Scrolling up: Show persona bar
-        isPersonaBarVisible.current = true;
-        Animated.timing(personaBarHeight, {
+      } else if (diff < -10 && !isAgentBarVisible.current) {
+        // Scrolling up: Show agent bar
+        isAgentBarVisible.current = true;
+        Animated.timing(agentBarHeight, {
           toValue: 58,
           duration: 180,
           useNativeDriver: false,
         }).start();
       }
-    } else if (currentOffset <= 5 && !isPersonaBarVisible.current) {
-      isPersonaBarVisible.current = true;
-      Animated.timing(personaBarHeight, {
+    } else if (currentOffset <= 5 && !isAgentBarVisible.current) {
+      isAgentBarVisible.current = true;
+      Animated.timing(agentBarHeight, {
         toValue: 58,
         duration: 180,
         useNativeDriver: false,
@@ -369,7 +377,7 @@ export default function ChatScreen() {
     }
 
     lastOffsetY.current = currentOffset;
-  }, [personaBarHeight]);
+  }, [agentBarHeight]);
 
   React.useEffect(() => {
     const randomIdx = Math.floor(Math.random() * QUOTES.length);
@@ -433,31 +441,30 @@ export default function ChatScreen() {
     return () => sub.remove();
   }, [cleanUpThrottleAndHeal, setStreamingThread]);
 
+  // #357: server mode overlays the remote agent list onto the local rows by
+  // id, so locally-created agents are never dropped. Standalone (local/cloud)
+  // never fetches.
   React.useEffect(() => {
-    if (apiUrl && apiKey) {
-      const fetchPersonas = async () => {
-        try {
-          const res = await fetch(`${apiUrl}/chat/personas`, {
-            headers: { 'Authorization': `Bearer ${apiKey}` }
-          });
-          if (res.ok) {
-            const data = await res.json();
-            const mapped = data.map((p: any) => {
-              let icon = '🤖';
-              if (p.id === 'teacher') icon = '👩🏫';
-              else if (p.id === 'analyst') icon = '📊';
-              else if (p.id === 'prompt builder') icon = '✍️';
-              return { ...p, icon };
-            });
-            setPersonas(mapped);
-          }
-        } catch (err) {
-          console.error('[fetchPersonas] Failed:', err);
-        }
-      };
-      fetchPersonas();
-    }
-  }, [apiUrl, apiKey]);
+    if (connectionMode !== 'server' || !apiUrl || !apiKey) return;
+    let cancelled = false;
+    const fetchAgents = async () => {
+      try {
+        const res = await fetch(`${apiUrl}/chat/personas`, {
+          headers: { 'Authorization': `Bearer ${apiKey}` }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled || !Array.isArray(data)) return;
+        await overlayRemoteAgents(data);
+      } catch (err) {
+        console.error('[fetchAgents] Failed:', err);
+      }
+    };
+    fetchAgents();
+    return () => {
+      cancelled = true;
+    };
+  }, [connectionMode, apiUrl, apiKey]);
 
   const activeMessages = useMemo(() => {
     return (activeThreadId && messages[activeThreadId]) || [];
@@ -724,16 +731,11 @@ export default function ChatScreen() {
 
         const activeThread = threads.find((t) => t.id === threadId);
         const selectedAgentId = activeThread?.agent || 'personal assistant';
-        const activePersona = personas.find((p) => p.id === selectedAgentId);
-
-        let personaPrompt = activePersona?.compact_prompt_instructions || activePersona?.compactPromptInstructions;
-        if (!personaPrompt) {
-          personaPrompt = COMPACT_PERSONAS_INSTRUCTIONS[selectedAgentId] || '';
-        }
+        const agentPrompt = resolveCompactInstructions(selectedAgentId, agents);
 
         const systemPromptCombined = userSystemPrompt && userSystemPrompt !== 'You autonomous research agent.'
-          ? `${userSystemPrompt}\n\n${personaPrompt}`
-          : (personaPrompt || userSystemPrompt);
+          ? `${userSystemPrompt}\n\n${agentPrompt}`
+          : (agentPrompt || userSystemPrompt);
 
         // Inject active skill prompt if set (standalone mode)
         const threadSkill = activeThread?.active_skill as SkillId | undefined;
@@ -857,15 +859,11 @@ export default function ChatScreen() {
 
     const activeThread = threads.find((t) => t.id === threadId);
     const selectedAgentId = activeThread?.agent || 'personal assistant';
-    const activePersona = personas.find((p) => p.id === selectedAgentId);
-    let personaPrompt = activePersona?.compact_prompt_instructions || activePersona?.compactPromptInstructions;
-    if (!personaPrompt) {
-      personaPrompt = COMPACT_PERSONAS_INSTRUCTIONS[selectedAgentId] || '';
-    }
+    const agentPrompt = resolveCompactInstructions(selectedAgentId, agents);
 
     const systemPromptCombined = userSystemPrompt && userSystemPrompt !== 'You are an autonomous research agent.'
-      ? `${userSystemPrompt}\n\n${personaPrompt}`
-      : (personaPrompt || userSystemPrompt);
+      ? `${userSystemPrompt}\n\n${agentPrompt}`
+      : (agentPrompt || userSystemPrompt);
 
     // Inject active skill prompt if set (standalone mode)
     const cloudThreadSkill = activeThread?.active_skill as SkillId | undefined;
@@ -1190,7 +1188,7 @@ export default function ChatScreen() {
     const controller = new AbortController();
     abortControllersRef.current[activeThreadId] = controller;
 
-    // Get agent/persona for the thread
+    // Get the active thread agent
     const regenerateAgent = threads.find((t) => t.id === activeThreadId)?.agent || 'personal assistant';
 
     try {
@@ -1301,7 +1299,7 @@ export default function ChatScreen() {
     threads
   ]);
 
-  const handleSendWelcome = useCallback(async (textToSend: string, personaId?: string) => {
+  const handleSendWelcome = useCallback(async (textToSend: string, agentId?: string) => {
     if (!textToSend.trim()) return;
 
     // Skill slash commands are intercepted BEFORE the credential checks:
@@ -1310,7 +1308,7 @@ export default function ChatScreen() {
     if (connectionMode !== 'server' && isSkillCommand(textToSend.trim())) {
       Keyboard.dismiss();
       const newThreadId = generateUUID();
-      const agent = personaId || selectedAgent;
+      const agent = resolveNewThreadAgent(agentId);
       createThread('New Conversation', newThreadId, agent);
       setInput('');
       handleSkillCommand(newThreadId, textToSend);
@@ -1333,7 +1331,7 @@ export default function ChatScreen() {
     Keyboard.dismiss();
 
     const newThreadId = generateUUID();
-    const agent = personaId || selectedAgent;
+    const agent = resolveNewThreadAgent(agentId);
 
     createThread('New Conversation', newThreadId, agent);
     setInput('');
@@ -1440,7 +1438,6 @@ export default function ChatScreen() {
   }, [
     apiUrl,
     apiKey,
-    selectedAgent,
     createThread,
     addMessage,
     appendToken,
@@ -1637,26 +1634,25 @@ export default function ChatScreen() {
     >
       {activeThreadId ? (
         <View style={styles.chatArea}>
-          {/* Horizontal Persona Selector Bar */}
-          <Animated.View style={{ height: personaBarHeight, overflow: 'hidden' }}>
-            <View style={[styles.personaBar, { borderBottomColor: colors.glassBorder, backgroundColor: colors.glass }]}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.personaBarScroll}>
-                {personas.map((p) => {
-                  const isSelected = selectedAgent === p.id;
+          {/* Horizontal Agent Selector Bar */}
+          <Animated.View style={{ height: agentBarHeight, overflow: 'hidden' }}>
+            <View style={[styles.agentBar, { borderBottomColor: colors.glassBorder, backgroundColor: colors.glass }]}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.agentBarScroll}>
+                {agents.map((p) => {
+                  const isSelected = currentAgentId === p.id;
                   return (
                     <Pressable
                       key={p.id}
                       style={[
-                        styles.personaBarCell,
+                        styles.agentBarCell,
                         { borderColor: colors.glassBorder, backgroundColor: 'rgba(0,0,0,0.25)' },
                         isSelected && { borderColor: aurora.acc1, backgroundColor: aurora.acc1 + '1f' }
                       ]}
                       onPress={() => {
-                        setSelectedAgent(p.id);
-                        setThreadPersona(activeThreadId, p.id);
+                        setThreadAgent(activeThreadId, p.id);
                       }}
                     >
-                      <Text style={[styles.personaBarText, { color: isSelected ? aurora.acc1 : colors.textMuted, fontSize: sizes.sub }]}>
+                      <Text style={[styles.agentBarText, { color: isSelected ? aurora.acc1 : colors.textMuted, fontSize: sizes.sub }]}>
                         {p.icon} {p.name}
                       </Text>
                     </Pressable>
@@ -1669,7 +1665,7 @@ export default function ChatScreen() {
           {activeMessages.length === 0 ? (
             <View style={styles.emptyMessagesContainer}>
               <Text style={[styles.emptyMessagesText, { color: colors.textDark }]}>
-                Send a message to start conversation with {personas.find(p => p.id === selectedAgent)?.name || 'Vela'}.
+                Send a message to start conversation with {agents.find(p => p.id === currentAgentId)?.name || 'Vela'}.
               </Text>
             </View>
           ) : (
@@ -1721,7 +1717,7 @@ export default function ChatScreen() {
                       >
                         {!isUser && (
                           <Text style={[styles.senderLabel, { color: aurora.acc1 }]}>
-                            {isLocalMode ? 'Gemma (Local)' : (personas.find(p => p.id === selectedAgent)?.name || 'Vela')}
+                            {isLocalMode ? 'Gemma (Local)' : (agents.find(p => p.id === currentAgentId)?.name || 'Vela')}
                           </Text>
                         )}
 
@@ -1871,7 +1867,7 @@ export default function ChatScreen() {
                     { backgroundColor: colors.glass, borderColor: colors.glassBorder },
                     pressed && { borderColor: aurora.acc1, opacity: 0.85 }
                   ]}
-                  onPress={() => handleSendWelcome(item.text, item.persona)}
+                  onPress={() => handleSendWelcome(item.text, item.agent)}
                 >
                   <Text style={[styles.suggestionText, { color: colors.text, fontSize: sizes.text - 1 }]}>
                     <Text style={{ color: aurora.acc1, fontWeight: '700' }}>{item.label}</Text>
@@ -1881,25 +1877,25 @@ export default function ChatScreen() {
               ))}
             </View>
 
-            {/* Persona Quick Selector */}
+            {/* Agent Quick Selector */}
             <Text style={[styles.sectionTitleLabel, { color: colors.text, fontSize: sizes.text, marginTop: 12 }]}>
-              Choose Persona
+              Choose Agent
             </Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.personaScrollContainer}>
-              {personas.map((p) => {
-                const isSelected = selectedAgent === p.id;
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.agentScrollContainer}>
+              {agents.map((p) => {
+                const isSelected = currentAgentId === p.id;
                 return (
                   <Pressable
                     key={p.id}
                     style={({ pressed }) => [
-                      styles.personaPill,
+                      styles.agentPill,
                       { backgroundColor: 'rgba(0,0,0,0.25)', borderColor: colors.glassBorder },
                       isSelected && { backgroundColor: aurora.acc1, borderColor: aurora.acc1 },
                       pressed && { opacity: 0.8 }
                     ]}
-                    onPress={() => setSelectedAgent(p.id)}
+                    onPress={() => setDefaultAgent(p.id)}
                   >
-                    <Text style={[styles.personaPillText, { color: isSelected ? aurora.onAccent : colors.textMuted, fontSize: sizes.sub }]}>
+                    <Text style={[styles.agentPillText, { color: isSelected ? aurora.onAccent : colors.textMuted, fontSize: sizes.sub }]}>
                       {p.icon} {p.name}
                     </Text>
                   </Pressable>
@@ -2052,21 +2048,21 @@ const styles = StyleSheet.create({
   chatArea: {
     flex: 1,
   },
-  personaBar: {
+  agentBar: {
     borderBottomWidth: 1,
     paddingVertical: 8,
   },
-  personaBarScroll: {
+  agentBarScroll: {
     paddingHorizontal: 16,
     gap: 8,
   },
-  personaBarCell: {
+  agentBarCell: {
     borderWidth: 1,
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
-  personaBarText: {
+  agentBarText: {
     fontWeight: '500',
   },
   emptyMessagesContainer: {
@@ -2251,17 +2247,17 @@ const styles = StyleSheet.create({
   suggestionText: {
     lineHeight: 18,
   },
-  personaScrollContainer: {
+  agentScrollContainer: {
     gap: 8,
     paddingVertical: 4,
   },
-  personaPill: {
+  agentPill: {
     borderWidth: 1,
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 8,
   },
-  personaPillText: {
+  agentPillText: {
     fontWeight: '600',
   },
   modelSwitcherContainer: {

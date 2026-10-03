@@ -7,7 +7,7 @@ import { Platform } from 'react-native';
 export interface SuggestionStarter {
   label: string;
   text: string;
-  persona: string;
+  agent: string;
 }
 
 export type ConnectionMode = 'server' | 'local' | 'cloud';
@@ -172,9 +172,9 @@ export const useConfigStore = create<ConfigState>()(
       defaultAgent: 'personal assistant',
       userName: 'Parth',
     suggestionStarters: [
-      { label: '👩🏫 Teach Concept', text: 'Teach intuition behind binary search with trace example', persona: 'teacher' },
-      { label: '📊 Data Analyst', text: 'Analyze key features of 2026 FIFA World Cup matches', persona: 'analyst' },
-      { label: '✍️ Prompt Architect', text: 'Help draft detailed system prompt for weather assistant bot', persona: 'prompt builder' }
+      { label: '👩🏫 Teach Concept', text: 'Teach intuition behind binary search with trace example', agent: 'teacher' },
+      { label: '📊 Data Analyst', text: 'Analyze key features of 2026 FIFA World Cup matches', agent: 'analyst' },
+      { label: '✍️ Prompt Architect', text: 'Help draft detailed system prompt for weather assistant bot', agent: 'prompt builder' }
     ],
     deviceAgentPermissions: {
       screen_read: 'auto',
@@ -260,9 +260,9 @@ export const useConfigStore = create<ConfigState>()(
           localConfigAutoApplied: false,
           detectedRamBytes: null,
           suggestionStarters: [
-            { label: '👩🏫 Teach Concept', text: 'Teach intuition behind binary search trace example', persona: 'teacher' },
-            { label: '📊 Data Analyst', text: 'Analyze key features 2026 FIFA World Cup matches', persona: 'analyst' },
-            { label: '✍️ Prompt Architect', text: 'Help draft detailed system prompt weather assistant bot', persona: 'prompt builder' }
+            { label: '👩🏫 Teach Concept', text: 'Teach intuition behind binary search trace example', agent: 'teacher' },
+            { label: '📊 Data Analyst', text: 'Analyze key features 2026 FIFA World Cup matches', agent: 'analyst' },
+            { label: '✍️ Prompt Architect', text: 'Help draft detailed system prompt weather assistant bot', agent: 'prompt builder' }
           ]
         });
         if (Platform.OS !== 'web') {
@@ -400,7 +400,9 @@ export const useConfigStore = create<ConfigState>()(
       // HTTP 401) — reset the removed name the same way.
       // v3 (#313 / #333): connectionMode ('server' | 'local' | 'cloud') replaces
       // isLocalMode, adding cloudProviders and activeCloudProvider.
-      version: 4,
+      // v4 (#356/#357): defaultPersona -> defaultAgent.
+      // v5 (#357): suggestionStarters[].persona -> suggestionStarters[].agent.
+      version: 5,
       migrate: (persistedState: any, fromVersion: number) => {
         if (persistedState) {
           if (fromVersion < 4) {
@@ -408,6 +410,17 @@ export const useConfigStore = create<ConfigState>()(
               persistedState.defaultAgent = persistedState.defaultPersona ?? 'personal assistant';
             }
             delete persistedState.defaultPersona;
+          }
+          if (fromVersion < 5 && Array.isArray(persistedState.suggestionStarters)) {
+            persistedState.suggestionStarters = persistedState.suggestionStarters.map(
+              (starter: any) => {
+                if (starter && starter.agent === undefined && starter.persona !== undefined) {
+                  const { persona, ...rest } = starter;
+                  return { ...rest, agent: persona };
+                }
+                return starter;
+              }
+            );
           }
           if (fromVersion < 1) {
             const retired = ['Gemma 2B', 'Phi-3 Mini', 'Llama 3 8B'];

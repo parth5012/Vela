@@ -10,32 +10,29 @@ import {
   PrimaryButton,
   useAurora,
 } from '../../components/ui/settingsKit';
-
-const PERSONA_OPTIONS = [
-  { value: 'personal assistant' as const, label: 'Assistant' },
-  { value: 'teacher' as const, label: 'Teacher' },
-  { value: 'analyst' as const, label: 'Analyst' },
-  { value: 'prompt builder' as const, label: 'Builder' },
-];
+import { useAgents } from '../../hooks/useAgents';
 
 export default function MessagingScreen() {
   const suggestionStarters = useConfigStore((s) => s.suggestionStarters);
   const setSuggestionStarters = useConfigStore((s) => s.setSuggestionStarters);
   const { colors, sizes, aurora } = useAurora();
 
+  // #357: shared DB-backed selector replaces the hardcoded option list.
+  const agentOptions = useAgents().map((agent) => ({ value: agent.id, label: agent.name }));
+
   const [label, setLabel] = useState('');
   const [text, setText] = useState('');
-  const [persona, setPersona] = useState<string>('personal assistant');
+  const [agent, setAgent] = useState<string>('personal assistant');
 
   const handleAdd = () => {
     if (!label.trim() || !text.trim()) {
       Alert.alert('Incomplete', 'Add a label and a prompt for the starter card.');
       return;
     }
-    setSuggestionStarters([...suggestionStarters, { label: label.trim(), text: text.trim(), persona }]);
+    setSuggestionStarters([...suggestionStarters, { label: label.trim(), text: text.trim(), agent }]);
     setLabel('');
     setText('');
-    setPersona('personal assistant');
+    setAgent('personal assistant');
   };
 
   const handleRemove = (index: number) => {
@@ -77,7 +74,7 @@ export default function MessagingScreen() {
                   {starter.text}
                 </Text>
                 <Text style={{ color: colors.textDark, fontSize: sizes.sub - 1, marginTop: 2 }}>
-                  {starter.persona}
+                  {starter.agent}
                 </Text>
               </View>
               <Pressable onPress={() => handleRemove(index)} hitSlop={10}>
@@ -101,11 +98,11 @@ export default function MessagingScreen() {
           textAlignVertical="top"
           style={styles.multiline}
         />
-        <Label>Persona</Label>
+        <Label>Agent</Label>
         <PillGroup
-          options={PERSONA_OPTIONS}
-          value={persona}
-          onChange={(v) => setPersona(v)}
+          options={agentOptions}
+          value={agent}
+          onChange={(v) => setAgent(v)}
         />
         <PrimaryButton label="Add Starter" onPress={handleAdd} />
       </Card>
