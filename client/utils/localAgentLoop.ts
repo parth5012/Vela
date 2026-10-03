@@ -68,18 +68,13 @@ export interface LocalAgentLoopResult {
   stoppedBySafety?: boolean;
 }
 
-export const ALLOWED_DEVICE_TOOLS = new Set([
-  'device_screen_read',
-  'device_info',
-  'device_screenshot',
-  'device_click',
-  'device_type',
-  'device_scroll',
-  'device_swipe',
-  'device_press_key',
-  'device_set_volume',
-  'device_open_app',
-]);
+import { filterByMode } from './toolRegistry';
+
+export const ALLOWED_DEVICE_TOOLS = new Set(
+  filterByMode('local')
+    .filter((tool) => tool.name.startsWith('device_'))
+    .map((tool) => tool.name)
+);
 
 /**
  * Confidence gate for local tool calls.
