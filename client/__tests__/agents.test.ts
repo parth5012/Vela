@@ -1,8 +1,7 @@
 import {
   DEFAULT_AGENTS,
-  COMPACT_AGENTS_INSTRUCTIONS,
   mergeRemoteAgents,
-  resolveCompactInstructions,
+  resolveAgentPrompt,
   resolveNewThreadAgent,
   slugifyAgentId,
 } from '../utils/agents';
@@ -35,12 +34,6 @@ describe('agents utility module (#357)', () => {
     expect(ids).toContain('prompt builder');
   });
 
-  it('should provide COMPACT_AGENTS_INSTRUCTIONS for default agents', () => {
-    expect(COMPACT_AGENTS_INSTRUCTIONS).toHaveProperty('personal assistant');
-    expect(COMPACT_AGENTS_INSTRUCTIONS).toHaveProperty('teacher');
-    expect(COMPACT_AGENTS_INSTRUCTIONS).toHaveProperty('analyst');
-  });
-
   describe('resolveNewThreadAgent', () => {
     it('reads the configured default agent when no explicit agent is given', () => {
       useConfigStore.getState().setDefaultAgent('analyst');
@@ -59,7 +52,7 @@ describe('agents utility module (#357)', () => {
     });
   });
 
-  describe('resolveCompactInstructions', () => {
+  describe('resolveAgentPrompt', () => {
     const row = {
       id: 'analyst',
       name: 'Analyst',
@@ -68,24 +61,23 @@ describe('agents utility module (#357)', () => {
     };
 
     it('prefers the DB row compact instructions over the legacy record', () => {
-      expect(resolveCompactInstructions('analyst', [row])).toBe('row version');
+      expect(resolveAgentPrompt('analyst', [row])).toBe('row version');
     });
 
     it('prefers the camelCase remote field when the snake_case field is absent', () => {
       const remote = { id: 'teacher', name: 'Teacher', icon: '👩🏫', compactPromptInstructions: 'camel' };
-      expect(resolveCompactInstructions('teacher', [remote])).toBe('camel');
+      expect(resolveAgentPrompt('teacher', [remote])).toBe('camel');
     });
 
-    it('falls back to the legacy record only when the DB row is missing', () => {
-      expect(resolveCompactInstructions('analyst', [])).toBe(
-        COMPACT_AGENTS_INSTRUCTIONS['analyst']
-      );
-      expect(resolveCompactInstructions('unknown-agent', [])).toBe('');
+    it('falls back to the row system_prompt, and to empty when the row is missing', () => {
+      const withSys = { id: 'analyst', name: 'Analyst', icon: '📊', system_prompt: 'full prompt' };
+      expect(resolveAgentPrompt('analyst', [withSys])).toBe('full prompt');
+      expect(resolveAgentPrompt('unknown-agent', [])).toBe('');
     });
 
-    it('does not mask an existing row that has no compact instructions', () => {
+    it('does not mask an existing row that has no prompt of any kind', () => {
       const bare = { id: 'analyst', name: 'Analyst', icon: '📊' };
-      expect(resolveCompactInstructions('analyst', [bare])).toBe('');
+      expect(resolveAgentPrompt('analyst', [bare])).toBe('');
     });
   });
 
