@@ -14,6 +14,8 @@ export async function searchStandalone(
   if (!deps.tavilyKey) return 'Web search needs a Tavily key — add one in Settings or use provider search.'
 
   const fetchFn = deps.fetchFn ?? fetch
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 10_000)
   const response = await fetchFn(TAVILY_ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -23,7 +25,10 @@ export async function searchStandalone(
       include_answer: true,
       max_results: 3,
     }),
-  }).catch(() => null)
+    signal: controller.signal,
+  })
+    .catch(() => null)
+    .finally(() => clearTimeout(timeout))
 
   if (!response || !response.ok) return 'Search failed. Try again.'
   const data = await response.json().catch(() => null)

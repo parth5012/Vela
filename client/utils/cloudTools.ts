@@ -1,4 +1,4 @@
-import { filterByMode } from './toolRegistry'
+import { filterByMode, isAvailable } from './toolRegistry'
 import { executeDeviceAction } from './deviceActionExecutor'
 
 export interface CloudToolResult {
@@ -40,6 +40,7 @@ export async function executeCloudTool(
   deps: CloudExecutorDeps = {}
 ): Promise<CloudToolResult> {
   if (!toolName) return { success: false, output: 'Unknown tool.' }
+  if (!isAvailable(toolName, 'cloud')) return { success: false, output: `Unknown cloud tool "${toolName}".` }
   const executeDevice = deps.executeDevice ?? executeDeviceAction
 
   if (isDeviceTool(toolName)) {
@@ -50,10 +51,12 @@ export async function executeCloudTool(
 
   if (toolName === 'web_search') {
     if (!deps.webSearch) return { success: false, output: 'Web search is not configured.' }
-    const output = await deps.webSearch(args.query ?? args.q ?? '').catch((error) => {
-      return `Search failed: ${error?.message || String(error)}`
-    })
-    return { success: true, output }
+    try {
+      const output = await deps.webSearch(args.query ?? args.q ?? '')
+      return { success: true, output }
+    } catch (error) {
+      return { success: false, output: `Search failed: ${error?.message || String(error)}` }
+    }
   }
 
   if (toolName === 'webview_browser') {
