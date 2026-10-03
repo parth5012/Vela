@@ -6,6 +6,7 @@ describe('cloudTools', () => {
 
     expect(names).toContain('device_screen_read')
     expect(names).not.toContain('gmail_send_email')
+    expect(names).not.toContain('save_user_memory')
   })
 
   it('builds description map for Vercel tool wiring', () => {

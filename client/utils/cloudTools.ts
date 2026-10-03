@@ -1,4 +1,4 @@
-import { filterByMode, isAvailable } from './toolRegistry'
+import { StandaloneCapabilities, filterAvailable, isAvailable } from './toolRegistry'
 import { executeDeviceAction } from './deviceActionExecutor'
 
 export interface CloudToolResult {
@@ -17,16 +17,16 @@ export interface CloudExecutorDeps {
   webSearch?: WebSearchFn
 }
 
-export function listCloudToolNames(): string[] {
-  return filterByMode('cloud').map((tool) => tool.name)
+export function listCloudToolNames(caps: StandaloneCapabilities = {}): string[] {
+  return filterAvailable('cloud', caps).map((tool) => tool.name)
 }
 
 function isDeviceTool(toolName: string): boolean {
   return toolName.startsWith('device_')
 }
 
-export function buildCloudToolDescriptions(): Record<string, string> {
-  const tools = filterByMode('cloud')
+export function buildCloudToolDescriptions(caps: StandaloneCapabilities = {}): Record<string, string> {
+  const tools = filterAvailable('cloud', caps)
   const descriptions: Record<string, string> = {}
   for (const tool of tools) {
     descriptions[tool.name] = tool.description
