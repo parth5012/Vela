@@ -237,7 +237,7 @@ export default function ChatScreen() {
   const apiUrl = useConfigStore((state) => state.apiUrl);
   const apiKey = useConfigStore((state) => state.apiKey);
   const modelName = useConfigStore((state) => state.modelName);
-  const defaultPersona = useConfigStore((state) => state.defaultPersona);
+  const defaultAgent = useConfigStore((state) => state.defaultAgent);
   const userName = useConfigStore((state) => state.userName);
   const suggestionStarters = useConfigStore((state) => state.suggestionStarters);
   const userSystemPrompt = useConfigStore((state) => state.systemPrompt);
@@ -275,7 +275,7 @@ export default function ChatScreen() {
   // Local/UI States
   const [input, setInput] = useState('');
   const [personas, setPersonas] = useState(DEFAULT_PERSONAS);
-  const [selectedAgent, setSelectedAgent] = useState(defaultPersona);
+  const [selectedAgent, setSelectedAgent] = useState(defaultAgent);
   const [welcomeQuote, setWelcomeQuote] = useState(QUOTES[0]);
   const [welcomeGreeting, setWelcomeGreeting] = useState('Hello');
   const [showRawMap, setShowRawMap] = useState<Record<string, boolean>>({});
@@ -723,7 +723,7 @@ export default function ChatScreen() {
         hasMoreIterations = false;
 
         const activeThread = threads.find((t) => t.id === threadId);
-        const selectedAgentId = activeThread?.persona || 'personal assistant';
+        const selectedAgentId = activeThread?.agent || 'personal assistant';
         const activePersona = personas.find((p) => p.id === selectedAgentId);
 
         let personaPrompt = activePersona?.compact_prompt_instructions || activePersona?.compactPromptInstructions;
@@ -856,7 +856,7 @@ export default function ChatScreen() {
     const apiKey = config.cloudApiKeys?.[provider] || '';
 
     const activeThread = threads.find((t) => t.id === threadId);
-    const selectedAgentId = activeThread?.persona || 'personal assistant';
+    const selectedAgentId = activeThread?.agent || 'personal assistant';
     const activePersona = personas.find((p) => p.id === selectedAgentId);
     let personaPrompt = activePersona?.compact_prompt_instructions || activePersona?.compactPromptInstructions;
     if (!personaPrompt) {
@@ -1042,7 +1042,7 @@ export default function ChatScreen() {
     }
 
     const activeThread = threads.find((t) => t.id === activeThreadId);
-    const selectedAgent = activeThread?.persona || 'personal assistant';
+    const selectedAgent = activeThread?.agent || 'personal assistant';
 
     const controller = new AbortController();
     abortControllersRef.current[activeThreadId] = controller;
@@ -1191,7 +1191,7 @@ export default function ChatScreen() {
     abortControllersRef.current[activeThreadId] = controller;
 
     // Get agent/persona for the thread
-    const regenerateAgent = threads.find((t) => t.id === activeThreadId)?.persona || 'personal assistant';
+    const regenerateAgent = threads.find((t) => t.id === activeThreadId)?.agent || 'personal assistant';
 
     try {
       await streamAgentResponse(

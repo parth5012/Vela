@@ -302,7 +302,7 @@ export async function syncDatabase(apiUrl: string, apiKey: string): Promise<void
           await db.insert(threads).values({
             id: threadId,
             title: 'Synced Conversation',
-            persona: 'personal assistant',
+            agent: 'personal assistant',
             updated_at: new Date().toISOString(),
             is_pinned: false,
           });

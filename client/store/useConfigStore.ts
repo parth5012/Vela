@@ -108,7 +108,7 @@ interface ConfigState {
   systemPrompt: string;
   temperature: number;
   modelName: string;
-  defaultPersona: string;
+  defaultAgent: string;
   userName: string;
   suggestionStarters: SuggestionStarter[];
   setTheme: (theme: 'deep' | 'slate' | 'cyberpunk' | 'nordic' | 'dracula' | 'oled') => void;
@@ -117,7 +117,7 @@ interface ConfigState {
   setSystemPrompt: (prompt: string) => void;
   setTemperature: (temp: number) => void;
   setModelName: (model: string) => void;
-  setDefaultPersona: (persona: string) => void;
+  setDefaultAgent: (agent: string) => void;
   setUserName: (name: string) => void;
   setSuggestionStarters: (starters: SuggestionStarter[]) => void;
   deviceAgentPermissions: DeviceAgentPermissions;
@@ -169,7 +169,7 @@ export const useConfigStore = create<ConfigState>()(
       systemPrompt: 'You are an autonomous research agent.',
       temperature: 0.7,
       modelName: 'gemini-1.5-pro',
-      defaultPersona: 'personal assistant',
+      defaultAgent: 'personal assistant',
       userName: 'Parth',
     suggestionStarters: [
       { label: '👩🏫 Teach Concept', text: 'Teach intuition behind binary search with trace example', persona: 'teacher' },
@@ -246,7 +246,7 @@ export const useConfigStore = create<ConfigState>()(
           systemPrompt: 'You are an autonomous research agent.',
           temperature: 0.7,
           modelName: 'gemini-1.5-pro',
-          defaultPersona: 'personal assistant',
+          defaultAgent: 'personal assistant',
           userName: 'Parth',
           connectionMode: 'server',
           cloudProviders: DEFAULT_CLOUD_PROVIDERS,
@@ -281,7 +281,7 @@ export const useConfigStore = create<ConfigState>()(
       setSystemPrompt: (systemPrompt) => set({ systemPrompt }),
       setTemperature: (temperature) => set({ temperature }),
       setModelName: (modelName) => set({ modelName }),
-      setDefaultPersona: (defaultPersona) => set({ defaultPersona }),
+      setDefaultAgent: (defaultAgent) => set({ defaultAgent }),
       setUserName: (userName) => set({ userName }),
       setSuggestionStarters: (suggestionStarters) => set({ suggestionStarters }),
       setDeviceAgentPermission: (action, tier) =>
@@ -400,9 +400,15 @@ export const useConfigStore = create<ConfigState>()(
       // HTTP 401) — reset the removed name the same way.
       // v3 (#313 / #333): connectionMode ('server' | 'local' | 'cloud') replaces
       // isLocalMode, adding cloudProviders and activeCloudProvider.
-      version: 3,
+      version: 4,
       migrate: (persistedState: any, fromVersion: number) => {
         if (persistedState) {
+          if (fromVersion < 4) {
+            if (persistedState.defaultAgent === undefined) {
+              persistedState.defaultAgent = persistedState.defaultPersona ?? 'personal assistant';
+            }
+            delete persistedState.defaultPersona;
+          }
           if (fromVersion < 1) {
             const retired = ['Gemma 2B', 'Phi-3 Mini', 'Llama 3 8B'];
             if (retired.includes(persistedState.localModelName)) {
