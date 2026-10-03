@@ -25,8 +25,8 @@ export default function AgentScreen() {
   const setModelName = useConfigStore((s) => s.setModelName);
   const temperature = useConfigStore((s) => s.temperature);
   const setTemperature = useConfigStore((s) => s.setTemperature);
-  const defaultPersona = useConfigStore((s) => s.defaultPersona);
-  const setDefaultPersona = useConfigStore((s) => s.setDefaultPersona);
+  const defaultAgent = useConfigStore((s) => s.defaultAgent);
+  const setDefaultAgent = useConfigStore((s) => s.setDefaultAgent);
   const userName = useConfigStore((s) => s.userName);
   const setUserName = useConfigStore((s) => s.setUserName);
   const systemPrompt = useConfigStore((s) => s.systemPrompt);
@@ -48,7 +48,7 @@ export default function AgentScreen() {
           autoCorrect={false}
         />
         <Label>Default Persona</Label>
-        <PillGroup options={PERSONA_OPTIONS} value={defaultPersona} onChange={setDefaultPersona} />
+        <PillGroup options={PERSONA_OPTIONS} value={defaultAgent} onChange={setDefaultAgent} />
       </Card>
 
       <Card>

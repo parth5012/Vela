@@ -3,10 +3,23 @@ import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
 export const threads = sqliteTable('threads', {
   id: text('id').primaryKey(),
   title: text('title').notNull(),
-  persona: text('persona').default('personal assistant').notNull(),
+  agent: text('agent').default('personal assistant').notNull(),
   updated_at: text('updated_at').notNull(),
   is_pinned: integer('is_pinned', { mode: 'boolean' }).default(false).notNull(),
   active_skill: text('active_skill'),
+});
+
+export const agents = sqliteTable('agents', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description'),
+  icon: text('icon'),
+  system_prompt: text('system_prompt').notNull(),
+  compact_prompt_instructions: text('compact_prompt_instructions'),
+  model: text('model'),
+  is_preset: integer('is_preset', { mode: 'boolean' }).default(false).notNull(),
+  created_at: text('created_at').notNull(),
+  updated_at: text('updated_at').notNull(),
 });
 
 export const messages = sqliteTable('messages', {
@@ -32,6 +45,8 @@ export const operationLog = sqliteTable('operation_log', {
 
 export type ThreadEntity = typeof threads.$inferSelect;
 export type InsertThreadEntity = typeof threads.$inferInsert;
+export type AgentEntity = typeof agents.$inferSelect;
+export type InsertAgentEntity = typeof agents.$inferInsert;
 export type MessageEntity = typeof messages.$inferSelect;
 export type InsertMessageEntity = typeof messages.$inferInsert;
 export type OperationLogEntity = typeof operationLog.$inferSelect;

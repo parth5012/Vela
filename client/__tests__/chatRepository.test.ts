@@ -58,7 +58,7 @@ describe('chatRepository (local-first chat persistence)', () => {
   });
 
   describe('saveThread', () => {
-    it('should upsert a thread with default persona/pin', async () => {
+    it('should upsert a thread with default agent/pin', async () => {
       const valuesFn = jest.fn(() => ({
         onConflictDoUpdate: jest.fn(async () => undefined),
       }));
@@ -73,7 +73,7 @@ describe('chatRepository (local-first chat persistence)', () => {
       expect(db.insert).toHaveBeenCalledTimes(1);
       const insertArg = valuesFn.mock.calls[0][0];
       expect(insertArg.id).toBe('thread-1');
-      expect(insertArg.persona).toBe('personal assistant');
+      expect(insertArg.agent).toBe('personal assistant');
       expect(insertArg.is_pinned).toBe(false);
     });
   });
@@ -240,7 +240,7 @@ describe('chatRepository (local-first chat persistence)', () => {
   describe('loadThreads', () => {
     it('should map rows back to store Thread shape', async () => {
       const orderByFn = jest.fn(async () => [
-        { id: 't1', title: 'One', persona: 'assistant', updated_at: '2026-08-16T10:00:00.000Z', is_pinned: 1 },
+        { id: 't1', title: 'One', agent: 'assistant', updated_at: '2026-08-16T10:00:00.000Z', is_pinned: 1 },
       ]);
       (db.select as jest.Mock).mockReturnValueOnce({
         from: jest.fn(() => ({ orderBy: orderByFn })),
@@ -251,7 +251,7 @@ describe('chatRepository (local-first chat persistence)', () => {
         {
           id: 't1',
           title: 'One',
-          persona: 'assistant',
+          agent: 'assistant',
           updated_at: '2026-08-16T10:00:00.000Z',
           is_pinned: true,
         },

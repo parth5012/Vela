@@ -87,7 +87,7 @@ export interface Thread {
   title: string;
   updated_at: string;
   is_pinned?: boolean;
-  persona?: string;
+  agent?: string;
   active_skill?: string | null;
 }
 
@@ -97,12 +97,12 @@ interface ChatState {
   messages: Record<string, Message[]>;
   streamingThreadIds: Set<string>;
   hasHydrated: boolean;
-  createThread: (title: string, id: string, persona?: string) => void;
+  createThread: (title: string, id: string, agent?: string) => void;
   selectThread: (id: string | null) => void;
   deleteThread: (id: string) => void;
   renameThread: (id: string, newTitle: string) => void;
   togglePinThread: (id: string) => void;
-  setThreadPersona: (threadId: string, persona: string) => void;
+  setThreadPersona: (threadId: string, agent: string) => void;
   setThreadSkill: (threadId: string, skillId: SkillId | null) => void;
   addMessage: (threadId: string, message: Message) => void;
   appendToken: (threadId: string, token: string) => void;
@@ -125,9 +125,9 @@ export const useChatStore = create<ChatState>()(
       messages: {},
       streamingThreadIds: new Set(),
       hasHydrated: false,
-      createThread: (title, id, persona = 'personal assistant') => {
+      createThread: (title, id, agent = 'personal assistant') => {
         const now = new Date().toISOString();
-        const newThread: Thread = { id, title, persona, updated_at: now, is_pinned: false };
+        const newThread: Thread = { id, title, agent, updated_at: now, is_pinned: false };
         set((state) => ({
           threads: [newThread, ...state.threads],
           activeThreadId: id,
@@ -321,9 +321,9 @@ export const useChatStore = create<ChatState>()(
         const pinned = useChatStore.getState().threads.find((t) => t.id === id);
         if (pinned) saveThread(pinned).catch(() => {});
       },
-      setThreadPersona: (threadId, persona) => {
+      setThreadPersona: (threadId, agent) => {
         set((state) => ({
-          threads: state.threads.map((t) => t.id === threadId ? { ...t, persona } : t)
+          threads: state.threads.map((t) => t.id === threadId ? { ...t, agent } : t)
         }));
         const updated = useChatStore.getState().threads.find((t) => t.id === threadId);
         if (updated) saveThread(updated).catch(() => {});
@@ -461,6 +461,19 @@ export const useChatStore = create<ChatState>()(
     {
       name: 'vela-chat-storage',
       storage: createJSONStorage(() => guardedAsyncStorage),
+      version: 1,
+      migrate: (persistedState: any) => {
+        if (persistedState && Array.isArray(persistedState.threads)) {
+          persistedState.threads = persistedState.threads.map((thread: any) => {
+            if (thread && thread.persona !== undefined && thread.agent === undefined) {
+              const { persona, ...rest } = thread;
+              return { ...rest, agent: persona };
+            }
+            return thread;
+          });
+        }
+        return persistedState;
+      },
       partialize: (state) => ({
         threads: state.threads,
         activeThreadId: state.activeThreadId,
