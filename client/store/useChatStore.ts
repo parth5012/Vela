@@ -17,6 +17,7 @@ import {
   isLocalDbAvailable,
 } from '../db/chatRepository';
 import type { SkillId } from '../utils/skillPrompts';
+import { DEFAULT_AGENT_ID } from '../utils/agents';
 
 // Trailing debounce (ms) for persisting streaming assistant content: tokens
 // arrive frequently during a stream, so we only write the final content once
@@ -102,7 +103,7 @@ interface ChatState {
   deleteThread: (id: string) => void;
   renameThread: (id: string, newTitle: string) => void;
   togglePinThread: (id: string) => void;
-  setThreadPersona: (threadId: string, agent: string) => void;
+  setThreadAgent: (threadId: string, agent: string) => void;
   setThreadSkill: (threadId: string, skillId: SkillId | null) => void;
   addMessage: (threadId: string, message: Message) => void;
   appendToken: (threadId: string, token: string) => void;
@@ -125,9 +126,13 @@ export const useChatStore = create<ChatState>()(
       messages: {},
       streamingThreadIds: new Set(),
       hasHydrated: false,
-      createThread: (title, id, agent = 'personal assistant') => {
+      createThread: (title, id, agent) => {
+        // #357: a new conversation reads the configured default agent
+        // explicitly, so it never inherits whatever agent the previous
+        // thread happened to be on.
+        const resolvedAgent = agent || useConfigStore.getState().defaultAgent || DEFAULT_AGENT_ID;
         const now = new Date().toISOString();
-        const newThread: Thread = { id, title, agent, updated_at: now, is_pinned: false };
+        const newThread: Thread = { id, title, agent: resolvedAgent, updated_at: now, is_pinned: false };
         set((state) => ({
           threads: [newThread, ...state.threads],
           activeThreadId: id,
@@ -321,7 +326,7 @@ export const useChatStore = create<ChatState>()(
         const pinned = useChatStore.getState().threads.find((t) => t.id === id);
         if (pinned) saveThread(pinned).catch(() => {});
       },
-      setThreadPersona: (threadId, agent) => {
+      setThreadAgent: (threadId, agent) => {
         set((state) => ({
           threads: state.threads.map((t) => t.id === threadId ? { ...t, agent } : t)
         }));

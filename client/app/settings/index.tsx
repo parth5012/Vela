@@ -34,7 +34,7 @@ const GROUPS: CategoryGroup[] = [
   {
     title: 'Agent',
     rows: [
-      { icon: '🤖', label: 'Persona Prompt', hint: 'Persona, model, temperature, system prompt', route: '/settings/agent' },
+      { icon: '🤖', label: 'Agent Prompt', hint: 'Agent, model, temperature, system prompt', route: '/settings/agent' },
       { icon: '🛡️', label: 'Device Agent Permissions', hint: 'Auto/Ask/Block safety settings', route: '/settings/device-agent' }
     ]
   },

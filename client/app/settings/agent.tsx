@@ -10,15 +10,9 @@ import {
   ChipGroup,
   useAurora,
 } from '../../components/ui/settingsKit';
+import { useAgents } from '../../hooks/useAgents';
 
 const PRESET_MODELS = ['gemini-1.5-pro', 'gemini-1.5-flash', 'claude-3-5-sonnet', 'gpt-4o'];
-
-const PERSONA_OPTIONS = [
-  { value: 'personal assistant' as const, label: 'Assistant' },
-  { value: 'teacher' as const, label: 'Teacher' },
-  { value: 'analyst' as const, label: 'Analyst' },
-  { value: 'prompt builder' as const, label: 'Builder' },
-];
 
 export default function AgentScreen() {
   const modelName = useConfigStore((s) => s.modelName);
@@ -33,10 +27,13 @@ export default function AgentScreen() {
   const setSystemPrompt = useConfigStore((s) => s.setSystemPrompt);
   const { colors, sizes, aurora } = useAurora();
 
+  // #357: shared DB-backed selector replaces the hardcoded option list.
+  const agentOptions = useAgents().map((agent) => ({ value: agent.id, label: agent.name }));
+
   return (
     <AuroraScreen
       title="Agent"
-      subtitle="How Vela behaves: persona, identity, model, and response character."
+      subtitle="How Vela behaves: identity, model, and response character."
     >
       <Card>
         <Label>User Name</Label>
@@ -47,8 +44,8 @@ export default function AgentScreen() {
           onChangeText={setUserName}
           autoCorrect={false}
         />
-        <Label>Default Persona</Label>
-        <PillGroup options={PERSONA_OPTIONS} value={defaultAgent} onChange={setDefaultAgent} />
+        <Label>Default Agent</Label>
+        <PillGroup options={agentOptions} value={defaultAgent} onChange={setDefaultAgent} />
       </Card>
 
       <Card>
