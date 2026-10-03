@@ -68,10 +68,10 @@ export interface LocalAgentLoopResult {
   stoppedBySafety?: boolean;
 }
 
-import { filterByMode } from './toolRegistry';
+import { filterAvailable } from './toolRegistry';
 
 export const ALLOWED_DEVICE_TOOLS = new Set(
-  filterByMode('local')
+  filterAvailable('local')
     .filter((tool) => tool.name.startsWith('device_'))
     .map((tool) => tool.name)
 );

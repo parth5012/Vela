@@ -1,4 +1,4 @@
-import { TOOL_REGISTRY, filterByMode, getTool, getUnavailableTools, isAvailable } from '../utils/toolRegistry'
+import { TOOL_REGISTRY, filterAvailable, filterByMode, getTool, getUnavailableTools, isAvailable } from '../utils/toolRegistry'
 
 describe('toolRegistry', () => {
   it('exposes a static registry with server flags', () => {
@@ -44,5 +44,33 @@ describe('toolRegistry', () => {
     expect(isAvailable('web_search', 'cloud')).toBe(true)
     expect(isAvailable('gmail_send_email', 'local')).toBe(false)
     expect(isAvailable('', 'local')).toBe(false)
+  })
+
+  it('hides not-yet-wired tools from standalone discovery but keeps them for server', () => {
+    const local = filterAvailable('local').map((tool) => tool.name)
+
+    expect(local).not.toContain('save_user_memory')
+    expect(local).not.toContain('delete_user_memory')
+    expect(local).not.toContain('webview_browser')
+    expect(local).toContain('web_search')
+    expect(local).toContain('device_screen_read')
+    expect(filterAvailable('server').map((tool) => tool.name)).toContain('save_user_memory')
+  })
+
+  it('drops Shizuku tools only when Shizuku is known absent', () => {
+    const without = filterAvailable('local', { hasShizuku: false }).map((tool) => tool.name)
+    const unknown = filterAvailable('local', {}).map((tool) => tool.name)
+
+    expect(without).not.toContain('device_app_install')
+    expect(without).toContain('device_screen_read')
+    expect(unknown).toContain('device_app_install')
+  })
+
+  it('drops web search from local only when no Tavily key (cloud keeps provider-native)', () => {
+    const localNoKey = filterAvailable('local', { hasTavilyKey: false }).map((tool) => tool.name)
+    const cloudNoKey = filterAvailable('cloud', { hasTavilyKey: false }).map((tool) => tool.name)
+
+    expect(localNoKey).not.toContain('web_search')
+    expect(cloudNoKey).toContain('web_search')
   })
 })

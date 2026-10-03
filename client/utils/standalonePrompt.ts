@@ -1,12 +1,11 @@
-import { ToolDefinition, filterByMode } from './toolRegistry'
+import { StandaloneCapabilities, ToolDefinition, filterAvailable } from './toolRegistry'
 
-export function buildLocalPromptBlock(): string {
-  const tools = filterByMode('local')
-  return tools.map((tool) => `${tool.name} - ${tool.description}`).join('\n')
+export function buildLocalPromptBlock(caps: StandaloneCapabilities = {}): string {
+  return describeToolsForPrompt(filterAvailable('local', caps))
 }
 
-export function buildToolDeclarations(): string[] {
-  return [buildLocalPromptBlock()]
+export function buildToolDeclarations(caps: StandaloneCapabilities = {}): string[] {
+  return [buildLocalPromptBlock(caps)]
 }
 
 export function buildUnavailableHint(toolName: string): string {

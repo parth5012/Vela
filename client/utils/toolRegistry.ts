@@ -13,6 +13,8 @@ export interface ToolDefinition {
   availableInLocal: boolean
   availableInCloud: boolean
   needsApiKey?: boolean
+  needsShizuku?: boolean
+  standaloneReady?: boolean
   parameters?: Record<string, ToolParameter>
 }
 
@@ -24,7 +26,8 @@ export interface StandaloneCapabilities {
 const device = (
   name: string,
   description: string,
-  parameters?: Record<string, ToolParameter>
+  parameters?: Record<string, ToolParameter>,
+  needsShizuku = false
 ): ToolDefinition => ({
   name,
   description,
@@ -32,6 +35,7 @@ const device = (
   availableInLocal: true,
   availableInCloud: true,
   parameters,
+  needsShizuku: needsShizuku || undefined,
 })
 
 const serverOnly = (name: string, description: string): ToolDefinition => ({
@@ -59,6 +63,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     requiresServer: false,
     availableInLocal: true,
     availableInCloud: true,
+    standaloneReady: false,
     parameters: {
       conversation_id: { type: 'string', description: 'Active conversation id.', required: true },
       fact: { type: 'string', description: 'Single independent fact.', required: true },
@@ -70,6 +75,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     requiresServer: false,
     availableInLocal: true,
     availableInCloud: true,
+    standaloneReady: false,
     parameters: {
       conversation_id: { type: 'string', description: 'Active conversation id.', required: true },
       fact: { type: 'string', description: 'Fact to forget.', required: true },
@@ -82,6 +88,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     requiresServer: false,
     availableInLocal: true,
     availableInCloud: true,
+    standaloneReady: false,
   },
   serverOnly('save_briefing_watch_item', 'Saves a briefing watch item via server cron.'),
   serverOnly('gmail_send_email', 'Sends Gmail via server-side OAuth.'),
@@ -103,14 +110,14 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
   device('device_set_volume', 'Sets volume level 0-100.'),
   device('device_screenshot', 'Takes a screenshot.'),
   device('device_info', 'Battery, screen, OS info.'),
-  device('device_app_permission_grant', 'Grants runtime permission via Shizuku.'),
-  device('device_app_permission_revoke', 'Revokes runtime permission via Shizuku.'),
-  device('device_setting_put', 'Writes system/secure/global setting via Shizuku.'),
-  device('device_app_force_stop', 'Force-stops an app via Shizuku.'),
-  device('device_app_set_state', 'Enables/disables an app via Shizuku.'),
-  device('device_app_clear_data', 'Clears app data via Shizuku (destructive).'),
-  device('device_app_install', 'Installs APK via Shizuku.'),
-  device('device_app_uninstall', 'Uninstalls app via Shizuku (destructive).'),
+  device('device_app_permission_grant', 'Grants runtime permission via Shizuku.', undefined, true),
+  device('device_app_permission_revoke', 'Revokes runtime permission via Shizuku.', undefined, true),
+  device('device_setting_put', 'Writes system/secure/global setting via Shizuku.', undefined, true),
+  device('device_app_force_stop', 'Force-stops an app via Shizuku.', undefined, true),
+  device('device_app_set_state', 'Enables/disables an app via Shizuku.', undefined, true),
+  device('device_app_clear_data', 'Clears app data via Shizuku (destructive).', undefined, true),
+  device('device_app_install', 'Installs APK via Shizuku.', undefined, true),
+  device('device_app_uninstall', 'Uninstalls app via Shizuku (destructive).', undefined, true),
 ]
 
 export function getTool(name: string): ToolDefinition | undefined {
@@ -129,6 +136,19 @@ export function getUnavailableTools(mode: ConnectionMode): ToolDefinition[] {
   if (mode === 'server') return []
   const available = new Set(filterByMode(mode).map((tool) => tool.name))
   return TOOL_REGISTRY.filter((tool) => !available.has(tool.name))
+}
+
+export function filterAvailable(
+  mode: ConnectionMode,
+  caps: StandaloneCapabilities = {}
+): ToolDefinition[] {
+  if (mode === 'server') return [...TOOL_REGISTRY]
+  return filterByMode(mode).filter((tool) => {
+    if (tool.standaloneReady === false) return false
+    if (tool.needsShizuku && caps.hasShizuku === false) return false
+    if (tool.needsApiKey && mode === 'local' && caps.hasTavilyKey === false) return false
+    return true
+  })
 }
 
 export function isAvailable(toolName: string, mode: ConnectionMode): boolean {
