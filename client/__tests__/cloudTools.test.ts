@@ -30,4 +30,24 @@ describe('cloudTools', () => {
 
     expect(result.success).toBe(false)
   })
+
+  it('rejects unregistered device names without executing', async () => {
+    const executeDevice = jest.fn(async () => ({ outcome: 'executed' as const, observation: 'Success' }))
+
+    const result = await executeCloudTool('device_unknown', {}, { executeDevice })
+
+    expect(result.success).toBe(false)
+    expect(executeDevice).not.toHaveBeenCalled()
+  })
+
+  it('reports failure when web search rejects', async () => {
+    const webSearch = jest.fn(async () => {
+      throw new Error('down')
+    })
+
+    const result = await executeCloudTool('web_search', { query: 'vela' }, { webSearch })
+
+    expect(result.success).toBe(false)
+    expect(result.output).toContain('Search failed')
+  })
 })
