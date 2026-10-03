@@ -394,10 +394,12 @@ export const useChatStore = create<ChatState>()(
           const index = parentMessages.findIndex((m) => m.id === uptoMessageId);
           const branchedMessages = index !== -1 ? parentMessages.slice(0, index + 1) : [...parentMessages];
           
+          const parentThread = state.threads.find((t) => t.id === parentThreadId);
           const newThread = {
             id: newThreadId,
             title,
             updated_at: new Date().toISOString(),
+            active_skill: parentThread?.active_skill ?? null,
           };
 
           return {
@@ -411,7 +413,8 @@ export const useChatStore = create<ChatState>()(
         });
 
         const branched = useChatStore.getState().messages[newThreadId] || [];
-        saveThread({ id: newThreadId, title, updated_at: new Date().toISOString(), is_pinned: false }).catch(() => {});
+        const branchedThread = useChatStore.getState().threads.find((t) => t.id === newThreadId);
+        saveThread(branchedThread || { id: newThreadId, title, updated_at: new Date().toISOString(), is_pinned: false }).catch(() => {});
         saveMessages(newThreadId, branched).catch(() => {});
       },
 

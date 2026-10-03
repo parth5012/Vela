@@ -152,14 +152,14 @@ export function isSkillCommand(
 ): { type: 'activate'; skillId: SkillId } | { type: 'deactivate' } | null {
   const trimmed = input.trim().toLowerCase();
 
-  // Check deactivate first
-  if (DEACTIVATE_COMMANDS.some((cmd) => trimmed === cmd || trimmed.startsWith(cmd + ' '))) {
+  // Check deactivate first — exact match only so trailing text isn't swallowed
+  if (DEACTIVATE_COMMANDS.some((cmd) => trimmed === cmd)) {
     return { type: 'deactivate' };
   }
 
-  // Check activate commands
+  // Check activate commands — exact match only
   for (const [cmd, skillId] of Object.entries(SKILL_COMMANDS)) {
-    if (trimmed === cmd || trimmed.startsWith(cmd + ' ')) {
+    if (trimmed === cmd) {
       return { type: 'activate', skillId };
     }
   }
