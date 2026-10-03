@@ -72,7 +72,7 @@ const generateUUID = () => {
   });
 };
 
-import { resolveCompactInstructions, resolveNewThreadAgent } from '../utils/agents';
+import { resolveAgentPrompt, resolveNewThreadAgent } from '../utils/agents';
 import { overlayRemoteAgents } from '../db/agentRepository';
 import { useAgents } from '../hooks/useAgents';
 import { generateUlid } from '../utils/syncIds';
@@ -243,7 +243,6 @@ export default function ChatScreen() {
   const setDefaultAgent = useConfigStore((state) => state.setDefaultAgent);
   const userName = useConfigStore((state) => state.userName);
   const suggestionStarters = useConfigStore((state) => state.suggestionStarters);
-  const userSystemPrompt = useConfigStore((state) => state.systemPrompt);
 
   // Local and cloud mode states
   const connectionMode = useConfigStore((state) => state.connectionMode);
@@ -731,17 +730,13 @@ export default function ChatScreen() {
 
         const activeThread = threads.find((t) => t.id === threadId);
         const selectedAgentId = activeThread?.agent || 'personal assistant';
-        const agentPrompt = resolveCompactInstructions(selectedAgentId, agents);
-
-        const systemPromptCombined = userSystemPrompt && userSystemPrompt !== 'You autonomous research agent.'
-          ? `${userSystemPrompt}\n\n${agentPrompt}`
-          : (agentPrompt || userSystemPrompt);
+        const agentPrompt = resolveAgentPrompt(selectedAgentId, agents);
 
         // Inject active skill prompt if set (standalone mode)
         const threadSkill = activeThread?.active_skill as SkillId | undefined;
         const skillAugmented = threadSkill && SKILL_PROMPTS[threadSkill]
-          ? `${systemPromptCombined}\n\n# Active Skill Instructions\n${SKILL_PROMPTS[threadSkill]}`
-          : systemPromptCombined;
+          ? `${agentPrompt}\n\n# Active Skill Instructions\n${SKILL_PROMPTS[threadSkill]}`
+          : agentPrompt;
 
         // 2. Compile prompt using LLM native chat template
         const compiledPrompt = compileLocalPrompt({
@@ -859,17 +854,14 @@ export default function ChatScreen() {
 
     const activeThread = threads.find((t) => t.id === threadId);
     const selectedAgentId = activeThread?.agent || 'personal assistant';
-    const agentPrompt = resolveCompactInstructions(selectedAgentId, agents);
-
-    const systemPromptCombined = userSystemPrompt && userSystemPrompt !== 'You are an autonomous research agent.'
-      ? `${userSystemPrompt}\n\n${agentPrompt}`
-      : (agentPrompt || userSystemPrompt);
+    const activeAgent = agents.find((candidate) => candidate.id === selectedAgentId);
+    const agentPrompt = resolveAgentPrompt(selectedAgentId, agents);
 
     // Inject active skill prompt if set (standalone mode)
     const cloudThreadSkill = activeThread?.active_skill as SkillId | undefined;
     const cloudSkillAugmented = cloudThreadSkill && SKILL_PROMPTS[cloudThreadSkill]
-      ? `${systemPromptCombined}\n\n# Active Skill Instructions\n${SKILL_PROMPTS[cloudThreadSkill]}`
-      : systemPromptCombined;
+      ? `${agentPrompt}\n\n# Active Skill Instructions\n${SKILL_PROMPTS[cloudThreadSkill]}`
+      : agentPrompt;
 
     const controller = new AbortController();
     abortControllersRef.current[threadId] = controller;
@@ -880,7 +872,7 @@ export default function ChatScreen() {
       await streamCloudResponse({
         provider,
         apiKey,
-        model: providerConfig?.model || 'gemini-1.5-flash',
+        model: activeAgent?.model ?? (providerConfig?.model || 'gemini-1.5-flash'),
         baseUrl: providerConfig?.baseUrl,
         systemPrompt: cloudSkillAugmented,
         temperature: config.temperature,

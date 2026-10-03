@@ -25,19 +25,6 @@ export const DEFAULT_AGENTS: Agent[] = [
   { id: 'prompt builder', name: 'Prompt Builder', description: 'Specialized assistant designed help craft, structure, refine agent prompts.', icon: '✍️' },
 ];
 
-/**
- * Legacy parallel record of compact instructions, kept only as a fallback for
- * agents with no DB row yet. Step 4 (#359) deletes it once send paths read the
- * agents table directly.
- */
-export const COMPACT_AGENTS_INSTRUCTIONS: Record<string, string> = {
-  "personal assistant": `Vela, adaptive, authentic personal assistant knowledgeable peer.\nVoice: Warm, approachable, direct. Balanced empathy candor. Avoid generic filler.\nGuidelines:\n1. Mirror user technical depth; respond accessibly.\n2. Prioritize concise, high-density responses.\n3. Give direct answers first, then add essential nuance.`,
-  "teacher": `Encouraging, patient, pedagogical Teacher guide.\nTone: Patient, warm, supportive, explaining concepts simply.\nGuidelines:\n1. Simplify complex terms using relatable analogies explaining student.\n2. Provide concrete, illustrative examples abstract concepts.\n3. End explanations supportive guiding question check understanding prompt discussion.`,
-  "analyst": `Sharp, logical, detail-oriented Analyst.\nTone: Objective, precise, structured, data-driven.\nGuidelines:\n1. Break down requests structured components: pros/cons, metrics, risks, trade-offs.\n2. Focus strictly facts, evidence, logical arguments.\n3. Present findings highly structured bullet points clean tables without conversational fluff.`,
-  "prompt builder": `Adaptive, authentic collaborator specializing crafting system prompts.\nTone: Warm, approachably direct. Balance empathy candor without rigid lecturing.\nGuidelines:\n1. Outline clear role definitions, formatting rules, tool integrations, evaluation criteria.\n2. Provide high-quality examples both good/valid bad/invalid prompt configurations.\n3. Keep instructions strictly actionable, avoiding vague advice like "think carefully".`,
-  "google_workspace": `Google Workspace automation specialist (Gmail, Calendar, Drive).\nTone: Efficient, precise, action-oriented, helpful.\nGuidelines:\n1. Help users manage email, calendar events, Drive files.\n2. Proactively offer check calendar slots find availability.\n3. Assist searching, drafting, organizing Gmail messages.\n4. Call out scope limitations when request exceeds capabilities.`,
-};
-
 /** URL/filename-safe id derived from a human agent name. */
 export function slugifyAgentId(input: string): string {
   const slug = (input || '')
@@ -61,13 +48,15 @@ export function resolveNewThreadAgent(explicitAgentId?: string): string {
 }
 
 /**
- * Compact instructions for the active agent. The DB row wins; the legacy
- * record is consulted only when no row exists for that agent id.
+ * System prompt for the active agent, sourced from the DB row only.
+ * Prefers the row's compact instructions (standalone/local budget path);
+ * falls back to the row's full system_prompt, which compileLocalPrompt
+ * truncates to its system budget.
  */
-export function resolveCompactInstructions(agentId: string, agents: Agent[]): string {
+export function resolveAgentPrompt(agentId: string, agents: Agent[]): string {
   const agent = agents.find((candidate) => candidate.id === agentId);
-  if (!agent) return COMPACT_AGENTS_INSTRUCTIONS[agentId] || '';
-  return agent.compact_prompt_instructions || agent.compactPromptInstructions || '';
+  if (!agent) return '';
+  return agent.compact_prompt_instructions || agent.compactPromptInstructions || agent.system_prompt || '';
 }
 
 export type AgentPatch = Partial<Agent> & { id: string };
