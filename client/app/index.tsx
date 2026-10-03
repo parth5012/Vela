@@ -466,6 +466,46 @@ export default function ChatScreen() {
 
   const isCurrentThreadStreaming = activeThreadId ? isThreadStreaming(activeThreadId) : false;
 
+  // Shared skill slash-command handling for handleSend, handleSendWelcome and
+  // the indicator's deactivate tap. Returns true when the input was consumed.
+  // Reads thread state fresh from the store to avoid stale closures.
+  const handleSkillCommand = useCallback((threadId: string, rawInput: string): boolean => {
+    const skillCmd = isSkillCommand(rawInput.trim());
+    if (!skillCmd) return false;
+
+    // Record the command as a user turn so roles alternate (strict APIs
+    // like Anthropic reject consecutive assistant turns).
+    addMessage(threadId, {
+      id: generateId('msg_user'),
+      role: 'user',
+      content: rawInput.trim(),
+      created_at: new Date().toISOString(),
+    });
+
+    if (skillCmd.type === 'activate') {
+      setThreadSkill(threadId, skillCmd.skillId);
+      const meta = SKILL_METADATA[skillCmd.skillId];
+      addMessage(threadId, {
+        id: generateId('msg_assistant'),
+        role: 'assistant',
+        content: `${meta.icon} **${meta.name}** activated. ${meta.description}.\n\nType \`/stop\` to deactivate.`,
+        created_at: new Date().toISOString(),
+      });
+    } else {
+      const currentThread = useChatStore.getState().threads.find((t) => t.id === threadId);
+      const wasActive = currentThread?.active_skill as SkillId | undefined;
+      const meta = wasActive ? SKILL_METADATA[wasActive] : undefined;
+      setThreadSkill(threadId, null);
+      addMessage(threadId, {
+        id: generateId('msg_assistant'),
+        role: 'assistant',
+        content: meta ? `${meta.icon} **${meta.name}** deactivated.` : '⏹️ No skill was active.',
+        created_at: new Date().toISOString(),
+      });
+    }
+    return true;
+  }, [addMessage, setThreadSkill]);
+
   React.useEffect(() => {
     if (!lastMsg || lastMsg.role !== 'assistant' || !activeThreadId) return;
 
@@ -931,43 +971,10 @@ export default function ChatScreen() {
     if (!input.trim()) return;
 
     // Skill slash command handling (standalone modes only)
-    if (connectionMode !== 'server' && activeThreadId) {
-      const skillCmd = isSkillCommand(input.trim());
-      if (skillCmd) {
-        Keyboard.dismiss();
-        setInput('');
-        if (skillCmd.type === 'activate') {
-          setThreadSkill(activeThreadId, skillCmd.skillId);
-          const meta = SKILL_METADATA[skillCmd.skillId];
-          addMessage(activeThreadId, {
-            id: generateId('msg_assistant'),
-            role: 'assistant',
-            content: `${meta.icon} **${meta.name}** activated. ${meta.description}.\n\nType \`/stop\` to deactivate.`,
-            created_at: new Date().toISOString(),
-          });
-        } else {
-          const currentThread = threads.find((t) => t.id === activeThreadId);
-          const wasActive = currentThread?.active_skill;
-          setThreadSkill(activeThreadId, null);
-          if (wasActive) {
-            const meta = SKILL_METADATA[wasActive as SkillId];
-            addMessage(activeThreadId, {
-              id: generateId('msg_assistant'),
-              role: 'assistant',
-              content: `${meta?.icon ?? '⏹️'} **${meta?.name ?? 'Skill'}** deactivated.`,
-              created_at: new Date().toISOString(),
-            });
-          } else {
-            addMessage(activeThreadId, {
-              id: generateId('msg_assistant'),
-              role: 'assistant',
-              content: '⏹️ No skill was active.',
-              created_at: new Date().toISOString(),
-            });
-          }
-        }
-        return;
-      }
+    if (connectionMode !== 'server' && activeThreadId && handleSkillCommand(activeThreadId, input)) {
+      Keyboard.dismiss();
+      setInput('');
+      return;
     }
 
     if (connectionMode === 'server' && (!apiUrl || !apiKey)) {
@@ -1115,7 +1122,7 @@ export default function ChatScreen() {
     isLocalMode,
     connectionMode,
     triggerAutoScroll,
-    setThreadSkill,
+    handleSkillCommand,
   ]);
 
   const handleRegenerate = useCallback(async (message: Message) => {
@@ -1283,6 +1290,20 @@ export default function ChatScreen() {
 
   const handleSendWelcome = useCallback(async (textToSend: string, personaId?: string) => {
     if (!textToSend.trim()) return;
+
+    // Skill slash commands are intercepted BEFORE the credential checks:
+    // activation is local-only and must work without API URL/key configured
+    // (standalone modes only — server mode still requires credentials).
+    if (connectionMode !== 'server' && isSkillCommand(textToSend.trim())) {
+      Keyboard.dismiss();
+      const newThreadId = generateUUID();
+      const agent = personaId || selectedAgent;
+      createThread('New Conversation', newThreadId, agent);
+      setInput('');
+      handleSkillCommand(newThreadId, textToSend);
+      return;
+    }
+
     if (connectionMode === 'server' && (!apiUrl || !apiKey)) {
       Alert.alert('Configuration Required', 'Please configure API URL and Key in Settings.');
       return;
@@ -1300,33 +1321,6 @@ export default function ChatScreen() {
 
     const newThreadId = generateUUID();
     const agent = personaId || selectedAgent;
-
-    // Skill slash command handling in welcome screen (standalone modes only)
-    if (connectionMode !== 'server') {
-      const skillCmd = isSkillCommand(textToSend.trim());
-      if (skillCmd) {
-        createThread('New Conversation', newThreadId, agent);
-        setInput('');
-        if (skillCmd.type === 'activate') {
-          setThreadSkill(newThreadId, skillCmd.skillId);
-          const meta = SKILL_METADATA[skillCmd.skillId];
-          addMessage(newThreadId, {
-            id: generateId('msg_assistant'),
-            role: 'assistant',
-            content: `${meta.icon} **${meta.name}** activated. ${meta.description}.\n\nType \`/stop\` to deactivate.`,
-            created_at: new Date().toISOString(),
-          });
-        } else {
-          addMessage(newThreadId, {
-            id: generateId('msg_assistant'),
-            role: 'assistant',
-            content: '⏹️ No skill was active.',
-            created_at: new Date().toISOString(),
-          });
-        }
-        return;
-      }
-    }
 
     createThread('New Conversation', newThreadId, agent);
     setInput('');
@@ -1442,6 +1436,7 @@ export default function ChatScreen() {
     isLocalMode,
     connectionMode,
     triggerAutoScroll,
+    handleSkillCommand,
   ]);
 
   const handleSendPress = () => {

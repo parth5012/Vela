@@ -200,11 +200,13 @@ describe('useChatStore', () => {
       const state = useChatStore.getState();
       expect(state.activeThreadId).toBe('branched-id');
       
-      // The branched thread should be prepended
+      // The branched thread should be prepended (and inherit the parent's
+      // active_skill — null here since the test parent has none)
       expect(state.threads[0]).toEqual({
         id: 'branched-id',
         title: 'Branched Thread',
         updated_at: expect.any(String),
+        active_skill: null,
       });
 
       // The branched thread should have messages up to and including msg-2

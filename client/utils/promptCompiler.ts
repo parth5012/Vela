@@ -9,7 +9,7 @@ export interface CompileLocalPromptParams {
   modelName?: string;
 }
 
-const CHAR_LIMIT_SYSTEM = 1200; //~300 tokens
+const CHAR_LIMIT_SYSTEM = 2500; // Raised from 1200 so skill prompts (up to 1891 chars) are not truncated
 const CHAR_LIMIT_TOOLS = 800; //~200 tokens
 const CHAR_LIMIT_TOTAL = 8000; //2K tokens limit
 
