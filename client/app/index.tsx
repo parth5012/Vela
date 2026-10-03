@@ -1936,6 +1936,9 @@ export default function ChatScreen() {
             pressed && { opacity: 0.7 }
           ]}
           onPress={handleDeactivateSkill}
+          // Deactivating mid-stream would mutate thread skill state while
+          // the in-flight prompt still carries the old skill instructions.
+          disabled={isCurrentThreadStreaming}
           accessibilityRole="button"
           accessibilityLabel="Deactivate skill"
         >
