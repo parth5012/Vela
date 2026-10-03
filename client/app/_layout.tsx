@@ -36,6 +36,7 @@ Notifications.setNotificationHandler({
 
 import { initializeDatabase } from '../db/client';
 import { wireOfflineSync, flushPendingMessages } from '../utils/offlineSync';
+import { runAgentDataBootstrap } from '../utils/seedAgents';
 
 function HeaderRightActions() {
   const router = useRouter();
@@ -98,6 +99,7 @@ export default function RootLayout() {
       if (!useChatStore.getState().activeThreadId) {
         useChatStore.getState().selectThread(null);
       }
+      runAgentDataBootstrap();
       // Local-first offline sync: flush any pending offline messages once the
       // store is hydrated, and listen for app foreground to flush again.
       wireOfflineSync();

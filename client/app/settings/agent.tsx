@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, Pressable, StyleSheet, Alert, TextInput } from 'react-native';
 import { useConfigStore } from '../../store/useConfigStore';
 import {
   AuroraScreen,
@@ -8,35 +8,200 @@ import {
   Label,
   PillGroup,
   ChipGroup,
+  SecondaryButton,
+  DangerButton,
   useAurora,
 } from '../../components/ui/settingsKit';
+import { useAgents } from '../../hooks/useAgents';
+import {
+  deleteAgent,
+  duplicateAgent,
+  insertAgent,
+  updateAgent,
+} from '../../db/agentRepository';
+import type { Agent } from '../../utils/agents';
 
 const PRESET_MODELS = ['gemini-1.5-pro', 'gemini-1.5-flash', 'claude-3-5-sonnet', 'gpt-4o'];
 
-const PERSONA_OPTIONS = [
-  { value: 'personal assistant' as const, label: 'Assistant' },
-  { value: 'teacher' as const, label: 'Teacher' },
-  { value: 'analyst' as const, label: 'Analyst' },
-  { value: 'prompt builder' as const, label: 'Builder' },
-];
+type FormState = {
+  name: string;
+  description: string;
+  icon: string;
+  system_prompt: string;
+  model: string;
+};
+
+const EMPTY_FORM: FormState = { name: '', description: '', icon: '', system_prompt: '', model: '' };
+
+function agentToForm(agent: Agent): FormState {
+  return {
+    name: agent.name,
+    description: agent.description ?? '',
+    icon: agent.icon,
+    system_prompt: agent.system_prompt ?? '',
+    model: agent.model ?? '',
+  };
+}
+
+function AgentForm({
+  initial,
+  title,
+  submitLabel,
+  connectionMode,
+  onSubmit,
+  onCancel,
+}: {
+  initial: FormState;
+  title: string;
+  submitLabel: string;
+  connectionMode: string;
+  onSubmit: (form: FormState) => void;
+  onCancel: () => void;
+}) {
+  const [form, setForm] = useState<FormState>(initial);
+  const { colors, sizes } = useAurora();
+  const cloud = connectionMode === 'cloud';
+
+  return (
+    <View style={{ gap: 10 }}>
+      <Label>{title}</Label>
+      <Field
+        label="Name"
+        placeholder="Agent name"
+        value={form.name}
+        onChangeText={(v) => setForm({ ...form, name: v })}
+        autoCorrect={false}
+      />
+      <Field
+        label="Description"
+        placeholder="One-line description"
+        value={form.description}
+        onChangeText={(v) => setForm({ ...form, description: v })}
+        autoCorrect={false}
+      />
+      <Field
+        label="Icon"
+        placeholder="🤖"
+        value={form.icon}
+        onChangeText={(v) => setForm({ ...form, icon: v })}
+        autoCorrect={false}
+      />
+      <View>
+        <Text style={[styles.formLabel, { color: colors.textMuted, fontSize: sizes.sub }]}>System Prompt</Text>
+        <TextInput
+          style={[
+            styles.promptInput,
+            { backgroundColor: 'rgba(0,0,0,0.25)', borderColor: colors.glassBorder, color: colors.text, fontSize: sizes.text },
+          ]}
+          placeholder="You are..."
+          placeholderTextColor={colors.textDark}
+          value={form.system_prompt}
+          onChangeText={(v) => setForm({ ...form, system_prompt: v })}
+          multiline
+          numberOfLines={4}
+          textAlignVertical="top"
+          autoCorrect={false}
+        />
+      </View>
+      <View>
+        <Field
+          label="Model"
+          placeholder={cloud ? 'Leave empty to inherit provider default' : 'Model is managed by connection mode'}
+          value={form.model}
+          onChangeText={(v) => setForm({ ...form, model: v })}
+          autoCapitalize="none"
+          autoCorrect={false}
+          editable={cloud}
+        />
+        {!cloud ? (
+          <Text style={[styles.helper, { color: colors.textMuted, fontSize: sizes.sub - 1 }]}>
+            {connectionMode === 'local'
+              ? 'Local mode: the model is chosen globally (the downloaded local model).'
+              : 'Server mode: the server chooses the model.'}
+          </Text>
+        ) : (
+          <Text style={[styles.helper, { color: colors.textMuted, fontSize: sizes.sub - 1 }]}>
+            Leave empty to inherit the cloud provider's default model.
+          </Text>
+        )}
+      </View>
+      <View style={styles.formActions}>
+        <SecondaryButton label={submitLabel} onPress={() => onSubmit(form)} accessibilityLabel={submitLabel} />
+        <SecondaryButton label="Cancel" onPress={onCancel} />
+      </View>
+    </View>
+  );
+}
 
 export default function AgentScreen() {
   const modelName = useConfigStore((s) => s.modelName);
   const setModelName = useConfigStore((s) => s.setModelName);
   const temperature = useConfigStore((s) => s.temperature);
   const setTemperature = useConfigStore((s) => s.setTemperature);
-  const defaultPersona = useConfigStore((s) => s.defaultPersona);
-  const setDefaultPersona = useConfigStore((s) => s.setDefaultPersona);
+  const defaultAgent = useConfigStore((s) => s.defaultAgent);
+  const setDefaultAgent = useConfigStore((s) => s.setDefaultAgent);
   const userName = useConfigStore((s) => s.userName);
   const setUserName = useConfigStore((s) => s.setUserName);
-  const systemPrompt = useConfigStore((s) => s.systemPrompt);
-  const setSystemPrompt = useConfigStore((s) => s.setSystemPrompt);
+  const connectionMode = useConfigStore((s) => s.connectionMode);
   const { colors, sizes, aurora } = useAurora();
+
+  const agents = useAgents();
+  const agentOptions = agents.map((agent) => ({ value: agent.id, label: agent.name }));
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+
+
+  const handleDuplicate = (agent: Agent) => {
+    duplicateAgent(agent.id).catch((err) =>
+      Alert.alert('Could not duplicate agent', err?.message ?? 'Unknown error'),
+    );
+  };
+
+  const handleDelete = (agent: Agent) => {
+    Alert.alert('Delete agent?', `"${agent.name}" will be removed. Threads using it move to the default agent.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          setSelectedId(null);
+          deleteAgent(agent.id).catch((err) =>
+            Alert.alert('Could not delete agent', err?.message ?? 'Unknown error'),
+          );
+        },
+      },
+    ]);
+  };
+
+  const handleEditSubmit = (agent: Agent, form: FormState) => {
+    updateAgent(agent.id, {
+      name: form.name.trim() || agent.name,
+      description: form.description,
+      icon: form.icon || agent.icon,
+      system_prompt: form.system_prompt,
+      model: form.model.trim() ? form.model.trim() : null,
+    }).catch((err) => Alert.alert('Could not save agent', err?.message ?? 'Unknown error'));
+    setEditingId(null);
+  };
+
+  const handleCreateSubmit = (form: FormState) => {
+    insertAgent({
+      name: form.name.trim() || 'Untitled agent',
+      description: form.description || undefined,
+      icon: form.icon || undefined,
+      system_prompt: form.system_prompt,
+      model: form.model.trim() ? form.model.trim() : null,
+      is_preset: false,
+    }).catch((err) => Alert.alert('Could not create agent', err?.message ?? 'Unknown error'));
+    setCreating(false);
+  };
 
   return (
     <AuroraScreen
       title="Agent"
-      subtitle="How Vela behaves: persona, identity, model, and response character."
+      subtitle="How Vela behaves: identity, model, and response character."
     >
       <Card>
         <Label>User Name</Label>
@@ -47,8 +212,111 @@ export default function AgentScreen() {
           onChangeText={setUserName}
           autoCorrect={false}
         />
-        <Label>Default Persona</Label>
-        <PillGroup options={PERSONA_OPTIONS} value={defaultPersona} onChange={setDefaultPersona} />
+        <Label>Default Agent</Label>
+        <PillGroup options={agentOptions} value={defaultAgent} onChange={setDefaultAgent} />
+      </Card>
+
+      <Card>
+        <Label>Agents</Label>
+        {agents.map((agent) => {
+          const isSelected = selectedId === agent.id;
+          const isEditing = editingId === agent.id;
+          return (
+            <View key={agent.id} style={{ gap: 8 }}>
+              <Pressable
+                testID={`agent-row-${agent.id}`}
+                style={[
+                  styles.row,
+                  {
+                    borderColor: isSelected ? aurora.acc1 : colors.glassBorder,
+                    backgroundColor: 'rgba(0,0,0,0.25)',
+                  },
+                ]}
+                onPress={() => {
+                  setSelectedId(isSelected ? null : agent.id);
+                  setEditingId(null);
+                }}
+              >
+                <Text style={{ fontSize: sizes.text + 10 }}>{agent.icon}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.text, fontSize: sizes.text, fontWeight: '600' }}>
+                    {agent.name}
+                  </Text>
+                  {agent.description ? (
+                    <Text style={{ color: colors.textMuted, fontSize: sizes.sub }} numberOfLines={2}>
+                      {agent.description}
+                    </Text>
+                  ) : null}
+                </View>
+                {agent.is_preset ? (
+                  <Text style={{ color: colors.textDark, fontSize: sizes.sub - 1 }}>Preset</Text>
+                ) : null}
+              </Pressable>
+
+              {isSelected && !isEditing ? (
+                <View style={{ gap: 10 }}>
+                  <Label>System Prompt</Label>
+                  <Text
+                    style={{
+                      color: colors.textMuted,
+                      fontSize: sizes.sub,
+                      backgroundColor: 'rgba(0,0,0,0.25)',
+                      borderRadius: 10,
+                      padding: 10,
+                    }}
+                  >
+                    {agent.system_prompt?.trim() ? agent.system_prompt : 'No system prompt set.'}
+                  </Text>
+                  <View style={styles.rowActions}>
+                    <SecondaryButton
+                      label="Duplicate"
+                      onPress={() => handleDuplicate(agent)}
+                      accessibilityLabel={`Duplicate ${agent.name}`}
+                    />
+                    {!agent.is_preset ? (
+                      <>
+                        <SecondaryButton
+                          label="Edit"
+                          onPress={() => setEditingId(agent.id)}
+                          accessibilityLabel={`Edit ${agent.name}`}
+                        />
+                        <DangerButton
+                          label="Delete"
+                          onPress={() => handleDelete(agent)}
+                          accessibilityLabel={`Delete ${agent.name}`}
+                        />
+                      </>
+                    ) : null}
+                  </View>
+                </View>
+              ) : null}
+
+              {isEditing && !agent.is_preset ? (
+                <AgentForm
+                  initial={agentToForm(agent)}
+                  title={`Edit ${agent.name}`}
+                  submitLabel="Save"
+                  connectionMode={connectionMode}
+                  onSubmit={(form) => handleEditSubmit(agent, form)}
+                  onCancel={() => setEditingId(null)}
+                />
+              ) : null}
+            </View>
+          );
+        })}
+
+        {creating ? (
+          <AgentForm
+            initial={EMPTY_FORM}
+            title="New Agent"
+            submitLabel="Create"
+            connectionMode={connectionMode}
+            onSubmit={handleCreateSubmit}
+            onCancel={() => setCreating(false)}
+          />
+        ) : (
+          <SecondaryButton label="+ New agent" onPress={() => setCreating(true)} />
+        )}
       </Card>
 
       <Card>
@@ -113,20 +381,6 @@ export default function AgentScreen() {
           </Pressable>
         </View>
       </Card>
-
-      <Card>
-        <Label>System Prompt</Label>
-        <Field
-          label="System Prompt"
-          placeholder="You are an autonomous research agent."
-          value={systemPrompt}
-          onChangeText={setSystemPrompt}
-          multiline
-          numberOfLines={4}
-          textAlignVertical="top"
-          style={styles.multiline}
-        />
-      </Card>
     </AuroraScreen>
   );
 }
@@ -156,9 +410,40 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 4,
   },
-  multiline: {
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+  },
+  rowActions: {
+    flexDirection: 'row',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  formActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  formLabel: {
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  promptInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     minHeight: 100,
     paddingTop: 10,
     paddingBottom: 10,
+  },
+  helper: {
+    marginTop: 6,
+    lineHeight: 16,
   },
 });

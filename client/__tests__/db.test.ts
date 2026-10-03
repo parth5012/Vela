@@ -30,7 +30,7 @@ describe('Database client schema', () => {
   it('should have correct columns defined in threads table', () => {
     expect(threads.id).toBeDefined();
     expect(threads.title).toBeDefined();
-    expect(threads.persona).toBeDefined();
+    expect(threads.agent).toBeDefined();
     expect(threads.updated_at).toBeDefined();
     expect(threads.is_pinned).toBeDefined();
   });
@@ -89,14 +89,15 @@ describe('message_vectors schema (#299)', () => {
     expect(messageVectors.created_at.notNull).toBe(true);
   });
 
-  it('registers migration 0006 in the drizzle bundle and journal', () => {
+  it('registers migrations through 0007 in the drizzle bundle and journal', () => {
     const keys = migrationKeys();
     expect(keys).toContain('m0005');
     expect(keys).toContain('m0006');
-    expect(keys[keys.length - 1]).toBe('m0006');
+    expect(keys).toContain('m0007');
+    expect(keys[keys.length - 1]).toBe('m0007');
 
     const tags = migrationTags();
-    expect(tags[tags.length - 1]).toMatch(/^0006_/);
+    expect(tags[tags.length - 1]).toMatch(/^0007_/);
   });
 
   it('creates message_vectors in the 0005 migration SQL', () => {
@@ -123,7 +124,7 @@ describe('migrations apply to a real SQLite database (#299)', () => {
 
     sqlite
       .prepare(
-        'INSERT INTO threads (id, title, persona, updated_at, is_pinned) VALUES (?, ?, ?, ?, ?)'
+        'INSERT INTO threads (id, title, agent, updated_at, is_pinned) VALUES (?, ?, ?, ?, ?)'
       )
       .run('t1', 'title', 'personal assistant', '2026-01-01', 0);
     sqlite

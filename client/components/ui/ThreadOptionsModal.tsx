@@ -84,7 +84,7 @@ export default function ThreadOptionsModal({
 
       let mdContent = `# Vela Chat: ${activeThread.title}\n`;
       mdContent += `*Exported on: ${new Date().toLocaleString()}*\n`;
-      mdContent += `*Persona: ${activeThread.persona || 'personal assistant'}*\n`;
+      mdContent += `*Agent: ${activeThread.agent || 'personal assistant'}*\n`;
       mdContent += `*ID: ${activeThread.id}*\n\n`;
       mdContent += `---\n\n`;
 
@@ -124,7 +124,7 @@ export default function ThreadOptionsModal({
         thread: {
           id: activeThread.id,
           title: activeThread.title,
-          persona: activeThread.persona,
+          agent: activeThread.agent,
           updated_at: activeThread.updated_at,
         },
         messages: threadMsgs,

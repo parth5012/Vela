@@ -24,7 +24,7 @@ function toThreadRow(thread: Thread) {
   return {
     id: thread.id,
     title: thread.title,
-    persona: thread.persona || 'personal assistant',
+    agent: thread.agent || 'personal assistant',
     updated_at: thread.updated_at,
     is_pinned: thread.is_pinned ?? false,
     active_skill: thread.active_skill ?? null,
@@ -48,7 +48,7 @@ function fromThreadRow(row: any): Thread {
   return {
     id: row.id,
     title: row.title,
-    persona: row.persona,
+    agent: row.agent,
     updated_at: row.updated_at,
     is_pinned: !!row.is_pinned,
     active_skill: row.active_skill ?? undefined,
@@ -76,7 +76,7 @@ export async function saveThread(thread: Thread): Promise<void> {
       target: threads.id,
       set: {
         title: row.title,
-        persona: row.persona,
+        agent: row.agent,
         updated_at: row.updated_at,
         is_pinned: row.is_pinned,
         active_skill: row.active_skill,

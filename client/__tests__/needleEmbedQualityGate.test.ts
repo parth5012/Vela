@@ -82,7 +82,7 @@ function buildFixtureDb() {
   applyMigrations(sqlite);
   sqlite
     .prepare(
-      'INSERT INTO threads (id, title, persona, updated_at, is_pinned) VALUES (?, ?, ?, ?, ?)'
+      'INSERT INTO threads (id, title, agent, updated_at, is_pinned) VALUES (?, ?, ?, ?, ?)'
     )
     .run('conv-gate', 'quality gate', 'personal assistant', '2026-01-01', 0);
 

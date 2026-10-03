@@ -65,7 +65,7 @@ export default function DrawerContent(_props?: any) {
   const createThread = useChatStore((state) => state.createThread);
   const selectThread = useChatStore((state) => state.selectThread);
   const streamingThreadIds = useChatStore((state) => state.streamingThreadIds);
-  const { apiUrl, apiKey, theme, fontSize, accentColor, defaultPersona } = useConfigStore();
+  const { apiUrl, apiKey, theme, fontSize, accentColor, defaultAgent } = useConfigStore();
   const currentUrl = useBrowserStore((s) => s.currentUrl);
   const pageTitle = useBrowserStore((s) => s.pageTitle);
   const aiStatus = useBrowserStore((s) => s.aiStatus);

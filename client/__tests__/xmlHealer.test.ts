@@ -119,7 +119,7 @@ describe('healXmlTags', () => {
 
 describe('healer + parser round-trip (#150 phantom guard)', () => {
   const MOCK_RESPONSE =
-    '<thought>User asked: what is the capital of France. I should answer directly.</thought>[PERSONA] The capital of France is Paris.';
+    '<thought>User asked: what is the capital of France. I should answer directly.</thought>[AGENT] The capital of France is Paris.';
 
   function countType(segments: MessageSegment[], type: MessageSegment['type']): number {
     return segments.reduce(

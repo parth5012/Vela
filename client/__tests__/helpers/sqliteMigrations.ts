@@ -21,11 +21,18 @@ export function migrationKeys(): string[] {
   return migrationTags().map((tag) => `m${tag.split('_')[0]}`);
 }
 
-export function applyMigrations(db: {
-  exec: (sql: string) => void;
-}): void {
+export function applyMigrations(
+  db: {
+    exec: (sql: string) => void;
+  },
+  range?: { from?: number; to?: number }
+): void {
   const bundle = migrations.migrations as Record<string, string | undefined>;
+  const from = range?.from ?? 0;
+  const to = range?.to ?? migrationKeys().length - 1;
   for (const key of migrationKeys()) {
+    const idx = Number(key.slice(1));
+    if (idx < from || idx > to) continue;
     const sql = bundle[key];
     if (typeof sql !== 'string') {
       throw new Error(`migration bundle is missing ${key}`);

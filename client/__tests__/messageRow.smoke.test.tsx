@@ -69,7 +69,7 @@ describe('CollapsibleBlock mount smoke (#148)', () => {
 
   it('survives the streamed-partial -> healed-final transition', () => {
     const finalContent =
-      '<thought>User asked: what is the capital of France.</thought>[PERSONA] The capital of France is Paris.';
+      '<thought>User asked: what is the capital of France.</thought>[AGENT] The capital of France is Paris.';
 
     // Simulate appendToken-style growth over the raw stream...
     for (let end = 1; end <= finalContent.length; end += 7) {
