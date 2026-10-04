@@ -872,7 +872,7 @@ export default function ChatScreen() {
       await streamCloudResponse({
         provider,
         apiKey,
-        model: activeAgent?.model ?? (providerConfig?.model || 'gemini-1.5-flash'),
+        model: activeAgent?.model?.trim() || providerConfig?.model || 'gemini-1.5-flash',
         baseUrl: providerConfig?.baseUrl,
         systemPrompt: cloudSkillAugmented,
         temperature: config.temperature,

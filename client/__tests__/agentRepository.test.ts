@@ -268,5 +268,27 @@ describe('agentRepository (#357)', () => {
       expect(added!.compact_prompt_instructions).toBe('remote');
       expect(added!.icon).toBe('🤖');
     });
+
+    it('never adopts is_preset from the remote payload (preset stays preset)', async () => {
+      await insertAgent({ id: 'analyst', name: 'Analyst', system_prompt: 'seed', is_preset: true });
+
+      await overlayRemoteAgents([
+        { id: 'analyst', name: 'Analyst (server)', is_preset: false },
+      ]);
+
+      expect((await getAgent('analyst'))!.is_preset).toBe(true);
+    });
+
+    it('forces remote-only and remote-overwritten custom rows to is_preset false', async () => {
+      await insertAgent({ id: 'my-custom', name: 'My Custom', system_prompt: 'local', is_preset: false });
+
+      await overlayRemoteAgents([
+        { id: 'my-custom', name: 'My Custom (server)', is_preset: true },
+        { id: 'device_agent', name: 'Device Agent', is_preset: true },
+      ]);
+
+      expect((await getAgent('my-custom'))!.is_preset).toBe(false);
+      expect((await getAgent('device_agent'))!.is_preset).toBe(false);
+    });
   });
 });

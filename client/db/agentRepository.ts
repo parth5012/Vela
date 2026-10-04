@@ -244,15 +244,22 @@ export async function overlayRemoteAgents(remote: unknown[]): Promise<void> {
     .filter((patch): patch is AgentPatch => patch !== null);
   if (patches.length === 0) return;
 
+  const remoteIds = new Set(patches.map((patch) => patch.id));
+  const local = db ? await listAgents() : getCachedAgents();
+  // Never trust `is_preset` from the server payload: a remote `false` would
+  // demote a seeded preset (stopping the seeder from re-syncing it and exposing
+  // Edit/Delete), and a remote `true` would lock a custom row as a preset.
+  const localPreset = new Map(local.map((a) => [a.id, !!a.is_preset]));
+  const merged = mergeRemoteAgents(local, patches).map((agent) =>
+    remoteIds.has(agent.id) ? { ...agent, is_preset: localPreset.get(agent.id) ?? false } : agent
+  );
+
   if (!db) {
-    cachedAgents = mergeRemoteAgents(getCachedAgents(), patches);
+    cachedAgents = merged;
     notifyAgentsChanged();
     return;
   }
 
-  const local = await listAgents();
-  const merged = mergeRemoteAgents(local, patches);
-  const remoteIds = new Set(patches.map((patch) => patch.id));
   await Promise.all(
     merged.filter((agent) => remoteIds.has(agent.id)).map((agent) => upsertAgentRow(agent))
   );
