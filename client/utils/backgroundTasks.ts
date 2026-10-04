@@ -4,6 +4,7 @@ import db from '../db/client';
 import { tasks, taskRuns } from '../db/schema';
 import { eq, and, lte, isNull, or } from 'drizzle-orm';
 import { useConfigStore } from '../store/useConfigStore';
+import { runTask } from './taskRunner';
 import {
   isCheckinSchedulerTask,
   gateCheckinTask,
@@ -107,50 +108,28 @@ TaskManager.defineTask(VELA_BACKGROUND_TASK, async (body: any) => {
       });
 
       try {
-        const response = await fetch(`${apiUrl}/api/tasks/run`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            task_id: task.id,
-            title: task.title,
-            prompt: task.task_prompt,
-            agent: task.linked_agent || 'personal assistant',
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP Error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        if (data.status === 'success') {
-          await db.update(taskRuns)
-            .set({
-              status: 'completed',
-              completed_at: Date.now(),
-              output: data.output,
-            })
-            .where(eq(taskRuns.id, runId));
-          if (isCheckinSchedulerTask(task)) {
-            if (task.id === NUDGE_TASK_ID) {
-              await presentCheckinNotification(
-                'vela-checkin-nudge-note',
-                'Gentle nudge 🌱',
-                `${data.output || 'No check-in yesterday — how are you today?'} Reply 'skip' to dismiss.`
-              );
-            } else {
-              await presentCheckinNotification(
-                'vela-checkin-weekly-note',
-                'Weekly reflection 📊',
-                data.output || 'Your week in review is ready — open chat to see it.'
-              );
-            }
+        const output = await runTask(task);
+        await db.update(taskRuns)
+          .set({
+            status: 'completed',
+            completed_at: Date.now(),
+            output,
+          })
+          .where(eq(taskRuns.id, runId));
+        if (isCheckinSchedulerTask(task)) {
+          if (task.id === NUDGE_TASK_ID) {
+            await presentCheckinNotification(
+              'vela-checkin-nudge-note',
+              'Gentle nudge 🌱',
+              `${output || 'No check-in yesterday — how are you today?'} Reply 'skip' to dismiss.`
+            );
+          } else {
+            await presentCheckinNotification(
+              'vela-checkin-weekly-note',
+              'Weekly reflection 📊',
+              output || 'Your week in review is ready — open chat to see it.'
+            );
           }
-        } else {
-          throw new Error(data.output || 'Unknown backend error');
         }
       } catch (err: any) {
         await db.update(taskRuns)
