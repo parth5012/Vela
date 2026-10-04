@@ -180,4 +180,70 @@ describe('Standalone SQLite-to-backend sync', () => {
     expect(res.success).toBe(true);
     expect(res.pushedCount).toBe(0);
   });
+
+  it('excludes tasks and task_runs from sync push payload (wayfinder #364)', async () => {
+    const mockMessages = [
+      {
+        id: 'msg_100',
+        conversation_id: 'conv_100',
+        role: 'user',
+        content: 'message payload only',
+        provider: 'local',
+        created_at: 1700000000,
+      },
+    ];
+
+    (db.select as jest.Mock).mockReturnValueOnce({
+      from: jest.fn(() => ({
+        where: jest.fn(() => Promise.resolve(mockMessages)),
+        then: (resolve: any) => resolve(mockMessages),
+      })),
+    });
+
+    const mockFetch = jest.fn().mockImplementation((url) => {
+      if (url.includes('/api/sync/push')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ accepted: ['msg_100'] }),
+        });
+      }
+      if (url.includes('/api/sync/pull')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ operations: [], cursor: 'c_end', has_more: false }),
+        });
+      }
+      return Promise.reject(new Error('Unknown url: ' + url));
+    });
+    (globalThis as any).fetch = mockFetch;
+
+    await syncStandaloneDataToBackend('https://api.vela.run', 'my-key');
+
+    const pushCall = mockFetch.mock.calls.find((c: any) => c[0].includes('/api/sync/push'));
+    expect(pushCall).toBeDefined();
+    const body = JSON.parse(pushCall[1].body);
+
+    expect(body).toHaveProperty('operations');
+    expect(Array.isArray(body.operations)).toBe(true);
+
+    const pushedTypes = body.operations.map((op: any) => op.type);
+    expect(new Set(pushedTypes)).toEqual(new Set(['message']));
+    expect(pushedTypes).not.toContain('task');
+    expect(pushedTypes).not.toContain('tasks');
+    expect(pushedTypes).not.toContain('task_run');
+    expect(pushedTypes).not.toContain('task_runs');
+
+    for (const op of body.operations) {
+      expect(Object.keys(op).sort()).toEqual(['conversation_id', 'id', 'payload', 'type'].sort());
+      const payloadKeys = Object.keys(op.payload);
+      expect(payloadKeys.sort()).toEqual(['content', 'created_at', 'origin', 'provider', 'role'].sort());
+      expect(payloadKeys).not.toContain('task_prompt');
+      expect(payloadKeys).not.toContain('recurrence_rule');
+      expect(payloadKeys).not.toContain('connection_mode');
+      expect(payloadKeys).not.toContain('last_run');
+      expect(payloadKeys).not.toContain('next_run');
+    }
+  });
 });
