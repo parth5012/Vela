@@ -65,7 +65,7 @@ const PRESET_UPSERT_SQL = [
   '  compact_prompt_instructions = excluded.compact_prompt_instructions,',
   '  is_preset = 1,',
   '  updated_at = excluded.updated_at',
-  'WHERE agents.is_preset = 1 AND agents.system_prompt = excluded.system_prompt',
+  'WHERE agents.is_preset = 1',
 ].join('\n');
 
 const LEGACY_AGENT_SELECT_SQL = 'SELECT id FROM agents WHERE is_preset = 0 AND system_prompt = ? LIMIT 1';

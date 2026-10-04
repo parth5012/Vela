@@ -253,9 +253,9 @@ export async function overlayRemoteAgents(remote: unknown[]): Promise<void> {
   const local = await listAgents();
   const merged = mergeRemoteAgents(local, patches);
   const remoteIds = new Set(patches.map((patch) => patch.id));
-  for (const agent of merged) {
-    if (remoteIds.has(agent.id)) await upsertAgentRow(agent);
-  }
+  await Promise.all(
+    merged.filter((agent) => remoteIds.has(agent.id)).map((agent) => upsertAgentRow(agent))
+  );
   await refreshAgents();
 }
 

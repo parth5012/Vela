@@ -19,10 +19,12 @@ export default function MessagingScreen() {
 
   // #357: shared DB-backed selector replaces the hardcoded option list.
   const agentOptions = useAgents().map((agent) => ({ value: agent.id, label: agent.name }));
+  const defaultAgent = useConfigStore((s) => s.defaultAgent);
+  const fallbackAgent = () => defaultAgent || agentOptions[0]?.value || 'personal assistant';
 
   const [label, setLabel] = useState('');
   const [text, setText] = useState('');
-  const [agent, setAgent] = useState<string>('personal assistant');
+  const [agent, setAgent] = useState<string>(fallbackAgent());
 
   const handleAdd = () => {
     if (!label.trim() || !text.trim()) {
@@ -32,7 +34,7 @@ export default function MessagingScreen() {
     setSuggestionStarters([...suggestionStarters, { label: label.trim(), text: text.trim(), agent }]);
     setLabel('');
     setText('');
-    setAgent('personal assistant');
+    setAgent(fallbackAgent());
   };
 
   const handleRemove = (index: number) => {
