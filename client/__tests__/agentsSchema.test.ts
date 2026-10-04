@@ -80,14 +80,15 @@ describe('agents table schema (#356)', () => {
 });
 
 describe('migration 0007 (#356)', () => {
-  it('is registered as the last migration with a matching tag', () => {
+  it('is registered in the migration bundle and journal', () => {
     const keys = migrationKeys();
-    expect(keys[keys.length - 1]).toBe('m0007');
-    expect(migrationTags()[migrationTags().length - 1]).toMatch(/^0007_/);
+    expect(keys).toContain('m0007');
+    expect(migrationTags().some((t) => t.startsWith('0007_'))).toBe(true);
   });
 
   it('creates the agents table', () => {
-    const sql = migrationSql(migrationTags()[migrationTags().length - 1]);
+    const tag = migrationTags().find((t) => t.startsWith('0007_'))!;
+    const sql = migrationSql(tag);
     expect(sql).toContain('CREATE TABLE `agents`');
     for (const column of AGENT_COLUMNS) {
       expect(sql).toContain(`\`${column}\``);
@@ -97,7 +98,8 @@ describe('migration 0007 (#356)', () => {
   });
 
   it('renames the threads column instead of dropping and re-adding it', () => {
-    const sql = migrationSql(migrationTags()[migrationTags().length - 1]);
+    const tag = migrationTags().find((t) => t.startsWith('0007_'))!;
+    const sql = migrationSql(tag);
     expect(sql).toMatch(/ALTER TABLE [`"]?threads[`"]? RENAME COLUMN [`"]?persona[`"]? TO [`"]?agent[`"]?/i);
     expect(sql).not.toMatch(/DROP COLUMN/i);
   });

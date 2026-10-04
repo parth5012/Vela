@@ -57,6 +57,13 @@
       "when": 1791400000000,
       "tag": "0007_agents_and_thread_agent",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1791500000000,
+      "tag": "0008_task_connection_mode",
+      "breakpoints": true
     }
   ]
 }

@@ -108,7 +108,7 @@ TaskManager.defineTask(VELA_BACKGROUND_TASK, async (body: any) => {
       });
 
       try {
-        const output = await runTask(task);
+        const output = await runTask(task, task.connection_mode);
         await db.update(taskRuns)
           .set({
             status: 'completed',

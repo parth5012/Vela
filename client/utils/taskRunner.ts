@@ -7,11 +7,11 @@ export interface TaskRunInput {
   title: string;
   task_prompt: string;
   linked_agent?: string | null;
-  connection_mode?: string | null;
+  connection_mode?: 'server' | 'local' | 'cloud' | null;
 }
 
 export function resolveTaskMode(
-  task?: { connection_mode?: string | null } | null,
+  task?: { connection_mode?: 'server' | 'local' | 'cloud' | null } | null,
   taskMode?: string | null
 ): ConnectionMode {
   const mode = taskMode ?? task?.connection_mode;
