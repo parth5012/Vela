@@ -5,10 +5,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import db, { initializeDatabase } from '../db/client';
 import { tasks, taskRuns, TaskEntity, TaskRunEntity } from '../db/schema';
 import { eq, desc } from 'drizzle-orm';
-import { useConfigStore } from '../store/useConfigStore';
 import { AuroraScreen, Card, PrimaryButton } from '../components/ui/settingsKit';
 import { useAurora } from '../hooks/useAurora';
 import { calculateNextRun } from '../utils/backgroundTasks';
+import { runTask } from '../utils/taskRunner';
 import { isUserVisibleTask } from '../utils/checkinScheduler';
 import { useAgents } from '../hooks/useAgents';
 
@@ -23,7 +23,6 @@ const generateId = () => {
 export default function TasksScreen() {
   const router = useRouter();
   const { colors, sizes, aurora } = useAurora();
-  const { apiUrl, apiKey } = useConfigStore();
 
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'paused'>('all');
   const [taskList, setTaskList] = useState<TaskEntity[]>([]);
@@ -222,49 +221,14 @@ export default function TasksScreen() {
         loadRunHistory(task.id);
       }
 
-      if (!apiUrl || !apiKey) {
-        throw new Error('API URL or Key is not configured in Settings.');
-      }
-
-      const response = await fetch(`${apiUrl}/api/tasks/run`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          task_id: task.id,
-          title: task.title,
-          prompt: task.task_prompt,
-          agent: task.linked_agent || 'personal assistant',
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP Error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      if (data.status === 'success') {
-        await db.update(taskRuns)
-          .set({
-            status: 'completed',
-            completed_at: Date.now(),
-            output: data.output,
-          })
-          .where(eq(taskRuns.id, runId));
-      } else {
-        throw new Error(data.output || 'Unknown backend error');
-      }
-
-      const nextRunTime = calculateNextRun(task.recurrence_rule, startedAt);
-      await db.update(tasks)
+      const output = await runTask(task);
+      await db.update(taskRuns)
         .set({
-          last_run: startedAt,
-          next_run: nextRunTime,
+          status: 'completed',
+          completed_at: Date.now(),
+          output,
         })
-        .where(eq(tasks.id, task.id));
-
+        .where(eq(taskRuns.id, runId));
     } catch (err: any) {
       Alert.alert('Task failed', err.name === 'TypeError' ? 'Network unavailable' : (err.message || 'Execution failed'));
       if (db) {
@@ -276,12 +240,22 @@ export default function TasksScreen() {
           })
           .where(eq(taskRuns.id, runId));
       }
-    } finally {
-      setRunningTaskId(null);
-      loadTasks();
-      if (selectedTask?.id === task.id) {
-        loadRunHistory(task.id);
-      }
+    }
+
+    if (db) {
+      const nextRunTime = calculateNextRun(task.recurrence_rule, startedAt);
+      await db.update(tasks)
+        .set({
+          last_run: startedAt,
+          next_run: nextRunTime,
+        })
+        .where(eq(tasks.id, task.id));
+    }
+
+    setRunningTaskId(null);
+    loadTasks();
+    if (selectedTask?.id === task.id) {
+      loadRunHistory(task.id);
     }
   };
 
