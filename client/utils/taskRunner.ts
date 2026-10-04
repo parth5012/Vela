@@ -1,5 +1,11 @@
 import { ConnectionMode, useConfigStore, DEFAULT_CLOUD_PROVIDERS } from '../store/useConfigStore';
-import { streamLocalLlmResponse, initializeLocalModel, isLocalModelLoaded } from './localLlm';
+import {
+  streamLocalLlmResponse,
+  initializeLocalModel,
+  isLocalModelLoaded,
+  isUsingMockFallback,
+  getLocalLlmFallbackReason,
+} from './localLlm';
 import { streamCloudResponse } from './providers';
 
 export interface TaskRunInput {
@@ -68,19 +74,33 @@ export async function runTask(
       throw new Error('Mode "local" not configured: no local model configured');
     }
 
+    const rejectMockFallback = () => {
+      if (isUsingMockFallback()) {
+        throw new Error(
+          `Mode "local" unavailable: ${getLocalLlmFallbackReason() || 'local model is using mock fallback'}`
+        );
+      }
+    };
+
+    rejectMockFallback();
+
     if (!isLocalModelLoaded) {
       try {
-        await initializeLocalModel();
+        await initializeLocalModel(true);
       } catch (initErr: any) {
         throw new Error(`Mode "local" not configured: ${initErr?.message || 'failed to initialize local model'}`);
       }
     }
+
+    rejectMockFallback();
 
     const generator = streamLocalLlmResponse(task.task_prompt);
     let output = '';
     for await (const chunk of generator) {
       output += chunk;
     }
+
+    rejectMockFallback();
     return output;
   }
 

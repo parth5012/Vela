@@ -208,15 +208,14 @@ export default function TasksScreen() {
 
   const handleTriggerManualRun = async (task: TaskEntity) => {
     if (runningTaskId) return;
+    if (!db) return;
 
     const runId = generateId();
     const startedAt = Date.now();
 
+    setRunningTaskId(task.id);
+
     try {
-      setRunningTaskId(task.id);
-
-      if (!db) return;
-
       await db.insert(taskRuns).values({
         id: runId,
         task_id: task.id,
@@ -238,7 +237,7 @@ export default function TasksScreen() {
         .where(eq(taskRuns.id, runId));
     } catch (err: any) {
       Alert.alert('Task failed', err.name === 'TypeError' ? 'Network unavailable' : (err.message || 'Execution failed'));
-      if (db) {
+      try {
         await db.update(taskRuns)
           .set({
             status: 'failed',
@@ -246,23 +245,27 @@ export default function TasksScreen() {
             output: err.name === 'TypeError' ? 'Network unavailable' : (err.message || 'Execution failed'),
           })
           .where(eq(taskRuns.id, runId));
+      } catch (rowErr) {
+        console.warn('[tasks] Failed to record failed run:', rowErr);
       }
-    }
+    } finally {
+      try {
+        const nextRunTime = calculateNextRun(task.recurrence_rule, startedAt);
+        await db.update(tasks)
+          .set({
+            last_run: startedAt,
+            next_run: nextRunTime,
+          })
+          .where(eq(tasks.id, task.id));
+      } catch (scheduleErr) {
+        console.warn('[tasks] Failed to advance schedule:', scheduleErr);
+      }
 
-    if (db) {
-      const nextRunTime = calculateNextRun(task.recurrence_rule, startedAt);
-      await db.update(tasks)
-        .set({
-          last_run: startedAt,
-          next_run: nextRunTime,
-        })
-        .where(eq(tasks.id, task.id));
-    }
-
-    setRunningTaskId(null);
-    loadTasks();
-    if (selectedTask?.id === task.id) {
-      loadRunHistory(task.id);
+      setRunningTaskId(null);
+      loadTasks();
+      if (selectedTask?.id === task.id) {
+        loadRunHistory(task.id);
+      }
     }
   };
 
