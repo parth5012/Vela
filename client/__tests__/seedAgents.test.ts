@@ -152,15 +152,18 @@ describe('seedPresetAgents (#356)', () => {
     db.close();
   });
 
-  it('does not revert a prompt edited on a preset row', () => {
+  it('re-syncs a drifted preset row to the bundled seed on every run', () => {
     const db = freshDb();
     const runner = makeRunner(db);
     seedPresetAgents(runner, '2026-01-01T00:00:00.000Z');
+    // A preset row that no longer matches the bundle (legacy edit, or a
+    // stale install) must be brought back to the canonical seed so prompt
+    // updates actually ship to existing installs.
     db.prepare('UPDATE agents SET system_prompt = ? WHERE id = ?').run('my rewritten teacher prompt', 'teacher');
 
     seedPresetAgents(runner, '2026-01-02T00:00:00.000Z');
 
-    expect(agentById(db, 'teacher').system_prompt).toBe('my rewritten teacher prompt');
+    expect(agentById(db, 'teacher').system_prompt).toBe(registry.prompts.teacher);
     expect(agentById(db, 'analyst').system_prompt).toBe(registry.prompts.analyst);
     db.close();
   });
