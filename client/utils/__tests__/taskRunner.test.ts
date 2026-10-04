@@ -8,6 +8,8 @@ let mockIsLocalModelLoaded = true;
 jest.mock('../localLlm', () => ({
   streamLocalLlmResponse: jest.fn(),
   initializeLocalModel: jest.fn(),
+  isUsingMockFallback: jest.fn(),
+  getLocalLlmFallbackReason: jest.fn(),
   get isLocalModelLoaded() {
     return mockIsLocalModelLoaded;
   },
@@ -266,7 +268,37 @@ describe('taskRunner', () => {
 
       expect(output).toBe('Cold start completed.');
       expect(localLlm.initializeLocalModel).toHaveBeenCalledTimes(1);
+      expect(localLlm.initializeLocalModel).toHaveBeenCalledWith(true);
       expect(callOrder).toEqual(['initialize', 'stream']);
+    });
+
+    it('rejects a local run when the model is already in mock fallback', async () => {
+      (localLlm.isUsingMockFallback as jest.Mock).mockReturnValueOnce(true);
+      (localLlm.getLocalLlmFallbackReason as jest.Mock).mockReturnValueOnce(
+        'NeedleModule initialization failed: engine missing'
+      );
+
+      await expect(runTask(baseTask, 'local')).rejects.toThrow(
+        'Mode "local" unavailable: NeedleModule initialization failed: engine missing'
+      );
+      expect(localLlm.streamLocalLlmResponse).not.toHaveBeenCalled();
+    });
+
+    it('rejects a local run when streaming falls back to mock output', async () => {
+      (localLlm.isUsingMockFallback as jest.Mock)
+        .mockReturnValueOnce(false)
+        .mockReturnValueOnce(false)
+        .mockReturnValueOnce(true);
+      (localLlm.getLocalLlmFallbackReason as jest.Mock).mockReturnValueOnce('streaming failed');
+
+      async function* mockStream() {
+        yield 'simulated output';
+      }
+      (localLlm.streamLocalLlmResponse as jest.Mock).mockReturnValueOnce(mockStream());
+
+      await expect(runTask(baseTask, 'local')).rejects.toThrow(
+        'Mode "local" unavailable: streaming failed'
+      );
     });
 
     it('fails fast with human-readable reason when initializeLocalModel fails', async () => {
