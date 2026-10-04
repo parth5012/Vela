@@ -76,6 +76,7 @@ export const tasks = sqliteTable('tasks', {
   recurrence_rule: text('recurrence_rule').notNull(),
   linked_agent: text('linked_agent'),
   task_prompt: text('task_prompt').notNull(),
+  connection_mode: text('connection_mode').$type<'server' | 'local' | 'cloud'>(),
   last_run: integer('last_run'),
   next_run: integer('next_run'),
   created_at: integer('created_at').notNull(),

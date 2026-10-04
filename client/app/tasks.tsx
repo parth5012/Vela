@@ -11,6 +11,7 @@ import { calculateNextRun } from '../utils/backgroundTasks';
 import { runTask } from '../utils/taskRunner';
 import { isUserVisibleTask } from '../utils/checkinScheduler';
 import { useAgents } from '../hooks/useAgents';
+import { useConfigStore } from '../store/useConfigStore';
 
 const generateId = () => {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -23,6 +24,7 @@ const generateId = () => {
 export default function TasksScreen() {
   const router = useRouter();
   const { colors, sizes, aurora } = useAurora();
+  const appConnectionMode = useConfigStore((s) => s.connectionMode);
 
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'paused'>('all');
   const [taskList, setTaskList] = useState<TaskEntity[]>([]);
@@ -36,6 +38,7 @@ export default function TasksScreen() {
   const [formRecurrence, setFormRecurrence] = useState<'15m' | '1h' | '12h' | '24h' | 'weekly'>('24h');
   const [formPrompt, setFormPrompt] = useState('');
   const [formAgent, setFormAgent] = useState('personal assistant');
+  const [formConnectionMode, setFormConnectionMode] = useState<'server' | 'local' | 'cloud' | null>(null);
   // #357: shared DB-backed agent selector — no local copy, no second fetch.
   const agents = useAgents();
 
@@ -88,6 +91,7 @@ export default function TasksScreen() {
       setFormRecurrence(task.recurrence_rule as any);
       setFormPrompt(task.task_prompt);
       setFormAgent(task.linked_agent || 'personal assistant');
+      setFormConnectionMode(task.connection_mode ?? null);
     } else {
       setEditingTask(null);
       setFormTitle('');
@@ -95,6 +99,7 @@ export default function TasksScreen() {
       setFormRecurrence('24h');
       setFormPrompt('');
       setFormAgent('personal assistant');
+      setFormConnectionMode(null);
     }
     setIsFormModalVisible(true);
   };
@@ -126,6 +131,7 @@ export default function TasksScreen() {
             recurrence_rule: formRecurrence,
             task_prompt: formPrompt.trim(),
             linked_agent: formAgent.trim(),
+            connection_mode: formConnectionMode,
             next_run: nextRunTime,
           })
           .where(eq(tasks.id, editingTask.id));
@@ -137,6 +143,7 @@ export default function TasksScreen() {
           recurrence_rule: formRecurrence,
           task_prompt: formPrompt.trim(),
           linked_agent: formAgent.trim(),
+          connection_mode: formConnectionMode,
           status: 'active',
           last_run: null,
           next_run: calculateNextRun(formRecurrence, now),
@@ -221,7 +228,7 @@ export default function TasksScreen() {
         loadRunHistory(task.id);
       }
 
-      const output = await runTask(task);
+      const output = await runTask(task, task.connection_mode);
       await db.update(taskRuns)
         .set({
           status: 'completed',
@@ -343,6 +350,9 @@ export default function TasksScreen() {
                 </Text>
                 <Text style={[styles.metaText, { color: colors.textMuted }]}>
                   🤖 {task.linked_agent || 'personal assistant'}
+                </Text>
+                <Text style={[styles.metaText, { color: colors.textMuted }]}>
+                  🌐 {task.connection_mode || 'default'}
                 </Text>
               </View>
 
@@ -478,6 +488,36 @@ export default function TasksScreen() {
             </View>
 
             <View style={styles.inputGroup}>
+              <Text style={[styles.inputLabel, { color: colors.textMuted }]}>Connection Mode</Text>
+              <View style={styles.recurrencePills}>
+                {[
+                  { value: null, label: 'App default' },
+                  { value: 'server', label: 'Server' },
+                  { value: 'local', label: 'Local' },
+                  { value: 'cloud', label: 'Cloud' },
+                ].map((opt) => (
+                  <Pressable
+                    key={opt.label}
+                    onPress={() => setFormConnectionMode(opt.value as any)}
+                    style={[
+                      styles.rPill,
+                      formConnectionMode === opt.value && { backgroundColor: aurora.acc1, borderColor: aurora.acc1 },
+                    ]}
+                  >
+                    <Text style={[styles.rPillText, { color: formConnectionMode === opt.value ? aurora.onAccent : colors.textMuted }]}>
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              {formConnectionMode === null && (
+                <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 4 }}>
+                  Inherits app mode ({appConnectionMode})
+                </Text>
+              )}
+            </View>
+
+            <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.textMuted }]}>Task Instructions / Prompt</Text>
               <TextInput
                 value={formPrompt}
@@ -523,6 +563,9 @@ export default function TasksScreen() {
                   </Text>
                   <Text style={{ color: colors.textMuted, fontSize: 13 }}>
                     Agent: <Text style={{ color: colors.text }}>{selectedTask.linked_agent || 'personal assistant'}</Text>
+                  </Text>
+                  <Text style={{ color: colors.textMuted, fontSize: 13 }}>
+                    Mode: <Text style={{ color: colors.text }}>{selectedTask.connection_mode || `App default (${appConnectionMode})`}</Text>
                   </Text>
                 </View>
               </View>

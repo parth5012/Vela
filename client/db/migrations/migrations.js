@@ -9,6 +9,7 @@ import m0004 from './0004_checkin_offline_queue.sql';
 import m0005 from './0005_message_vectors.sql';
 import m0006 from './0006_active_skill.sql';
 import m0007 from './0007_agents_and_thread_agent.sql';
+import m0008 from './0008_task_connection_mode.sql';
 
 export default {
   journal,
@@ -21,5 +22,7 @@ export default {
     m0005,
     m0006,
     m0007,
+    m0008,
   },
 };
+  
