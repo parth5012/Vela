@@ -598,9 +598,26 @@ export default function TasksScreen() {
                         </Text>
                       ) : null}
                       {run.output ? (
-                        <View style={[styles.outputContainer, { backgroundColor: 'rgba(0,0,0,0.3)', borderColor: colors.glassBorder }]}>
-                          <Text style={{ color: '#a5b4fc', fontSize: 11, fontWeight: 'bold', marginBottom: 4 }}>OUTPUT LOG</Text>
-                          <Text style={{ color: '#e0e7ff', fontSize: 12, fontFamily: 'monospace' }}>
+                        <View style={[
+                          styles.outputContainer,
+                          {
+                            backgroundColor: run.status === 'failed' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(0,0,0,0.3)',
+                            borderColor: run.status === 'failed' ? 'rgba(239, 68, 68, 0.35)' : colors.glassBorder,
+                          }
+                        ]}>
+                          <Text style={{
+                            color: run.status === 'failed' ? '#f87171' : '#a5b4fc',
+                            fontSize: 11,
+                            fontWeight: 'bold',
+                            marginBottom: 4,
+                          }}>
+                            {run.status === 'failed' ? 'FAILURE REASON' : 'OUTPUT LOG'}
+                          </Text>
+                          <Text style={{
+                            color: run.status === 'failed' ? '#fca5a5' : '#e0e7ff',
+                            fontSize: 12,
+                            fontFamily: 'monospace',
+                          }}>
                             {run.output}
                           </Text>
                         </View>

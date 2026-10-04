@@ -2,7 +2,7 @@ import React from 'react';
 import renderer, { act } from 'react-test-renderer';
 import TasksScreen from '../app/tasks';
 import { useConfigStore } from '../store/useConfigStore';
-import { TaskEntity } from '../db/schema';
+import { TaskEntity, TaskRunEntity } from '../db/schema';
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({
@@ -51,10 +51,22 @@ const mockTasks: TaskEntity[] = [
   },
 ];
 
+const mockRuns: TaskRunEntity[] = [
+  {
+    id: 'run-fail-1',
+    task_id: 'task-1',
+    status: 'failed',
+    started_at: 1700000000,
+    completed_at: 1700000005,
+    output: 'Mode "cloud" not configured: no cloud provider key',
+  },
+];
+
 const mockInsert = jest.fn().mockReturnValue({ values: jest.fn(async () => {}) });
 const mockUpdateSet = jest.fn().mockReturnValue({ where: jest.fn(async () => {}) });
 const mockUpdate = jest.fn().mockReturnValue({ set: mockUpdateSet });
-const mockSelectFrom = jest.fn().mockResolvedValue(mockTasks);
+const mockWhere = jest.fn(async () => mockRuns);
+const mockSelectFrom = jest.fn(() => Object.assign(Promise.resolve(mockTasks), { where: mockWhere }));
 const mockSelect = jest.fn().mockReturnValue({
   from: mockSelectFrom,
 });
@@ -240,5 +252,23 @@ describe('TasksScreen Connection Mode Selector (#362)', () => {
     expect(mockInsert).toHaveBeenCalled();
     const insertedValues = mockInsert.mock.results[0].value.values.mock.calls[0][0];
     expect(insertedValues.connection_mode).toBeNull();
+  });
+
+  it('surfaces failure reason in task run history detail view (#363)', async () => {
+    let component: any;
+    await act(async () => {
+      component = renderer.create(<TasksScreen />);
+    });
+
+    // Click first task to open details modal
+    await act(async () => {
+      pressText(component.root, 'Daily News Digest');
+    });
+
+    const texts = findTexts(component.root);
+    expect(texts.some((t) => t.includes('Execution Run History'))).toBe(true);
+    expect(texts.some((t) => t.includes('FAILED'))).toBe(true);
+    expect(texts.some((t) => t.includes('FAILURE REASON'))).toBe(true);
+    expect(texts.some((t) => t.includes('Mode "cloud" not configured: no cloud provider key'))).toBe(true);
   });
 });

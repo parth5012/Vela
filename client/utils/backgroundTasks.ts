@@ -3,7 +3,6 @@ import * as BackgroundTask from 'expo-background-task';
 import db from '../db/client';
 import { tasks, taskRuns } from '../db/schema';
 import { eq, and, lte, isNull, or } from 'drizzle-orm';
-import { useConfigStore } from '../store/useConfigStore';
 import { runTask } from './taskRunner';
 import {
   isCheckinSchedulerTask,
@@ -49,7 +48,7 @@ const generateId = () => {
   });
 };
 
-TaskManager.defineTask(VELA_BACKGROUND_TASK, async (body: any) => {
+export async function executeVelaBackgroundTask(body?: any): Promise<BackgroundTask.BackgroundTaskResult> {
   const { error } = body || {};
   if (error) {
     console.error(`Background Task ID error: ${error.message}`);
@@ -59,12 +58,6 @@ TaskManager.defineTask(VELA_BACKGROUND_TASK, async (body: any) => {
   try {
     if (!db) {
       console.warn('[Background Task] DB client not available.');
-      return BackgroundTask.BackgroundTaskResult.Failed;
-    }
-
-    const { apiUrl, apiKey } = useConfigStore.getState();
-    if (!apiUrl || !apiKey) {
-      console.warn('[Background Task] API credentials not set.');
       return BackgroundTask.BackgroundTaskResult.Failed;
     }
 
@@ -150,7 +143,9 @@ TaskManager.defineTask(VELA_BACKGROUND_TASK, async (body: any) => {
     console.error('[Background Task] Execution error:', err);
     return BackgroundTask.BackgroundTaskResult.Failed;
   }
-});
+}
+
+TaskManager.defineTask(VELA_BACKGROUND_TASK, executeVelaBackgroundTask);
 
 export async function registerVelaBackgroundTask() {
   try {
