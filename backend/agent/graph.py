@@ -18,7 +18,6 @@ from utils.logger import StructuredLogger
 
 
 logger = StructuredLogger("GraphSupervisor")
-tools = ToolNode(tools_list)
 
 @traceable(name='Supervisor')
 def supervisor_node(state: AgentState) -> dict:

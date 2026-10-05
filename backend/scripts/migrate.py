@@ -6,7 +6,6 @@ or via uv:
     uv run python backend/scripts/migrate.py
 """
 
-import os
 import sys
 from pathlib import Path
 from dotenv import load_dotenv

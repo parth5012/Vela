@@ -1,12 +1,10 @@
 """Gmail tools — send and read emails through the Google Workspace auth gate."""
 
-import os
 import base64
 from concurrent.futures import ThreadPoolExecutor
 from email.message import EmailMessage
 from langchain_core.tools import tool
-from googleapiclient.discovery import build
-from utils.auth_gate import get_authenticated_service, AUTH_REQUIRED
+from utils.auth_gate import get_authenticated_service
 from utils.logger import StructuredLogger
 
 logger = StructuredLogger("GmailTool")

@@ -1,7 +1,6 @@
 import socket
 import urllib.parse
 import ipaddress
-import os
 import uuid
 import httpx
 import asyncio
@@ -56,20 +55,6 @@ def is_safe_audio_url(url: str) -> bool:
                 or not ip.is_global
             ):
                 return False
-
-            if isinstance(ip, ipaddress.IPv4Address):
-                if ip in ipaddress.IPv4Network("127.0.0.0/8"):
-                    return False
-                if ip in ipaddress.IPv4Network("169.254.0.0/16"):
-                    return False
-                if ip in ipaddress.IPv4Network("10.0.0.0/8"):
-                    return False
-                if ip in ipaddress.IPv4Network("172.16.0.0/12"):
-                    return False
-                if ip in ipaddress.IPv4Network("192.168.0.0/16"):
-                    return False
-                if ip in ipaddress.IPv4Network("0.0.0.0/8"):
-                    return False
 
         return True
     except Exception:

@@ -1,7 +1,7 @@
 import uuid
 import json
 from sqlalchemy.orm import Session
-from db.models import Conversation, OAuthToken, MemoryVector, Experience, SystemPromptFragment, SkillsRegistry, SystemSetting, Briefing, CheckIn, EMBEDDING_DIMENSIONS, utcnow_naive
+from db.models import Conversation, OAuthToken, MemoryVector, Experience, SystemPromptFragment, SystemSetting, Briefing, CheckIn, EMBEDDING_DIMENSIONS, utcnow_naive
 from datetime import timedelta
 from utils.ulid import generate_ulid
 
