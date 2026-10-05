@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Modal, Switch, ActivityIndicator, Alert, TextInput } from 'react-native';
-import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import db, { initializeDatabase } from '../db/client';
 import { tasks, taskRuns, TaskEntity, TaskRunEntity } from '../db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { AuroraScreen, Card, PrimaryButton } from '../components/ui/settingsKit';
 import { useAurora } from '../hooks/useAurora';
 import { calculateNextRun } from '../utils/backgroundTasks';
@@ -22,7 +21,6 @@ const generateId = () => {
 };
 
 export default function TasksScreen() {
-  const router = useRouter();
   const { colors, sizes, aurora } = useAurora();
   const appConnectionMode = useConfigStore((s) => s.connectionMode);
 

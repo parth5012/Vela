@@ -15,7 +15,6 @@ import {
   handleWebViewLoadEnd,
   handleWebViewMessage,
 } from '../store/useBrowserStore';
-import { hydrateGoogleTokens } from '../store/useGoogleAuthStore';
 import { registerVelaBackgroundTask } from '../utils/backgroundTasks';
 import * as Notifications from 'expo-notifications';
 import { SafetyDialog } from '../components/ui/SafetyDialog';
@@ -107,13 +106,11 @@ export default function RootLayout() {
     }
   }, [hasHydrated, chatHasHydrated]);
 
-useEffect(() => {
-if (hasHydrated) {
-// Hydrate Google OAuth tokens SecureStore
-hydrateGoogleTokens();
-registerVelaBackgroundTask();
-}
-}, [hasHydrated]);
+  useEffect(() => {
+    if (hasHydrated) {
+      registerVelaBackgroundTask();
+    }
+  }, [hasHydrated]);
 
   // FCM push registration — triggers on setup completion (hasHydrated && isConfigured)
   // per #132. Extracted to utils/pushRegistration.ts; reads apiUrl/apiKey via
@@ -389,11 +386,5 @@ const styles = StyleSheet.create({
     backgroundColor: '#09090b',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  persistentWebview: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
   },
 });

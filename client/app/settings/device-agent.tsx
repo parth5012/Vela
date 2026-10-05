@@ -114,9 +114,6 @@ export default function DeviceAgentPermissionsScreen() {
 }
 
 const styles = StyleSheet.create({
-  styleHelper: {
-    display: 'none',
-  },
   section: {
     marginBottom: 20,
   },

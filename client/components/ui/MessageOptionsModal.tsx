@@ -44,6 +44,44 @@ export default function MessageOptionsModal({
   isRaw,
   isUser,
 }: MessageOptionsModalProps) {
+  const optionButtonStyle = ({ pressed }: { pressed: boolean }) => [
+    styles.optionButton,
+    { backgroundColor: themeColors.card, borderColor: themeColors.border },
+    pressed && styles.optionButtonPressed,
+  ];
+
+  const options: {
+    id: string;
+    icon: string;
+    label: string;
+    onPress: () => void;
+    visible?: boolean;
+    accessibilityLabel?: string;
+  }[] = [
+    { id: 'download', icon: '📄', label: 'Download as MD', onPress: onDownloadMd },
+    { id: 'regenerate', icon: '🔄', label: 'Regenerate Response', onPress: onRegenerate, visible: !isUser },
+    {
+      id: 'raw',
+      icon: '👁️',
+      label: isRaw ? 'Show Rendered Markdown' : 'Show Raw Markdown',
+      onPress: onToggleRaw,
+      visible: !isUser,
+    },
+    { id: 'branch', icon: '🌿', label: 'Branch Conversation', onPress: onBranch },
+    {
+      id: 'view',
+      icon: '👁️',
+      label: 'View Full',
+      onPress: () => onView?.(messageContent ?? ''),
+      visible: Boolean(onView && messageContent),
+      accessibilityLabel: 'View full message',
+    },
+    { id: 'copy-text', icon: '📋', label: 'Copy Message', onPress: onCopyText },
+    { id: 'copy-code', icon: '💻', label: 'Copy Code Blocks Only', onPress: onCopyCode },
+    { id: 'share', icon: '📤', label: 'Share', onPress: onShare, visible: !isUser },
+    { id: 'info', icon: 'ℹ️', label: 'Response Info', onPress: onShowInfo, visible: !isUser },
+  ];
+
   return (
     <Modal
       visible={visible}
@@ -62,127 +100,26 @@ export default function MessageOptionsModal({
           <View style={[styles.dragHandle, { backgroundColor: themeColors.textDark }]} />
           <Text style={[styles.title, { color: themeColors.text }]}>Message Options</Text>
 
-          <Pressable
-            style={({ pressed }) => [
-              styles.optionButton,
-              { backgroundColor: themeColors.card, borderColor: themeColors.border },
-              pressed && styles.optionButtonPressed,
-            ]}
-            onPress={() => { onDownloadMd(); onClose(); }}
-          >
-            <Text style={styles.optionIcon}>📄</Text>
-            <Text style={[styles.optionButtonText, { color: themeColors.text }]}>Download as MD</Text>
-          </Pressable>
-
-          {!isUser && (
-<Pressable
-            style={({ pressed }) => [
-              styles.optionButton,
-              { backgroundColor: themeColors.card, borderColor: themeColors.border },
-              pressed && styles.optionButtonPressed,
-            ]}
-            onPress={() => { onRegenerate(); onClose(); }}
-          >
-            <Text style={styles.optionIcon}>🔄</Text>
-            <Text style={[styles.optionButtonText, { color: themeColors.text }]}>Regenerate Response</Text>
-          </Pressable>
-          )}
-
-          {!isUser && (
-<Pressable
-            style={({ pressed }) => [
-              styles.optionButton,
-              { backgroundColor: themeColors.card, borderColor: themeColors.border },
-              pressed && styles.optionButtonPressed,
-            ]}
-            onPress={() => { onToggleRaw(); onClose(); }}
-          >
-            <Text style={styles.optionIcon}>👁️</Text>
-            <Text style={[styles.optionButtonText, { color: themeColors.text }]}>
-              {isRaw ? 'Show Rendered Markdown' : 'Show Raw Markdown'}
-            </Text>
-          </Pressable>
-          )}
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.optionButton,
-              { backgroundColor: themeColors.card, borderColor: themeColors.border },
-              pressed && styles.optionButtonPressed,
-            ]}
-            onPress={() => { onBranch(); onClose(); }}
-          >
-            <Text style={styles.optionIcon}>🌿</Text>
-            <Text style={[styles.optionButtonText, { color: themeColors.text }]}>Branch Conversation</Text>
-          </Pressable>
-
-          {onView && messageContent ? (
-            <Pressable
-              style={({ pressed }) => [
-                styles.optionButton,
-                { backgroundColor: themeColors.card, borderColor: themeColors.border },
-                pressed && styles.optionButtonPressed,
-              ]}
-              onPress={() => { onView(messageContent); onClose(); }}
-              accessibilityRole="button"
-              accessibilityLabel="View full message"
-            >
-              <Text style={styles.optionIcon}>👁️</Text>
-              <Text style={[styles.optionButtonText, { color: themeColors.text }]}>View Full</Text>
-            </Pressable>
-          ) : null}
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.optionButton,
-              { backgroundColor: themeColors.card, borderColor: themeColors.border },
-              pressed && styles.optionButtonPressed,
-            ]}
-            onPress={() => { onCopyText(); onClose(); }}
-          >
-            <Text style={styles.optionIcon}>📋</Text>
-            <Text style={[styles.optionButtonText, { color: themeColors.text }]}>Copy Message</Text>
-          </Pressable>
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.optionButton,
-              { backgroundColor: themeColors.card, borderColor: themeColors.border },
-              pressed && styles.optionButtonPressed,
-            ]}
-            onPress={() => { onCopyCode(); onClose(); }}
-          >
-            <Text style={styles.optionIcon}>💻</Text>
-            <Text style={[styles.optionButtonText, { color: themeColors.text }]}>Copy Code Blocks Only</Text>
-          </Pressable>
-
-          {!isUser && (
-<Pressable
-            style={({ pressed }) => [
-              styles.optionButton,
-              { backgroundColor: themeColors.card, borderColor: themeColors.border },
-              pressed && styles.optionButtonPressed,
-            ]}
-            onPress={() => { onShare(); onClose(); }}
-          >
-            <Text style={styles.optionIcon}>📤</Text>
-            <Text style={[styles.optionButtonText, { color: themeColors.text }]}>Share</Text>
-          </Pressable>
-          )}
-
-          {!isUser && (
-<Pressable
-            style={({ pressed }) => [
-              styles.optionButton,
-              { backgroundColor: themeColors.card, borderColor: themeColors.border },
-              pressed && styles.optionButtonPressed,
-            ]}
-            onPress={() => { onShowInfo(); onClose(); }}
-          >
-            <Text style={styles.optionIcon}>ℹ️</Text>
-            <Text style={[styles.optionButtonText, { color: themeColors.text }]}>Response Info</Text>
-          </Pressable>
-          )}
+          {options
+            .filter((opt) => opt.visible !== false)
+            .map((opt) => (
+              <Pressable
+                key={opt.id}
+                style={optionButtonStyle}
+                onPress={() => {
+                  opt.onPress();
+                  onClose();
+                }}
+                {...(opt.accessibilityLabel
+                  ? { accessibilityRole: 'button' as const, accessibilityLabel: opt.accessibilityLabel }
+                  : {})}
+              >
+                <Text style={styles.optionIcon}>{opt.icon}</Text>
+                <Text style={[styles.optionButtonText, { color: themeColors.text }]}>
+                  {opt.label}
+                </Text>
+              </Pressable>
+            ))}
 
           <Pressable
             style={({ pressed }) => [

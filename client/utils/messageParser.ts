@@ -60,6 +60,13 @@ function pruneEmptyClosedSegments(segments: MessageSegment[]): MessageSegment[] 
   return pruned;
 }
 
+// Tag shapes for <call:...> and <skill:...>; the parse logic is identical
+// apart from the tag name and resulting segment type.
+const CALL_OPEN_REGEX = /^<call:([a-zA-Z0-9_:]+)(?:\s+input=(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'))?\s*>/;
+const CALL_NAME_REGEX = /^<call:([a-zA-Z0-9_:]*)/;
+const SKILL_OPEN_REGEX = /^<skill:([a-zA-Z0-9_:]+)(?:\s+input=(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'))?\s*>/;
+const SKILL_NAME_REGEX = /^<skill:([a-zA-Z0-9_:]*)/;
+
 export function parseMessage(content: string): MessageSegment[] {
   if (typeof content !== 'string') return [];
   const root: MessageSegment = {
@@ -94,6 +101,103 @@ export function parseMessage(content: string): MessageSegment[] {
         content: text,
         isClosed: true,
       });
+    }
+  };
+
+  // Shared <call:...>/<skill:...> open-tag handling. Returns whether the
+  // caller should break out of the parse loop, continue it, or fall through.
+  const handleNamedTagOpen = (
+    openTagRegex: RegExp,
+    nameRegex: RegExp,
+    bareMarker: string,
+    segmentType: 'tool_call' | 'skill'
+  ): 'break' | 'continue' | 'next' => {
+    const remaining = content.slice(index);
+    const openTagMatch = remaining.match(openTagRegex);
+
+    if (!openTagMatch) {
+      const nameMatch = remaining.match(nameRegex);
+      const name = nameMatch ? nameMatch[1] : '';
+
+      if (!name) {
+        // Bare marker fragment (e.g. '<call:>' or a stray marker in prose).
+        // Emit it as literal text instead of fabricating a nameless node
+        // that renders a phantom block (#150).
+        addText(bareMarker);
+        index += bareMarker.length;
+        return 'continue';
+      }
+
+      let input: string | undefined = undefined;
+      const inputMatch = remaining.match(/input=(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')/);
+      if (inputMatch) {
+        input = inputMatch[1] !== undefined ? inputMatch[1] : inputMatch[2];
+      } else {
+        const partialInputMatch = remaining.match(/input=["']((?:[^"\\]|\\.)*)$/);
+        if (partialInputMatch) {
+          input = partialInputMatch[1];
+        }
+      }
+
+      if (openToolDepth() >= MAX_NESTING) {
+        // FIX-1: nesting cap reached — emit the raw tag as literal text
+        // instead of pushing another node, then stop parsing.
+        addText(remaining);
+        return 'break';
+      }
+
+      const newNode: MessageSegment = {
+        type: segmentType,
+        name,
+        isClosed: false,
+        children: [],
+      };
+      if (input !== undefined) {
+        newNode.input = truncateInput(input);
+      }
+      activeNode().children!.push(newNode);
+      stack.push(newNode);
+      return 'break';
+    }
+
+    const tagName = openTagMatch[1];
+    const inputVal = openTagMatch[2] !== undefined ? openTagMatch[2] : openTagMatch[3];
+    index += openTagMatch[0].length;
+
+    if (openToolDepth() >= MAX_NESTING) {
+      // FIX-1: nesting cap reached — emit the raw tag as literal text
+      // instead of pushing another node.
+      addText(openTagMatch[0]);
+      return 'continue';
+    }
+
+    const newNode: MessageSegment = {
+      type: segmentType,
+      name: tagName,
+      isClosed: false,
+      children: [],
+    };
+    if (inputVal !== undefined) {
+      newNode.input = truncateInput(inputVal);
+    }
+    activeNode().children!.push(newNode);
+    stack.push(newNode);
+    return 'next';
+  };
+
+  // Shared </call...>/</skill...> close-tag handling.
+  const handleNamedTagClose = (segmentType: 'tool_call' | 'skill'): void => {
+    const closeRemaining = content.slice(index);
+    const closeTagEndIdx = closeRemaining.indexOf('>');
+
+    if (closeTagEndIdx === -1) {
+      index = content.length;
+    } else {
+      index += closeTagEndIdx + 1;
+      if (stack.length > 1 && stack[stack.length - 1].type === segmentType) {
+        const popped = stack.pop()!;
+        popped.isClosed = true;
+      }
     }
   };
 
@@ -171,182 +275,19 @@ export function parseMessage(content: string): MessageSegment[] {
         popped.isClosed = true;
       }
     } 
-    else if (nextTarget.type === 'call_open') {
-      const callRemaining = content.slice(index);
-      const openTagRegex = /^<call:([a-zA-Z0-9_:]+)(?:\s+input=(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'))?\s*>/;
-      const openTagMatch = callRemaining.match(openTagRegex);
-
-      if (!openTagMatch) {
-        const nameMatch = callRemaining.match(/^<call:([a-zA-Z0-9_:]*)/);
-        const name = nameMatch ? nameMatch[1] : '';
-
-        if (!name) {
-          // Bare '<call:' fragment (e.g. '<call:>' or a stray marker in prose).
-          // Emit it as literal text instead of fabricating a nameless tool_call
-          // node that renders a phantom "Executed: Tool" block (#150).
-          addText('<call:');
-          index += 6; // '<call:'.length
-          continue;
-        }
-
-        let input: string | undefined = undefined;
-        const inputMatch = callRemaining.match(/input=(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')/);
-        if (inputMatch) {
-          input = inputMatch[1] !== undefined ? inputMatch[1] : inputMatch[2];
-        } else {
-          const partialInputMatch = callRemaining.match(/input=["']((?:[^"\\]|\\.)*)$/);
-          if (partialInputMatch) {
-            input = partialInputMatch[1];
-          }
-        }
-
-        if (openToolDepth() >= MAX_NESTING) {
-          // FIX-1: nesting cap reached — emit the raw tag as literal text
-          // instead of pushing another node, then exit as existing code does.
-          addText(callRemaining);
-          break;
-        }
-
-        const newNode: MessageSegment = {
-          type: 'tool_call',
-          name,
-          isClosed: false,
-          children: [],
-        };
-        if (input !== undefined) {
-          newNode.input = truncateInput(input);
-        }
-        activeNode().children!.push(newNode);
-        stack.push(newNode);
-        break;
-      }
-
-      const toolName = openTagMatch[1];
-      const inputVal = openTagMatch[2] !== undefined ? openTagMatch[2] : openTagMatch[3];
-      const openTagLength = openTagMatch[0].length;
-
-      index += openTagLength;
-
-      if (openToolDepth() >= MAX_NESTING) {
-        // FIX-1: nesting cap reached — emit the raw tag as literal text
-        // instead of pushing another node.
-        addText(openTagMatch[0]);
-        continue;
-      }
-
-      const newNode: MessageSegment = {
-        type: 'tool_call',
-        name: toolName,
-        isClosed: false,
-        children: [],
-      };
-      if (inputVal !== undefined) {
-        newNode.input = truncateInput(inputVal);
-      }
-      activeNode().children!.push(newNode);
-      stack.push(newNode);
-    } 
-    else if (nextTarget.type === 'call_close') {
-      const closeRemaining = content.slice(index);
-      const closeTagEndIdx = closeRemaining.indexOf('>');
-      
-      if (closeTagEndIdx === -1) {
-        index = content.length;
-      } else {
-        index += closeTagEndIdx + 1;
-        if (stack.length > 1 && stack[stack.length - 1].type === 'tool_call') {
-          const popped = stack.pop()!;
-          popped.isClosed = true;
-        }
-      }
+    else if (nextTarget.type === 'call_open' || nextTarget.type === 'skill_open') {
+      const isCall = nextTarget.type === 'call_open';
+      const outcome = handleNamedTagOpen(
+        isCall ? CALL_OPEN_REGEX : SKILL_OPEN_REGEX,
+        isCall ? CALL_NAME_REGEX : SKILL_NAME_REGEX,
+        isCall ? '<call:' : '<skill:',
+        isCall ? 'tool_call' : 'skill'
+      );
+      if (outcome === 'break') break;
+      if (outcome === 'continue') continue;
     }
-    else if (nextTarget.type === 'skill_open') {
-      const skillRemaining = content.slice(index);
-      const openTagRegex = /^<skill:([a-zA-Z0-9_:]+)(?:\s+input=(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'))?\s*>/;
-      const openTagMatch = skillRemaining.match(openTagRegex);
-
-      if (!openTagMatch) {
-        const nameMatch = skillRemaining.match(/^<skill:([a-zA-Z0-9_:]*)/);
-        const name = nameMatch ? nameMatch[1] : '';
-
-        if (!name) {
-          // Bare '<skill:' fragment: emit literal text, never a nameless
-          // "Executing: Skill" phantom block (#150).
-          addText('<skill:');
-          index += 7; // '<skill:'.length
-          continue;
-        }
-
-        let input: string | undefined = undefined;
-        const inputMatch = skillRemaining.match(/input=(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')/);
-        if (inputMatch) {
-          input = inputMatch[1] !== undefined ? inputMatch[1] : inputMatch[2];
-        } else {
-          const partialInputMatch = skillRemaining.match(/input=["']((?:[^"\\]|\\.)*)$/);
-          if (partialInputMatch) {
-            input = partialInputMatch[1];
-          }
-        }
-
-        if (openToolDepth() >= MAX_NESTING) {
-          // FIX-1: nesting cap reached — emit the raw tag as literal text
-          // instead of pushing another node, then exit as existing code does.
-          addText(skillRemaining);
-          break;
-        }
-
-        const newNode: MessageSegment = {
-          type: 'skill',
-          name,
-          isClosed: false,
-          children: [],
-        };
-        if (input !== undefined) {
-          newNode.input = truncateInput(input);
-        }
-        activeNode().children!.push(newNode);
-        stack.push(newNode);
-        break;
-      }
-
-      const skillName = openTagMatch[1];
-      const inputVal = openTagMatch[2] !== undefined ? openTagMatch[2] : openTagMatch[3];
-      const openTagLength = openTagMatch[0].length;
-
-      index += openTagLength;
-
-      if (openToolDepth() >= MAX_NESTING) {
-        // FIX-1: nesting cap reached — emit the raw tag as literal text
-        // instead of pushing another node.
-        addText(openTagMatch[0]);
-        continue;
-      }
-
-      const newNode: MessageSegment = {
-        type: 'skill',
-        name: skillName,
-        isClosed: false,
-        children: [],
-      };
-      if (inputVal !== undefined) {
-        newNode.input = truncateInput(inputVal);
-      }
-      activeNode().children!.push(newNode);
-      stack.push(newNode);
-    }
-    else if (nextTarget.type === 'skill_close') {
-      const closeRemaining = content.slice(index);
-      const closeTagEndIdx = closeRemaining.indexOf('>');
-      
-      if (closeTagEndIdx === -1) {
-        index = content.length;
-      } else {
-        index += closeTagEndIdx + 1;
-        if (stack.length > 1 && stack[stack.length - 1].type === 'skill') {
-          const popped = stack.pop()!;
-          popped.isClosed = true;
-        }
-      }
+    else if (nextTarget.type === 'call_close' || nextTarget.type === 'skill_close') {
+      handleNamedTagClose(nextTarget.type === 'call_close' ? 'tool_call' : 'skill');
     }
   }
 
