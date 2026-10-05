@@ -44,7 +44,7 @@ import { useBrowserStore } from '../store/useBrowserStore';
 import { useGoogleAuthStore } from '../store/useGoogleAuthStore';
 
 // Importing local mode modules
-import { initializeLocalModel, isLocalModelLoaded, streamLocalLlmResponse, isLocalLlmDown, localModelStorageKey, LOCAL_MODELS } from '../utils/localLlm';
+import { initializeLocalModel, streamLocalLlmResponse, isLocalLlmDown, localModelStorageKey, LOCAL_MODELS } from '../utils/localLlm';
 import { compileLocalPrompt } from '../utils/promptCompiler';
 import { parseAndExecuteTools } from '../utils/toolProxy';
 import { streamCloudResponse } from '../utils/providers';
@@ -98,6 +98,102 @@ const generateId = (_prefix: string) => {
   // across pages (finding-009). See utils/syncIds.ts.
   return generateUlid();
 };
+
+// Start the 100ms flush timer for a streaming thread if it isn't running yet.
+// FIX-3: the tick self-heals when a stream ends without explicit cleanup.
+function ensureThrottleTimer(
+  threadId: string,
+  throttleTimers: { current: Record<string, any> },
+  pendingTokens: { current: Record<string, string> },
+  appendToken: (threadId: string, token: string) => void,
+  cleanUpThrottleAndHeal: (threadId: string) => void
+): void {
+  if (throttleTimers.current[threadId]) return;
+  throttleTimers.current[threadId] = setInterval(() => {
+    if (!useChatStore.getState().isThreadStreaming(threadId)) {
+      cleanUpThrottleAndHeal(threadId);
+      return;
+    }
+    if (pendingTokens.current[threadId]) {
+      appendToken(threadId, pendingTokens.current[threadId]);
+      pendingTokens.current[threadId] = '';
+    }
+  }, 100);
+}
+
+type ServerStreamParams = {
+  apiUrl: string;
+  apiKey: string;
+  threadId: string;
+  prompt: string;
+  agent: string;
+  /** User message to queue for sync if the stream fails (onError + network catch). */
+  syncUserEntry: Message;
+  /** Threads snapshot for the optimistic title update; omit to persist only via renameThread. */
+  threads?: Thread[];
+  abortControllers: { current: Record<string, AbortController> };
+  throttleTimers: { current: Record<string, any> };
+  pendingTokens: { current: Record<string, string> };
+  appendToken: (threadId: string, token: string) => void;
+  setStreamingThread: (threadId: string, isStreaming: boolean) => void;
+  setThreads: (threads: Thread[]) => void;
+  setAuthRequired: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  cleanUpThrottleAndHeal: (threadId: string) => void;
+};
+
+// Shared server-mode SSE dispatch used by send, regenerate, and new-thread:
+// token throttling, title rename, error surfacing, and sync queueing.
+async function runServerStream(p: ServerStreamParams): Promise<void> {
+  const controller = new AbortController();
+  p.abortControllers.current[p.threadId] = controller;
+
+  try {
+    await streamAgentResponse(
+      p.apiUrl,
+      p.apiKey,
+      p.threadId,
+      p.prompt,
+      (chunk) => {
+        p.pendingTokens.current[p.threadId] = (p.pendingTokens.current[p.threadId] || '') + chunk;
+        ensureThrottleTimer(p.threadId, p.throttleTimers, p.pendingTokens, p.appendToken, p.cleanUpThrottleAndHeal);
+      },
+      (newTitle) => {
+        p.setStreamingThread(p.threadId, false);
+        delete p.abortControllers.current[p.threadId];
+        p.cleanUpThrottleAndHeal(p.threadId);
+        useChatStore.getState().removeLastEmptyAssistant(p.threadId);
+        if (newTitle) {
+          if (p.threads) {
+            p.setThreads(p.threads.map((t) => (t.id === p.threadId ? { ...t, title: newTitle } : t)));
+          }
+          useChatStore.getState().renameThread(p.threadId, newTitle);
+        }
+      },
+      (error) => {
+        p.setStreamingThread(p.threadId, false);
+        delete p.abortControllers.current[p.threadId];
+        p.cleanUpThrottleAndHeal(p.threadId);
+        useChatStore.getState().removeLastEmptyAssistant(p.threadId);
+        const errMsg = error?.message || (typeof error === 'string' ? error : '') || 'Failed to stream response.';
+        p.appendToken(p.threadId, `\n\n⚠️ **Error:** ${errMsg}`);
+        queueMessageForSync(p.threadId, p.syncUserEntry).catch(() => {});
+      },
+      controller.signal,
+      p.agent,
+      (provider) => {
+        if (provider === 'google' && p.threadId) {
+          p.setAuthRequired((prev) => ({ ...prev, [p.threadId]: true }));
+        }
+      }
+    );
+  } catch (err: any) {
+    p.setStreamingThread(p.threadId, false);
+    p.cleanUpThrottleAndHeal(p.threadId);
+    useChatStore.getState().removeLastEmptyAssistant(p.threadId);
+    p.appendToken(p.threadId, `\n\n⚠️ **Network Error:** ${err.message || 'Verification aborted.'}`);
+    queueMessageForSync(p.threadId, p.syncUserEntry).catch(() => {});
+  }
+}
 
 function SourceCard({ src, colors, sizes, accentHex }: { src: SearchSource; colors: any; sizes: any; accentHex: string }) {
   const [imgError, setImgError] = React.useState(false);
@@ -749,19 +845,7 @@ export default function ChatScreen() {
         });
 
         // 3. Setup throttle timer
-        if (!throttleTimersRef.current[threadId]) {
-          throttleTimersRef.current[threadId] = setInterval(() => {
-            // FIX-3 self-heal: stream ended without cleanup -> flush + stop ticking.
-            if (!useChatStore.getState().isThreadStreaming(threadId)) {
-              cleanUpThrottleAndHeal(threadId);
-              return;
-            }
-            if (pendingTokensMapRef.current[threadId]) {
-              appendToken(threadId, pendingTokensMapRef.current[threadId]);
-              pendingTokensMapRef.current[threadId] = '';
-            }
-          }, 100);
-        }
+        ensureThrottleTimer(threadId, throttleTimersRef, pendingTokensMapRef, appendToken, cleanUpThrottleAndHeal);
 
         // 4. Stream response from local inference engine
         // Add a safety timeout so streaming always stops even if the generator hangs
@@ -880,18 +964,7 @@ export default function ChatScreen() {
         signal: controller.signal,
         onToken: (chunk) => {
           pendingTokensMapRef.current[threadId] = (pendingTokensMapRef.current[threadId] || '') + chunk;
-          if (!throttleTimersRef.current[threadId]) {
-            throttleTimersRef.current[threadId] = setInterval(() => {
-              if (!useChatStore.getState().isThreadStreaming(threadId)) {
-                cleanUpThrottleAndHeal(threadId);
-                return;
-              }
-              if (pendingTokensMapRef.current[threadId]) {
-                appendToken(threadId, pendingTokensMapRef.current[threadId]);
-                pendingTokensMapRef.current[threadId] = '';
-              }
-            }, 100);
-          }
+          ensureThrottleTimer(threadId, throttleTimersRef, pendingTokensMapRef, appendToken, cleanUpThrottleAndHeal);
         },
         onDone: () => {
           setStreamingThread(threadId, false);
@@ -1034,81 +1107,23 @@ export default function ChatScreen() {
     const activeThread = threads.find((t) => t.id === activeThreadId);
     const selectedAgent = activeThread?.agent || 'personal assistant';
 
-    const controller = new AbortController();
-    abortControllersRef.current[activeThreadId] = controller;
-
-    try {
-      await streamAgentResponse(
-        apiUrl,
-        apiKey,
-        activeThreadId,
-        userText,
-        (chunk) => {
-          pendingTokensMapRef.current[activeThreadId] = (pendingTokensMapRef.current[activeThreadId] || '') + chunk;
-          if (!throttleTimersRef.current[activeThreadId]) {
-            throttleTimersRef.current[activeThreadId] = setInterval(() => {
-              // FIX-3 self-heal: stream ended without cleanup -> flush + stop ticking.
-              if (!useChatStore.getState().isThreadStreaming(activeThreadId)) {
-                cleanUpThrottleAndHeal(activeThreadId);
-                return;
-              }
-              if (pendingTokensMapRef.current[activeThreadId]) {
-                appendToken(activeThreadId, pendingTokensMapRef.current[activeThreadId]);
-                pendingTokensMapRef.current[activeThreadId] = '';
-              }
-            }, 100);
-          }
-        },
-        (newTitle) => {
-          setStreamingThread(activeThreadId, false);
-          delete abortControllersRef.current[activeThreadId];
-          cleanUpThrottleAndHeal(activeThreadId);
-    useChatStore.getState().removeLastEmptyAssistant(activeThreadId);
-          if (newTitle) {
-            const updatedThreads = threads.map((t) => {
-              if (t.id === activeThreadId) {
-                return { ...t, title: newTitle };
-              }
-              return t;
-            });
-            setThreads(updatedThreads);
-            useChatStore.getState().renameThread(activeThreadId, newTitle);
-          }
-        },
-        (error) => {
-          setStreamingThread(activeThreadId, false);
-          delete abortControllersRef.current[activeThreadId];
-          cleanUpThrottleAndHeal(activeThreadId);
-    useChatStore.getState().removeLastEmptyAssistant(activeThreadId);
-          const errMsg = error?.message || (typeof error === 'string' ? error : '') || 'Failed to stream response.';
-          appendToken(activeThreadId, `\n\n⚠️ **Error:** ${errMsg}`);
-          queueMessageForSync(activeThreadId, {
-            id: userMsgId,
-            role: 'user',
-            content: userText,
-            created_at: nowIso,
-          }).catch(() => {});
-        },
-        controller.signal,
-        selectedAgent,
-        (provider) => {
-          if (provider === 'google' && activeThreadId) {
-            setAuthRequired((prev) => ({ ...prev, [activeThreadId]: true }));
-          }
-        }
-      );
-    } catch (err: any) {
-      setStreamingThread(activeThreadId, false);
-      cleanUpThrottleAndHeal(activeThreadId);
-    useChatStore.getState().removeLastEmptyAssistant(activeThreadId);
-      appendToken(activeThreadId, `\n\n⚠️ **Network Error:** ${err.message || 'Verification aborted.'}`);
-      queueMessageForSync(activeThreadId, {
-        id: userMsgId,
-        role: 'user',
-        content: userText,
-        created_at: nowIso,
-      }).catch(() => {});
-    }
+    await runServerStream({
+      apiUrl,
+      apiKey,
+      threadId: activeThreadId,
+      prompt: userText,
+      agent: selectedAgent,
+      syncUserEntry: { id: userMsgId, role: 'user', content: userText, created_at: nowIso },
+      threads,
+      abortControllers: abortControllersRef,
+      throttleTimers: throttleTimersRef,
+      pendingTokens: pendingTokensMapRef,
+      appendToken,
+      setStreamingThread,
+      setThreads,
+      setAuthRequired,
+      cleanUpThrottleAndHeal,
+    });
   }, [
     input,
     isCurrentThreadStreaming,
@@ -1177,84 +1192,31 @@ export default function ChatScreen() {
       return;
     }
 
-    const controller = new AbortController();
-    abortControllersRef.current[activeThreadId] = controller;
-
     // Get the active thread agent
     const regenerateAgent = threads.find((t) => t.id === activeThreadId)?.agent || 'personal assistant';
 
-    try {
-      await streamAgentResponse(
-        apiUrl,
-        apiKey,
-        activeThreadId,
-        userPrompt,
-        (chunk) => {
-          pendingTokensMapRef.current[activeThreadId] = (pendingTokensMapRef.current[activeThreadId] || '') + chunk;
-          if (!throttleTimersRef.current[activeThreadId]) {
-            throttleTimersRef.current[activeThreadId] = setInterval(() => {
-              // FIX-3 self-heal: stream ended without cleanup -> flush + stop ticking.
-              if (!useChatStore.getState().isThreadStreaming(activeThreadId)) {
-                cleanUpThrottleAndHeal(activeThreadId);
-                return;
-              }
-              if (pendingTokensMapRef.current[activeThreadId]) {
-                appendToken(activeThreadId, pendingTokensMapRef.current[activeThreadId]);
-                pendingTokensMapRef.current[activeThreadId] = '';
-              }
-            }, 100);
-          }
-        },
-        (newTitle) => {
-          setStreamingThread(activeThreadId, false);
-          delete abortControllersRef.current[activeThreadId];
-          cleanUpThrottleAndHeal(activeThreadId);
-    useChatStore.getState().removeLastEmptyAssistant(activeThreadId);
-          if (newTitle) {
-            const updatedThreads = threads.map((t) => {
-              if (t.id === activeThreadId) {
-                return { ...t, title: newTitle };
-              }
-              return t;
-            });
-            setThreads(updatedThreads);
-            useChatStore.getState().renameThread(activeThreadId, newTitle);
-          }
-        },
-        (error) => {
-          setStreamingThread(activeThreadId, false);
-          delete abortControllersRef.current[activeThreadId];
-          cleanUpThrottleAndHeal(activeThreadId);
-    useChatStore.getState().removeLastEmptyAssistant(activeThreadId);
-          const errMsg = error?.message || (typeof error === 'string' ? error : '') || 'Failed to stream response.';
-          appendToken(activeThreadId, `\n\n⚠️ **Error:** ${errMsg}`);
-          queueMessageForSync(activeThreadId, {
-            id: threadMsgs[userIndex]?.id || generateId('msg_user'),
-            role: 'user',
-            content: userPrompt,
-            created_at: threadMsgs[userIndex]?.created_at,
-          }).catch(() => {});
-        },
-        controller.signal,
-        regenerateAgent,
-        (provider) => {
-          if (provider === 'google' && activeThreadId) {
-            setAuthRequired((prev) => ({ ...prev, [activeThreadId]: true }));
-          }
-        }
-      );
-    } catch (err: any) {
-      setStreamingThread(activeThreadId, false);
-      cleanUpThrottleAndHeal(activeThreadId);
-    useChatStore.getState().removeLastEmptyAssistant(activeThreadId);
-      appendToken(activeThreadId, `\n\n⚠️ **Network Error:** ${err.message || 'Verification aborted.'}`);
-      queueMessageForSync(activeThreadId, {
+    await runServerStream({
+      apiUrl,
+      apiKey,
+      threadId: activeThreadId,
+      prompt: userPrompt,
+      agent: regenerateAgent,
+      syncUserEntry: {
         id: threadMsgs[userIndex]?.id || generateId('msg_user'),
         role: 'user',
         content: userPrompt,
         created_at: threadMsgs[userIndex]?.created_at,
-      }).catch(() => {});
-    }
+      },
+      threads,
+      abortControllers: abortControllersRef,
+      throttleTimers: throttleTimersRef,
+      pendingTokens: pendingTokensMapRef,
+      appendToken,
+      setStreamingThread,
+      setThreads,
+      setAuthRequired,
+      cleanUpThrottleAndHeal,
+    });
   }, [
     isCurrentThreadStreaming,
     activeThreadId,
@@ -1359,74 +1321,22 @@ export default function ChatScreen() {
       return;
     }
 
-    const controller = new AbortController();
-    abortControllersRef.current[newThreadId] = controller;
-
-    try {
-      await streamAgentResponse(
-        apiUrl,
-        apiKey,
-        newThreadId,
-        textToSend.trim(),
-        (chunk) => {
-          pendingTokensMapRef.current[newThreadId] = (pendingTokensMapRef.current[newThreadId] || '') + chunk;
-          if (!throttleTimersRef.current[newThreadId]) {
-            throttleTimersRef.current[newThreadId] = setInterval(() => {
-              // FIX-3 self-heal: stream ended without cleanup -> flush + stop ticking.
-              if (!useChatStore.getState().isThreadStreaming(newThreadId)) {
-                cleanUpThrottleAndHeal(newThreadId);
-                return;
-              }
-              if (pendingTokensMapRef.current[newThreadId]) {
-                appendToken(newThreadId, pendingTokensMapRef.current[newThreadId]);
-                pendingTokensMapRef.current[newThreadId] = '';
-              }
-            }, 100);
-          }
-        },
-        (newTitle) => {
-          setStreamingThread(newThreadId, false);
-          delete abortControllersRef.current[newThreadId];
-          cleanUpThrottleAndHeal(newThreadId);
-    useChatStore.getState().removeLastEmptyAssistant(newThreadId);
-          if (newTitle) {
-            useChatStore.getState().renameThread(newThreadId, newTitle);
-          }
-        },
-        (error) => {
-          setStreamingThread(newThreadId, false);
-          delete abortControllersRef.current[newThreadId];
-          cleanUpThrottleAndHeal(newThreadId);
-    useChatStore.getState().removeLastEmptyAssistant(newThreadId);
-          const errMsg = error?.message || (typeof error === 'string' ? error : '') || 'Failed to stream response.';
-          appendToken(newThreadId, `\n\n⚠️ **Error:** ${errMsg}`);
-          queueMessageForSync(newThreadId, {
-            id: userMsgId,
-            role: 'user',
-            content: textToSend.trim(),
-            created_at: nowIso,
-          }).catch(() => {});
-        },
-        controller.signal,
-        agent,
-        (provider) => {
-          if (provider === 'google') {
-            setAuthRequired((prev) => ({ ...prev, [newThreadId]: true }));
-          }
-        }
-      );
-    } catch (err: any) {
-      setStreamingThread(newThreadId, false);
-      cleanUpThrottleAndHeal(newThreadId);
-    useChatStore.getState().removeLastEmptyAssistant(newThreadId);
-      appendToken(newThreadId, `\n\n⚠️ **Network Error:** ${err.message || 'Verification aborted.'}`);
-      queueMessageForSync(newThreadId, {
-        id: userMsgId,
-        role: 'user',
-        content: textToSend.trim(),
-        created_at: nowIso,
-      }).catch(() => {});
-    }
+    await runServerStream({
+      apiUrl,
+      apiKey,
+      threadId: newThreadId,
+      prompt: textToSend.trim(),
+      agent,
+      syncUserEntry: { id: userMsgId, role: 'user', content: textToSend.trim(), created_at: nowIso },
+      abortControllers: abortControllersRef,
+      throttleTimers: throttleTimersRef,
+      pendingTokens: pendingTokensMapRef,
+      appendToken,
+      setStreamingThread,
+      setThreads,
+      setAuthRequired,
+      cleanUpThrottleAndHeal,
+    });
   }, [
     apiUrl,
     apiKey,
