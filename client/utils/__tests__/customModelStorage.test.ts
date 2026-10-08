@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import {
   sniffMagicBytes,
   sniffNeedleVariant,
@@ -26,7 +26,7 @@ const mockDownloadResumable = {
   resumeAsync: jest.fn().mockResolvedValue({ uri: 'file:///mock/model.cact' }),
 };
 
-jest.mock('expo-file-system', () => ({
+jest.mock('expo-file-system/legacy', () => ({
   documentDirectory: 'file:///mock-doc-dir/',
   getInfoAsync: jest.fn().mockResolvedValue({ exists: true, size: 50000000 }),
   makeDirectoryAsync: jest.fn().mockResolvedValue(true),

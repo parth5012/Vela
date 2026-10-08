@@ -1,3 +1,12 @@
+/**
+ * Module: client/utils/messageParser
+ * Intent: Pure chat-markup parser (text/thought/tool_call/intent/skill segments) with DoS caps.
+ * Responsibilities: Owns MessageSegment type, MAX_NESTING/MAX_INPUT caps, parse + renderability checks.
+ * Public API: MessageSegment, MAX_NESTING, MAX_INPUT_LENGTH, hasRenderableContent, parseMessage.
+ * Invariants: No imports (pure); nesting >MAX_NESTING becomes literal text; inputs truncated at MAX_INPUT_LENGTH.
+ * Side Effects: none.
+ * Maintenance: Update this block when exports, invariants, side effects, or ownership change.
+ */
 export interface MessageSegment {
   type: 'text' | 'thought' | 'tool_call' | 'intent' | 'skill';
   content?: string;
