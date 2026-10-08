@@ -1,4 +1,4 @@
-import { requireNativeModule, EventEmitter, Subscription } from 'expo-modules-core';
+import { requireNativeModule, type EventSubscription } from 'expo-modules-core';
 
 export interface NeedleStreamEvent {
   type: 'token' | 'tool_call' | 'refusal' | 'done';
@@ -18,15 +18,6 @@ try {
   nativeModule = requireNativeModule('NeedleModule');
 } catch {
   // Native module not available (e.g. Jest / Node / Web environment)
-}
-
-let emitter: EventEmitter | null = null;
-try {
-  if (nativeModule) {
-    emitter = new EventEmitter(nativeModule);
-  }
-} catch {
-  // Emitter fallback
 }
 
 export const NeedleModule = {
@@ -107,11 +98,16 @@ export const NeedleModule = {
     return nativeModule.unload();
   },
 
-  addListener(listener: (event: NeedleStreamEvent) => void): Subscription {
-    if (!emitter) {
-      return { remove: () => {} } as Subscription;
+  /**
+   * Subscribes to native 'onStream' events. Since SDK 52 the native module
+   * object is itself an EventEmitter, so we subscribe on it directly instead
+   * of wrapping it (deprecated `new EventEmitter(nativeModule)`).
+   */
+  addListener(listener: (event: NeedleStreamEvent) => void): EventSubscription {
+    if (!nativeModule) {
+      return { remove: () => {} };
     }
-    return emitter.addListener<NeedleStreamEvent>('onStream', listener);
+    return nativeModule.addListener('onStream', listener);
   },
 };
 

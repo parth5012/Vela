@@ -1,5 +1,5 @@
 import '@stardazed/streams-text-encoding';
-import { streamText, LanguageModelV1 } from 'ai';
+import { streamText, LanguageModel } from 'ai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createAnthropic } from '@ai-sdk/anthropic';
@@ -29,7 +29,7 @@ export function getLanguageModel(
   apiKey: string,
   modelName: string,
   baseUrl?: string
-): LanguageModelV1 {
+): LanguageModel {
   const customFetch = getStreamingFetch();
 
   switch (provider) {

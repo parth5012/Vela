@@ -96,7 +96,7 @@ function streamingDots(component: renderer.ReactTestRenderer) {
   // Animated.View contributes composite + host nodes sharing the testID;
   // count the host View only so each pulsing dot counts exactly once.
   return component.root.findAll(
-    (node) => node.type === 'View' && node.props?.testID === 'bubble-footer-streaming-dot'
+    (node) => String(node.type) === 'View' && node.props?.testID === 'bubble-footer-streaming-dot'
   );
 }
 
