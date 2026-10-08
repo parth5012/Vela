@@ -16,7 +16,7 @@ import { useBrowserStore } from '../store/useBrowserStore';
 import { useConfigStore } from '../store/useConfigStore';
 import { THEME_COLORS, FONT_SIZES, ACCENT_COLORS, getAurora } from '../utils/theme';
 import CookieSyncCard from '../components/ui/CookieSyncCard';
-import { styles } from './browserStyles';
+import { styles } from '../styles/browserStyles';
 
 const QUICK_LINKS: { label: string; url: string; icon: string }[] = [
   { label: 'Google', url: 'https://www.google.com', icon: '🔍' },

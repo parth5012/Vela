@@ -428,19 +428,19 @@ All 5 are single-default-export screens (good boundary) but critical tier (>500 
 
 ### `client/app/browser.tsx` — 356 LOC (was 639), 0 any — score `63%` (`Adequate`, was 59%)
 
-- Phase 1 DONE (2026-10-06): 282 StyleSheet lines → `client/app/browserStyles.ts` (byte-identical, verified by diff); `browser.tsx` imports `{ styles }`; route path unchanged
+- Phase 1 DONE (2026-10-06): 282 StyleSheet lines → `client/styles/browserStyles.ts` (byte-identical, verified by diff); `browser.tsx` imports `{ styles }`; route path unchanged
 - `[low] remaining: 9 nav callbacks → `hooks/useBrowserNav.ts` candidate for Phase 2`
 - Verification: `lint` pass (0 errors), `typecheck` 0 repo-wide, styles body diff identical, no dedicated screen tests exist (move is provably behavior-preserving)
 
 ### `client/app/setup.tsx` — 552 LOC (was 780), 3 any — score `63%` (`Adequate`, was 59%)
 
-- Phase 1 DONE (2026-10-08): 227 StyleSheet lines → `client/app/setupStyles.ts` (byte-identical, verified by diff); route path unchanged
+- Phase 1 DONE (2026-10-08): 227 StyleSheet lines → `client/styles/setupStyles.ts` (byte-identical, verified by diff); route path unchanged
 - Remaining axes: per-step sections → components; CLOUD_OPTIONS/HEADER_TEXTS stay (route config)
 - Verification: `lint` pass, `typecheck` 0 repo-wide, `setup.test.tsx` green (in 3-suite run, 34/34)
 
 ### `client/app/tasks.tsx` — 640 LOC (was 837), 5 any — score `58%` (`Adequate`, was 54%)
 
-- Phase 1 DONE (2026-10-08): 196 StyleSheet lines → `client/app/tasksStyles.ts` (byte-identical, verified by diff); route path unchanged
+- Phase 1 DONE (2026-10-08): 196 StyleSheet lines → `client/styles/tasksStyles.ts` (byte-identical, verified by diff); route path unchanged
 - Remaining axes: task-row → `components/`; data load/save → hook
 - Verification: `lint` pass, `typecheck` 0 repo-wide, `tasksSchema` + `taskRunner` suites green (in 3-suite run, 34/34)
 
@@ -453,7 +453,7 @@ All 5 are single-default-export screens (good boundary) but critical tier (>500 
   - Phase 1: `utils/serverStream.ts` (`ensureThrottleTimer` + `runServerStream`), `utils/parseCache.ts` (`ParsedMessageEntry`/`PARSE_CACHE_LIMIT`/`parseCache`/`getCachedParse`), `utils/deriveSafetyTier.ts` (`SafetyTierLabel` + `deriveSafetyTier`) — verbatim moves; test pins updated (`parse-memoization.test.tsx` reads utils/parseCache, `deriveSafetyTier.test.ts` reads utils/deriveSafetyTier, `standaloneRunner.ts` doc)
   - Phase 2: `components/chat/SourceCard.tsx` (component + its 7 `source*` style keys); dead imports dropped (`Linking`, `Image`, `SearchSource`)
   - Phase 3: 5 message actions → `hooks/useMessageActions.ts` (copies/share/download-md/copy-code/info; selects `modelName`/`isLocalMode`/`localModelName` from stores inside hook); dead imports dropped (`Clipboard`, `Share`, `Sharing`)
-  - Phase 4: remaining styles → `app/indexStyles.ts` (266 lines, `Platform` dep discovered by typecheck)
+  - Phase 4: remaining styles → `styles/indexStyles.ts` (266 lines, `Platform` dep discovered by typecheck)
   - Route path unchanged; index lint at baseline 9 warnings; tsc 0; full suite 83/83 (798 passed)
 - Still >500 LOC → Modularity/Structural caps remain 1/5; further reduction needs section components (deferred)
 
@@ -477,7 +477,7 @@ All 5 are single-default-export screens (good boundary) but critical tier (>500 
 
 All four split with verbatim extractions; route/export paths unchanged; per-file lint baseline 0 problems maintained.
 
-### `client/components/ui/CookieSyncCard.tsx` — 207 LOC (was 524) — score `64%` (`Good`, provisional)
+### `client/components/ui/CookieSyncCard.tsx` — 207 LOC (was 524) — score `64%` (`Adequate`, provisional)
 - Phase A: 154 style lines → `cookieSyncCardStyles.ts` (byte-identical, `StyleSheet.hairlineWidth` covered)
 - Phase B: pick/parse/import/consent logic (lines 51–214: 5 store selectors + 6 states + `lastSyncText` + 8 handlers) → `hooks/useCookieSync.ts` (216 LOC); component = props + render + 14-value destructure
 - Verification: tsc 0, lint 0 problems both files; full suite 83/83

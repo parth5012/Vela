@@ -33,7 +33,7 @@ import { ensureThrottleTimer, runServerStream } from '../utils/serverStream';
 import CollapsibleBlock from '../components/chat/CollapsibleBlock';
 import { getCachedParse } from '../utils/parseCache';
 import SourceCard from '../components/chat/SourceCard';
-import { styles } from './indexStyles';
+import { styles } from '../styles/indexStyles';
 import { healXmlTags } from '../utils/xmlHealer';
 import { useRouter } from 'expo-router';
 import { useBrowserStore } from '../store/useBrowserStore';

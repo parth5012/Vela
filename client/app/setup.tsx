@@ -18,7 +18,7 @@ import {
 } from '../store/useConfigStore';
 import { syncHistoryWithBackend } from '../utils/history';
 import { testProviderConnection } from '../utils/providers/models';
-import { styles } from './setupStyles';
+import { styles } from '../styles/setupStyles';
 
 type SetupStep = 'fork' | 'server' | 'standalone';
 type StandaloneSubtype = 'cloud' | 'local';

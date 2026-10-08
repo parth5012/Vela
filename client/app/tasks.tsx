@@ -11,7 +11,7 @@ import { runTask } from '../utils/taskRunner';
 import { isUserVisibleTask } from '../utils/checkinScheduler';
 import { useAgents } from '../hooks/useAgents';
 import { useConfigStore } from '../store/useConfigStore';
-import { styles } from './tasksStyles';
+import { styles } from '../styles/tasksStyles';
 
 const generateId = () => {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {

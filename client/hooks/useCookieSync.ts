@@ -59,25 +59,12 @@ export function useCookieSync() {
       if (!asset?.uri) return;
 
       let text = '';
-      // expo-file-system legacy vs new API
-      // @ts-ignore - readAsStringAsync exists on older expo-file-system
-      if (typeof (FileSystem as unknown as Record<string, unknown>).readAsStringAsync === 'function') {
-        // @ts-ignore
-        text = await (FileSystem as unknown as { readAsStringAsync: (uri: string) => Promise<string> }).readAsStringAsync(
-          asset.uri
-        );
+      // SDK 54+: root-module legacy functions are throwing stubs; use the File class.
+      if (typeof FileSystem.File === 'function') {
+        text = await new FileSystem.File(asset.uri).text();
       } else {
-        // New File API fallback (SDK 57+): File class
-        // @ts-ignore
-        const FileCls = (FileSystem as unknown as { File?: new (uri: string) => { text: () => Promise<string> } }).File;
-        if (FileCls) {
-          const file = new FileCls(asset.uri);
-          text = await file.text();
-        } else {
-          // Final fallback: fetch uri (content:// may not be fetchable but try)
-          const resp = await fetch(asset.uri);
-          text = await resp.text();
-        }
+        const resp = await fetch(asset.uri);
+        text = await resp.text();
       }
 
       const trimmed = text.trim();
