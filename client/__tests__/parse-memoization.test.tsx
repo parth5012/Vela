@@ -19,6 +19,9 @@ import { parseSearchContent } from '../utils/sourceParser';
  */
 describe('parse memoization guard (wayfinder #143)', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'app', 'index.tsx'), 'utf8');
+  // Parse-cache definitions moved to utils/parseCache.ts (index Phase 1 extraction);
+  // the cache-definition tests below pin that file instead.
+  const cacheSource = fs.readFileSync(path.join(__dirname, '..', 'utils', 'parseCache.ts'), 'utf8');
   const renderItem = source.slice(source.indexOf('renderItem={'));
 
   it('uses the module-level parse cache per message inside renderItem', () => {
@@ -35,13 +38,13 @@ describe('parse memoization guard (wayfinder #143)', () => {
   });
 
   it('defines a bounded module-level parse cache', () => {
-    expect(source).toMatch(/const PARSE_CACHE_LIMIT = \d+/);
-    expect(source).toMatch(/const parseCache = new Map</);
-    expect(source).toMatch(/function getCachedParse\(/);
+    expect(cacheSource).toMatch(/const PARSE_CACHE_LIMIT = \d+/);
+    expect(cacheSource).toMatch(/const parseCache = new Map</);
+    expect(cacheSource).toMatch(/function getCachedParse\(/);
   });
 
   it('cache computes segments, header/bubble filters, and sources without re-parsing hits', () => {
-    const fn = source.slice(source.indexOf('function getCachedParse'), source.indexOf('export default function ChatScreen'));
+    const fn = cacheSource.slice(cacheSource.indexOf('function getCachedParse'));
     expect(fn).toMatch(/parseMessage\(content\)/);
     expect(fn).toMatch(/parseSearchContent\(content\)/);
     expect(fn).toMatch(/headerSegments: segments\.filter/);
