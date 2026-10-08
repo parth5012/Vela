@@ -1,0 +1,186 @@
+# PR-flag Android APK build.
+#
+# Trigger: add the `build-apk` label to a PR (or push new commits while the
+# label is present) → CI builds the debug APK and publishes it to a rolling
+# pre-release tag `pr-<number>-apk`, linked from a sticky PR comment.
+#
+# Build recipe mirrors docs/android-build-verification.md:
+#   pnpm install → expo prebuild --clean -p android → gradlew assembleDebug
+# NDK is pinned to 27.1.12297006 (required by modules/needle/android/build.gradle).
+
+name: PR APK build
+
+on:
+  pull_request:
+    types: [labeled, synchronize]
+
+permissions:
+  contents: write       # create the rolling pre-release + assets
+  issues: write         # upsert the sticky comment via the issue-comment API
+  pull-requests: write  # read PR labels / metadata
+
+concurrency:
+  group: pr-apk-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build-apk:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    # github.event_name is 'pull_request' for both activity types below;
+    # the activity type itself is github.event.action.
+    if: >-
+      (github.event.action == 'labeled' && github.event.label.name == 'build-apk') ||
+      (github.event.action == 'synchronize' &&
+       contains(github.event.pull_request.labels.*.name, 'build-apk'))
+    defaults:
+      run:
+        working-directory: client
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      TAG: pr-${{ github.event.pull_request.number }}-apk
+
+    steps:
+      # Build the PR head commit itself (not the ephemeral merge ref) so the
+      # APK matches the sha the rolling release is tagged with.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: client/pnpm-lock.yaml
+
+      - name: Install pinned NDK and CMake
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "ndk;27.1.12297006" "cmake;3.22.1"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Android project
+        run: npx expo prebuild --clean -p android
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # shell: bash (not the default) so pipefail is on and a failed gradle
+      # build is not masked by tee.
+      - name: Build debug APK
+        shell: bash
+        working-directory: client/android
+        run: ./gradlew assembleDebug --no-daemon 2>&1 | tee "$RUNNER_TEMP/gradle-build.log"
+
+      # The build is green even when the needle engine archive failed to fetch
+      # (honest mock fallback). Surface which one happened in the PR comment
+      # instead of failing the PR build.
+      - name: Detect needle engine link status
+        id: engine
+        run: |
+          if grep -q "Linking needle engine" "$RUNNER_TEMP/gradle-build.log"; then
+            echo "status=native" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=mock-fallback" >> "$GITHUB_OUTPUT"
+          fi
+
+      # withAbiSplits.js emits per-ABI APKs (universalApk = false).
+      - name: Collect APKs
+        run: |
+          shopt -s nullglob
+          mkdir -p "$RUNNER_TEMP/apk"
+          for apk in android/app/build/outputs/apk/debug/*.apk; do
+            base=$(basename "$apk" .apk)          # app-debug-arm64-v8a
+            abi=${base#app-debug}                  # -arm64-v8a | '' for unsplit
+            sha7=${HEAD_SHA:0:7}
+            cp "$apk" "$RUNNER_TEMP/apk/vela-pr${PR_NUMBER}-${sha7}${abi}.apk"
+          done
+          ls -la "$RUNNER_TEMP/apk"
+          compgen -G "$RUNNER_TEMP/apk/*.apk" > /dev/null || {
+            echo "::error::No APK produced under client/android/app/build/outputs/apk/debug/"
+            exit 1
+          }
+
+      - name: Publish rolling pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Replace last build for this PR: rolling tag keeps the Releases page
+          # (and the PR comment link) stable and lightweight.
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || {
+            # Older gh without --cleanup-tag (or release already gone):
+            # delete the release if present, then the tag if present.
+            gh release delete "$TAG" --yes 2>/dev/null || true
+            git push origin ":refs/tags/$TAG" 2>/dev/null || true
+          }
+
+          notes_file="$RUNNER_TEMP/release-notes.md"
+          {
+            echo "Non-production test build for PR #$PR_NUMBER."
+            echo
+            echo "- Commit: \`$HEAD_SHA\`"
+            echo "- Variant: debug (\`com.parth5012.client.dev\`), self-signed with the debug keystore"
+            echo "- Needle engine: \`${{ steps.engine.outputs.status }}\`"
+            echo "- Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          } > "$notes_file"
+
+          gh release create "$TAG" "$RUNNER_TEMP"/apk/*.apk \
+            --prerelease \
+            --target "$HEAD_SHA" \
+            --title "PR #$PR_NUMBER test build (${HEAD_SHA:0:7})" \
+            --notes-file "$notes_file"
+
+          # Download links for the sticky comment (asset names are URL-safe).
+          links_file="$RUNNER_TEMP/download-links.md"
+          : > "$links_file"
+          for apk in "$RUNNER_TEMP"/apk/*.apk; do
+            name=$(basename "$apk")
+            echo "- [$name](https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$name)" >> "$links_file"
+          done
+
+      - name: Upsert sticky PR comment with download links
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MARKER: "<!-- pr-apk-build -->"
+        run: |
+          body_file="$RUNNER_TEMP/comment.md"
+          {
+            echo "$MARKER"
+            echo "## 📲 Test build ready"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Commit | \`${HEAD_SHA:0:7}\` |"
+            echo "| Needle engine | \`${{ steps.engine.outputs.status }}\` |"
+            echo "| Build | [run #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |"
+            echo
+            echo "**Downloads** (direct links — open on your phone, install the arm64 one):"
+            echo
+            cat "$RUNNER_TEMP/download-links.md"
+            echo
+            echo "<sub>Rolling release \`$TAG\` — each new build replaces the previous APK."
+            echo "Re-trigger: push new commits (label stays on) or remove and re-add the \`build-apk\` label.</sub>"
+          } > "$body_file"
+
+          existing=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+            --paginate --jq "[.[] | select(.body | contains(\"$MARKER\")) | .id] | first // empty" \
+            | head -n 1)
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" \
+              -F body=@"$body_file" > /dev/null
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+              -F body=@"$body_file" > /dev/null
+          fi
