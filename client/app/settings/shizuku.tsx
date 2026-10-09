@@ -100,7 +100,7 @@ export default function ShizukuSetupScreen() {
   };
 
   const privilege = (() => {
-    if (!status || !status.serverRunning || status.uid < 0) return null;
+    if (!status || !status.serverRunning || status.uid === undefined || status.uid < 0) return null;
     if (status.uid === 0) return 'root (uid 0)';
     if (status.uid === 2000) return 'ADB / shell (uid 2000)';
     return `uid ${status.uid}`;

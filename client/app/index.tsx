@@ -11,33 +11,29 @@ import {
   Platform,
   ActivityIndicator,
   Keyboard,
-  Share,
   Alert,
   ScrollView,
   Animated,
-  Image,
-  Linking,
   Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as Clipboard from 'expo-clipboard';
 import * as FileSystem from 'expo-file-system/legacy';
-import * as Sharing from 'expo-sharing';
 import MessageOptionsModal from '../components/ui/MessageOptionsModal';
 import MarkdownViewerOverlay from '../components/ui/MarkdownViewerOverlay';
 import { useConfigStore } from '../store/useConfigStore';
+import type { ConnectionMode } from '../store/useConfigStore';
 import { useChatStore, Message, Thread } from '../store/useChatStore';
 import { useAurora } from '../hooks/useAurora';
 import RichText from '../components/chat/RichText';
 import BubbleFooter from '../components/chat/BubbleFooter';
 import DateDividerPill from '../components/chat/DateDividerPill';
 import { buildChatFeedItems } from '../utils/chatFeed';
-import { streamAgentResponse } from '../utils/sse';
-import { queueMessageForSync } from '../db/chatRepository';
+import { ensureThrottleTimer, runServerStream } from '../utils/serverStream';
 import CollapsibleBlock from '../components/chat/CollapsibleBlock';
-import { parseMessage, hasRenderableContent } from '../utils/messageParser';
-import { parseSearchContent, SearchSource } from '../utils/sourceParser';
+import { getCachedParse } from '../utils/parseCache';
+import SourceCard from '../components/chat/SourceCard';
+import { styles } from '../styles/indexStyles';
 import { healXmlTags } from '../utils/xmlHealer';
 import { useRouter } from 'expo-router';
 import { useBrowserStore } from '../store/useBrowserStore';
@@ -52,7 +48,8 @@ import { buildContextMessages } from '../utils/providers/context';
 import { isSkillCommand, SKILL_PROMPTS, SKILL_METADATA } from '../utils/skillPrompts';
 import type { SkillId } from '../utils/skillPrompts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { evaluateSafety, classifyAction } from '../utils/safetyManager';
+import { evaluateSafety } from '../utils/safetyManager';
+import { deriveSafetyTier, type SafetyTierLabel } from '../utils/deriveSafetyTier';
 import { executeDeviceAction, sendDeviceResponse } from '../utils/deviceActionExecutor';
 import { isShizukuTool } from '../utils/shizuku';
 import {
@@ -75,6 +72,7 @@ const generateUUID = () => {
 import { resolveAgentPrompt, resolveNewThreadAgent } from '../utils/agents';
 import { overlayRemoteAgents } from '../db/agentRepository';
 import { useAgents } from '../hooks/useAgents';
+import { useMessageActions } from '../hooks/useMessageActions';
 import { generateUlid } from '../utils/syncIds';
 
 const QUOTES = [
@@ -98,233 +96,6 @@ const generateId = (_prefix: string) => {
   // across pages (finding-009). See utils/syncIds.ts.
   return generateUlid();
 };
-
-// Start the 100ms flush timer for a streaming thread if it isn't running yet.
-// FIX-3: the tick self-heals when a stream ends without explicit cleanup.
-function ensureThrottleTimer(
-  threadId: string,
-  throttleTimers: { current: Record<string, any> },
-  pendingTokens: { current: Record<string, string> },
-  appendToken: (threadId: string, token: string) => void,
-  cleanUpThrottleAndHeal: (threadId: string) => void
-): void {
-  if (throttleTimers.current[threadId]) return;
-  throttleTimers.current[threadId] = setInterval(() => {
-    if (!useChatStore.getState().isThreadStreaming(threadId)) {
-      cleanUpThrottleAndHeal(threadId);
-      return;
-    }
-    if (pendingTokens.current[threadId]) {
-      appendToken(threadId, pendingTokens.current[threadId]);
-      pendingTokens.current[threadId] = '';
-    }
-  }, 100);
-}
-
-type ServerStreamParams = {
-  apiUrl: string;
-  apiKey: string;
-  threadId: string;
-  prompt: string;
-  agent: string;
-  /** User message to queue for sync if the stream fails (onError + network catch). */
-  syncUserEntry: Message;
-  /** Threads snapshot for the optimistic title update; omit to persist only via renameThread. */
-  threads?: Thread[];
-  abortControllers: { current: Record<string, AbortController> };
-  throttleTimers: { current: Record<string, any> };
-  pendingTokens: { current: Record<string, string> };
-  appendToken: (threadId: string, token: string) => void;
-  setStreamingThread: (threadId: string, isStreaming: boolean) => void;
-  setThreads: (threads: Thread[]) => void;
-  setAuthRequired: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
-  cleanUpThrottleAndHeal: (threadId: string) => void;
-};
-
-// Shared server-mode SSE dispatch used by send, regenerate, and new-thread:
-// token throttling, title rename, error surfacing, and sync queueing.
-async function runServerStream(p: ServerStreamParams): Promise<void> {
-  const controller = new AbortController();
-  p.abortControllers.current[p.threadId] = controller;
-
-  try {
-    await streamAgentResponse(
-      p.apiUrl,
-      p.apiKey,
-      p.threadId,
-      p.prompt,
-      (chunk) => {
-        p.pendingTokens.current[p.threadId] = (p.pendingTokens.current[p.threadId] || '') + chunk;
-        ensureThrottleTimer(p.threadId, p.throttleTimers, p.pendingTokens, p.appendToken, p.cleanUpThrottleAndHeal);
-      },
-      (newTitle) => {
-        p.setStreamingThread(p.threadId, false);
-        delete p.abortControllers.current[p.threadId];
-        p.cleanUpThrottleAndHeal(p.threadId);
-        useChatStore.getState().removeLastEmptyAssistant(p.threadId);
-        if (newTitle) {
-          if (p.threads) {
-            p.setThreads(p.threads.map((t) => (t.id === p.threadId ? { ...t, title: newTitle } : t)));
-          }
-          useChatStore.getState().renameThread(p.threadId, newTitle);
-        }
-      },
-      (error) => {
-        p.setStreamingThread(p.threadId, false);
-        delete p.abortControllers.current[p.threadId];
-        p.cleanUpThrottleAndHeal(p.threadId);
-        useChatStore.getState().removeLastEmptyAssistant(p.threadId);
-        const errMsg = error?.message || (typeof error === 'string' ? error : '') || 'Failed to stream response.';
-        p.appendToken(p.threadId, `\n\n⚠️ **Error:** ${errMsg}`);
-        queueMessageForSync(p.threadId, p.syncUserEntry).catch(() => {});
-      },
-      controller.signal,
-      p.agent,
-      (provider) => {
-        if (provider === 'google' && p.threadId) {
-          p.setAuthRequired((prev) => ({ ...prev, [p.threadId]: true }));
-        }
-      }
-    );
-  } catch (err: any) {
-    p.setStreamingThread(p.threadId, false);
-    p.cleanUpThrottleAndHeal(p.threadId);
-    useChatStore.getState().removeLastEmptyAssistant(p.threadId);
-    p.appendToken(p.threadId, `\n\n⚠️ **Network Error:** ${err.message || 'Verification aborted.'}`);
-    queueMessageForSync(p.threadId, p.syncUserEntry).catch(() => {});
-  }
-}
-
-function SourceCard({ src, colors, sizes, accentHex }: { src: SearchSource; colors: any; sizes: any; accentHex: string }) {
-  const [imgError, setImgError] = React.useState(false);
-
-  const handlePress = async () => {
-    try {
-      await Linking.openURL(src.url);
-    } catch (error) {
-      Alert.alert('Error', 'Could not open link in browser.');
-    }
-  };
-
-  const getInitials = (siteName: string) => {
-    return siteName ? siteName.substring(0, 2).toUpperCase() : 'W';
-  };
-
-  return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.sourceCard,
-        { backgroundColor: 'rgba(0,0,0,0.25)', borderColor: colors.glassBorder },
-        pressed && { opacity: 0.8 }
-      ]}
-      onPress={handlePress}
-    >
-      <View style={styles.sourceHeader}>
-        {src.favicon && !imgError ? (
-          <Image
-            source={{ uri: src.favicon }}
-            style={styles.sourceFavicon}
-            onError={() => setImgError(true)}
-          />
-        ) : (
-          <View style={[styles.sourceIconFallback, { backgroundColor: accentHex + '20' }]}>
-            <Text style={[styles.sourceIconFallbackText, { color: accentHex }]}>
-              {getInitials(src.siteName || src.domain)}
-            </Text>
-          </View>
-        )}
-        <Text style={[styles.sourceSiteName, { color: colors.text, fontSize: sizes.sub }]} numberOfLines={1}>
-          {src.siteName || 'Web Page'}
-        </Text>
-      </View>
-      <Text style={[styles.sourceTitle, { color: colors.textMuted, fontSize: sizes.text }]} numberOfLines={2}>
-        {src.title}
-      </Text>
-    </Pressable>
-  );
-}
-
-// Module-level parse cache (wayfinder #143 follow-up fix).
-// The FlatList renderItem below is a plain callback, NOT a component, so React
-// hooks (useMemo) are illegal inside it (Rules of Hooks) and crashed the chat
-// on the first rendered message. This content-keyed cache preserves the
-// memoization intent of #143: unchanged messages are never re-parsed during
-// streaming re-renders (appendToken every 100ms), while the streaming row
-// naturally misses cache as its content grows.
-type ParsedSegments = ReturnType<typeof parseMessage>;
-type ParsedSources = ReturnType<typeof parseSearchContent>;
-interface ParsedMessageEntry {
-  segments: ParsedSegments;
-  headerSegments: ParsedSegments;
-  bubbleContent: ParsedSegments;
-  sources: ParsedSources;
-}
-const PARSE_CACHE_LIMIT = 256;
-const parseCache = new Map<string, ParsedMessageEntry>();
-
-function getCachedParse(content: string, isUser: boolean): ParsedMessageEntry {
-  const key = (isUser ? 'u:' : 'a:') + content;
-  let entry = parseCache.get(key);
-  if (!entry) {
-    const segments = isUser ? ([] as ParsedSegments) : parseMessage(content);
-    entry = {
-      segments,
-      // hasRenderableContent is defense-in-depth (#150): parseMessage already
-      // prunes empty closed tool_call/skill segments, but nothing empty may
-      // ever reach renderSegment/CollapsibleBlock ("Executed: Tool" phantom).
-      headerSegments: segments.filter(
-        s => (s.type === 'thought' || s.type === 'intent') && hasRenderableContent(s)
-      ),
-      bubbleContent: segments.filter(
-        s => s.type !== 'thought' && s.type !== 'intent' && hasRenderableContent(s)
-      ),
-      sources: isUser ? ([] as ParsedSources) : parseSearchContent(content),
-    };
-    if (parseCache.size >= PARSE_CACHE_LIMIT) {
-      // Map preserves insertion order; evict the oldest entry.
-      const oldest = parseCache.keys().next().value;
-      if (oldest !== undefined) parseCache.delete(oldest);
-    }
-    parseCache.set(key, entry);
-  }
-  return entry;
-}
-
-// #160: Derive the safety tier shown on a tool_call pill from the same policy
-// inputs evaluateSafety consumes (classifyAction + configured tier), without
-// triggering any approval flow. Mirrors evaluateSafety's sensitive-word
-// escalation so the pill reflects what execution will actually do.
-type SafetyTierLabel = 'auto' | 'ask' | 'blocked';
-
-function deriveSafetyTier(name?: string, input?: string): SafetyTierLabel {
-  let target: string | undefined;
-  let value: string | undefined;
-  if (input) {
-    try {
-      const parsed = JSON.parse(input);
-      if (typeof parsed?.target === 'string') target = parsed.target;
-      if (typeof parsed?.value === 'string') value = parsed.value;
-    } catch {
-      // Non-JSON input: fall back to raw text so keyword checks still apply.
-      target = input;
-    }
-  }
-
-  const permissions = useConfigStore.getState().deviceAgentPermissions;
-  const category = classifyAction(name || '', target, value);
-  const tier = permissions[category] || 'auto';
-  if (tier === 'deny') return 'blocked';
-  if (tier === 'confirm') return 'ask';
-
-  // Auto tiers escalate on sensitive words (same heuristic as evaluateSafety).
-  const targetLower = target ? target.toLowerCase() : '';
-  const valueLower = value ? value.toLowerCase() : '';
-  const sensitiveWords = ['delete', 'buy', 'pay', 'purchase', 'send', 'call', 'remove', 'clear'];
-  if (sensitiveWords.some((word) => valueLower.includes(word))) {
-    return 'ask';
-  }
-  return 'auto';
-}
 
 export default function ChatScreen() {
   const router = useRouter();
@@ -750,57 +521,13 @@ export default function ChatScreen() {
     return buildChatFeedItems(activeMessages);
   }, [activeMessages]);
 
-  const handleCopyText = useCallback(async (text: string) => {
-    await Clipboard.setStringAsync(text);
-    Alert.alert('Success', 'Copied to clipboard');
-  }, []);
-
-  const handleShareText = useCallback(async (text: string) => {
-    try {
-      await Share.share({ message: text });
-    } catch (err: any) {
-      console.error(err);
-    }
-  }, []);
-
-  const handleDownloadMd = useCallback(async (message: Message) => {
-    try {
-      const dateStr = new Date().toISOString().slice(0, 10);
-      const filename = `vela-response-${message.id}-${dateStr}.md`;
-      const fileUri = `${FileSystem.cacheDirectory}${filename}`;
-      const mdContent = `# Vela Agent Response\n*Date: ${new Date().toLocaleString()}*\n\n${message.content}`;
-
-      await FileSystem.writeAsStringAsync(fileUri, mdContent, { encoding: FileSystem.EncodingType.UTF8 });
-      await Sharing.shareAsync(fileUri, { mimeType: 'text/markdown', dialogTitle: 'Download Response' });
-    } catch (err: any) {
-      Alert.alert('Error', 'Failed to save markdown file.');
-    }
-  }, []);
-
-  const handleCopyCodeBlocks = useCallback(async (text: string) => {
-    const codeBlockRegex = /```[\s\S]*?```/g;
-    const matches = text.match(codeBlockRegex);
-    if (!matches || matches.length === 0) {
-      Alert.alert('Info', 'No code blocks found in message.');
-      return;
-    }
-
-    const cleanedCodes = matches.map((m) => {
-      return m.replace(/^```[a-zA-Z0-9+#-]*\n/, '').replace(/```$/, '');
-    }).join('\n\n---\n\n');
-
-    await Clipboard.setStringAsync(cleanedCodes);
-    Alert.alert('Success', 'Copied code blocks to clipboard.');
-  }, []);
-
-  const handleShowInfo = useCallback((message: Message) => {
-    const wordCount = message.content.trim().split(/\s+/).filter(Boolean).length;
-    const charCount = message.content.length;
-    Alert.alert(
-      'Response Metadata',
-      `Model: ${isLocalMode ? `Local (${localModelName})` : (modelName || 'gemini-1.5-flash')}\nWords: ${wordCount}\nCharacters: ${charCount}`
-    );
-  }, [modelName, isLocalMode, localModelName]);
+  const {
+    handleCopyText,
+    handleShareText,
+    handleDownloadMd,
+    handleCopyCodeBlocks,
+    handleShowInfo,
+  } = useMessageActions();
 
   const toggleRaw = useCallback((msgId: string) => {
     setShowRawMap(prev => ({
@@ -1931,305 +1658,3 @@ export default function ChatScreen() {
     </LinearGradient>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  screen: {
-    flex: 1,
-  },
-  auroraGlow: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 0,
-  },
-  chatArea: {
-    flex: 1,
-  },
-  agentBar: {
-    borderBottomWidth: 1,
-    paddingVertical: 8,
-  },
-  agentBarScroll: {
-    paddingHorizontal: 16,
-    gap: 8,
-  },
-  agentBarCell: {
-    borderWidth: 1,
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  agentBarText: {
-    fontWeight: '500',
-  },
-  emptyMessagesContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-  },
-  emptyMessagesText: {
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  messagesList: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  messageRow: {
-    marginVertical: 6,
-    width: '100%',
-  },
-  userRow: {
-    alignItems: 'flex-end',
-  },
-  assistantRow: {
-    alignItems: 'flex-start',
-  },
-  bubble: {
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderWidth: 1,
-    maxWidth: '85%',
-  },
-  userBubble: {
-    borderTopRightRadius: 4,
-  },
-  assistantBubble: {
-    borderTopLeftRadius: 4,
-  },
-  senderLabel: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 4,
-  },
-  messageText: {
-    lineHeight: 20,
-  },
-  rawText: {
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    lineHeight: 18,
-  },
-  thoughtNestingContainer: {
-    width: '100%',
-    marginBottom: 6,
-  },
-  sourcesTitleLabel: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    marginBottom: 6,
-    paddingHorizontal: 4,
-  },
-  sourcesContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    paddingHorizontal: 4,
-  },
-  sourceCard: {
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 8,
-    width: 140,
-  },
-  sourceHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-    gap: 6,
-  },
-  sourceFavicon: {
-    width: 14,
-    height: 14,
-    borderRadius: 2,
-  },
-  sourceIconFallback: {
-    width: 14,
-    height: 14,
-    borderRadius: 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sourceIconFallbackText: {
-    fontSize: 8,
-    fontWeight: 'bold',
-  },
-  sourceSiteName: {
-    flex: 1,
-    fontWeight: '600',
-  },
-  sourceTitle: {
-    fontWeight: '500',
-  },
-  actionBar: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 8,
-    paddingHorizontal: 4,
-  },
-  actionBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.13)',
-    backgroundColor: 'rgba(0, 0, 0, 0.25)',
-  },
-  actionBtnText: {
-    fontSize: 11,
-  },
-  welcomeScroll: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingVertical: 32,
-  },
-  welcomeContainer: {
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  welcomeLogo: {
-    fontSize: 36,
-    fontWeight: '900',
-    letterSpacing: 8,
-    marginBottom: 16,
-  },
-  welcomeTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  welcomeSubtitle: {
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  quoteContainer: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 16,
-    width: '100%',
-    marginBottom: 24,
-  },
-  quoteText: {
-    fontStyle: 'italic',
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  quoteAuthor: {
-    fontSize: 12,
-    textAlign: 'right',
-    fontWeight: '500',
-  },
-  sectionTitleLabel: {
-    alignSelf: 'flex-start',
-    fontWeight: 'bold',
-    marginBottom: 12,
-  },
-  suggestionsContainer: {
-    width: '100%',
-    gap: 8,
-    marginBottom: 16,
-  },
-  suggestionCard: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-  },
-  suggestionText: {
-    lineHeight: 18,
-  },
-  agentScrollContainer: {
-    gap: 8,
-    paddingVertical: 4,
-  },
-  agentPill: {
-    borderWidth: 1,
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  agentPillText: {
-    fontWeight: '600',
-  },
-  modelSwitcherContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    borderTopWidth: 1,
-  },
-  switcherButton: {
-    borderWidth: 1,
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  switcherLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  downloadProgressText: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  skillIndicator: {
-    marginHorizontal: 12,
-    marginTop: 8,
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    alignSelf: 'flex-start',
-  },
-  skillIndicatorText: {
-    fontWeight: '600',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderTopWidth: 1,
-    gap: 12,
-  },
-  input: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    maxHeight: 100,
-  },
-  sendButton: {
-    borderRadius: 20,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowOpacity: 0.45,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
-  },
-  sendButtonText: {
-    color: '#ffffff',
-    fontWeight: 'bold',
-  },
-  permissionPromptOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    justifyContent: 'flex-end',
-    padding: 16,
-  },
-});

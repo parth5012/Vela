@@ -2,17 +2,18 @@ import React from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   Pressable,
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
+import { styles } from './drawerContentStyles';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useNavigation } from 'expo-router';
 import { useConfigStore } from '../../store/useConfigStore';
 import { useChatStore, Thread } from '../../store/useChatStore';
 import { useBrowserStore } from '../../store/useBrowserStore';
 import ThreadOptionsModal from './ThreadOptionsModal';
+import ThreadRow from './ThreadRow';
 import { THEME_COLORS, FONT_SIZES, ACCENT_COLORS, getAurora } from '../../utils/theme';
 import { syncHistoryWithBackend } from '../../utils/history';
 
@@ -23,33 +24,6 @@ const generateId = () => {
     return v.toString(16);
   });
 };
-
-// Lightweight formatDistanceToNow fallback — avoids date-fns dependency while
-// matching expected UI ("2m ago", "3h ago"). Keeps WCAG-friendly textMuted styling.
-function formatDistanceToNow(date: Date | string | number): string {
-  try {
-    const d = date instanceof Date ? date : new Date(date);
-    const now = Date.now();
-    const diff = now - d.getTime();
-    if (isNaN(diff) || diff < 0) return '';
-    const sec = Math.floor(diff / 1000);
-    if (sec < 60) return 'just now';
-    const min = Math.floor(sec / 60);
-    if (min < 60) return `${min}m ago`;
-    const hrs = Math.floor(min / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    const days = Math.floor(hrs / 24);
-    if (days < 7) return `${days}d ago`;
-    const weeks = Math.floor(days / 7);
-    if (weeks < 5) return `${weeks}w ago`;
-    const months = Math.floor(days / 30);
-    if (months < 12) return `${months}mo ago`;
-    const years = Math.floor(days / 365);
-    return `${years}y ago`;
-  } catch {
-    return '';
-  }
-}
 
 /**
  * Wayfinder #173 Audit — Drawer
@@ -255,47 +229,18 @@ const handleJournal = () => {
         {sortedThreads.length === 0 ? (
           <Text style={[styles.emptyText, { color: colors.textDark }]}>No chats yet</Text>
         ) : (
-          sortedThreads.map((thread) => {
-            const isActive = thread.id === activeThreadId;
-            const timeAgo = thread.updated_at ? formatDistanceToNow(thread.updated_at) : '';
-            return (
-              <Pressable
-                key={thread.id}
-                style={[
-                  styles.threadItem, 
-                  isActive && styles.activeThreadItem,
-                  isActive && { backgroundColor: colors.card }
-                ]}
-                onPress={() => handleSelectThread(thread.id)}
-                onLongPress={() => handleOpenOptions(thread)}
-                delayLongPress={450}
-              >
-                <View style={styles.threadTextCol}>
-                  <Text
-                    style={[
-                      styles.threadTitle,
-                      { color: colors.textMuted },
-                      thread.is_pinned && styles.pinnedThreadTitle,
-                      thread.is_pinned && { color: colors.text },
-                      isActive && styles.activeThreadTitle,
-                      isActive && { color: colors.text }
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {thread.is_pinned ? '📌 ' : ''}{thread.title}
-                  </Text>
-                  {timeAgo ? (
-                    <Text style={[styles.threadTimestamp, { color: colors.textDark }]} numberOfLines={1}>
-                      {timeAgo}
-                    </Text>
-                  ) : null}
-                </View>
-            {streamingThreadIds && streamingThreadIds.has(thread.id) && (
-              <ActivityIndicator size="small" color={accentHex} style={{ marginLeft: 6 }} />
-            )}
-              </Pressable>
-            );
-          })
+          sortedThreads.map((thread) => (
+            <ThreadRow
+              key={thread.id}
+              thread={thread}
+              isActive={thread.id === activeThreadId}
+              streaming={!!streamingThreadIds?.has(thread.id)}
+              colors={colors}
+              accentHex={accentHex}
+              onSelect={handleSelectThread}
+              onOpenOptions={handleOpenOptions}
+            />
+          ))
         )}
       </ScrollView>
 
@@ -383,185 +328,3 @@ const handleJournal = () => {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#09090b',
-  },
-  header: {
-    paddingHorizontal: 20,
-    paddingVertical: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: '#18181b',
-  },
-  logo: {
-    fontSize: 20,
-    fontWeight: '900',
-    color: '#818cf8',
-    letterSpacing: 4,
-    marginBottom: 4,
-  },
-  nodeStatus: {
-    fontSize: 12,
-    color: '#71717a',
-  },
-  browserRow: {
-    marginHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 4,
-    borderWidth: 1,
-    borderLeftWidth: 3,
-    borderRadius: 10,
-    minHeight: 48,
-    justifyContent: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-  },
-  browserRowInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  browserIcon: {
-    fontSize: 18,
-    marginRight: 10,
-  },
-  browserTextCol: {
-    flex: 1,
-    gap: 2,
-  },
-  browserTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  browserDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  pulsingDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    opacity: 0.9,
-  },
-  browserTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    flexShrink: 1,
-  },
-  browserAiRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  browserAiText: {
-    fontSize: 11,
-    flexShrink: 1,
-  },
-  browserUrl: {
-    fontSize: 11,
-  },
-  newChatButton: {
-    backgroundColor: '#18181b',
-    borderColor: '#27272a',
-    borderWidth: 1,
-    borderRadius: 8,
-    marginHorizontal: 16,
-    marginVertical: 16,
-    paddingVertical: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 48,
-  },
-  newChatButtonPressed: {
-    backgroundColor: '#27272a',
-  },
-  newChatButtonText: {
-    color: '#f4f4f5',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  threadsContainer: {
-    flex: 1,
-  },
-  threadsContent: {
-    paddingHorizontal: 16,
-  },
-  sectionTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#71717a',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 8,
-    paddingLeft: 4,
-  },
-  emptyText: {
-    fontSize: 13,
-    color: '#3f3f46',
-    textAlign: 'center',
-    marginTop: 20,
-  },
-  threadItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    marginBottom: 4,
-  },
-  activeThreadItem: {
-    backgroundColor: '#18181b',
-  },
-  threadTextCol: {
-    flex: 1,
-    marginRight: 8,
-    gap: 2,
-  },
-  threadTitle: {
-    fontSize: 14,
-    color: '#a1a1aa',
-    flex: 1,
-  },
-  threadTimestamp: {
-    fontSize: 11,
-  },
-  pinnedThreadTitle: {
-    color: '#e4e4e7',
-    fontWeight: '600',
-  },
-  activeThreadTitle: {
-    color: '#f4f4f5',
-    fontWeight: '500',
-  },
-  deleteButton: {
-    padding: 4,
-  },
-  deleteButtonText: {
-    color: '#52525b',
-    fontSize: 12,
-  },
-  footer: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#18181b',
-  },
-  settingsButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    backgroundColor: 'transparent',
-  },
-  settingsButtonPressed: {
-    backgroundColor: '#18181b',
-  },
-  settingsButtonText: {
-    color: '#a1a1aa',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-});

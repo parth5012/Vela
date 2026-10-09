@@ -103,7 +103,7 @@ export async function syncStandaloneDataToBackend(
 
     for (let i = 0; i < unsynced.length; i += CHUNK_SIZE) {
       const chunk = unsynced.slice(i, i + CHUNK_SIZE);
-      const operations = chunk.map((m) => ({
+      const operations = chunk.map((m: (typeof unsynced)[number]) => ({
         id: m.id,
         type: 'message',
         conversation_id: m.conversation_id,

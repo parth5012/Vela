@@ -1,3 +1,12 @@
+/**
+ * Module: client/db/messageSearch
+ * Intent: Hybrid lexical (FTS5) + semantic (needle embed) message search over SQLite.
+ * Responsibilities: Owns MessageSearchResult/Options types, cosineSimilarity, searchMessages, saveMessageVector, indexMessageVectors.
+ * Public API: MessageSearchResult, EmbedFn, MessageSearchOptions, NEEDLE_PROBE_POOL_MODEL, HYBRID_*_WEIGHT, cosineSimilarity, searchMessages, saveMessageVector, indexMessageVectors.
+ * Invariants: Missing/failing embedder never drops lexical results; limit clamped [1,500]; FTS phrase quoting escapes embedded quotes.
+ * Side Effects: Reads/writes expoDb (FTS + vectors); calls NeedleModule.embed when embedder omitted (native, device-only).
+ * Maintenance: Update this block when exports, invariants, side effects, or ownership change.
+ */
 import { expoDb } from './client';
 import NeedleModule from '../modules/needle';
 

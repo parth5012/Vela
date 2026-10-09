@@ -55,7 +55,7 @@ export async function executeCloudTool(
       const output = await deps.webSearch(args.query ?? args.q ?? '')
       return { success: true, output }
     } catch (error) {
-      return { success: false, output: `Search failed: ${error?.message || String(error)}` }
+      return { success: false, output: `Search failed: ${(error as { message?: string } | undefined)?.message || String(error)}` }
     }
   }
 

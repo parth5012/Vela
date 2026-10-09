@@ -1,5 +1,5 @@
 import React from 'react';
-import renderer, { act } from 'react-test-renderer';
+import renderer, { act, type ReactTestInstance } from 'react-test-renderer';
 import CloudProvidersScreen from '../app/settings/cloud-providers';
 import ConnectionScreen from '../app/settings/connection';
 import { useConfigStore } from '../store/useConfigStore';
@@ -49,7 +49,7 @@ describe('Cloud Providers and Connection Settings Screens', () => {
     });
 
     const root = component.root;
-    const texts = root.findAllByType('Text').map((t) => t.props.children);
+    const texts = root.findAllByType('Text').map((t: ReactTestInstance) => t.props.children);
     const joined = texts.flat(Infinity).join(' ');
 
     expect(joined).toContain('Google Gemini');
