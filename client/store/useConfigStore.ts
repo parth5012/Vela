@@ -147,6 +147,9 @@ interface ConfigState {
   detectedRamBytes: number | null;
   maxSteps: number;
   maxStepsEnabled: boolean;
+  contextCompression: boolean;
+  systemPromptEnabled: boolean;
+  maxTokens: number;
   setLocalModelDownloadProgress: (val: number | null) => void;
   setWifiOnlyDownload: (val: boolean) => void;
   setLocalModelName: (val: string) => void;
@@ -156,6 +159,9 @@ interface ConfigState {
   setDetectedRamBytes: (val: number | null) => void;
   setMaxSteps: (val: number) => void;
   setMaxStepsEnabled: (val: boolean) => void;
+  setContextCompression: (val: boolean) => void;
+  setSystemPromptEnabled: (val: boolean) => void;
+  setMaxTokens: (val: number) => void;
 }
 
 const SECURE_KEY = 'vela-api-key';
@@ -228,6 +234,9 @@ export const useConfigStore = create<ConfigState>()(
       detectedRamBytes: null,
       maxSteps: 15,
       maxStepsEnabled: true,
+      contextCompression: true,
+      systemPromptEnabled: true,
+      maxTokens: 4096,
 
       setConfig: (url, key) => {
         set((state) => ({
@@ -267,6 +276,9 @@ export const useConfigStore = create<ConfigState>()(
           detectedRamBytes: null,
           maxSteps: 15,
           maxStepsEnabled: true,
+          contextCompression: true,
+          systemPromptEnabled: true,
+          maxTokens: 4096,
           suggestionStarters: [
             { label: '👩🏫 Teach Concept', text: 'Teach intuition behind binary search trace example', agent: 'teacher' },
             { label: '📊 Data Analyst', text: 'Analyze key features 2026 FIFA World Cup matches', agent: 'analyst' },
@@ -397,6 +409,9 @@ export const useConfigStore = create<ConfigState>()(
       setDetectedRamBytes: (detectedRamBytes) => set({ detectedRamBytes }),
       setMaxSteps: (maxSteps) => set({ maxSteps }),
       setMaxStepsEnabled: (maxStepsEnabled) => set({ maxStepsEnabled }),
+      setContextCompression: (contextCompression) => set({ contextCompression }),
+      setSystemPromptEnabled: (systemPromptEnabled) => set({ systemPromptEnabled }),
+      setMaxTokens: (maxTokens) => set({ maxTokens }),
     }),
     {
       name: 'vela-config-storage',
@@ -459,6 +474,18 @@ export const useConfigStore = create<ConfigState>()(
           }
           if (persistedState.maxStepsEnabled === undefined) {
             persistedState.maxStepsEnabled = true;
+          }
+          if (persistedState.temperature === undefined) {
+            persistedState.temperature = 0.7;
+          }
+          if (persistedState.maxTokens === undefined) {
+            persistedState.maxTokens = 4096;
+          }
+          if (persistedState.contextCompression === undefined) {
+            persistedState.contextCompression = true;
+          }
+          if (persistedState.systemPromptEnabled === undefined) {
+            persistedState.systemPromptEnabled = true;
           }
         }
         return persistedState;

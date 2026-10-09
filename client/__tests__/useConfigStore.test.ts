@@ -50,9 +50,38 @@ describe('useConfigStore', () => {
     expect(state.accentColor).toBe('indigo');
     expect(state.systemPrompt).toBe('You are an autonomous research agent.');
     expect(state.temperature).toBe(0.7);
+    expect(state.maxTokens).toBe(4096);
+    expect(state.contextCompression).toBe(true);
+    expect(state.systemPromptEnabled).toBe(true);
     expect(state.modelName).toBe('gemini-1.5-pro');
     expect(state.maxSteps).toBe(15);
     expect(state.maxStepsEnabled).toBe(true);
+  });
+
+  it('should initialize, update, and reset persisted toggles (temperature, maxTokens, contextCompression, systemPromptEnabled)', () => {
+    const state = useConfigStore.getState();
+    expect(state.temperature).toBe(0.7);
+    expect(state.maxTokens).toBe(4096);
+    expect(state.contextCompression).toBe(true);
+    expect(state.systemPromptEnabled).toBe(true);
+
+    state.setTemperature(0.2);
+    state.setMaxTokens(8192);
+    state.setContextCompression(false);
+    state.setSystemPromptEnabled(false);
+
+    let updated = useConfigStore.getState();
+    expect(updated.temperature).toBe(0.2);
+    expect(updated.maxTokens).toBe(8192);
+    expect(updated.contextCompression).toBe(false);
+    expect(updated.systemPromptEnabled).toBe(false);
+
+    updated.clearConfig();
+    let cleared = useConfigStore.getState();
+    expect(cleared.temperature).toBe(0.7);
+    expect(cleared.maxTokens).toBe(4096);
+    expect(cleared.contextCompression).toBe(true);
+    expect(cleared.systemPromptEnabled).toBe(true);
   });
 
   it('should allow updating maxSteps and maxStepsEnabled via setters', () => {
@@ -309,5 +338,33 @@ describe('useConfigStore', () => {
     const parsed = JSON.parse(asyncStorageVal);
     expect(parsed.state.apiKey).toBe('');
     expect(parsed.state.apiUrl).toBe('https://api.vela.local');
+  });
+
+  it('hydrates persisted toggles correctly on rehydrate', async () => {
+    const AsyncStorage = require('@react-native-async-storage/async-storage');
+    await AsyncStorage.setItem(
+      'vela-config-storage',
+      JSON.stringify({
+        state: {
+          ...useConfigStore.getState(),
+          temperature: 0.3,
+          maxTokens: 2048,
+          contextCompression: false,
+          systemPromptEnabled: false,
+        },
+        version: 5,
+      })
+    );
+
+    await useConfigStore.persist.rehydrate();
+
+    const hydrated = useConfigStore.getState();
+    expect(hydrated.temperature).toBe(0.3);
+    expect(hydrated.maxTokens).toBe(2048);
+    expect(hydrated.contextCompression).toBe(false);
+    expect(hydrated.systemPromptEnabled).toBe(false);
+
+    await AsyncStorage.removeItem('vela-config-storage');
+    useConfigStore.getState().clearConfig();
   });
 });

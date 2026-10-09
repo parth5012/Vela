@@ -2,6 +2,105 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ProviderSlug } from '../../store/useConfigStore';
 import { streamCloudResponse } from './index';
 
+export const OPENROUTER_FREE_MODEL = 'gpt-oss-120b:free';
+export const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
+
+export function trimBearerToken(input: string): string {
+  if (!input) return '';
+  const trimmed = input.trim();
+  return trimmed.replace(/^bearer\s+/i, '').trim();
+}
+
+export function isFreeModelId(modelId: string): boolean {
+  if (!modelId) return false;
+  const lower = modelId.toLowerCase().trim();
+  if (lower.includes(':free') || lower.endsWith('/free') || lower.includes('-free')) {
+    return true;
+  }
+  if (lower.startsWith('free-') || lower.includes('/free-')) {
+    return true;
+  }
+  return false;
+}
+
+export function sortModelIds(models: string[]): string[] {
+  return [...models].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true }));
+}
+
+export interface FetchModelsResult {
+  models: string[];
+  error?: string;
+}
+
+export async function fetchCustomEndpointModels(
+  baseUrl: string,
+  apiKey: string
+): Promise<FetchModelsResult> {
+  const cleanKey = trimBearerToken(apiKey);
+  let normalized = (baseUrl || '').trim().replace(/\/+$/, '');
+  if (!normalized) {
+    return { models: [], error: 'Base URL is required' };
+  }
+  if (!/^https?:\/\//i.test(normalized)) {
+    normalized = `https://${normalized}`;
+  }
+
+  const endpoint = `${normalized}/models`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+
+  try {
+    const headers: Record<string, string> = {};
+    if (cleanKey) {
+      headers['Authorization'] = `Bearer ${cleanKey}`;
+    }
+    const res = await fetch(endpoint, {
+      headers,
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      return { models: [], error: `Server returned HTTP ${res.status}` };
+    }
+
+    let json: any;
+    try {
+      json = await res.json();
+    } catch {
+      return { models: [], error: 'Malformed JSON response from /models' };
+    }
+
+    const rawList = Array.isArray(json?.data)
+      ? json.data
+      : Array.isArray(json?.models)
+      ? json.models
+      : Array.isArray(json)
+      ? json
+      : null;
+
+    if (!rawList) {
+      return { models: [], error: 'Malformed JSON response: missing models array' };
+    }
+
+    const ids: string[] = rawList
+      .map((item: any) => (typeof item === 'string' ? item : item?.id || item?.name))
+      .filter((id: any): id is string => typeof id === 'string' && Boolean(id.trim()));
+
+    if (ids.length === 0) {
+      return { models: [], error: 'Endpoint returned an empty model list' };
+    }
+
+    return { models: sortModelIds(ids) };
+  } catch (err: any) {
+    if (err?.name === 'AbortError' || controller.signal.aborted) {
+      return { models: [], error: 'Network timeout connecting to /models' };
+    }
+    return { models: [], error: 'Network error connecting to /models' };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export const CURATED_MODELS: Record<ProviderSlug, string[]> = {
   gemini: ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'],
   openai: ['gpt-4o-mini', 'gpt-4o', 'o1-mini', 'o3-mini'],
@@ -116,19 +215,9 @@ export async function fetchProviderModels(
         }
       }
     } else if (provider === 'custom' && baseUrl) {
-      let normalized = baseUrl.trim().replace(/\/+$/, '');
-      if (!/^https?:\/\//i.test(normalized)) {
-        normalized = `https://${normalized}`;
-      }
-      const res = await fetch(`${normalized}/models`, {
-        headers: { Authorization: `Bearer ${apiKey.trim()}` },
-        signal: controller.signal,
-      });
-      if (res.ok) {
-        const json = await res.json();
-        if (Array.isArray(json?.data)) {
-          fetchedModels = json.data.map((m: any) => m.id).filter(Boolean);
-        }
+      const customRes = await fetchCustomEndpointModels(baseUrl, apiKey);
+      if (customRes.models.length > 0) {
+        fetchedModels = customRes.models;
       }
     }
   } catch (e) {
@@ -139,7 +228,7 @@ export async function fetchProviderModels(
 
   // Only cache when models were actually retrieved from the network
   if (fetchedModels.length > 0) {
-    const combined = Array.from(new Set([...curated, ...fetchedModels])).filter(Boolean);
+    const combined = sortModelIds(Array.from(new Set([...curated, ...fetchedModels])).filter(Boolean));
     try {
       await AsyncStorage.setItem(
         cacheKey,
@@ -151,7 +240,7 @@ export async function fetchProviderModels(
     return combined;
   }
 
-  return curated;
+  return sortModelIds(curated);
 }
 
 export async function testProviderConnection(
