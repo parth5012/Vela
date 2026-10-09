@@ -296,4 +296,40 @@ describe('localAgentLoop real engine envelope (function_calls)', () => {
     expect(start.lowConfidence).toBe(false);
     expect(start.reasoning).toBeUndefined();
   });
+
+  it('strips <think> reasoning blocks from local agent final conversational responses', async () => {
+    async function* replyStep() {
+      yield '<think>Analyzing network topology...</think>Wi-Fi is currently connected.';
+    }
+    mockStream.mockReturnValueOnce(replyStep() as any);
+
+    const result = await runLocalAgentLoop('Check my Wi-Fi state');
+    expect(result.completed).toBe(true);
+    expect(result.finalResponse).toBe('Wi-Fi is currently connected.');
+    expect(result.steps[0].response).toBe('Wi-Fi is currently connected.');
+  });
+
+  it('surfaces empty response error when local agent response contains only <think> blocks', async () => {
+    async function* replyStep() {
+      yield '<think>Thinking and thinking with no final output</think>';
+    }
+    mockStream.mockReturnValueOnce(replyStep() as any);
+
+    const result = await runLocalAgentLoop('Check my Wi-Fi state');
+    expect(result.completed).toBe(true);
+    expect(result.finalResponse).toContain('Empty response — try raising maxTokens');
+    expect(result.steps[0].response).toContain('Empty response — try raising maxTokens');
+  });
+
+  it('surfaces empty response error when local agent response contains unclosed <think> block (exhausted maxTokens)', async () => {
+    async function* replyStep() {
+      yield '<think>Thinking and thinking but maxTokens exhausted mid-thought';
+    }
+    mockStream.mockReturnValueOnce(replyStep() as any);
+
+    const result = await runLocalAgentLoop('Check my Wi-Fi state');
+    expect(result.completed).toBe(true);
+    expect(result.finalResponse).toContain('Empty response — try raising maxTokens');
+    expect(result.steps[0].response).toContain('Empty response — try raising maxTokens');
+  });
 });

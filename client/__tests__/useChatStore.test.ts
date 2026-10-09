@@ -11,8 +11,22 @@ jest.mock('../db/client', () => ({
   default: null,
 }));
 
+jest.mock('../db/chatRepository', () => ({
+  saveThread: jest.fn(async () => {}),
+  saveThreads: jest.fn(async () => {}),
+  saveMessage: jest.fn(async () => {}),
+  saveMessages: jest.fn(async () => {}),
+  deleteThreadLocal: jest.fn(async () => {}),
+  deleteMessageLocal: jest.fn(async () => {}),
+  replaceThreadMessages: jest.fn(async () => {}),
+  hydrateChatFromLocalDb: jest.fn(async () => {}),
+  clearChatLocal: jest.fn(async () => {}),
+  isLocalDbAvailable: jest.fn(() => false),
+}));
+
 import { useChatStore } from '../store/useChatStore';
 import { useConfigStore } from '../store/useConfigStore';
+import * as chatRepo from '../db/chatRepository';
 
 describe('useChatStore', () => {
   beforeEach(() => {
@@ -326,6 +340,61 @@ describe('useChatStore', () => {
       expect(state.messages['thread-id']).toEqual([
         { id: 'msg-1', role: 'user', content: 'hello 1' },
       ]);
+    });
+  });
+
+  describe('reasoning stripping in persistence', () => {
+    it('strips <think> blocks when saving assistant messages', () => {
+      const store = useChatStore.getState();
+      store.createThread('Think Thread', 'thread-think');
+
+      store.addMessage('thread-think', {
+        id: 'msg-think',
+        role: 'assistant',
+        content: '<think>internal reason</think>Public text',
+      });
+
+      expect(chatRepo.saveMessage).toHaveBeenCalledWith(
+        'thread-think',
+        expect.objectContaining({
+          id: 'msg-think',
+          role: 'assistant',
+          content: 'Public text',
+        })
+      );
+    });
+
+    it('sanitizes in-memory zustand state so state.messages matches persisted content', () => {
+      const store = useChatStore.getState();
+      store.createThread('Thread X', 'thread-x');
+
+      store.addMessage('thread-x', {
+        id: 'msg-1',
+        role: 'assistant',
+        content: '<think>internal reason</think>Visible answer',
+      });
+
+      expect(useChatStore.getState().messages['thread-x'][0].content).toBe('Visible answer');
+    });
+
+    it('does not alter user message content', () => {
+      const store = useChatStore.getState();
+      store.createThread('User Thread', 'thread-user');
+
+      store.addMessage('thread-user', {
+        id: 'msg-user',
+        role: 'user',
+        content: '<think>keep as is</think>',
+      });
+
+      expect(chatRepo.saveMessage).toHaveBeenCalledWith(
+        'thread-user',
+        expect.objectContaining({
+          id: 'msg-user',
+          role: 'user',
+          content: '<think>keep as is</think>',
+        })
+      );
     });
   });
 });

@@ -209,4 +209,224 @@ describe('streamAgentResponse', () => {
     expect(completed).toBe(true);
     expect(title).toBe('Finished');
   });
+
+  it('should strip <think> reasoning blocks from stream and assembly', async () => {
+    const chunks: string[] = [];
+    let completed = false;
+
+    (globalThis as any).fetch = jest.fn().mockImplementation(() => {
+      const mockStream = {
+        getReader() {
+          let count = 0;
+          return {
+            async read() {
+              if (count === 0) {
+                count++;
+                return { value: new TextEncoder().encode('data: {"type": "content", "delta": "<think>pondering...</think>Hello "}\n'), done: false };
+              } else if (count === 1) {
+                count++;
+                return { value: new TextEncoder().encode('data: {"type": "content", "delta": "world!"}\n'), done: false };
+              } else if (count === 2) {
+                count++;
+                return { value: new TextEncoder().encode('data: {"type": "done", "thread_title": "Thought"}\n'), done: false };
+              }
+              return { value: undefined, done: true };
+            }
+          };
+        }
+      };
+      return Promise.resolve({ ok: true, body: mockStream });
+    });
+
+    await streamAgentResponse(
+      'http://localhost',
+      'key',
+      'thread-1',
+      'hi',
+      (chunk) => chunks.push(chunk),
+      () => { completed = true; },
+      () => {}
+    );
+
+    expect(chunks.join('')).toBe('Hello world!');
+    expect(completed).toBe(true);
+  });
+
+  it('handles chunk-boundary split across <think> tags without leaking or losing characters', async () => {
+    (globalThis as any).fetch = jest.fn().mockImplementation(() => {
+      const mockStream = {
+        getReader() {
+          let count = 0;
+          return {
+            async read() {
+              if (count === 0) {
+                count++;
+                return { value: new TextEncoder().encode('data: {"type": "content", "delta": "<th"}\n'), done: false };
+              } else if (count === 1) {
+                count++;
+                return { value: new TextEncoder().encode('data: {"type": "content", "delta": "ink>reasoning</think>Hello"}\n'), done: false };
+              } else if (count === 2) {
+                count++;
+                return { value: new TextEncoder().encode('data: {"type": "done"}\n'), done: false };
+              }
+              return { value: undefined, done: true };
+            }
+          };
+        }
+      };
+      return Promise.resolve({ ok: true, body: mockStream });
+    });
+
+    const chunks: string[] = [];
+    let completed = false;
+
+    await streamAgentResponse(
+      'http://localhost',
+      'key',
+      'thread-1',
+      'hi',
+      (chunk) => chunks.push(chunk),
+      () => { completed = true; },
+      () => {}
+    );
+
+    expect(completed).toBe(true);
+    expect(chunks.join('')).toBe('Hello');
+  });
+
+  it('surfaces empty-response error when model returns only reasoning or whitespace', async () => {
+    let error: Error | undefined;
+
+    (globalThis as any).fetch = jest.fn().mockImplementation(() => {
+      const mockStream = {
+        getReader() {
+          let count = 0;
+          return {
+            async read() {
+              if (count === 0) {
+                count++;
+                return { value: new TextEncoder().encode('data: {"type": "content", "delta": "<think>pondering only</think>"}\n'), done: false };
+              } else if (count === 1) {
+                count++;
+                return { value: new TextEncoder().encode('data: {"type": "done", "thread_title": "Empty"}\n'), done: false };
+              }
+              return { value: undefined, done: true };
+            }
+          };
+        }
+      };
+      return Promise.resolve({ ok: true, body: mockStream });
+    });
+
+    await streamAgentResponse(
+      'http://localhost',
+      'key',
+      'thread-1',
+      'hi',
+      () => {},
+      () => {},
+      (err) => { error = err; }
+    );
+
+    expect(error).toBeDefined();
+    expect(error?.message).toContain('Empty response — try raising maxTokens');
+  });
+
+  it('surfaces empty-response error when model exhausts maxTokens inside unclosed <think> block', async () => {
+    let error: Error | undefined;
+
+    (globalThis as any).fetch = jest.fn().mockImplementation(() => {
+      const mockStream = {
+        getReader() {
+          let count = 0;
+          return {
+            async read() {
+              if (count === 0) {
+                count++;
+                return { value: new TextEncoder().encode('data: {"type": "content", "delta": "<think>hit maxTokens before completing thought"}\n'), done: false };
+              } else if (count === 1) {
+                count++;
+                return { value: new TextEncoder().encode('data: {"type": "done"}\n'), done: false };
+              }
+              return { value: undefined, done: true };
+            }
+          };
+        }
+      };
+      return Promise.resolve({ ok: true, body: mockStream });
+    });
+
+    await streamAgentResponse(
+      'http://localhost',
+      'key',
+      'thread-1',
+      'hi',
+      () => {},
+      () => {},
+      (err) => { error = err; }
+    );
+
+    expect(error).toBeDefined();
+    expect(error?.message).toContain('Empty response — try raising maxTokens');
+  });
+
+  it('retries up to 4 times with exponential backoff on transient errors', async () => {
+    let callCount = 0;
+    const recordedDelays: number[] = [];
+
+    (globalThis as any).fetch = jest.fn().mockImplementation(() => {
+      callCount++;
+      if (callCount <= 4) {
+        return Promise.resolve({
+          ok: false,
+          status: 502,
+          text: () => Promise.resolve('Bad Gateway'),
+        });
+      }
+      const mockStream = {
+        getReader() {
+          let count = 0;
+          return {
+            async read() {
+              if (count === 0) {
+                count++;
+                return { value: new TextEncoder().encode('data: {"type": "content", "delta": "Recovered!"}\n'), done: false };
+              } else if (count === 1) {
+                count++;
+                return { value: new TextEncoder().encode('data: {"type": "done"}\n'), done: false };
+              }
+              return { value: undefined, done: true };
+            }
+          };
+        }
+      };
+      return Promise.resolve({ ok: true, body: mockStream });
+    });
+
+    const chunks: string[] = [];
+    let completed = false;
+
+    await streamAgentResponse(
+      'http://localhost',
+      'key',
+      'thread-1',
+      'hi',
+      (chunk) => chunks.push(chunk),
+      () => { completed = true; },
+      () => {},
+      undefined,
+      undefined,
+      undefined,
+      90000,
+      {
+        delays: [10, 20, 30, 40],
+        sleepFn: async (ms) => { recordedDelays.push(ms); },
+      }
+    );
+
+    expect(callCount).toBe(5); // Initial attempt + 4 retries
+    expect(recordedDelays).toEqual([10, 20, 30, 40]);
+    expect(chunks.join('')).toBe('Recovered!');
+    expect(completed).toBe(true);
+  });
 });
