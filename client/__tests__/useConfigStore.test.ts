@@ -15,6 +15,12 @@ jest.mock('expo-secure-store', () => ({
 }));
 
 import { useConfigStore } from '../store/useConfigStore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  LITERT_GPU_CRASH_FLAG_KEY,
+  LITERT_GPU_INIT_SESSION_KEY,
+  isGpuCrashFlagSet,
+} from '../utils/liteRtCrashFlag';
 
 describe('useConfigStore', () => {
   beforeEach(() => {
@@ -386,5 +392,21 @@ describe('useConfigStore', () => {
 
     await AsyncStorage.removeItem('vela-config-storage');
     useConfigStore.getState().clearConfig();
+  });
+
+  it('clears the LiteRT crash keys on clearConfig', async () => {
+    await AsyncStorage.setItem(
+      LITERT_GPU_CRASH_FLAG_KEY,
+      JSON.stringify({ backend: 'opencl', modelName: 'm', timestamp: 1, consumed: false })
+    );
+    await AsyncStorage.setItem(
+      LITERT_GPU_INIT_SESSION_KEY,
+      JSON.stringify({ backend: 'opencl', modelName: 'm', timestamp: 1 })
+    );
+
+    useConfigStore.getState().clearConfig();
+
+    expect(await isGpuCrashFlagSet()).toBe(false);
+    expect(await AsyncStorage.getItem(LITERT_GPU_INIT_SESSION_KEY)).toBeNull();
   });
 });

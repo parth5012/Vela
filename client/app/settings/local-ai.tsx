@@ -17,6 +17,11 @@ import {
   type GpuVendor,
 } from '../../utils/ramDetection';
 import {
+  getGpuCrashFlagDetails,
+  clearGpuCrashFlag,
+  type GpuCrashFlagDetails,
+} from '../../utils/liteRtCrashFlag';
+import {
   getCustomModels,
   deleteCustomModel,
   importModelFromFile,
@@ -105,6 +110,7 @@ export default function LocalAiScreen() {
 
   const [showUnsupportedModels, setShowUnsupportedModels] = useState(false);
   const [detectedGpuVendor, setDetectedGpuVendor] = useState<GpuVendor | null>(null);
+  const [gpuCrashDetails, setGpuCrashDetails] = useState<GpuCrashFlagDetails | null>(null);
 
   // Wayfinder #230: Needle engine runtime state. Synchronous boolean, safe on
   // web/Jest where the native module is absent (hasNativeLibrary() → false).
@@ -133,6 +139,21 @@ export default function LocalAiScreen() {
       }
     });
   }, []);
+
+  useEffect(() => {
+    getGpuCrashFlagDetails().then((details) => {
+      if (isMounted.current) {
+        setGpuCrashDetails(details);
+      }
+    });
+  }, []);
+
+  const handleClearGpuCrash = async () => {
+    await clearGpuCrashFlag();
+    if (isMounted.current) {
+      setGpuCrashDetails(null);
+    }
+  };
 
   const handleApplyRecommendation = () => {
     if (detectedRamBytes) {
@@ -701,6 +722,69 @@ export default function LocalAiScreen() {
 
       <Card>
         <Label>GPU Acceleration & Backend</Label>
+        {gpuCrashDetails ? (
+          <View
+            style={{
+              backgroundColor: 'rgba(239, 68, 68, 0.15)',
+              borderColor: '#ef4444',
+              borderWidth: 1,
+              borderRadius: 8,
+              padding: 10,
+              marginBottom: 12,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+            accessibilityRole="alert"
+            accessibilityLabel="LiteRT GPU crash detected: fell back to CPU-safe mode"
+          >
+            <View style={{ flex: 1, marginRight: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                <Text style={{ color: '#ef4444', fontSize: sizes.sub - 1, fontWeight: '700' }}>
+                  ⚠️ GPU Crash Detected
+                </Text>
+                <View
+                  style={{
+                    backgroundColor: 'rgba(0,0,0,0.3)',
+                    paddingHorizontal: 6,
+                    paddingVertical: 1,
+                    borderRadius: 4,
+                    borderWidth: 1,
+                    borderColor: '#ef4444',
+                  }}
+                >
+                  <Text style={{ color: '#f87171', fontSize: 10, fontWeight: '700' }}>
+                    CPU-Safe Fallback
+                  </Text>
+                </View>
+              </View>
+              <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, lineHeight: 15 }}>
+                LiteRT hit a GPU crash — running on CPU for this session. GPU will be retried next launch.
+              </Text>
+              <Text style={{ color: colors.textDark, fontSize: sizes.sub - 2, marginTop: 2, fontStyle: 'italic' }}>
+                Mock honesty: local inference runs on CPU or mock fallback; GPU will be retried next launch.
+              </Text>
+            </View>
+            <Pressable
+              onPress={handleClearGpuCrash}
+              accessibilityRole="button"
+              accessibilityLabel="Clear GPU crash flag"
+              style={{
+                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                borderColor: colors.glassBorder,
+                borderWidth: 1,
+                borderRadius: 6,
+                paddingHorizontal: 8,
+                paddingVertical: 5,
+                alignSelf: 'center',
+              }}
+            >
+              <Text style={{ color: colors.text, fontSize: sizes.sub - 1, fontWeight: '600' }}>
+                Clear
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
         <View
           style={{
             flexDirection: 'row',

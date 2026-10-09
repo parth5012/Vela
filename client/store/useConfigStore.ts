@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
+import { clearGpuCrashFlag } from '../utils/liteRtCrashFlag';
 
 export interface SuggestionStarter {
   label: string;
@@ -304,6 +305,9 @@ export const useConfigStore = create<ConfigState>()(
             SecureStore.deleteItemAsync(getCloudKeyStorageKey(slug)).catch(() => {});
           }
         }
+        clearGpuCrashFlag().catch((err) => {
+          console.error('[useConfigStore] Failed to clear LiteRT crash keys:', err);
+        });
       },
       setHasHydrated: (val) => set({ hasHydrated: val }),
       setTheme: (theme) => set({ theme }),
