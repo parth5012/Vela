@@ -1,12 +1,15 @@
-# PR-flag Android APK build.
+# PR-flag Android APK build — via EAS cloud (eas-cli).
 #
 # Trigger: add the `build-apk` label to a PR (or push new commits while the
-# label is present) → CI builds the debug APK and publishes it to a rolling
-# pre-release tag `pr-<number>-apk`, linked from a sticky PR comment.
+# label is present) → CI submits an EAS cloud build (profile `preview`,
+# non-production `com.parth5012.client.dev` APK), waits for it, downloads the
+# artifact, and publishes it to a rolling pre-release tag `pr-<number>-apk`,
+# linked from a sticky PR comment.
 #
-# Build recipe mirrors docs/android-build-verification.md:
-#   pnpm install → expo prebuild --clean -p android → gradlew assembleDebug
-# NDK is pinned to 27.1.12297006 (required by modules/needle/android/build.gradle).
+# Requires repo secret EXPO_TOKEN (Expo access token). The EAS CLI evaluates
+# app.config.js and its plugins locally before upload, so project deps must be
+# installed on the runner; compilation itself happens entirely in EAS cloud.
+# Note: withAbiSplits makes EAS deliver a .tar.gz containing per-ABI APKs.
 
 name: PR APK build
 
@@ -25,7 +28,7 @@ concurrency:
 
 jobs:
   build-apk:
-    name: Build Android APK
+    name: Build Android APK (EAS)
     runs-on: ubuntu-latest
     timeout-minutes: 90
     # github.event_name is 'pull_request' for both activity types below;
@@ -38,6 +41,8 @@ jobs:
       run:
         working-directory: client
     env:
+      CI: 'true'            # suppresses eas-cli upgrade notices on stdout (would corrupt --json)
+      EXPO_NO_TELEMETRY: '1'
       PR_NUMBER: ${{ github.event.pull_request.number }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       TAG: pr-${{ github.event.pull_request.number }}-apk
@@ -49,11 +54,6 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
       - uses: pnpm/action-setup@v4
         with:
           version: 12
@@ -64,54 +64,85 @@ jobs:
           cache: pnpm
           cache-dependency-path: client/pnpm-lock.yaml
 
-      - name: Install pinned NDK and CMake
-        run: |
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "ndk;27.1.12297006" "cmake;3.22.1"
-
+      # eas-cli evaluates app.config.js + config plugins (expo-router,
+      # withAbiSplits, ...) locally before uploading sources.
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Generate Android project
-        run: npx expo prebuild --clean -p android
+      - name: Install eas-cli
+        run: npm install -g eas-cli
 
-      - uses: gradle/actions/setup-gradle@v4
-
-      # shell: bash (not the default) so pipefail is on and a failed gradle
-      # build is not masked by tee.
-      - name: Build debug APK
-        shell: bash
-        working-directory: client/android
-        run: ./gradlew assembleDebug --no-daemon 2>&1 | tee "$RUNNER_TEMP/gradle-build.log"
-
-      # The build is green even when the needle engine archive failed to fetch
-      # (honest mock fallback). Surface which one happened in the PR comment
-      # instead of failing the PR build.
-      - name: Detect needle engine link status
-        id: engine
+      - name: Submit EAS cloud build
+        id: submit
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          if grep -q "Linking needle engine" "$RUNNER_TEMP/gradle-build.log"; then
-            echo "status=native" >> "$GITHUB_OUTPUT"
-          else
-            echo "status=mock-fallback" >> "$GITHUB_OUTPUT"
-          fi
-
-      # withAbiSplits.js emits per-ABI APKs (universalApk = false).
-      - name: Collect APKs
-        run: |
-          shopt -s nullglob
-          mkdir -p "$RUNNER_TEMP/apk"
-          for apk in android/app/build/outputs/apk/debug/*.apk; do
-            base=$(basename "$apk" .apk)          # app-debug-arm64-v8a
-            abi=${base#app-debug}                  # -arm64-v8a | '' for unsplit
-            sha7=${HEAD_SHA:0:7}
-            cp "$apk" "$RUNNER_TEMP/apk/vela-pr${PR_NUMBER}-${sha7}${abi}.apk"
-          done
-          ls -la "$RUNNER_TEMP/apk"
-          compgen -G "$RUNNER_TEMP/apk/*.apk" > /dev/null || {
-            echo "::error::No APK produced under client/android/app/build/outputs/apk/debug/"
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::error::EXPO_TOKEN repo secret is missing — create an Expo access token (expo.dev → Account Settings → Access Tokens) and add it: gh secret set EXPO_TOKEN --repo $GITHUB_REPOSITORY"
             exit 1
-          }
+          fi
+          out=$(eas build --platform android --profile preview --non-interactive --no-wait --json)
+          id=$(echo "$out" | jq -r '.[0].id // empty')
+          if [ -z "$id" ]; then
+            echo "::error::eas build did not return a build id"
+            echo "$out"
+            exit 1
+          fi
+          echo "Submitted EAS build $id"
+          echo "build_id=$id" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for EAS build
+        id: poll
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          build_id="${{ steps.submit.outputs.build_id }}"
+          # EAS queue + native build: poll up to ~60 min.
+          for i in $(seq 1 120); do
+            # build:view accepts only --json (verified against eas-cli 24.x help)
+            json=$(eas build:view "$build_id" --json)
+            st=$(echo "$json" | jq -r '.status')
+            echo "[$i] $st"
+            case "$st" in
+              FINISHED)
+                url=$(echo "$json" | jq -r '.artifacts.buildUrl // empty')
+                if [ -z "$url" ]; then
+                  echo "::error::Build finished but artifacts.buildUrl is empty"
+                  exit 1
+                fi
+                echo "build_url=$url" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+              ERRORED|CANCELED|PENDING_CANCEL)
+                echo "::error::EAS build $build_id ended as $st"
+                echo "$json" | jq '.error'
+                exit 1
+                ;;
+            esac
+            sleep 30
+          done
+          echo "::error::Timed out after 60 min waiting for EAS build $build_id"
+          exit 1
+
+      # EAS delivers a .tar.gz here (withAbiSplits → multiple per-ABI APKs).
+      - name: Download and unpack APKs
+        run: |
+          curl -fSL -o "$RUNNER_TEMP/eas-build.tar.gz" "${{ steps.poll.outputs.build_url }}"
+          mkdir -p "$RUNNER_TEMP/apk-src" "$RUNNER_TEMP/apk"
+          tar -xzf "$RUNNER_TEMP/eas-build.tar.gz" -C "$RUNNER_TEMP/apk-src"
+          sha7=${HEAD_SHA:0:7}
+          found=0
+          while IFS= read -r apk; do
+            base=$(basename "$apk")
+            cp "$apk" "$RUNNER_TEMP/apk/vela-pr${PR_NUMBER}-${sha7}-${base}"
+            found=1
+          done < <(find "$RUNNER_TEMP/apk-src" -name '*.apk' | sort)
+          ls -la "$RUNNER_TEMP/apk"
+          if [ "$found" -ne 1 ]; then
+            echo "::error::No .apk found inside the EAS artifact tarball"
+            tar -tzf "$RUNNER_TEMP/eas-build.tar.gz" | head -50
+            exit 1
+          fi
 
       - name: Publish rolling pre-release
         env:
@@ -128,11 +159,11 @@ jobs:
 
           notes_file="$RUNNER_TEMP/release-notes.md"
           {
-            echo "Non-production test build for PR #$PR_NUMBER."
+            echo "Non-production test build for PR #$PR_NUMBER (EAS \`preview\` profile)."
             echo
             echo "- Commit: \`$HEAD_SHA\`"
-            echo "- Variant: debug (\`com.parth5012.client.dev\`), self-signed with the debug keystore"
-            echo "- Needle engine: \`${{ steps.engine.outputs.status }}\`"
+            echo "- Variant: preview (\`com.parth5012.client.dev\`), self-signed"
+            echo "- EAS build: \`${{ steps.submit.outputs.build_id }}\`"
             echo "- Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           } > "$notes_file"
 
@@ -163,7 +194,7 @@ jobs:
             echo "| | |"
             echo "|---|---|"
             echo "| Commit | \`${HEAD_SHA:0:7}\` |"
-            echo "| Needle engine | \`${{ steps.engine.outputs.status }}\` |"
+            echo "| EAS build | \`${{ steps.submit.outputs.build_id }}\` |"
             echo "| Build | [run #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |"
             echo
             echo "**Downloads** (direct links — open on your phone, install the arm64 one):"
