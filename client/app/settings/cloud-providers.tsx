@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, Alert, Switch } from 'react-native';
 import {
   AuroraScreen,
   Card,
@@ -17,7 +17,15 @@ import {
   PROVIDER_SLUGS,
   DEFAULT_CLOUD_PROVIDERS,
 } from '../../store/useConfigStore';
-import { fetchProviderModels, testProviderConnection } from '../../utils/providers/models';
+import {
+  fetchProviderModels,
+  fetchCustomEndpointModels,
+  testProviderConnection,
+  trimBearerToken,
+  isFreeModelId,
+  OPENROUTER_FREE_MODEL,
+  OPENROUTER_BASE_URL,
+} from '../../utils/providers/models';
 
 interface ProviderMeta {
   name: string;
@@ -96,6 +104,17 @@ export default function CloudProvidersScreen() {
   const [isFetchingModels, setIsFetchingModels] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [onlyFreeModels, setOnlyFreeModels] = useState(false);
+  const [modelFetchError, setModelFetchError] = useState<string | null>(null);
+
+  const temperature = useConfigStore((s) => s.temperature);
+  const setTemperature = useConfigStore((s) => s.setTemperature);
+  const maxTokens = useConfigStore((s) => s.maxTokens);
+  const setMaxTokens = useConfigStore((s) => s.setMaxTokens);
+  const contextCompression = useConfigStore((s) => s.contextCompression);
+  const setContextCompression = useConfigStore((s) => s.setContextCompression);
+  const systemPromptEnabled = useConfigStore((s) => s.systemPromptEnabled);
+  const setSystemPromptEnabled = useConfigStore((s) => s.setSystemPromptEnabled);
 
   useEffect(() => {
     loadCloudApiKeys();
@@ -113,9 +132,19 @@ export default function CloudProvidersScreen() {
       setBaseUrlInput(currentConfig?.baseUrl || '');
       setTestResult(null);
 
+      setModelFetchError(null);
       setIsFetchingModels(true);
       try {
-        const models = await fetchProviderModels(slug, key, currentConfig?.baseUrl);
+        let models: string[] = [];
+        if (slug === 'custom') {
+          const res = await fetchCustomEndpointModels(currentConfig?.baseUrl || '', key);
+          models = res.models;
+          if (res.error && isMounted.current && activeFetchSlug.current === slug) {
+            setModelFetchError(res.error);
+          }
+        } else {
+          models = await fetchProviderModels(slug, key, currentConfig?.baseUrl);
+        }
         if (isMounted.current && activeFetchSlug.current === slug) {
           setAvailableModels(models);
         }
@@ -143,11 +172,13 @@ export default function CloudProvidersScreen() {
   };
 
   const handleSaveKey = async (slug: ProviderSlug) => {
-    if (!keyInput.trim()) {
+    const rawClean = trimBearerToken(keyInput);
+    if (!rawClean) {
       Alert.alert('Key Required', 'Please enter an API key.');
       return;
     }
-    await setCloudApiKey(slug, keyInput.trim());
+    await setCloudApiKey(slug, rawClean);
+    setKeyInput(rawClean);
     setCloudProviderConfig(slug, {
       model: modelInput.trim() || DEFAULT_CLOUD_PROVIDERS[slug].model,
       baseUrl: baseUrlInput.trim() || undefined,
@@ -180,7 +211,7 @@ export default function CloudProvidersScreen() {
     try {
       const res = await testProviderConnection(
         slug,
-        keyInput.trim(),
+        trimBearerToken(keyInput),
         modelInput.trim(),
         baseUrlInput.trim()
       );
@@ -194,8 +225,18 @@ export default function CloudProvidersScreen() {
 
   const handleRefreshModels = async (slug: ProviderSlug) => {
     setIsFetchingModels(true);
+    setModelFetchError(null);
     try {
-      const models = await fetchProviderModels(slug, keyInput.trim(), baseUrlInput.trim(), true);
+      let models: string[] = [];
+      if (slug === 'custom') {
+        const res = await fetchCustomEndpointModels(baseUrlInput.trim(), trimBearerToken(keyInput));
+        models = res.models;
+        if (res.error) {
+          setModelFetchError(res.error);
+        }
+      } else {
+        models = await fetchProviderModels(slug, trimBearerToken(keyInput), baseUrlInput.trim(), true);
+      }
       setAvailableModels(models);
     } finally {
       setIsFetchingModels(false);
@@ -281,6 +322,33 @@ export default function CloudProvidersScreen() {
               <View style={styles.expandedContent}>
                 <View style={styles.divider} />
 
+                {slug === 'openrouter' && (
+                  <View style={{ marginBottom: 12 }}>
+                    <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, marginBottom: 6 }}>
+                      Free Model Quick-Chip:
+                    </Text>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Quick-chip gpt-oss-120b:free"
+                      style={[
+                        styles.quickChip,
+                        { borderColor: aurora.acc1, backgroundColor: 'rgba(255, 255, 255, 0.06)' },
+                      ]}
+                      onPress={() => {
+                        setModelInput(OPENROUTER_FREE_MODEL);
+                        setBaseUrlInput(OPENROUTER_BASE_URL);
+                      }}
+                    >
+                      <Text style={{ color: aurora.acc1, fontWeight: '700', fontSize: sizes.sub }}>
+                        ⚡ {OPENROUTER_FREE_MODEL}
+                      </Text>
+                      <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 2 }}>
+                        One-tap free OpenRouter model
+                      </Text>
+                    </Pressable>
+                  </View>
+                )}
+
                 {slug === 'custom' && (
                   <View style={{ marginBottom: 12 }}>
                     <Field
@@ -312,36 +380,82 @@ export default function CloudProvidersScreen() {
                 </View>
 
                 <View style={{ marginBottom: 12 }}>
-                  <Field
-                    label="Model Name"
-                    placeholder="e.g. gpt-4o, gemini-1.5-flash"
-                    value={modelInput}
-                    onChangeText={setModelInput}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
-                  <Pressable
-                    onPress={() => handleRefreshModels(slug)}
-                    disabled={isFetchingModels}
-                    style={{ alignSelf: 'flex-end', marginTop: 4 }}
-                  >
-                    <Text style={{ color: aurora.acc1, fontSize: sizes.sub - 1 }}>
-                      {isFetchingModels ? 'Fetching...' : '↻ Refresh Models'}
-                    </Text>
-                  </Pressable>
+                  <View style={styles.modelHeaderRow}>
+                    <Field
+                      label="Model Name"
+                      placeholder="e.g. gpt-4o, gemini-1.5-flash"
+                      value={modelInput}
+                      onChangeText={setModelInput}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      style={{ flex: 1 }}
+                    />
+                  </View>
 
-                  {availableModels.length > 0 && (
-                    <View style={{ marginTop: 8 }}>
-                      <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 2, marginBottom: 4 }}>
-                        Available Models:
-                      </Text>
-                      <ChipGroup
-                        options={availableModels.slice(0, 10).map((m) => ({ value: m, label: m }))}
-                        value={modelInput}
-                        onChange={(m) => setModelInput(m)}
+                  <View style={styles.filterRefreshRow}>
+                    <Pressable
+                      style={styles.freeFilterToggle}
+                      onPress={() => setOnlyFreeModels(!onlyFreeModels)}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: onlyFreeModels }}
+                    >
+                      <Switch
+                        value={onlyFreeModels}
+                        onValueChange={setOnlyFreeModels}
+                        trackColor={{ false: colors.border, true: aurora.acc1 + '80' }}
+                        thumbColor={onlyFreeModels ? aurora.acc1 : colors.textMuted}
+                        accessibilityLabel="Free models filter"
                       />
-                    </View>
-                  )}
+                      <Text style={{ color: colors.text, fontSize: sizes.sub - 1, marginLeft: 6 }}>
+                        Free Models Only
+                      </Text>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={() => handleRefreshModels(slug)}
+                      disabled={isFetchingModels}
+                      style={{ paddingVertical: 4, paddingHorizontal: 6 }}
+                    >
+                      <Text style={{ color: aurora.acc1, fontSize: sizes.sub - 1 }}>
+                        {isFetchingModels ? 'Fetching...' : '↻ Refresh Models'}
+                      </Text>
+                    </Pressable>
+                  </View>
+
+                  {modelFetchError ? (
+                    <Text style={{ color: '#ef4444', fontSize: sizes.sub - 1, marginTop: 4 }}>
+                      ⚠️ {modelFetchError}
+                    </Text>
+                  ) : null}
+
+                  {(() => {
+                    const displayed = onlyFreeModels
+                      ? availableModels.filter(isFreeModelId)
+                      : availableModels;
+
+                    if (displayed.length > 0) {
+                      return (
+                        <View style={{ marginTop: 8 }}>
+                          <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 2, marginBottom: 4 }}>
+                            {onlyFreeModels ? 'Free Models Available:' : 'Available Models:'}
+                          </Text>
+                          <ChipGroup
+                            options={displayed.slice(0, 10).map((m) => ({ value: m, label: m }))}
+                            value={modelInput}
+                            onChange={(m) => setModelInput(m)}
+                          />
+                        </View>
+                      );
+                    }
+                    if (onlyFreeModels && availableModels.length > 0) {
+                      return (
+                        <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, marginTop: 6, fontStyle: 'italic' }}>
+                          No free models found in endpoint list.
+                        </Text>
+                      );
+                    }
+                    return null;
+                  })()}
                 </View>
 
                 {testResult && (
@@ -392,6 +506,151 @@ export default function CloudProvidersScreen() {
           </Card>
         );
       })}
+
+      <Card>
+        <Label>Inference & Prompt Controls</Label>
+        <Text style={[styles.controlHelper, { color: colors.textMuted, fontSize: sizes.sub - 1 }]}>
+          Fine-tune streaming temperature, token budget, context truncation, and system prompt injection.
+        </Text>
+
+        <View style={{ marginTop: 14 }}>
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1, paddingRight: 10 }}>
+              <Text style={{ color: colors.text, fontSize: sizes.text, fontWeight: '600' }}>
+                Context Compression
+              </Text>
+              <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, marginTop: 2 }}>
+                Truncates long conversation history to 30 messages to conserve token budgets.
+              </Text>
+            </View>
+            <Switch
+              value={contextCompression}
+              onValueChange={setContextCompression}
+              trackColor={{ false: colors.border, true: aurora.acc1 + '80' }}
+              thumbColor={contextCompression ? aurora.acc1 : colors.textMuted}
+              accessibilityLabel="Context Compression Switch"
+            />
+          </View>
+        </View>
+
+        <View style={{ marginTop: 14 }}>
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1, paddingRight: 10 }}>
+              <Text style={{ color: colors.text, fontSize: sizes.text, fontWeight: '600' }}>
+                System Prompt Enabled
+              </Text>
+              <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, marginTop: 2 }}>
+                Injects persona instructions and active skills as system messages.
+              </Text>
+            </View>
+            <Switch
+              value={systemPromptEnabled}
+              onValueChange={setSystemPromptEnabled}
+              trackColor={{ false: colors.border, true: aurora.acc1 + '80' }}
+              thumbColor={systemPromptEnabled ? aurora.acc1 : colors.textMuted}
+              accessibilityLabel="System Prompt Enabled Switch"
+            />
+          </View>
+        </View>
+
+        <View style={{ marginTop: 16 }}>
+          <Label>Temperature ({temperature.toFixed(1)})</Label>
+          <View style={styles.stepperRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Decrease temperature"
+              style={({ pressed }) => [
+                styles.stepBtn,
+                { borderColor: colors.glassBorder, backgroundColor: 'rgba(0,0,0,0.25)' },
+                pressed && { opacity: 0.7 },
+                temperature <= 0 && { opacity: 0.4 },
+              ]}
+              onPress={() => setTemperature(Math.max(0, Math.round((temperature - 0.1) * 10) / 10))}
+              disabled={temperature <= 0}
+            >
+              <Text style={{ color: colors.text, fontSize: sizes.text + 4 }}>−</Text>
+            </Pressable>
+            <View
+              style={[
+                styles.tempTrack,
+                { borderColor: colors.glassBorder, backgroundColor: 'rgba(0,0,0,0.25)' },
+              ]}
+            >
+              <View
+                style={[
+                  styles.tempFill,
+                  {
+                    width: `${Math.min(100, Math.max(0, temperature * 100))}%`,
+                    backgroundColor: aurora.acc1,
+                  },
+                ]}
+              />
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Increase temperature"
+              style={({ pressed }) => [
+                styles.stepBtn,
+                { borderColor: colors.glassBorder, backgroundColor: 'rgba(0,0,0,0.25)' },
+                pressed && { opacity: 0.7 },
+                temperature >= 1.0 && { opacity: 0.4 },
+              ]}
+              onPress={() => setTemperature(Math.min(1.0, Math.round((temperature + 0.1) * 10) / 10))}
+              disabled={temperature >= 1.0}
+            >
+              <Text style={{ color: colors.text, fontSize: sizes.text + 4 }}>+</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={{ marginTop: 16 }}>
+          <Label>Max Tokens ({maxTokens})</Label>
+          <View style={styles.stepperRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Decrease max tokens"
+              style={({ pressed }) => [
+                styles.stepBtn,
+                { borderColor: colors.glassBorder, backgroundColor: 'rgba(0,0,0,0.25)' },
+                pressed && { opacity: 0.7 },
+                maxTokens <= 256 && { opacity: 0.4 },
+              ]}
+              onPress={() => setMaxTokens(Math.max(256, maxTokens - 256))}
+              disabled={maxTokens <= 256}
+            >
+              <Text style={{ color: colors.text, fontSize: sizes.text + 4 }}>−</Text>
+            </Pressable>
+            <Field
+              label=""
+              value={String(maxTokens)}
+              onChangeText={(txt) => {
+                const parsed = parseInt(txt.replace(/[^0-9]/g, ''), 10);
+                if (!isNaN(parsed)) {
+                  setMaxTokens(Math.max(1, parsed));
+                } else if (txt === '') {
+                  setMaxTokens(256);
+                }
+              }}
+              keyboardType="numeric"
+              style={{ flex: 1, textAlign: 'center' }}
+            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Increase max tokens"
+              style={({ pressed }) => [
+                styles.stepBtn,
+                { borderColor: colors.glassBorder, backgroundColor: 'rgba(0,0,0,0.25)' },
+                pressed && { opacity: 0.7 },
+                maxTokens >= 32768 && { opacity: 0.4 },
+              ]}
+              onPress={() => setMaxTokens(Math.min(32768, maxTokens + 256))}
+              disabled={maxTokens >= 32768}
+            >
+              <Text style={{ color: colors.text, fontSize: sizes.text + 4 }}>+</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Card>
     </AuroraScreen>
   );
 }
@@ -449,5 +708,63 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
     marginTop: 8,
+  },
+  quickChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'column',
+    gap: 2,
+    alignSelf: 'flex-start',
+  },
+  modelHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  filterRefreshRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  freeFilterToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  controlHelper: {
+    marginTop: 4,
+    lineHeight: 18,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  stepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 8,
+  },
+  stepBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tempTrack: {
+    flex: 1,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  tempFill: {
+    height: '100%',
+    borderRadius: 5,
   },
 });

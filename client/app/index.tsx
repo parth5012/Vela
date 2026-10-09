@@ -677,7 +677,11 @@ export default function ChatScreen() {
     const controller = new AbortController();
     abortControllersRef.current[threadId] = controller;
 
-    const contextMessages = buildContextMessages(historyList, { maxMessages: 30 });
+    const systemPromptToUse = config.systemPromptEnabled === false ? undefined : cloudSkillAugmented;
+
+    const contextMessages = buildContextMessages(historyList, {
+      maxMessages: config.contextCompression ? 30 : 100,
+    });
 
     try {
       await streamCloudResponse({
@@ -685,8 +689,9 @@ export default function ChatScreen() {
         apiKey,
         model: activeAgent?.model?.trim() || providerConfig?.model || 'gemini-1.5-flash',
         baseUrl: providerConfig?.baseUrl,
-        systemPrompt: cloudSkillAugmented,
+        systemPrompt: systemPromptToUse,
         temperature: config.temperature,
+        maxTokens: config.maxTokens,
         messages: contextMessages,
         signal: controller.signal,
         onToken: (chunk) => {

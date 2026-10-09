@@ -1,10 +1,148 @@
-import { fetchProviderModels, getCuratedModels, testProviderConnection } from '../utils/providers/models';
+import {
+  fetchProviderModels,
+  fetchCustomEndpointModels,
+  getCuratedModels,
+  testProviderConnection,
+  trimBearerToken,
+  isFreeModelId,
+  sortModelIds,
+  OPENROUTER_FREE_MODEL,
+} from '../utils/providers/models';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 describe('Cloud Provider Models & Connection', () => {
   beforeEach(async () => {
     await AsyncStorage.clear();
     jest.clearAllMocks();
+  });
+
+  describe('trimBearerToken', () => {
+    it('handles keys with and without Bearer prefix, whitespace, and mixed case', () => {
+      expect(trimBearerToken('sk-12345')).toBe('sk-12345');
+      expect(trimBearerToken('  sk-12345  ')).toBe('sk-12345');
+      expect(trimBearerToken('Bearer sk-12345')).toBe('sk-12345');
+      expect(trimBearerToken('bearer sk-12345')).toBe('sk-12345');
+      expect(trimBearerToken('BEARER sk-12345')).toBe('sk-12345');
+      expect(trimBearerToken('  Bearer   sk-12345  ')).toBe('sk-12345');
+      expect(trimBearerToken('')).toBe('');
+      expect(trimBearerToken(undefined as any)).toBe('');
+    });
+  });
+
+  describe('isFreeModelId', () => {
+    it('identifies free models across OpenRouter, NIM, and other conventions', () => {
+      expect(isFreeModelId('gpt-oss-120b:free')).toBe(true);
+      expect(isFreeModelId('meta-llama/llama-3.3-70b-instruct:free')).toBe(true);
+      expect(isFreeModelId('nvidia/llama-3.1-nemotron-70b-instruct/free')).toBe(true);
+      expect(isFreeModelId('free-tier/mistral-7b')).toBe(true);
+      expect(isFreeModelId('deepseek-r1-free')).toBe(true);
+      expect(isFreeModelId('nvidia/free-nemotron')).toBe(true);
+
+      expect(isFreeModelId('gpt-4o')).toBe(false);
+      expect(isFreeModelId('claude-3-5-sonnet-20241022')).toBe(false);
+      expect(isFreeModelId('meta-llama/llama-3.3-70b-instruct')).toBe(false);
+      expect(isFreeModelId('')).toBe(false);
+      expect(isFreeModelId(null as any)).toBe(false);
+    });
+  });
+
+  describe('sortModelIds', () => {
+    it('sorts model IDs deterministically using natural case-insensitive comparison', () => {
+      const unsorted = ['gpt-4o', 'gpt-3.5-turbo', 'GPT-4o-mini', 'claude-3-sonnet', 'claude-3.5-sonnet', 'claude-3-opus'];
+      const sorted = sortModelIds(unsorted);
+      expect(sorted).toEqual([
+        'claude-3-opus',
+        'claude-3-sonnet',
+        'claude-3.5-sonnet',
+        'gpt-3.5-turbo',
+        'gpt-4o',
+        'GPT-4o-mini',
+      ]);
+    });
+  });
+
+  describe('fetchCustomEndpointModels', () => {
+    const mockSecret = 'super-secret-nim-key-xyz';
+
+    it('fetches, parses, and sorts models successfully', async () => {
+      const mockFetch = jest.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: [
+            { id: 'meta/llama-3.1-8b-instruct' },
+            { id: 'meta/llama-3.1-70b-instruct:free' },
+            { id: 'nvidia/llama-3.1-nemotron-70b-instruct' },
+          ],
+        }),
+      } as any);
+
+      const res = await fetchCustomEndpointModels('https://integrate.api.nvidia.com/v1', mockSecret);
+      expect(res.error).toBeUndefined();
+      expect(res.models).toEqual([
+        'meta/llama-3.1-8b-instruct',
+        'meta/llama-3.1-70b-instruct:free',
+        'nvidia/llama-3.1-nemotron-70b-instruct',
+      ]);
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://integrate.api.nvidia.com/v1/models',
+        expect.objectContaining({
+          headers: { Authorization: `Bearer ${mockSecret}` },
+        })
+      );
+      mockFetch.mockRestore();
+    });
+
+    it('handles non-200 responses with an honest error without leaking the key', async () => {
+      const mockFetch = jest.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+      } as any);
+
+      const res = await fetchCustomEndpointModels('https://nim.example.com', mockSecret);
+      expect(res.models).toEqual([]);
+      expect(res.error).toBe('Server returned HTTP 403');
+      expect(res.error).not.toContain(mockSecret);
+      mockFetch.mockRestore();
+    });
+
+    it('handles malformed JSON response with an honest error without leaking the key', async () => {
+      const mockFetch = jest.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => {
+          throw new Error('Unexpected token < in JSON at position 0');
+        },
+      } as any);
+
+      const res = await fetchCustomEndpointModels('https://nim.example.com', mockSecret);
+      expect(res.models).toEqual([]);
+      expect(res.error).toBe('Malformed JSON response from /models');
+      expect(res.error).not.toContain(mockSecret);
+      mockFetch.mockRestore();
+    });
+
+    it('handles empty model list with an honest error', async () => {
+      const mockFetch = jest.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: [] }),
+      } as any);
+
+      const res = await fetchCustomEndpointModels('https://nim.example.com', mockSecret);
+      expect(res.models).toEqual([]);
+      expect(res.error).toBe('Endpoint returned an empty model list');
+      mockFetch.mockRestore();
+    });
+
+    it('handles network failure with an honest error without leaking the key', async () => {
+      const mockFetch = jest.spyOn(global, 'fetch').mockRejectedValueOnce(
+        new Error(`Failed to fetch for ${mockSecret}`)
+      );
+
+      const res = await fetchCustomEndpointModels('https://nim.example.com', mockSecret);
+      expect(res.models).toEqual([]);
+      expect(res.error).toBe('Network error connecting to /models');
+      expect(res.error).not.toContain(mockSecret);
+      mockFetch.mockRestore();
+    });
   });
 
   it('returns curated fallback models when no API key or network fails', async () => {

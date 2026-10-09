@@ -17,6 +17,7 @@ export interface StreamCloudOptions {
   baseUrl?: string;
   systemPrompt?: string;
   temperature?: number;
+  maxTokens?: number;
   messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
   onToken: (token: string) => void;
   onDone: () => void;
@@ -94,6 +95,7 @@ export async function streamCloudResponse(options: StreamCloudOptions): Promise<
     baseUrl,
     systemPrompt,
     temperature,
+    maxTokens,
     messages,
     onToken,
     onDone,
@@ -129,6 +131,7 @@ export async function streamCloudResponse(options: StreamCloudOptions): Promise<
       system: systemPrompt,
       messages: messages as any,
       temperature: typeof temperature === 'number' ? temperature : 0.7,
+      maxOutputTokens: typeof maxTokens === 'number' ? maxTokens : undefined,
       abortSignal: signal,
     });
 
