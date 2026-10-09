@@ -68,6 +68,9 @@ export const computeIsConfigured = (state: {
 
 export type PermissionTier = 'auto' | 'confirm' | 'deny';
 
+export type GpuBackendPreference = 'auto' | 'opencl' | 'vulkan' | 'cpu';
+export type GpuQuantPreference = 'auto' | 'q4_0' | 'q4_k_m' | 'q8_0';
+
 export type OSPermission = 'notifications' | 'camera' | 'microphone' | 'storage' | 'accessibility' | 'background';
 export type OSPermissionStatus = 'granted' | 'denied' | 'undetermined';
 
@@ -150,6 +153,8 @@ interface ConfigState {
   contextCompression: boolean;
   systemPromptEnabled: boolean;
   maxTokens: number;
+  gpuBackendPreference: GpuBackendPreference;
+  gpuQuantPreference: GpuQuantPreference;
   setLocalModelDownloadProgress: (val: number | null) => void;
   setWifiOnlyDownload: (val: boolean) => void;
   setLocalModelName: (val: string) => void;
@@ -162,6 +167,8 @@ interface ConfigState {
   setContextCompression: (val: boolean) => void;
   setSystemPromptEnabled: (val: boolean) => void;
   setMaxTokens: (val: number) => void;
+  setGpuBackendPreference: (val: GpuBackendPreference) => void;
+  setGpuQuantPreference: (val: GpuQuantPreference) => void;
 }
 
 const SECURE_KEY = 'vela-api-key';
@@ -237,6 +244,8 @@ export const useConfigStore = create<ConfigState>()(
       contextCompression: true,
       systemPromptEnabled: true,
       maxTokens: 4096,
+      gpuBackendPreference: 'auto',
+      gpuQuantPreference: 'auto',
 
       setConfig: (url, key) => {
         set((state) => ({
@@ -279,6 +288,8 @@ export const useConfigStore = create<ConfigState>()(
           contextCompression: true,
           systemPromptEnabled: true,
           maxTokens: 4096,
+          gpuBackendPreference: 'auto',
+          gpuQuantPreference: 'auto',
           suggestionStarters: [
             { label: '👩🏫 Teach Concept', text: 'Teach intuition behind binary search trace example', agent: 'teacher' },
             { label: '📊 Data Analyst', text: 'Analyze key features 2026 FIFA World Cup matches', agent: 'analyst' },
@@ -412,6 +423,8 @@ export const useConfigStore = create<ConfigState>()(
       setContextCompression: (contextCompression) => set({ contextCompression }),
       setSystemPromptEnabled: (systemPromptEnabled) => set({ systemPromptEnabled }),
       setMaxTokens: (maxTokens) => set({ maxTokens }),
+      setGpuBackendPreference: (gpuBackendPreference) => set({ gpuBackendPreference }),
+      setGpuQuantPreference: (gpuQuantPreference) => set({ gpuQuantPreference }),
     }),
     {
       name: 'vela-config-storage',
@@ -486,6 +499,12 @@ export const useConfigStore = create<ConfigState>()(
           }
           if (persistedState.systemPromptEnabled === undefined) {
             persistedState.systemPromptEnabled = true;
+          }
+          if (persistedState.gpuBackendPreference === undefined) {
+            persistedState.gpuBackendPreference = 'auto';
+          }
+          if (persistedState.gpuQuantPreference === undefined) {
+            persistedState.gpuQuantPreference = 'auto';
           }
         }
         return persistedState;

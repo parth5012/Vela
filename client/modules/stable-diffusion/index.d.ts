@@ -1,5 +1,12 @@
 interface StableDiffusionNative {
   initializeModel(modelPath: string): Promise<boolean>;
+  getGpuInfo?(): Promise<{
+    vendor?: string;
+    hardware?: string;
+    socModel?: string;
+    board?: string;
+    glEsVersion?: string;
+  }>;
   generateImage(
     prompt: string,
     negativePrompt: string,

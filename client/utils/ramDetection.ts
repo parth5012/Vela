@@ -1,7 +1,176 @@
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
+import StableDiffusionNative from '../modules/stable-diffusion';
 
 export type ModelRecommendationStatus = 'recommended' | 'borderline' | 'unsupported';
+
+export type GpuVendor = 'adreno' | 'mali' | 'xclipse' | 'tensor' | 'unknown';
+export type GpuBackend = 'opencl' | 'vulkan' | 'cpu';
+
+export const GPU_BACKEND_TABLE: Record<GpuVendor, GpuBackend> = {
+  adreno: 'opencl',
+  mali: 'vulkan',
+  xclipse: 'vulkan',
+  tensor: 'cpu',
+  unknown: 'cpu',
+};
+
+/**
+ * Models that are guarded against GPU execution on Google Tensor hardware.
+ *
+ * Why: On Google Tensor SoCs (Pixel 6-9), Gemma Q4_K_M triggers known driver/shader
+ * issues in mobile Vulkan/OpenCL runtimes when compiling intermediate matrix kernels,
+ * causing system freeze or SIGSEGV. This is a stability guard rather than an inherent
+ * format limitation, ensuring Tensor devices fail safe to CPU or protected inference.
+ */
+export const TENSOR_GUARDED_MODELS: readonly string[] = [
+  'Gemma 2B Q4_K_M',
+  'Gemma 7B Q4_K_M',
+  'Gemma-2-2B-it-Q4_K_M',
+  'gemma-2-2b-it-Q4_K_M.gguf',
+  'gemma-q4_k_m',
+];
+
+export function isTensorGuarded(modelName: string): boolean {
+  if (!modelName) return false;
+  const lower = modelName.toLowerCase();
+  return lower.includes('gemma') && lower.includes('q4_k_m');
+}
+
+/**
+ * Classifies a device's GPU vendor from Android hardware and SoC identifiers.
+ *
+ * - Adreno: Qualcomm chipsets (qcom, msm, sdm, snapdragon, smXXXX)
+ * - Xclipse: Samsung AMD RDNA chipsets (xclipse, rdna, Exynos 2200/2400/1480/2500)
+ * - Mali: ARM Mali chipsets (other Exynos, MediaTek/Dimensity/Helio, Kirin)
+ * - Tensor: Google Tensor chipsets (gs101, gs201, zuma/gs301, zuma pro/gs401)
+ * - unknown: Anything unrecognized falls back safely to unknown
+ */
+export function classifyGpuVendor(hardware?: string, socModel?: string): GpuVendor {
+  if (!hardware && !socModel) return 'unknown';
+
+  const hw = (typeof hardware === 'string' ? hardware : '').toLowerCase().trim();
+  const soc = (typeof socModel === 'string' ? socModel : '').toLowerCase().trim();
+  const text = `${hw} ${soc}`.trim();
+
+  if (!text) return 'unknown';
+
+  // 1. Google Tensor (Pixel 6+: GS101, GS201, Zuma/GS301, Zuma Pro/GS401)
+  if (
+    text.includes('tensor') ||
+    text.includes('zuma') ||
+    /\bgs[1-4]\w*/.test(text) ||
+    /gs[1-4]01/.test(text)
+  ) {
+    return 'tensor';
+  }
+
+  // 2. Qualcomm / Adreno
+  if (
+    text.includes('adreno') ||
+    text.includes('qcom') ||
+    text.includes('qualcomm') ||
+    text.includes('snapdragon') ||
+    /\b(msm|sdm)\w*/.test(text) ||
+    /\bsm\d{4}\w*/.test(text)
+  ) {
+    return 'adreno';
+  }
+
+  // 3. Samsung Xclipse (AMD RDNA on Exynos 2200 / 2400 / 1480 / 2500)
+  if (
+    text.includes('xclipse') ||
+    text.includes('rdna') ||
+    /(s5e9925|s5e9945|s5e8845)/.test(text) ||
+    (text.includes('exynos') && /(2200|2400|1480|2500|920|940|530)/.test(text))
+  ) {
+    return 'xclipse';
+  }
+
+  // 4. ARM Mali (Standard Exynos, MediaTek, HiSilicon Kirin)
+  if (
+    text.includes('mali') ||
+    text.includes('exynos') ||
+    text.includes('kirin') ||
+    text.includes('hisilicon') ||
+    text.includes('mediatek') ||
+    text.includes('dimensity') ||
+    text.includes('helio') ||
+    /\bmt\d+\w*/.test(text) ||
+    /\bmtk\w*/.test(text)
+  ) {
+    return 'mali';
+  }
+
+  return 'unknown';
+}
+
+/**
+ * Resolves effective GPU backend preference, honouring user override if specified.
+ */
+export function getGpuBackendPreference(
+  vendor: GpuVendor,
+  userOverride?: 'auto' | 'opencl' | 'vulkan' | 'cpu',
+  modelName?: string
+): GpuBackend {
+  if (userOverride && userOverride !== 'auto') {
+    return userOverride;
+  }
+  if (vendor === 'tensor' && modelName && isTensorGuarded(modelName)) {
+    return 'cpu';
+  }
+  return GPU_BACKEND_TABLE[vendor] ?? 'cpu';
+}
+
+let cachedGpuVendor: GpuVendor | null = null;
+
+export function resetGpuVendorCache(): void {
+  cachedGpuVendor = null;
+}
+
+/**
+ * Detects GPU vendor natively via non-fatal call to StableDiffusionModule.getGpuInfo.
+ * If the module is missing, throws, or rejects, safely returns 'unknown' and never throws.
+ */
+export async function detectGpuVendor(): Promise<GpuVendor> {
+  if (cachedGpuVendor !== null) {
+    return cachedGpuVendor;
+  }
+
+  if (Platform.OS === 'web') {
+    cachedGpuVendor = 'unknown';
+    return 'unknown';
+  }
+
+  try {
+    const mod = StableDiffusionNative;
+    if (!mod || typeof mod.getGpuInfo !== 'function') {
+      cachedGpuVendor = 'unknown';
+      return 'unknown';
+    }
+
+    const info = await mod.getGpuInfo();
+    if (!info || typeof info !== 'object') {
+      cachedGpuVendor = 'unknown';
+      return 'unknown';
+    }
+
+    const hardware =
+      typeof info.hardware === 'string'
+        ? info.hardware
+        : typeof info.vendor === 'string'
+        ? info.vendor
+        : '';
+    const socModel = typeof info.socModel === 'string' ? info.socModel : undefined;
+
+    cachedGpuVendor = classifyGpuVendor(hardware, socModel);
+    return cachedGpuVendor;
+  } catch (err) {
+    console.warn('[ramDetection] Failed to detect GPU vendor natively:', err);
+    cachedGpuVendor = 'unknown';
+    return 'unknown';
+  }
+}
 
 export const FORMAT_RAM_MULTIPLIERS: Record<string, number> = {
   cact: 1.2,

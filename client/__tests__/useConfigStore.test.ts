@@ -56,6 +56,8 @@ describe('useConfigStore', () => {
     expect(state.modelName).toBe('gemini-1.5-pro');
     expect(state.maxSteps).toBe(15);
     expect(state.maxStepsEnabled).toBe(true);
+    expect(state.gpuBackendPreference).toBe('auto');
+    expect(state.gpuQuantPreference).toBe('auto');
   });
 
   it('should initialize, update, and reset persisted toggles (temperature, maxTokens, contextCompression, systemPromptEnabled)', () => {
@@ -97,6 +99,24 @@ describe('useConfigStore', () => {
     const clearedState = useConfigStore.getState();
     expect(clearedState.maxSteps).toBe(15);
     expect(clearedState.maxStepsEnabled).toBe(true);
+  });
+
+  it('should allow updating gpuBackendPreference and gpuQuantPreference via setters and reset via clearConfig', () => {
+    const state = useConfigStore.getState();
+    expect(state.gpuBackendPreference).toBe('auto');
+    expect(state.gpuQuantPreference).toBe('auto');
+
+    state.setGpuBackendPreference('vulkan');
+    state.setGpuQuantPreference('q4_0');
+
+    let updated = useConfigStore.getState();
+    expect(updated.gpuBackendPreference).toBe('vulkan');
+    expect(updated.gpuQuantPreference).toBe('q4_0');
+
+    updated.clearConfig();
+    let cleared = useConfigStore.getState();
+    expect(cleared.gpuBackendPreference).toBe('auto');
+    expect(cleared.gpuQuantPreference).toBe('auto');
   });
 
   it('should allow updating UI customizations and agent parameters via setters', () => {
