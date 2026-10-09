@@ -4,6 +4,21 @@ import { useConfigStore } from '../store/useConfigStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NeedleModule from '../modules/needle';
 import type { NeedleStreamEvent } from '../modules/needle';
+import {
+  beginGpuInitSession,
+  completeGpuInitSession,
+  detectCrashedGpuInit,
+  isGpuCrashFlagSet,
+  getGpuCrashFlagDetails,
+  clearGpuCrashFlag,
+  markGpuCrashFlagConsumed,
+  isGpuBackend,
+} from './liteRtCrashFlag';
+import {
+  detectGpuVendor,
+  getGpuBackendPreference,
+  type GpuVendor,
+} from './ramDetection';
 
 /** Event name emitted by GemmaReactNativeModule for streamed generation. */
 const GEMMA_STREAM_EVENT = 'GemmaLlmStream';
@@ -232,6 +247,48 @@ function mockResponseTemplate(prompt: string): string {
   return `This is a simulated local LLM response. The ${localModelName} model is running in fallback mock mode. MediaPipe LLM Inference API is functioning offline.`;
 }
 
+interface LiteRtBackendResolution {
+  targetBackend: string;
+  forceCpuFromCrash: boolean;
+}
+
+/**
+ * Resolves LiteRT GPU/CPU backend according to the crash flag lifecycle:
+ * 1. Stale GPU marker -> crash flag persisted (consumed: false).
+ * 2. Active crash flag (consumed: false) -> one-shot CPU downgrade for this launch only (no store write).
+ * 3. Consumed crash flag (consumed: true) -> clear flag and retry GPU.
+ * 4. Explicit user GPU preference ('opencl' | 'vulkan') -> clears flag and wins over crash flag.
+ */
+async function resolveLiteRtBackend(
+  vendor: GpuVendor,
+  userOverride: 'auto' | 'opencl' | 'vulkan' | 'cpu' | undefined,
+  localModelName: string
+): Promise<LiteRtBackendResolution> {
+  await detectCrashedGpuInit();
+  let crashDetails = await getGpuCrashFlagDetails();
+  let forceCpuFromCrash = false;
+
+  if (isGpuBackend(userOverride)) {
+    if (crashDetails) {
+      await clearGpuCrashFlag();
+      crashDetails = null;
+    }
+  } else if (crashDetails) {
+    if (crashDetails.consumed) {
+      await clearGpuCrashFlag();
+      crashDetails = null;
+    } else {
+      forceCpuFromCrash = true;
+    }
+  }
+
+  const targetBackend = forceCpuFromCrash
+    ? 'cpu'
+    : getGpuBackendPreference(vendor, userOverride, localModelName);
+
+  return { targetBackend, forceCpuFromCrash };
+}
+
 /**
  * Initializes the local inference engine for the configured model.
  *  - `.task` models use MediaPipe `tasks-genai` (GemmaReactNativeModule).
@@ -340,6 +397,20 @@ export async function initializeLocalModel(throwOnFallback: boolean = false): Pr
     }
   } else if (GemmaNative && typeof GemmaNative.initializeLocalModel === 'function') {
     // ---- MediaPipe engine (.task) ----
+    // MediaPipe floor constraint: tasks-genai >= 0.10.24 must be preserved (see CONTEXT.md).
+    const vendor = await detectGpuVendor();
+    const userOverride = useConfigStore.getState().gpuBackendPreference;
+    const { targetBackend, forceCpuFromCrash } = await resolveLiteRtBackend(
+      vendor,
+      userOverride,
+      localModelName
+    );
+
+    if (forceCpuFromCrash) {
+      localLlmFallbackReason =
+        'LiteRT GPU crash detected on previous run; booted in CPU-safe mode. The local model is NOT running on GPU.';
+    }
+
     try {
       // MediaPipe only accepts LiteRT `.task` bundles. A GGUF file here means
       // the model list is stale — fail loudly instead of pretending to work.
@@ -351,26 +422,51 @@ export async function initializeLocalModel(throwOnFallback: boolean = false): Pr
         );
       }
 
-      const cleanPath = modelPath.startsWith('file://') ? modelPath.slice(7) : modelPath;
-      await GemmaNative.initializeLocalModel(cleanPath);
+      if (isGpuBackend(targetBackend)) {
+        await beginGpuInitSession(targetBackend, localModelName);
+      }
+
+      try {
+        const cleanPath = modelPath.startsWith('file://') ? modelPath.slice(7) : modelPath;
+        await GemmaNative.initializeLocalModel(cleanPath);
+      } finally {
+        if (isGpuBackend(targetBackend)) {
+          await completeGpuInitSession();
+        }
+      }
+
+      if (forceCpuFromCrash) {
+        await markGpuCrashFlagConsumed();
+      }
+
       loadedModelName = localModelName;
       notifyLoadedStateChanged();
     } catch (error: any) {
+      if (isGpuBackend(targetBackend)) {
+        await completeGpuInitSession();
+      }
       const reason = error?.message || String(error);
       console.warn('Native local LLM initialization failed, using mock fallback:', reason);
       loadedModelName = null;
       notifyLoadedStateChanged();
       useFallback = true;
-      localLlmFallbackReason = reason;
+      localLlmFallbackReason = forceCpuFromCrash
+        ? `LiteRT GPU crash detected on previous run; booted in CPU-safe mode. Native init failed: ${reason}`
+        : reason;
       await new Promise((resolve) => setTimeout(resolve, 50));
       if (throwOnFallback) {
         throw new Error(reason);
       }
     }
   } else {
+    await detectCrashedGpuInit();
+    const crashDetails = await getGpuCrashFlagDetails();
+    const hasCrashFlag = Boolean(crashDetails && !crashDetails.consumed);
+
     useFallback = true;
-    localLlmFallbackReason =
-      'Native local-inference module unavailable in this build (Expo Go or web). Use a development build.';
+    localLlmFallbackReason = hasCrashFlag
+      ? 'LiteRT GPU crash detected on previous run; booted in CPU-safe mode (mock fallback). The local model is NOT running on GPU.'
+      : 'Native local-inference module unavailable in this build (Expo Go or web). Use a development build.';
     await new Promise((resolve) => setTimeout(resolve, 50));
     if (throwOnFallback) {
       throw new Error(localLlmFallbackReason);

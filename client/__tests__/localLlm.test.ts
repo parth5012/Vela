@@ -65,6 +65,10 @@ jest.mock('expo-secure-store', () => ({
   }),
 }));
 
+jest.mock('../modules/stable-diffusion', () => ({
+  getGpuInfo: jest.fn(async () => ({ hardware: 'qcom', vendor: 'adreno' })),
+}));
+
 import {
   initializeLocalModel,
   unloadLocalModel,
@@ -72,13 +76,26 @@ import {
   streamLocalLlmResponse,
   isLocalLlmDown,
   setLocalLlmDown,
+  getLocalLlmFallbackReason,
 } from '../utils/localLlm';
+import { useConfigStore } from '../store/useConfigStore';
+import {
+  LITERT_GPU_INIT_SESSION_KEY,
+  LITERT_GPU_CRASH_FLAG_KEY,
+  clearGpuCrashFlag,
+  isGpuCrashFlagSet,
+  detectCrashedGpuInit,
+} from '../utils/liteRtCrashFlag';
+import { resetGpuVendorCache } from '../utils/ramDetection';
 
 const GemmaNative = NativeModules.GemmaReactNativeModule;
 
 describe('localLlm wrapper', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
+    resetGpuVendorCache();
+    await clearGpuCrashFlag();
+    useConfigStore.getState().setGpuBackendPreference('auto');
     // Must match the default `localModelName` in useConfigStore and use the
     // LiteRT `.task` extension that initializeLocalModel now requires.
     await AsyncStorage.setItem(
@@ -91,6 +108,9 @@ describe('localLlm wrapper', () => {
     if (isLocalModelLoaded) {
       await unloadLocalModel();
     }
+    resetGpuVendorCache();
+    await clearGpuCrashFlag();
+    useConfigStore.getState().setGpuBackendPreference('auto');
   });
 
   it('should initialize state unloaded', () => {
@@ -287,5 +307,185 @@ describe('localLlm wrapper', () => {
     }).rejects.toThrow('Local LLM is down/unavailable.');
 
     setLocalLlmDown(false); // reset
+  });
+
+  describe('LiteRT GPU crash flag to CPU-safe fallback', () => {
+    it('should boot CPU-safe and set honest mock fallback reason when GPU crash flag is set', async () => {
+      // Seed an active GPU crash flag from a previous session crash
+      await AsyncStorage.setItem(
+        LITERT_GPU_CRASH_FLAG_KEY,
+        JSON.stringify({
+          backend: 'opencl',
+          modelName: 'DeepSeek-R1 1.5B (GGUF)',
+          timestamp: Date.now(),
+          consumed: false,
+        })
+      );
+      useConfigStore.getState().setGpuBackendPreference('auto');
+
+      // Native module throws during init, forcing mock fallback
+      (GemmaNative.initializeLocalModel as jest.Mock).mockRejectedValueOnce(
+        new Error('Driver init failed')
+      );
+
+      await initializeLocalModel();
+
+      // 1. Preference must NOT be overwritten in config store (one-shot downgrade)
+      expect(useConfigStore.getState().gpuBackendPreference).toBe('auto');
+
+      // 2. Mock fallback reason must honestly indicate CPU-safe boot after GPU crash
+      const fallbackReason = getLocalLlmFallbackReason();
+      expect(fallbackReason).not.toBeNull();
+      expect(fallbackReason).toContain('LiteRT GPU crash detected');
+      expect(fallbackReason).toContain('CPU-safe');
+
+      // 3. Streaming response in fallback mode must include mock honesty prefix
+      const tokens: string[] = [];
+      const onTokenSpy = jest.fn((token) => tokens.push(token));
+      const generator = streamLocalLlmResponse('Hello', onTokenSpy);
+      for await (const _ of generator) {
+        // drain generator
+      }
+
+      const fullText = tokens.join('');
+      expect(fullText).toContain('[Mock mode — the local model is NOT running]');
+      expect(fullText).toContain('LiteRT GPU crash detected');
+    });
+
+    it('should detect stale GPU session marker from hard crash, persist crash flag, and boot CPU-safe', async () => {
+      // Simulate hard native process death (SIGSEGV): marker left behind from killed process
+      await AsyncStorage.setItem(
+        LITERT_GPU_INIT_SESSION_KEY,
+        JSON.stringify({
+          backend: 'vulkan',
+          modelName: 'DeepSeek-R1 1.5B (GGUF)',
+          timestamp: 1700000000000,
+        })
+      );
+      useConfigStore.getState().setGpuBackendPreference('auto');
+
+      let markerDuringNativeCall: string | null = null;
+      (GemmaNative.initializeLocalModel as jest.Mock).mockImplementationOnce(async () => {
+        markerDuringNativeCall = await AsyncStorage.getItem(LITERT_GPU_INIT_SESSION_KEY);
+      });
+
+      await initializeLocalModel();
+
+      // Stale marker promoted to persisted crash flag and removed from session key
+      expect(await AsyncStorage.getItem(LITERT_GPU_INIT_SESSION_KEY)).toBeNull();
+      expect(await isGpuCrashFlagSet()).toBe(true);
+
+      // Backend forced CPU-safe for this launch: no GPU session marker written during init
+      expect(markerDuringNativeCall).toBeNull();
+      expect(useConfigStore.getState().gpuBackendPreference).toBe('auto');
+      expect(isLocalModelLoaded).toBe(true);
+    });
+
+    it('should write GPU session marker before native call and remove it on success when GPU backend configured', async () => {
+      useConfigStore.getState().setGpuBackendPreference('opencl');
+
+      let markerPresentDuringNativeCall: string | null = null;
+      (GemmaNative.initializeLocalModel as jest.Mock).mockImplementationOnce(async () => {
+        // Inspect AsyncStorage state during native call: marker MUST be written beforehand
+        markerPresentDuringNativeCall = await AsyncStorage.getItem(LITERT_GPU_INIT_SESSION_KEY);
+      });
+
+      await initializeLocalModel();
+
+      // Marker was present during native initialization
+      expect(markerPresentDuringNativeCall).not.toBeNull();
+      const marker = JSON.parse(markerPresentDuringNativeCall!);
+      expect(marker.backend).toBe('opencl');
+
+      // Marker removed after successful native completion
+      expect(await AsyncStorage.getItem(LITERT_GPU_INIT_SESSION_KEY)).toBeNull();
+      expect(await isGpuCrashFlagSet()).toBe(false);
+    });
+
+    it('should never write GPU session marker when CPU backend is used', async () => {
+      useConfigStore.getState().setGpuBackendPreference('cpu');
+
+      let markerPresentDuringNativeCall: string | null = null;
+      (GemmaNative.initializeLocalModel as jest.Mock).mockImplementationOnce(async () => {
+        markerPresentDuringNativeCall = await AsyncStorage.getItem(LITERT_GPU_INIT_SESSION_KEY);
+      });
+
+      await initializeLocalModel();
+
+      // No session marker written for CPU (prevents false positives)
+      expect(markerPresentDuringNativeCall).toBeNull();
+      expect(await AsyncStorage.getItem(LITERT_GPU_INIT_SESSION_KEY)).toBeNull();
+    });
+
+    it('removes the session marker on a handled JS exception (no false-positive crash next launch)', async () => {
+      useConfigStore.getState().setGpuBackendPreference('opencl');
+      (GemmaNative.initializeLocalModel as jest.Mock).mockRejectedValueOnce(
+        new Error('Handled JS exception during init')
+      );
+
+      await initializeLocalModel();
+
+      expect(await AsyncStorage.getItem(LITERT_GPU_INIT_SESSION_KEY)).toBeNull();
+      expect((await detectCrashedGpuInit()).crashed).toBe(false);
+    });
+
+    it('lets an explicit user GPU preference win over a persisted crash flag', async () => {
+      await AsyncStorage.setItem(
+        LITERT_GPU_CRASH_FLAG_KEY,
+        JSON.stringify({ backend: 'opencl', modelName: 'm', timestamp: 1, consumed: false })
+      );
+      useConfigStore.getState().setGpuBackendPreference('opencl');
+      (GemmaNative.initializeLocalModel as jest.Mock).mockResolvedValueOnce(undefined);
+
+      await initializeLocalModel();
+      expect(useConfigStore.getState().gpuBackendPreference).toBe('opencl');
+    });
+
+    it('downgrades to CPU for exactly one launch, then retries GPU', async () => {
+      // Launch 1: Stale GPU marker -> crash flag detected and set (consumed: false)
+      await AsyncStorage.setItem(
+        LITERT_GPU_INIT_SESSION_KEY,
+        JSON.stringify({
+          backend: 'opencl',
+          modelName: 'DeepSeek-R1 1.5B (GGUF)',
+          timestamp: 1700000000000,
+        })
+      );
+      useConfigStore.getState().setGpuBackendPreference('auto');
+
+      let launch1MarkerDuringNativeCall: string | null = null;
+      (GemmaNative.initializeLocalModel as jest.Mock).mockImplementationOnce(async () => {
+        launch1MarkerDuringNativeCall = await AsyncStorage.getItem(LITERT_GPU_INIT_SESSION_KEY);
+      });
+
+      await initializeLocalModel();
+
+      // Launch 1 forced CPU: no GPU session marker written during native call
+      expect(launch1MarkerDuringNativeCall).toBeNull();
+      // Flag must still exist (so badge is visible this session) and be marked consumed
+      expect(await isGpuCrashFlagSet()).toBe(true);
+      const rawFlag1 = await AsyncStorage.getItem(LITERT_GPU_CRASH_FLAG_KEY);
+      expect(JSON.parse(rawFlag1!).consumed).toBe(true);
+      // gpuBackendPreference must NOT be overwritten to cpu in config store
+      expect(useConfigStore.getState().gpuBackendPreference).toBe('auto');
+
+      // Unload before launch 2
+      await unloadLocalModel();
+
+      // Launch 2: Flag was consumed, so flag is cleared and GPU is retried
+      let launch2MarkerDuringNativeCall: string | null = null;
+      (GemmaNative.initializeLocalModel as jest.Mock).mockImplementationOnce(async () => {
+        launch2MarkerDuringNativeCall = await AsyncStorage.getItem(LITERT_GPU_INIT_SESSION_KEY);
+      });
+
+      await initializeLocalModel();
+
+      // Flag was cleared
+      expect(await isGpuCrashFlagSet()).toBe(false);
+      // GPU was retried: GPU session marker was written during native call (opencl)
+      expect(launch2MarkerDuringNativeCall).not.toBeNull();
+      const marker2 = JSON.parse(launch2MarkerDuringNativeCall!);
+      expect(marker2.backend).toBe('opencl');
+    });
   });
 });
