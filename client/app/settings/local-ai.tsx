@@ -12,6 +12,9 @@ import {
   getModelStatusForRam,
   getOptimalSettingsForRam,
   getDynamicModelStatusForRam,
+  detectGpuVendor,
+  getGpuBackendPreference,
+  type GpuVendor,
 } from '../../utils/ramDetection';
 import {
   getCustomModels,
@@ -48,6 +51,20 @@ const NETWORK_OPTIONS = [
   { value: 'any' as const, label: 'Any Network' },
 ];
 
+const GPU_BACKEND_OPTIONS = [
+  { value: 'auto' as const, label: 'Auto' },
+  { value: 'opencl' as const, label: 'OpenCL' },
+  { value: 'vulkan' as const, label: 'Vulkan' },
+  { value: 'cpu' as const, label: 'CPU' },
+];
+
+const GPU_QUANT_OPTIONS = [
+  { value: 'auto' as const, label: 'Auto' },
+  { value: 'q4_0' as const, label: 'Q4_0' },
+  { value: 'q4_k_m' as const, label: 'Q4_K_M' },
+  { value: 'q8_0' as const, label: 'Q8_0' },
+];
+
 /**
  * Wayfinder #173 Audit — Local AI Rows
  * Model rows: LOCAL_MODELS filtered by getModelStatusForRam (recommended/borderline/unsupported) — filtered when showUnsupportedModels=false.
@@ -81,8 +98,13 @@ export default function LocalAiScreen() {
   const setLocalContextSize = useConfigStore((s) => s.setLocalContextSize);
   const localMaxTokens = useConfigStore((s) => s.localMaxTokens);
   const setLocalMaxTokens = useConfigStore((s) => s.setLocalMaxTokens);
+  const gpuBackendPreference = useConfigStore((s) => s.gpuBackendPreference);
+  const setGpuBackendPreference = useConfigStore((s) => s.setGpuBackendPreference);
+  const gpuQuantPreference = useConfigStore((s) => s.gpuQuantPreference);
+  const setGpuQuantPreference = useConfigStore((s) => s.setGpuQuantPreference);
 
   const [showUnsupportedModels, setShowUnsupportedModels] = useState(false);
+  const [detectedGpuVendor, setDetectedGpuVendor] = useState<GpuVendor | null>(null);
 
   // Wayfinder #230: Needle engine runtime state. Synchronous boolean, safe on
   // web/Jest where the native module is absent (hasNativeLibrary() → false).
@@ -102,7 +124,15 @@ export default function LocalAiScreen() {
         }
       });
     }
-  }, [detectedRamBytes]);
+  }, [detectedRamBytes, setDetectedRamBytes]);
+
+  useEffect(() => {
+    detectGpuVendor().then((vendor) => {
+      if (isMounted.current) {
+        setDetectedGpuVendor(vendor);
+      }
+    });
+  }, []);
 
   const handleApplyRecommendation = () => {
     if (detectedRamBytes) {
@@ -666,6 +696,97 @@ export default function LocalAiScreen() {
         </View>
         <Text style={{ color: colors.textDark, fontSize: sizes.sub - 1, marginTop: 6, lineHeight: 14 }}>
           Allocating larger context size uses more memory and can cause model loaded in RAM to OOM crash.
+        </Text>
+      </Card>
+
+      <Card>
+        <Label>GPU Acceleration & Backend</Label>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingVertical: 8,
+            borderBottomWidth: 1,
+            borderBottomColor: 'rgba(255,255,255,0.06)',
+            marginBottom: 10,
+          }}
+        >
+          <Text style={{ color: colors.textMuted, fontSize: sizes.sub }}>Detected Hardware</Text>
+          <View
+            style={{
+              backgroundColor: 'rgba(0,0,0,0.3)',
+              paddingHorizontal: 8,
+              paddingVertical: 3,
+              borderRadius: 6,
+              borderWidth: 1,
+              borderColor: detectedGpuVendor && detectedGpuVendor !== 'unknown' ? '#10b981' : '#fb923c',
+            }}
+            accessibilityRole="text"
+            accessibilityLabel={
+              detectedGpuVendor && detectedGpuVendor !== 'unknown'
+                ? `Detected GPU: ${detectedGpuVendor}`
+                : 'Unknown GPU — using CPU-safe default'
+            }
+          >
+            <Text
+              style={{
+                color: detectedGpuVendor && detectedGpuVendor !== 'unknown' ? '#10b981' : '#fb923c',
+                fontSize: sizes.sub - 1,
+                fontWeight: '700',
+              }}
+            >
+              {detectedGpuVendor === null
+                ? 'Detecting GPU…'
+                : detectedGpuVendor === 'unknown'
+                ? 'Unknown GPU — using CPU-safe default'
+                : detectedGpuVendor === 'adreno'
+                ? 'Adreno → OpenCL'
+                : detectedGpuVendor === 'mali'
+                ? 'Mali → Vulkan'
+                : detectedGpuVendor === 'xclipse'
+                ? 'Xclipse → Vulkan'
+                : 'Google Tensor → CPU (Gemma guard)'}
+            </Text>
+          </View>
+        </View>
+
+        <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, lineHeight: 16, marginBottom: 8 }}>
+          {detectedGpuVendor === 'tensor'
+            ? 'Tensor chip detected: Gemma Q4_K_M is guarded to CPU to avoid driver kernel faults. Other models map to safe CPU execution.'
+            : detectedGpuVendor === 'unknown'
+            ? 'GPU vendor could not be confirmed natively. Vela defaults safely to CPU to avoid driver faults.'
+            : `PrivateLM target preference: ${getGpuBackendPreference(
+                detectedGpuVendor ?? 'unknown',
+                gpuBackendPreference,
+                localModelName
+              ).toUpperCase()} (engine integration pending).`}
+        </Text>
+
+        <View style={{ marginTop: 6, marginBottom: 12 }}>
+          <Text style={{ color: colors.text, fontSize: sizes.sub, fontWeight: '600', marginBottom: 6 }}>
+            Backend Preference (Override)
+          </Text>
+          <PillGroup
+            options={GPU_BACKEND_OPTIONS}
+            value={gpuBackendPreference}
+            onChange={(v) => setGpuBackendPreference(v)}
+          />
+        </View>
+
+        <View style={{ marginTop: 2 }}>
+          <Text style={{ color: colors.text, fontSize: sizes.sub, fontWeight: '600', marginBottom: 6 }}>
+            Quantization Preference
+          </Text>
+          <PillGroup
+            options={GPU_QUANT_OPTIONS}
+            value={gpuQuantPreference}
+            onChange={(v) => setGpuQuantPreference(v)}
+          />
+        </View>
+
+        <Text style={{ color: colors.textDark, fontSize: sizes.sub - 1, marginTop: 10, lineHeight: 14 }}>
+          Mock honesty: these preferences are stored and shown here, but no engine consumes them yet — on-device acceleration still depends on compatible native drivers, and nothing here changes how a model currently runs.
         </Text>
       </Card>
 
