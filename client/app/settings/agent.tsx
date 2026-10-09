@@ -143,6 +143,10 @@ export default function AgentScreen() {
   const userName = useConfigStore((s) => s.userName);
   const setUserName = useConfigStore((s) => s.setUserName);
   const connectionMode = useConfigStore((s) => s.connectionMode);
+  const maxSteps = useConfigStore((s) => s.maxSteps);
+  const setMaxSteps = useConfigStore((s) => s.setMaxSteps);
+  const maxStepsEnabled = useConfigStore((s) => s.maxStepsEnabled);
+  const setMaxStepsEnabled = useConfigStore((s) => s.setMaxStepsEnabled);
   const { colors, sizes, aurora } = useAurora();
 
   const agents = useAgents();
@@ -381,6 +385,88 @@ export default function AgentScreen() {
           </Pressable>
         </View>
       </Card>
+
+      <Card>
+        <Label>
+          Max Steps Budget ({maxStepsEnabled ? `${maxSteps} steps` : 'Unlimited'})
+        </Label>
+        <Text style={[styles.helper, { color: colors.textMuted, fontSize: sizes.sub - 1 }]}>
+          Caps tool iteration loops per turn. Disabling the step cap permits unlimited reasoning/tool steps until completion or refusal.
+        </Text>
+        <View style={{ marginTop: 10 }}>
+          <PillGroup
+            options={[
+              { value: 'enabled', label: 'Cap Enabled' },
+              { value: 'unlimited', label: 'Unlimited (Disabled)' },
+            ]}
+            value={maxStepsEnabled ? 'enabled' : 'unlimited'}
+            onChange={(val) => setMaxStepsEnabled(val === 'enabled')}
+          />
+        </View>
+        {maxStepsEnabled ? (
+          <View style={[styles.stepBudgetRow, { marginTop: 12 }]}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.tempStep,
+                { borderColor: colors.glassBorder, backgroundColor: 'rgba(0,0,0,0.25)' },
+                pressed && { opacity: 0.7 },
+                maxSteps <= 1 && { opacity: 0.4 },
+              ]}
+              onPress={() => setMaxSteps(Math.max(1, maxSteps - 1))}
+              disabled={maxSteps <= 1}
+              accessibilityLabel="Decrease max steps"
+            >
+              <Text style={{ color: colors.text, fontSize: sizes.text + 4 }}>−</Text>
+            </Pressable>
+            <TextInput
+              style={[
+                styles.stepInput,
+                {
+                  backgroundColor: 'rgba(0,0,0,0.25)',
+                  borderColor: colors.glassBorder,
+                  color: colors.text,
+                  fontSize: sizes.text,
+                },
+              ]}
+              value={String(maxSteps)}
+              onChangeText={(txt) => {
+                const parsed = parseInt(txt.replace(/[^0-9]/g, ''), 10);
+                if (!isNaN(parsed)) {
+                  setMaxSteps(Math.max(1, parsed));
+                } else if (txt === '') {
+                  setMaxSteps(1);
+                }
+              }}
+              keyboardType="numeric"
+              accessibilityLabel="Max steps numeric input"
+            />
+            <Pressable
+              style={({ pressed }) => [
+                styles.tempStep,
+                { borderColor: colors.glassBorder, backgroundColor: 'rgba(0,0,0,0.25)' },
+                pressed && { opacity: 0.7 },
+                maxSteps >= 100 && { opacity: 0.4 },
+              ]}
+              onPress={() => setMaxSteps(Math.min(100, maxSteps + 1))}
+              disabled={maxSteps >= 100}
+              accessibilityLabel="Increase max steps"
+            >
+              <Text style={{ color: colors.text, fontSize: sizes.text + 4 }}>+</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [
+                styles.resetBtn,
+                { borderColor: colors.glassBorder, backgroundColor: 'rgba(255,255,255,0.08)' },
+                pressed && { opacity: 0.7 },
+              ]}
+              onPress={() => setMaxSteps(15)}
+              accessibilityLabel="Reset to default 15"
+            >
+              <Text style={{ color: colors.textMuted, fontSize: sizes.sub }}>Default (15)</Text>
+            </Pressable>
+          </View>
+        ) : null}
+      </Card>
     </AuroraScreen>
   );
 }
@@ -445,5 +531,26 @@ const styles = StyleSheet.create({
   helper: {
     marginTop: 6,
     lineHeight: 16,
+  },
+  stepBudgetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  stepInput: {
+    width: 60,
+    height: 38,
+    borderWidth: 1,
+    borderRadius: 10,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  resetBtn: {
+    paddingHorizontal: 12,
+    height: 38,
+    borderWidth: 1,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

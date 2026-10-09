@@ -226,4 +226,28 @@ describe('Agent settings screen', () => {
     expect(joined).toContain('Custom One');
     act(() => component.unmount());
   });
+
+  it('renders max steps budget card with default 15 and stepper controls', async () => {
+    const component = await render();
+    const joined = component.root
+      .findAllByType('Text')
+      .map((t: any) => t.props.children)
+      .flat(Infinity)
+      .join(' ');
+    expect(joined).toContain('Max Steps Budget');
+    expect(joined).toContain('15 steps');
+    expect(findByA11y(component.root, 'Decrease max steps')).toBeTruthy();
+    expect(findByA11y(component.root, 'Increase max steps')).toBeTruthy();
+
+    act(() => {
+      findByA11y(component.root, 'Increase max steps').props.onPress();
+    });
+    expect(useConfigStore.getState().maxSteps).toBe(16);
+
+    act(() => {
+      findByA11y(component.root, 'Reset to default 15').props.onPress();
+    });
+    expect(useConfigStore.getState().maxSteps).toBe(15);
+    act(() => component.unmount());
+  });
 });
