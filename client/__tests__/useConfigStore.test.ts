@@ -51,6 +51,23 @@ describe('useConfigStore', () => {
     expect(state.systemPrompt).toBe('You are an autonomous research agent.');
     expect(state.temperature).toBe(0.7);
     expect(state.modelName).toBe('gemini-1.5-pro');
+    expect(state.maxSteps).toBe(15);
+    expect(state.maxStepsEnabled).toBe(true);
+  });
+
+  it('should allow updating maxSteps and maxStepsEnabled via setters', () => {
+    const state = useConfigStore.getState();
+    state.setMaxSteps(25);
+    state.setMaxStepsEnabled(false);
+
+    const updatedState = useConfigStore.getState();
+    expect(updatedState.maxSteps).toBe(25);
+    expect(updatedState.maxStepsEnabled).toBe(false);
+
+    updatedState.clearConfig();
+    const clearedState = useConfigStore.getState();
+    expect(clearedState.maxSteps).toBe(15);
+    expect(clearedState.maxStepsEnabled).toBe(true);
   });
 
   it('should allow updating UI customizations and agent parameters via setters', () => {
