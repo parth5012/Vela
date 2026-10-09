@@ -18,6 +18,7 @@ import {
 } from '../db/chatRepository';
 import type { SkillId } from '../utils/skillPrompts';
 import { DEFAULT_AGENT_ID } from '../utils/agents';
+import { stripReasoning } from '../utils/reasoning';
 
 // Trailing debounce (ms) for persisting streaming assistant content: tokens
 // arrive frequently during a stream, so we only write the final content once
@@ -37,7 +38,25 @@ function scheduleMessagePersist(threadId: string) {
     const list = state.messages[threadId] || [];
     const last = list[list.length - 1];
     if (last) {
-      saveMessage(threadId, last).catch(() => {});
+      const sanitized =
+        last.role === 'assistant'
+          ? { ...last, content: stripReasoning(last.content, false) }
+          : last;
+      if (last.role === 'assistant' && sanitized.content !== last.content) {
+        useChatStore.setState((s) => {
+          const currentList = s.messages[threadId] || [];
+          if (currentList.length === 0) return {};
+          const currentLast = currentList[currentList.length - 1];
+          if (currentLast.id !== last.id) return {};
+          return {
+            messages: {
+              ...s.messages,
+              [threadId]: [...currentList.slice(0, -1), sanitized],
+            },
+          };
+        });
+      }
+      saveMessage(threadId, sanitized).catch(() => {});
     }
   }, PERSIST_DEBOUNCE_MS);
 }
@@ -183,6 +202,10 @@ export const useChatStore = create<ChatState>()(
         doLocalDelete();
       },
   addMessage: (threadId, message) => {
+    const sanitizedMessage =
+      message.role === 'assistant'
+        ? { ...message, content: stripReasoning(message.content, false) }
+        : message;
     const now = new Date().toISOString();
     set((state) => {
       const current = state.messages[threadId] || [];
@@ -197,7 +220,7 @@ export const useChatStore = create<ChatState>()(
         updatedThreads = [updatedThread, ...updatedThreads];
       }
       return {
-        messages: { ...state.messages, [threadId]: [...current, message] },
+        messages: { ...state.messages, [threadId]: [...current, sanitizedMessage] },
         threads: updatedThreads
       };
     });
@@ -208,7 +231,7 @@ export const useChatStore = create<ChatState>()(
     if (updatedThread) {
       saveThread(updatedThread).catch(() => {});
     }
-    saveMessage(threadId, message).catch(() => {});
+    saveMessage(threadId, sanitizedMessage).catch(() => {});
   },
       appendToken: (threadId, token) => {
         set((state) => {

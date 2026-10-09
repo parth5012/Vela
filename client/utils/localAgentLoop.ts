@@ -4,6 +4,7 @@ import { executeDeviceAction, DeviceActionOutcome, DeviceActionResult } from './
 import { db } from '../db/client';
 import { operationLog } from '../db/schema';
 import { generateUlid } from './syncIds';
+import { stripReasoning, EMPTY_RESPONSE_ERROR_HINT } from './reasoning';
 
 export interface ParsedToolCall {
   toolName: string;
@@ -321,12 +322,14 @@ export async function runLocalAgentLoop(
 
     if (!toolCall) {
       // Normal conversational completion, no further tool steps needed
+      const strippedResponse = stripReasoning(stepResponse, false).trim();
+      const cleanedResponse = strippedResponse || EMPTY_RESPONSE_ERROR_HINT;
       steps.push({
         step,
         prompt: currentPrompt,
-        response: stepResponse,
+        response: cleanedResponse,
       });
-      finalResponse = stepResponse;
+      finalResponse = cleanedResponse;
       completed = true;
       options.onEvent?.({
         type: 'done',
