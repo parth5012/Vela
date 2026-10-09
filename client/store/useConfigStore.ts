@@ -145,6 +145,8 @@ interface ConfigState {
   localMaxTokens: number;
   localConfigAutoApplied: boolean;
   detectedRamBytes: number | null;
+  maxSteps: number;
+  maxStepsEnabled: boolean;
   setLocalModelDownloadProgress: (val: number | null) => void;
   setWifiOnlyDownload: (val: boolean) => void;
   setLocalModelName: (val: string) => void;
@@ -152,6 +154,8 @@ interface ConfigState {
   setLocalMaxTokens: (val: number) => void;
   setLocalConfigAutoApplied: (val: boolean) => void;
   setDetectedRamBytes: (val: number | null) => void;
+  setMaxSteps: (val: number) => void;
+  setMaxStepsEnabled: (val: boolean) => void;
 }
 
 const SECURE_KEY = 'vela-api-key';
@@ -222,6 +226,8 @@ export const useConfigStore = create<ConfigState>()(
       localMaxTokens: 512,
       localConfigAutoApplied: false,
       detectedRamBytes: null,
+      maxSteps: 15,
+      maxStepsEnabled: true,
 
       setConfig: (url, key) => {
         set((state) => ({
@@ -259,6 +265,8 @@ export const useConfigStore = create<ConfigState>()(
           localMaxTokens: 512,
           localConfigAutoApplied: false,
           detectedRamBytes: null,
+          maxSteps: 15,
+          maxStepsEnabled: true,
           suggestionStarters: [
             { label: '👩🏫 Teach Concept', text: 'Teach intuition behind binary search trace example', agent: 'teacher' },
             { label: '📊 Data Analyst', text: 'Analyze key features 2026 FIFA World Cup matches', agent: 'analyst' },
@@ -386,7 +394,9 @@ export const useConfigStore = create<ConfigState>()(
       setLocalContextSize: (localContextSize) => set({ localContextSize }),
       setLocalMaxTokens: (localMaxTokens) => set({ localMaxTokens }),
       setLocalConfigAutoApplied: (localConfigAutoApplied) => set({ localConfigAutoApplied }),
-      setDetectedRamBytes: (detectedRamBytes) => set({ detectedRamBytes })
+      setDetectedRamBytes: (detectedRamBytes) => set({ detectedRamBytes }),
+      setMaxSteps: (maxSteps) => set({ maxSteps }),
+      setMaxStepsEnabled: (maxStepsEnabled) => set({ maxStepsEnabled }),
     }),
     {
       name: 'vela-config-storage',
@@ -443,6 +453,12 @@ export const useConfigStore = create<ConfigState>()(
               persistedState.activeCloudProvider = 'gemini';
             }
             persistedState.isConfigured = computeIsConfigured(persistedState);
+          }
+          if (persistedState.maxSteps === undefined) {
+            persistedState.maxSteps = 15;
+          }
+          if (persistedState.maxStepsEnabled === undefined) {
+            persistedState.maxStepsEnabled = true;
           }
         }
         return persistedState;

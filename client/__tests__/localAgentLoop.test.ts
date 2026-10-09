@@ -332,4 +332,137 @@ describe('localAgentLoop real engine envelope (function_calls)', () => {
     expect(result.finalResponse).toContain('Empty response — try raising maxTokens');
     expect(result.steps[0].response).toContain('Empty response — try raising maxTokens');
   });
+
+  describe('recovery engine heuristics and step cap', () => {
+    it('enforces step cap at default 15 with cap enabled', async () => {
+      async function* loopStep() {
+        yield '{"name": "device_screen_read", "arguments": {}}';
+      }
+      mockStream.mockImplementation(() => loopStep() as any);
+
+      const result = await runLocalAgentLoop('Check my Wi-Fi state');
+      expect(result.totalSteps).toBe(15);
+      expect(result.completed).toBe(false);
+    });
+
+    it('allows unbounded steps when cap is disabled (maxStepsEnabled: false)', async () => {
+      let turns = 0;
+      async function* multiStepGenerator() {
+        turns++;
+        if (turns <= 16) {
+          yield '{"name": "device_screen_read", "arguments": {}}';
+        } else {
+          yield 'Wi-Fi state verified after 16 iterations.';
+        }
+      }
+      mockStream.mockImplementation(() => multiStepGenerator() as any);
+
+      const result = await runLocalAgentLoop('Check my Wi-Fi state', {
+        maxStepsEnabled: false,
+      });
+      expect(result.completed).toBe(true);
+      expect(result.totalSteps).toBe(17);
+      expect(result.finalResponse).toBe('Wi-Fi state verified after 16 iterations.');
+    });
+
+    it('recovers from loading screen via wait without consuming step budget', async () => {
+      async function* step1() {
+        yield '{"name": "device_screen_read", "arguments": {}}';
+      }
+      async function* step2() {
+        yield 'Finished loading screen.';
+      }
+      mockStream
+        .mockReturnValueOnce(step1() as any)
+        .mockReturnValueOnce(step2() as any);
+
+      const events: any[] = [];
+      const result = await runLocalAgentLoop('Wait for screen', {
+        initialScreenContent: 'Screen contains ProgressBar: loading...',
+        waitMs: 0,
+        maxSteps: 1, // Cap is 1 step; wait should not count against it
+        onEvent: (ev) => events.push(ev),
+      });
+
+      expect(result.completed).toBe(true);
+      expect(events.some((e) => e.type === 'recovery' && e.recoveryType === 'wait')).toBe(true);
+    });
+
+    it('recovers from GBoard blocking target by pressing BACK', async () => {
+      async function* step1() {
+        yield '{"name": "device_click", "arguments": {"target": "@target_input"}}';
+      }
+      async function* step2() {
+        yield 'Tapped input after keyboard dismissed.';
+      }
+      mockStream
+        .mockReturnValueOnce(step1() as any)
+        .mockReturnValueOnce(step2() as any);
+
+      const events: any[] = [];
+      const prompt = 'Tap target';
+      const result = await runLocalAgentLoop(prompt, {
+        initialScreenContent: 'Screen tree: GBoard is blocking the target @target_input',
+        onEvent: (ev) => events.push(ev),
+      });
+
+      expect(deviceActionExecutor.executeDeviceAction).toHaveBeenCalledWith(
+        'device_press_key',
+        'BACK'
+      );
+      expect(events.some((e) => e.type === 'recovery' && e.recoveryType === 'back')).toBe(true);
+      expect(result.completed).toBe(true);
+    });
+
+    it('recovers from off-screen scrollable target by scrolling then retapping', async () => {
+      async function* step1() {
+        yield '{"name": "device_click", "arguments": {"target": "@submit_btn"}}';
+      }
+      async function* step2() {
+        yield 'Submitted successfully.';
+      }
+      mockStream
+        .mockReturnValueOnce(step1() as any)
+        .mockReturnValueOnce(step2() as any);
+
+      const events: any[] = [];
+      const prompt = 'Submit form';
+      const result = await runLocalAgentLoop(prompt, {
+        initialScreenContent: 'ScrollView: scrollable. [@submit_btn] off-screen',
+        onEvent: (ev) => events.push(ev),
+      });
+
+      expect(deviceActionExecutor.executeDeviceAction).toHaveBeenCalledWith(
+        'device_scroll',
+        '@submit_btn',
+        'down'
+      );
+      expect(events.some((e) => e.type === 'recovery' && e.recoveryType === 'scroll')).toBe(true);
+      expect(result.completed).toBe(true);
+    });
+
+    it('recovers from unchanged hierarchy: back at threshold N, then home reset if still unchanged', async () => {
+      async function* loopStep() {
+        yield '{"name": "device_screen_read", "arguments": {}}';
+      }
+      mockStream.mockImplementation(() => loopStep() as any);
+
+      const events: any[] = [];
+      const result = await runLocalAgentLoop('Start task', {
+        unchangedThreshold: 2,
+        maxSteps: 6,
+        onEvent: (ev) => events.push(ev),
+      });
+
+      expect(deviceActionExecutor.executeDeviceAction).toHaveBeenCalledWith(
+        'device_press_key',
+        'BACK'
+      );
+      expect(deviceActionExecutor.executeDeviceAction).toHaveBeenCalledWith(
+        'device_press_key',
+        'HOME'
+      );
+      expect(events.some((e) => e.type === 'recovery' && e.recoveryType === 'home_reset')).toBe(true);
+    });
+  });
 });

@@ -5,6 +5,7 @@ import { db } from '../db/client';
 import { operationLog } from '../db/schema';
 import { generateUlid } from './syncIds';
 import { stripReasoning, EMPTY_RESPONSE_ERROR_HINT } from './reasoning';
+import { useConfigStore } from '../store/useConfigStore';
 
 export interface ParsedToolCall {
   toolName: string;
@@ -38,10 +39,21 @@ export interface AgentTurnStep {
    * finds no native capability at all. Absent when no action was attempted.
    */
   executionStatus?: DeviceActionOutcome | 'blocked';
+  /** Recovery action performed on this step if a recovery heuristic was triggered. */
+  recoveryAction?: 'wait' | 'back' | 'scroll' | 'home_reset';
 }
 
 export interface AgentTurnEvent {
-  type: 'token' | 'tool_start' | 'tool_executing' | 'tool_observation' | 'step_complete' | 'done' | 'error' | 'refusal';
+  type:
+    | 'token'
+    | 'tool_start'
+    | 'tool_executing'
+    | 'tool_observation'
+    | 'step_complete'
+    | 'done'
+    | 'error'
+    | 'refusal'
+    | 'recovery';
   token?: string;
   toolName?: string;
   target?: string;
@@ -52,11 +64,17 @@ export interface AgentTurnEvent {
   reasoning?: string;
   confidence?: number;
   lowConfidence?: boolean;
+  recoveryType?: 'wait' | 'back' | 'scroll' | 'home_reset';
 }
 
 export interface LocalAgentLoopOptions {
   conversationId?: string;
   maxSteps?: number;
+  maxStepsEnabled?: boolean;
+  unchangedThreshold?: number;
+  waitMs?: number;
+  sleepFn?: (ms: number) => Promise<void>;
+  initialScreenContent?: string;
   onEvent?: (event: AgentTurnEvent) => void;
   onToken?: (token: string) => void;
 }
@@ -284,14 +302,281 @@ async function logDeviceStepToDb(
 }
 
 /**
+ * Recovery heuristic definitions and configuration.
+ */
+export type RecoveryActionType = 'wait' | 'back' | 'scroll_and_retap' | 'home_reset';
+
+export interface RecoveryContext {
+  screenContent: string;
+  target?: string;
+  toolName?: string;
+  consecutiveUnchangedCount: number;
+  unchangedThreshold?: number;
+  lastRecoveryAction?: 'back' | 'home_reset' | null;
+}
+
+export type RecoveryAction =
+  | { type: 'wait'; reason: string }
+  | { type: 'back'; reason: string }
+  | { type: 'scroll_and_retap'; target: string; reason: string }
+  | { type: 'home_reset'; reason: string }
+  | null;
+
+export const DEFAULT_UNCHANGED_HIERARCHY_THRESHOLD = 3;
+export const DEFAULT_MAX_STEPS = 15;
+
+/**
+ * Bound total waits across an entire agent loop run to guarantee termination
+ * even if loading indicators pathologically persist or oscillate.
+ */
+export const MAX_TOTAL_RECOVERY_WAITS = 10;
+
+/**
+ * Canonical loading indicator patterns matched by isScreenLoading and cleared by clearLoadingMarkers.
+ */
+export const LOADING_MARKERS: readonly string[] = [
+  'circularprogressindicator',
+  'progressbar',
+  'progress_bar',
+  'loading_spinner',
+  'loading...',
+  'text="loading..."',
+  'text="loading"',
+  'desc="loading"',
+  'state="loading"',
+  'is_loading',
+  'loading',
+];
+
+/**
+ * Detects if the screen content or observation contains a loading indicator.
+ * Pure function: matches progress bars, spinners, and loading text.
+ */
+export function isScreenLoading(content: string): boolean {
+  if (!content) return false;
+  const lower = content.toLowerCase();
+  return LOADING_MARKERS.some((marker) => lower.includes(marker));
+}
+
+/**
+ * Clears loading markers from content using the exact same patterns detected by isScreenLoading.
+ * Pure function: strips circular progress indicators, progress bars, spinners, and loading text.
+ */
+export function clearLoadingMarkers(content: string): string {
+  if (!content) return '';
+  let result = content;
+  const sortedMarkers = [...LOADING_MARKERS].sort((a, b) => b.length - a.length);
+  for (const marker of sortedMarkers) {
+    const escaped = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    result = result.replace(new RegExp(escaped, 'gi'), '');
+  }
+  return result;
+}
+
+/**
+ * Detects if the software keyboard (GBoard or LatinIME) is blocking the target.
+ * Pure function: checks for keyboard indicators and target obscuration.
+ */
+export function isKeyboardBlocking(content: string, target?: string): boolean {
+  if (!content) return false;
+  const lower = content.toLowerCase();
+  const hasKeyboard =
+    lower.includes('com.google.android.inputmethod.latin') ||
+    lower.includes('gboard') ||
+    lower.includes('latinime') ||
+    lower.includes('inputmethod') ||
+    lower.includes('softkeyboard') ||
+    lower.includes('keyboard is blocking') ||
+    lower.includes('blocked by keyboard');
+
+  if (!hasKeyboard) return false;
+
+  if (target) {
+    const targetLower = target.toLowerCase();
+    if (lower.includes(`blocking ${targetLower}`) || lower.includes(`blocked by keyboard`)) {
+      return true;
+    }
+  }
+
+  return (
+    lower.includes('keyboard is blocking') ||
+    lower.includes('blocked by keyboard') ||
+    lower.includes('gboard is blocking')
+  );
+}
+
+/**
+ * Detects if a tap/click target is located off-screen within a scrollable container.
+ * Pure function: inspects scrollable container markers and off-screen bounds/keywords.
+ */
+export function isTargetOffScreenScrollable(content: string, target?: string): boolean {
+  if (!content || !target) return false;
+  const lower = content.toLowerCase();
+
+  const isScrollable =
+    lower.includes('scrollable') ||
+    lower.includes('scrollview') ||
+    lower.includes('recyclerview') ||
+    lower.includes('listview');
+
+  if (!isScrollable) return false;
+
+  if (
+    lower.includes('off-screen') ||
+    lower.includes('offscreen') ||
+    lower.includes('outside viewport') ||
+    lower.includes('scroll to reveal') ||
+    lower.includes('scroll to bring into view')
+  ) {
+    return true;
+  }
+
+  const targetIdx = content.indexOf(target);
+  if (targetIdx !== -1) {
+    const snippet = content.slice(targetIdx, targetIdx + 150);
+    const boundsMatch = snippet.match(/bounds=\[(\d+),(-?\d+),(\d+),(-?\d+)\]/);
+    if (boundsMatch) {
+      const topPct = parseInt(boundsMatch[2], 10);
+      const bottomPct = parseInt(boundsMatch[4], 10);
+      if (topPct >= 100 || bottomPct <= 0) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Detects whether an observation is a real screen hierarchy snapshot.
+ * Pure function: matches accessibility tree nodes, bounds, hierarchy headers,
+ * scrollable containers, and package indicators.
+ * Simple tool execution outputs (e.g. "Success", "Action failed", or error strings)
+ * are not screen snapshots and must not poison the unchanged hierarchy counter.
+ */
+export function isScreenSnapshot(content: string): boolean {
+  if (!content) return false;
+  const lower = content.toLowerCase();
+  return (
+    lower.includes('bounds=') ||
+    lower.includes('hierarchy') ||
+    lower.includes('screen tree') ||
+    lower.includes('scrollable') ||
+    lower.includes('package') ||
+    /\[@e\d+\]/.test(content) ||
+    lower.includes('node:') ||
+    lower.includes('linearlayout') ||
+    lower.includes('framelayout') ||
+    lower.includes('recyclerview') ||
+    lower.includes('scrollview')
+  );
+}
+
+/**
+ * Derives a stable comparison signature from a screen hierarchy snapshot.
+ * One-line choice: We normalize whitespace, dynamic timestamps, and volatile pixel coords to track stagnant screens.
+ */
+export function getHierarchySignature(content: string): string {
+  if (!content) return '';
+  return content
+    .replace(/\b\d{10,13}\b/g, '') // strip timestamps
+    .replace(/px\(-?\d+,-?\d+,-?\d+,-?\d+\)/g, '') // strip volatile pixel bounds
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Checks whether the current hierarchy snapshot matches the previous one.
+ * Pure function comparison.
+ */
+export function isHierarchyUnchanged(previousSignature: string, currentSignature: string): boolean {
+  if (!previousSignature || !currentSignature) return false;
+  return previousSignature === currentSignature;
+}
+
+/**
+ * Evaluates recovery heuristics against current screen state and action context.
+ * Pure function: maps failure/obstruction triggers to recovery actions.
+ */
+export function detectRecoveryAction(context: RecoveryContext): RecoveryAction {
+  const {
+    screenContent,
+    target,
+    toolName,
+    consecutiveUnchangedCount,
+    unchangedThreshold = DEFAULT_UNCHANGED_HIERARCHY_THRESHOLD,
+    lastRecoveryAction,
+  } = context;
+
+  // No recovery heuristics may trigger before at least one screen observation arrives
+  if (!screenContent || !screenContent.trim()) {
+    return null;
+  }
+
+  // 1. Screen hierarchy unchanged N times in a row -> back, and if still unchanged, home reset
+  if (consecutiveUnchangedCount >= unchangedThreshold) {
+    if (lastRecoveryAction === 'back') {
+      return {
+        type: 'home_reset',
+        reason: `Screen hierarchy unchanged ${consecutiveUnchangedCount} times; back did not resolve, triggering home reset.`,
+      };
+    }
+    return {
+      type: 'back',
+      reason: `Screen hierarchy unchanged ${consecutiveUnchangedCount} times in a row; triggering back to recover.`,
+    };
+  }
+
+  // 2. Screen shows a loading indicator -> wait
+  if (isScreenLoading(screenContent)) {
+    return {
+      type: 'wait',
+      reason: 'Screen shows a loading indicator; waiting for UI to settle.',
+    };
+  }
+
+  // 3. Keyboard / GBoard is blocking the target -> back
+  if (isKeyboardBlocking(screenContent, target)) {
+    return {
+      type: 'back',
+      reason: `Keyboard is blocking target "${target || ''}"; pressing back to dismiss.`,
+    };
+  }
+
+  // 4. Tap target off-screen inside a scrollable container -> scroll to bring into view, then re-tap
+  const isTap = toolName === 'device_click' || toolName === 'device_tap';
+  if (isTap && target && isTargetOffScreenScrollable(screenContent, target)) {
+    return {
+      type: 'scroll_and_retap',
+      target,
+      reason: `Target "${target}" is off-screen inside a scrollable container; scrolling to bring into view.`,
+    };
+  }
+
+  return null;
+}
+
+/**
  * Executes a multi-turn streaming local agent loop with safety gating and on-device execution.
- * Max 5 steps per invocation.
+ * Configurable maxSteps (default 15, disableable) with automatic recovery heuristics.
+ *
+ * Recovery Counting Rule:
+ * - Active tool actions and corrective recovery operations (back, scroll, home reset)
+ *   advance the step counter and count against `maxSteps`.
+ * - Pure wait recovery actions (triggered when the screen shows a loading indicator)
+ *   do NOT increment the step counter and do NOT consume the `maxSteps` budget.
  */
 export async function runLocalAgentLoop(
   initialPrompt: string,
   options: LocalAgentLoopOptions = {}
 ): Promise<LocalAgentLoopResult> {
-  const maxSteps = Math.min(options.maxSteps || 5, 5);
+  const config = useConfigStore?.getState ? useConfigStore.getState() : ({} as any);
+  const maxStepsEnabled = options.maxStepsEnabled ?? config.maxStepsEnabled ?? true;
+  const configuredMaxSteps = options.maxSteps ?? config.maxSteps ?? DEFAULT_MAX_STEPS;
+  const maxSteps = maxStepsEnabled ? configuredMaxSteps : Infinity;
+  const unchangedThreshold = options.unchangedThreshold ?? DEFAULT_UNCHANGED_HIERARCHY_THRESHOLD;
+  const waitMs = options.waitMs ?? 500;
+  const sleepFn = options.sleepFn ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
   const conversationId = options.conversationId || 'default_local_conv';
   const steps: AgentTurnStep[] = [];
 
@@ -299,6 +584,13 @@ export async function runLocalAgentLoop(
   let step = 1;
   let completed = false;
   let finalResponse = '';
+
+  let lastScreenContent = options.initialScreenContent ?? '';
+  let previousHierarchySignature = '';
+  let consecutiveUnchangedCount = 0;
+  let lastRecoveryAction: 'back' | 'home_reset' | null = null;
+  let consecutiveWaitCount = 0;
+  let totalWaitCount = 0;
 
   while (step <= maxSteps) {
     let stepResponse = '';
@@ -364,6 +656,10 @@ export async function runLocalAgentLoop(
       break;
     }
 
+    // Extract thoughts / rationale preceding the tool call
+    const rawIdx = stepResponse.indexOf(toolCall.raw);
+    const thoughts = rawIdx > 0 ? stepResponse.slice(0, rawIdx).trim() : undefined;
+
     // Tool detected in model response
     options.onEvent?.({
       type: 'tool_start',
@@ -379,6 +675,330 @@ export async function runLocalAgentLoop(
         toolCall.confidence < LOCAL_TOOL_CALL_CONFIDENCE_THRESHOLD,
       step,
     });
+
+    // Evaluate recovery heuristics
+    const recovery = detectRecoveryAction({
+      screenContent: lastScreenContent,
+      target: toolCall.target,
+      toolName: toolCall.toolName,
+      consecutiveUnchangedCount,
+      unchangedThreshold,
+      lastRecoveryAction,
+    });
+
+    if (recovery?.type === 'wait') {
+      if (totalWaitCount >= MAX_TOTAL_RECOVERY_WAITS) {
+        finalResponse = stepResponse;
+        completed = false;
+        break;
+      }
+      totalWaitCount++;
+      consecutiveWaitCount++;
+      const observation = `[Recovery] ${recovery.reason}`;
+      options.onEvent?.({
+        type: 'recovery',
+        recoveryType: 'wait',
+        observation,
+        step,
+      });
+      await sleepFn(waitMs);
+      steps.push({
+        step,
+        prompt: currentPrompt,
+        response: stepResponse,
+        observation,
+        recoveryAction: 'wait',
+      });
+      currentPrompt += `\n${stepResponse}\nObservation: ${observation}\n`;
+      lastScreenContent = clearLoadingMarkers(lastScreenContent);
+      if (consecutiveWaitCount >= 3) {
+        lastScreenContent = '';
+      }
+      // Note: step is NOT incremented; pure wait does not consume maxSteps budget
+      continue;
+    }
+
+    // Reset consecutive wait counter whenever screen is no longer in wait recovery
+    consecutiveWaitCount = 0;
+
+    if (recovery?.type === 'back') {
+      const isUnchangedRecovery = consecutiveUnchangedCount >= unchangedThreshold;
+      if (isUnchangedRecovery) {
+        lastRecoveryAction = 'back';
+      }
+      const recoveryToolCall: ParsedToolCall = {
+        toolName: 'device_press_key',
+        target: 'BACK',
+        raw: 'device_press_key BACK',
+        format: 'needle_json',
+      };
+      const safety = await evaluateSafety(
+        'device_press_key',
+        'BACK',
+        undefined,
+        thoughts,
+        conversationId
+      );
+
+      if (safety.status === 'error') {
+        const observation = `Action blocked by safety policy: ${safety.result}`;
+        await logDeviceStepToDb(conversationId, step, recoveryToolCall, observation, 'blocked');
+        options.onEvent?.({
+          type: 'tool_observation',
+          toolName: 'device_press_key',
+          observation,
+          step,
+          error: safety.result,
+        });
+        steps.push({
+          step,
+          prompt: currentPrompt,
+          response: stepResponse,
+          toolCall: recoveryToolCall,
+          safetyStatus: 'error',
+          safetyMessage: safety.result,
+          observation,
+          executionStatus: 'blocked',
+          recoveryAction: 'back',
+        });
+        currentPrompt += `\n${stepResponse}\nObservation: ${observation}\n`;
+        if (maxStepsEnabled && step >= maxSteps) {
+          finalResponse = stepResponse;
+          completed = false;
+          break;
+        }
+        step++;
+        continue;
+      }
+
+      const observation = `[Recovery] ${recovery.reason}`;
+      options.onEvent?.({
+        type: 'recovery',
+        recoveryType: 'back',
+        observation,
+        step,
+      });
+      const backOutcome = await executeDeviceAction('device_press_key', 'BACK');
+      await logDeviceStepToDb(conversationId, step, recoveryToolCall, observation, backOutcome.outcome);
+      steps.push({
+        step,
+        prompt: currentPrompt,
+        response: stepResponse,
+        observation,
+        recoveryAction: 'back',
+        executionStatus: backOutcome.outcome,
+      });
+      currentPrompt += `\n${stepResponse}\nObservation: ${observation}\n`;
+      lastScreenContent = lastScreenContent
+        .replace(/latinime/gi, '')
+        .replace(/gboard/gi, '')
+        .replace(/keyboard/gi, '');
+      if (maxStepsEnabled && step >= maxSteps) {
+        finalResponse = stepResponse;
+        completed = false;
+        break;
+      }
+      step++;
+      continue;
+    }
+
+    if (recovery?.type === 'home_reset') {
+      lastRecoveryAction = 'home_reset';
+      consecutiveUnchangedCount = 0;
+      const recoveryToolCall: ParsedToolCall = {
+        toolName: 'device_press_key',
+        target: 'HOME',
+        raw: 'device_press_key HOME',
+        format: 'needle_json',
+      };
+      const safety = await evaluateSafety(
+        'device_press_key',
+        'HOME',
+        undefined,
+        thoughts,
+        conversationId
+      );
+
+      if (safety.status === 'error') {
+        const observation = `Action blocked by safety policy: ${safety.result}`;
+        await logDeviceStepToDb(conversationId, step, recoveryToolCall, observation, 'blocked');
+        options.onEvent?.({
+          type: 'tool_observation',
+          toolName: 'device_press_key',
+          observation,
+          step,
+          error: safety.result,
+        });
+        steps.push({
+          step,
+          prompt: currentPrompt,
+          response: stepResponse,
+          toolCall: recoveryToolCall,
+          safetyStatus: 'error',
+          safetyMessage: safety.result,
+          observation,
+          executionStatus: 'blocked',
+          recoveryAction: 'home_reset',
+        });
+        currentPrompt += `\n${stepResponse}\nObservation: ${observation}\n`;
+        if (maxStepsEnabled && step >= maxSteps) {
+          finalResponse = stepResponse;
+          completed = false;
+          break;
+        }
+        step++;
+        continue;
+      }
+
+      const observation = `[Recovery] ${recovery.reason}`;
+      options.onEvent?.({
+        type: 'recovery',
+        recoveryType: 'home_reset',
+        observation,
+        step,
+      });
+      const homeOutcome = await executeDeviceAction('device_press_key', 'HOME');
+      await logDeviceStepToDb(conversationId, step, recoveryToolCall, observation, homeOutcome.outcome);
+      steps.push({
+        step,
+        prompt: currentPrompt,
+        response: stepResponse,
+        observation,
+        recoveryAction: 'home_reset',
+        executionStatus: homeOutcome.outcome,
+      });
+      currentPrompt += `\n${stepResponse}\nObservation: ${observation}\n`;
+      if (maxStepsEnabled && step >= maxSteps) {
+        finalResponse = stepResponse;
+        completed = false;
+        break;
+      }
+      step++;
+      continue;
+    }
+
+    if (recovery?.type === 'scroll_and_retap') {
+      // 1. Safety check on the original tool call first
+      const safety = await evaluateSafety(
+        toolCall.toolName,
+        recovery.target,
+        toolCall.value,
+        thoughts,
+        conversationId
+      );
+
+      if (safety.status === 'error') {
+        const observation = `Action blocked by safety policy: ${safety.result}`;
+        await logDeviceStepToDb(conversationId, step, toolCall, observation, 'blocked');
+        options.onEvent?.({
+          type: 'tool_observation',
+          toolName: toolCall.toolName,
+          observation,
+          step,
+          error: safety.result,
+        });
+        steps.push({
+          step,
+          prompt: currentPrompt,
+          response: stepResponse,
+          toolCall,
+          safetyStatus: 'error',
+          safetyMessage: safety.result,
+          observation,
+          executionStatus: 'blocked',
+        });
+        currentPrompt += `\n${stepResponse}\nObservation: ${observation}\n`;
+        if (maxStepsEnabled && step >= maxSteps) {
+          finalResponse = stepResponse;
+          completed = false;
+          break;
+        }
+        step++;
+        continue;
+      }
+
+      // 2. Safety check on the scroll action
+      const scrollSafety = await evaluateSafety(
+        'device_scroll',
+        recovery.target,
+        'down',
+        thoughts,
+        conversationId
+      );
+      const scrollToolCall: ParsedToolCall = {
+        toolName: 'device_scroll',
+        target: recovery.target,
+        value: 'down',
+        raw: '',
+        format: 'needle_json',
+      };
+
+      if (scrollSafety.status === 'error') {
+        const observation = `Action blocked by safety policy: ${scrollSafety.result}`;
+        await logDeviceStepToDb(conversationId, step, scrollToolCall, observation, 'blocked');
+        options.onEvent?.({
+          type: 'tool_observation',
+          toolName: 'device_scroll',
+          observation,
+          step,
+          error: scrollSafety.result,
+        });
+        steps.push({
+          step,
+          prompt: currentPrompt,
+          response: stepResponse,
+          toolCall: scrollToolCall,
+          safetyStatus: 'error',
+          safetyMessage: scrollSafety.result,
+          observation,
+          executionStatus: 'blocked',
+        });
+        currentPrompt += `\n${stepResponse}\nObservation: ${observation}\n`;
+        if (maxStepsEnabled && step >= maxSteps) {
+          finalResponse = stepResponse;
+          completed = false;
+          break;
+        }
+        step++;
+        continue;
+      }
+
+      const observation = `[Recovery] ${recovery.reason}`;
+      options.onEvent?.({
+        type: 'recovery',
+        recoveryType: 'scroll',
+        target: recovery.target,
+        observation,
+        step,
+      });
+      const scrollOutcome = await executeDeviceAction('device_scroll', recovery.target, 'down');
+      await logDeviceStepToDb(conversationId, step, scrollToolCall, scrollOutcome.observation, scrollOutcome.outcome);
+
+      const retapOutcome = await executeDeviceAction(toolCall.toolName, recovery.target, toolCall.value);
+      const fullObservation = `[Recovery] Scrolled target into view and retapped. Result: ${retapOutcome.observation}`;
+      await logDeviceStepToDb(conversationId, step, toolCall, fullObservation, retapOutcome.outcome);
+
+      steps.push({
+        step,
+        prompt: currentPrompt,
+        response: stepResponse,
+        toolCall,
+        observation: fullObservation,
+        recoveryAction: 'scroll',
+        executionStatus: retapOutcome.outcome,
+      });
+      currentPrompt += `\n${stepResponse}\nObservation: ${fullObservation}\n`;
+      if (isScreenSnapshot(retapOutcome.observation)) {
+        lastScreenContent = retapOutcome.observation;
+      }
+      if (maxStepsEnabled && step >= maxSteps) {
+        finalResponse = stepResponse;
+        completed = false;
+        break;
+      }
+      step++;
+      continue;
+    }
 
     if (!ALLOWED_DEVICE_TOOLS.has(toolCall.toolName)) {
       const observation = `Error: Unknown device tool "${toolCall.toolName}".`;
@@ -399,13 +1019,14 @@ export async function runLocalAgentLoop(
         error: observation,
       });
       currentPrompt += `\n${stepResponse}\nObservation: ${observation}\n`;
+      if (maxStepsEnabled && step >= maxSteps) {
+        finalResponse = stepResponse;
+        completed = false;
+        break;
+      }
       step++;
       continue;
     }
-
-    // Extract thoughts / rationale preceding the tool call
-    const rawIdx = stepResponse.indexOf(toolCall.raw);
-    const thoughts = rawIdx > 0 ? stepResponse.slice(0, rawIdx).trim() : undefined;
 
     // 1. Check safety policy
     const safety = await evaluateSafety(
@@ -494,7 +1115,20 @@ export async function runLocalAgentLoop(
       step,
     });
 
-    if (step >= maxSteps) {
+    // Update screen content and unchanged hierarchy counter ONLY when observation is a screen snapshot
+    if (isScreenSnapshot(observation)) {
+      lastScreenContent = observation;
+      const currentSignature = getHierarchySignature(observation);
+      if (previousHierarchySignature && isHierarchyUnchanged(previousHierarchySignature, currentSignature)) {
+        consecutiveUnchangedCount++;
+      } else if (currentSignature) {
+        consecutiveUnchangedCount = 0;
+        previousHierarchySignature = currentSignature;
+        lastRecoveryAction = null;
+      }
+    }
+
+    if (maxStepsEnabled && step >= maxSteps) {
       finalResponse = stepResponse;
       completed = false; // hit max step limit
       break;
