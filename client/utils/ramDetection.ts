@@ -105,20 +105,123 @@ export function classifyGpuVendor(hardware?: string, socModel?: string): GpuVend
   return 'unknown';
 }
 
+export const MIN_VRAM_CAP_BYTES = Math.round(0.75 * 1024 * 1024 * 1024);
+export const MAX_VRAM_CAP_BYTES = Math.round(1.75 * 1024 * 1024 * 1024);
+export const VRAM_CAP_RATIO = 0.22;
+
 /**
- * Resolves effective GPU backend preference, honouring user override if specified.
+ * Calculates device VRAM cap for GPU inference:
+ * 22% of total device RAM, clamped to [0.75 GB, 1.75 GB] inclusive.
+ */
+export function getVramCapBytes(ramBytes: number): number {
+  if (!Number.isFinite(ramBytes)) {
+    if (ramBytes === Infinity) return MAX_VRAM_CAP_BYTES;
+    return MIN_VRAM_CAP_BYTES;
+  }
+  if (ramBytes <= 0) return MIN_VRAM_CAP_BYTES;
+  const rawCap = ramBytes * VRAM_CAP_RATIO;
+  return Math.round(Math.min(Math.max(rawCap, MIN_VRAM_CAP_BYTES), MAX_VRAM_CAP_BYTES));
+}
+
+/**
+ * Guard predicate determining whether an inference workload must be forced to CPU.
+ * A model whose estimated peak VRAM requirement exceeds the VRAM cap forces CPU
+ * to prevent GPU out-of-memory (OOM) driver crashes.
+ */
+export function shouldForceCpu(
+  modelSizeBytes: number,
+  vramCapBytes: number,
+  format: string = 'gguf',
+  contextSize: number = 2048
+): boolean {
+  if (vramCapBytes === Infinity) {
+    vramCapBytes = MAX_VRAM_CAP_BYTES;
+  }
+  if (!Number.isFinite(vramCapBytes) || vramCapBytes <= 0) return true;
+  if (!Number.isFinite(modelSizeBytes) || modelSizeBytes <= 0) return false;
+  const estimatedPeak = calculateEstimatedPeakRam(modelSizeBytes, format, contextSize);
+  return estimatedPeak > vramCapBytes;
+}
+
+export interface GpuGuardOptions {
+  modelSizeBytes?: number;
+  vramCapBytes?: number;
+  format?: string;
+  contextSize?: number;
+  forcedCpu?: boolean;
+}
+
+function checkIsGuardForced(
+  guardOptionsOrModelSize?: number | GpuGuardOptions,
+  vramCapBytes?: number,
+  format?: string,
+  contextSize?: number
+): boolean {
+  if (typeof guardOptionsOrModelSize === 'object' && guardOptionsOrModelSize !== null) {
+    if (guardOptionsOrModelSize.forcedCpu === true) {
+      return true;
+    }
+    if (
+      typeof guardOptionsOrModelSize.modelSizeBytes === 'number' &&
+      typeof guardOptionsOrModelSize.vramCapBytes === 'number'
+    ) {
+      return shouldForceCpu(
+        guardOptionsOrModelSize.modelSizeBytes,
+        guardOptionsOrModelSize.vramCapBytes,
+        guardOptionsOrModelSize.format,
+        guardOptionsOrModelSize.contextSize
+      );
+    }
+    return false;
+  }
+
+  if (typeof guardOptionsOrModelSize === 'number' && typeof vramCapBytes === 'number') {
+    return shouldForceCpu(guardOptionsOrModelSize, vramCapBytes, format, contextSize);
+  }
+
+  return false;
+}
+
+/**
+ * Resolves effective GPU backend preference, honouring user override if specified
+ * and enforcing GPU guards (VRAM cap exceedance and Tensor Gemma stability guards).
  */
 export function getGpuBackendPreference(
   vendor: GpuVendor,
   userOverride?: 'auto' | 'opencl' | 'vulkan' | 'cpu',
-  modelName?: string
+  modelName?: string,
+  guardOptionsOrModelSize?: number | GpuGuardOptions,
+  vramCapBytes?: number,
+  format?: string,
+  contextSize?: number
 ): GpuBackend {
+  // Explicit CPU override always wins
+  if (userOverride === 'cpu') {
+    return 'cpu';
+  }
+
+  // GPU-guard evaluation (model exceeds VRAM cap)
+  const isGuardForced = checkIsGuardForced(
+    guardOptionsOrModelSize,
+    vramCapBytes,
+    format,
+    contextSize
+  );
+
+  if (isGuardForced) {
+    return 'cpu';
+  }
+
+  // Explicit user override (opencl / vulkan) honoured if guard did not force CPU
   if (userOverride && userOverride !== 'auto') {
     return userOverride;
   }
+
+  // Tensor + Gemma guard
   if (vendor === 'tensor' && modelName && isTensorGuarded(modelName)) {
     return 'cpu';
   }
+
   return GPU_BACKEND_TABLE[vendor] ?? 'cpu';
 }
 
@@ -185,16 +288,22 @@ export function calculateEstimatedPeakRam(
   format: string,
   contextSize: number = 2048
 ): number {
-  const normFormat = format.toLowerCase().replace(/^\./, '');
+  if (modelSizeBytes === Infinity) return Infinity;
+  const safeSize = Number.isFinite(modelSizeBytes) && modelSizeBytes > 0 ? modelSizeBytes : 0;
+  const normFormat = (typeof format === 'string' ? format : '').toLowerCase().replace(/^\./, '');
   const multiplier = FORMAT_RAM_MULTIPLIERS[normFormat] ?? 1.35;
-  const kvCache = contextSize * KV_CACHE_BYTES_PER_TOKEN;
-  return Math.round(modelSizeBytes * multiplier + kvCache);
+  const safeContext = Number.isFinite(contextSize) && contextSize > 0 ? contextSize : 0;
+  const kvCache = safeContext * KV_CACHE_BYTES_PER_TOKEN;
+  return Math.round(safeSize * multiplier + kvCache);
 }
 
 /**
  * Size-driven tier status: peak RAM (size * FORMAT_RAM_MULTIPLIERS[format] +
  * contextSize * KV_CACHE_BYTES_PER_TOKEN) as a fraction of device RAM.
  * <50% recommended, 50-75% borderline, >75% unsupported.
+ *
+ * For unreadable, non-finite, or non-positive RAM values, fails safe to 'unsupported'
+ * because sufficient memory cannot be verified to prevent OOM termination.
  *
  * The shipping `.cact` sizes (needle2 13,737,807 B, needle3 35,335,380 B,
  * research #292) stay 'recommended' at every realistic tier — including with
@@ -206,7 +315,9 @@ export function getDynamicModelStatusForRam(
   ramBytes: number,
   contextSize: number = 2048
 ): ModelRecommendationStatus {
-  if (ramBytes <= 0) return 'borderline';
+  if (!Number.isFinite(ramBytes) || ramBytes <= 0) return 'unsupported';
+  if (ramBytes === Infinity) return 'recommended';
+  if (!Number.isFinite(modelSizeBytes) || modelSizeBytes <= 0) return 'unsupported';
   const estimatedPeak = calculateEstimatedPeakRam(modelSizeBytes, format, contextSize);
   const ratio = estimatedPeak / ramBytes;
   if (ratio < 0.5) return 'recommended';
@@ -235,20 +346,21 @@ export async function detectRamBytes(): Promise<number> {
  * Maps a model name to its RAM recommendation tier.
  *
  * Model names must match `LOCAL_MODELS` in `utils/localLlm.ts` exactly.
+ * Aligned with PrivateLM tier boundaries: <=4 GB, 4-6 GB, 6-8 GB, >8 GB.
  *
- * | Model                    | Size     | <4.5 GB   | 4.5-7.5 GB | >=7.5 GB  |
- * |--------------------------|----------|------------|------------|-----------|
- * | Needle-2 45M             | ~0.014 GB| recommended| recommended| recommended|
- * | Needle-3 (20-layer)      | ~0.035 GB| recommended| recommended| recommended|
- * | SmolLM 135M              | ~0.16 GB | recommended| supported*| recommended|
- * | Qwen2.5 0.5B             | ~0.52 GB | borderline | recommended| recommended|
- * | Llama 3.2 1B (GGUF)      | ~0.81 GB | unsupported| recommended| recommended|
- * | TinyLlama 1.1B           | ~1.1 GB  | unsupported| borderline | recommended|
- * | Qwen2.5 1.5B (GGUF)      | ~1.06 GB | unsupported| borderline | recommended|
- * | DeepSeek-R1 1.5B (GGUF)  | ~1.06 GB | unsupported| borderline | recommended|
- * | Qwen2.5 1.5B             | ~1.5 GB  | unsupported| borderline | recommended|
- * | DeepSeek-R1 1.5B         | ~1.9 GB  | unsupported| borderline | recommended|
- * | Phi-4 Mini (GGUF)        | ~2.5 GB  | unsupported| unsupported| recommended|
+ * | Model                    | Size     | <=4 GB     | 4-6 GB     | 6-8 GB     | >8 GB      |
+ * |--------------------------|----------|------------|------------|------------|-----------|
+ * | Needle-2 45M             | ~0.014 GB| recommended| recommended| recommended| recommended|
+ * | Needle-3 (20-layer)      | ~0.035 GB| recommended| recommended| recommended| recommended|
+ * | SmolLM 135M              | ~0.16 GB | recommended| recommended| recommended| recommended|
+ * | Qwen2.5 0.5B             | ~0.52 GB | borderline | recommended| recommended| recommended|
+ * | Llama 3.2 1B (GGUF)      | ~0.81 GB | unsupported| recommended| recommended| recommended|
+ * | TinyLlama 1.1B           | ~1.1 GB  | unsupported| borderline | recommended| recommended|
+ * | Qwen2.5 1.5B (GGUF)      | ~1.06 GB | unsupported| borderline | recommended| recommended|
+ * | DeepSeek-R1 1.5B (GGUF)  | ~1.06 GB | unsupported| borderline | recommended| recommended|
+ * | Qwen2.5 1.5B             | ~1.5 GB  | unsupported| borderline | recommended| recommended|
+ * | DeepSeek-R1 1.5B         | ~1.9 GB  | unsupported| borderline | recommended| recommended|
+ * | Phi-4 Mini (GGUF)        | ~2.5 GB  | unsupported| unsupported| recommended| recommended|
  *
  * *Mid-tier also covers task-variant names (without GGUF suffix) for 1.5B models.
  * Keep strings in sync with LOCAL_MODELS to prevent drift.
@@ -264,23 +376,30 @@ export async function detectRamBytes(): Promise<number> {
 export function getModelStatusForRam(modelName: string, ramBytes: number): ModelRecommendationStatus {
   const ramGB = ramBytes / (1024 * 1024 * 1024);
 
-  if (ramGB < 4.5) {
+  // If RAM is not finite or <= 4 GB, resolve to lowest tier (fail-safe to low tier on NaN/<=0)
+  if (!Number.isFinite(ramBytes) || ramGB <= 4) {
+    if (ramBytes === Infinity) {
+      return 'recommended';
+    }
     if (
       modelName === 'Needle-2 45M' ||
       modelName === 'Needle-3 (20-layer)' ||
       modelName === 'SmolLM 135M'
-    )
+    ) {
       return 'recommended';
+    }
     if (modelName === 'Qwen2.5 0.5B') return 'borderline';
     return 'unsupported';
-  } else if (ramGB < 7.5) {
+  } else if (ramGB <= 6) {
     if (
       modelName === 'Needle-2 45M' ||
       modelName === 'Needle-3 (20-layer)' ||
+      modelName === 'SmolLM 135M' ||
       modelName === 'Qwen2.5 0.5B' ||
       modelName === 'Llama 3.2 1B (GGUF)'
-    )
+    ) {
       return 'recommended';
+    }
     if (
       modelName === 'TinyLlama 1.1B' ||
       modelName === 'Qwen2.5 1.5B (GGUF)' ||
@@ -292,17 +411,17 @@ export function getModelStatusForRam(modelName: string, ramBytes: number): Model
     }
     return 'unsupported';
   } else {
-    // High tier (>= 7.5 GB) - all models are recommended, nothing is unsupported
+    // High tier (>6 GB, including 8 GB and >8 GB) - all models recommended
     return 'recommended';
   }
 }
 
 /**
- * Returns optimal inference settings for the device's RAM tier.
- * - Low  (<4.5 GB):  SmolLM 135M,      ctx 1024, max 256
- * - Mid  (4.5-7.5):  Qwen2.5 0.5B,      ctx 2048, max 512
- * - High (>=7.5 GB): Qwen2.5 1.5B (GGUF), ctx 4096, max 1024
- * High-tier prefers Qwen2.5 1.5B (GGUF) (~1.06 GB) over TinyLlama 1.1B for quality at similar footprint.
+ * Returns optimal inference settings for the device's RAM tier aligned with PrivateLM:
+ * - <= 4 GB:  SmolLM 135M,            ctx 1024, max 256
+ * - <= 6 GB:  Qwen2.5 0.5B,           ctx 2048, max 512
+ * - <= 8 GB:  Qwen2.5 1.5B (GGUF),    ctx 4096, max 1024
+ * - > 8 GB:   Qwen2.5 1.5B (GGUF),    ctx 8192, max 4096
  *
  * Needle entries (Needle-2 45M / Needle-3 (20-layer)) are never returned as a
  * tier preset: they are 'recommended' on every tier via getModelStatusForRam
@@ -317,23 +436,81 @@ export function getOptimalSettingsForRam(ramBytes: number): {
 } {
   const ramGB = ramBytes / (1024 * 1024 * 1024);
 
-  if (ramGB < 4.5) {
+  // If RAM is not finite or <= 4 GB, resolve to lowest tier (fail-safe to low tier on NaN/<=0)
+  if (!Number.isFinite(ramBytes) || ramGB <= 4) {
+    if (ramBytes === Infinity) {
+      return {
+        modelName: 'Qwen2.5 1.5B (GGUF)',
+        contextSize: 8192,
+        maxTokens: 4096,
+      };
+    }
     return {
       modelName: 'SmolLM 135M',
       contextSize: 1024,
       maxTokens: 256,
     };
-  } else if (ramGB < 7.5) {
+  } else if (ramGB <= 6) {
     return {
       modelName: 'Qwen2.5 0.5B',
       contextSize: 2048,
       maxTokens: 512,
     };
-  } else {
+  } else if (ramGB <= 8) {
     return {
       modelName: 'Qwen2.5 1.5B (GGUF)',
       contextSize: 4096,
       maxTokens: 1024,
     };
+  } else {
+    return {
+      modelName: 'Qwen2.5 1.5B (GGUF)',
+      contextSize: 8192,
+      maxTokens: 4096,
+    };
   }
+}
+
+export interface SafeInferencePlan {
+  contextSize: number;
+  maxTokens: number;
+  backend: GpuBackend;
+  vramCapBytes: number;
+  forcedCpu: boolean;
+  status: ModelRecommendationStatus;
+}
+
+/**
+ * Composed helper returning a complete inference plan combining VRAM cap,
+ * GPU guard, RAM tier settings, and hardware fail-safes.
+ */
+export function getSafeInferencePlan(
+  ramBytes: number,
+  modelSizeBytes: number,
+  format: string,
+  vendor: GpuVendor = 'unknown',
+  override?: 'auto' | 'opencl' | 'vulkan' | 'cpu',
+  modelName?: string
+): SafeInferencePlan {
+  const vramCapBytes = getVramCapBytes(ramBytes);
+  const tierSettings = getOptimalSettingsForRam(ramBytes);
+  const { contextSize, maxTokens } = tierSettings;
+  const forcedCpu = shouldForceCpu(modelSizeBytes, vramCapBytes, format, contextSize);
+  const backend = getGpuBackendPreference(vendor, override, modelName, {
+    modelSizeBytes,
+    vramCapBytes,
+    format,
+    contextSize,
+    forcedCpu,
+  });
+  const status = getDynamicModelStatusForRam(modelSizeBytes, format, ramBytes, contextSize);
+
+  return {
+    contextSize,
+    maxTokens,
+    backend,
+    vramCapBytes,
+    forcedCpu,
+    status,
+  };
 }
