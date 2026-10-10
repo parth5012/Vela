@@ -1,6 +1,6 @@
 import type { ShizukuStatus } from '../../utils/shizuku';
 
-interface DeviceAgentNative {
+export interface DeviceAgentNative {
   getScreenTree(): Promise<string>;
   performAction(action: string, target: string, value: string, ref: string): Promise<boolean>;
   getDeviceInfo(): Promise<Record<string, any>>;
@@ -29,6 +29,8 @@ interface DeviceAgentNative {
    * that as indeterminate.
    */
   runPrivilegedOp(op: string, args: string[]): Promise<string>;
+  checkSelfPermission?(permissionName: string): Promise<{ success: boolean; status: 'granted' | 'denied' | 'undetermined'; error?: string }>;
+  openSettingsAction?(action: string, needsPackageUri: boolean): Promise<{ success: boolean; message?: string; error?: string }>;
 }
 
 declare const _default: DeviceAgentNative;

@@ -72,7 +72,7 @@ export type PermissionTier = 'auto' | 'confirm' | 'deny';
 export type GpuBackendPreference = 'auto' | 'opencl' | 'vulkan' | 'cpu';
 export type GpuQuantPreference = 'auto' | 'q4_0' | 'q4_k_m' | 'q8_0';
 
-export type OSPermission = 'notifications' | 'camera' | 'microphone' | 'storage' | 'accessibility' | 'background';
+export type OSPermission = 'notifications' | 'camera' | 'microphone' | 'storage' | 'accessibility' | 'background' | 'phone' | 'contacts';
 export type OSPermissionStatus = 'granted' | 'denied' | 'undetermined';
 
 export interface DeviceAgentPermissions {
@@ -227,6 +227,8 @@ export const useConfigStore = create<ConfigState>()(
         storage: 'granted',
         accessibility: 'undetermined',
         background: 'undetermined',
+        phone: 'undetermined',
+        contacts: 'undetermined',
       } as Record<OSPermission, OSPermissionStatus>,
       
       // Defaults for connection mode
@@ -296,6 +298,16 @@ export const useConfigStore = create<ConfigState>()(
           gpuBackendPreference: 'auto',
           gpuQuantPreference: 'auto',
           deviceAgentPermissions: { ...DEFAULT_DEVICE_AGENT_PERMISSIONS },
+          osPermissions: {
+            notifications: 'undetermined',
+            camera: 'undetermined',
+            microphone: 'undetermined',
+            storage: 'granted',
+            accessibility: 'undetermined',
+            background: 'undetermined',
+            phone: 'undetermined',
+            contacts: 'undetermined',
+          } as Record<OSPermission, OSPermissionStatus>,
           suggestionStarters: [
             { label: '👩🏫 Teach Concept', text: 'Teach intuition behind binary search trace example', agent: 'teacher' },
             { label: '📊 Data Analyst', text: 'Analyze key features 2026 FIFA World Cup matches', agent: 'analyst' },
