@@ -227,6 +227,12 @@ export async function streamAgentResponse(
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
   retryOptions?: StreamAgentResponseOptions
 ): Promise<void> {
+  let emittedAny = false;
+  const trackedOnChunk = (chunk: string) => {
+    emittedAny = true;
+    onChunk(chunk);
+  };
+
   try {
     await withRetry(
       () =>
@@ -235,7 +241,7 @@ export async function streamAgentResponse(
           apiKey,
           threadId,
           message,
-          onChunk,
+          trackedOnChunk,
           onDone,
           onError,
           signal,
@@ -249,6 +255,7 @@ export async function streamAgentResponse(
         maxRetries: retryOptions?.maxRetries,
         sleepFn: retryOptions?.sleepFn,
         isRetryable: (err: unknown) => {
+          if (emittedAny) return false;
           const message = err instanceof Error ? err.message : (err as { message?: string })?.message;
           if (message === EMPTY_RESPONSE_ERROR_HINT) return false;
           return isTransientError(err);

@@ -99,5 +99,29 @@ describe('retry utility', () => {
       expect(isTransientError(new Error('Network request failed'))).toBe(true);
       expect(isTransientError(new Error('Failed to fetch'))).toBe(true);
     });
+
+    it('treats deterministic errors like unconfigured API or unreadable body as non-transient', () => {
+      expect(isTransientError(new Error('API URL is not configured.'))).toBe(false);
+      expect(isTransientError(new Error('Response body is not readable'))).toBe(false);
+    });
+
+    it('treats network, ECONNRESET, socket, timed out, and idle errors as transient', () => {
+      expect(isTransientError(new Error('read ECONNRESET'))).toBe(true);
+      expect(isTransientError(new Error('socket hang up'))).toBe(true);
+      expect(isTransientError(new Error('Connection timed out'))).toBe(true);
+      expect(isTransientError(new Error('Stream idle for 30s'))).toBe(true);
+    });
+
+    it('treats TimeoutError and non-user AbortError as transient', () => {
+      const timeoutErr = new Error('timed out');
+      timeoutErr.name = 'TimeoutError';
+      expect(isTransientError(timeoutErr)).toBe(true);
+
+      const abortErr = new DOMException('The operation was aborted.', 'AbortError');
+      expect(isTransientError(abortErr)).toBe(true);
+
+      const userAbort = new DOMException('The user aborted a request.', 'AbortError');
+      expect(isTransientError(userAbort)).toBe(false);
+    });
   });
 });

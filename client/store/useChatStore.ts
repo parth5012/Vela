@@ -42,7 +42,11 @@ function scheduleMessagePersist(threadId: string) {
         last.role === 'assistant'
           ? { ...last, content: stripReasoning(last.content, false) }
           : last;
-      if (last.role === 'assistant' && sanitized.content !== last.content) {
+      if (
+        !state.isThreadStreaming(threadId) &&
+        last.role === 'assistant' &&
+        sanitized.content !== last.content
+      ) {
         useChatStore.setState((s) => {
           const currentList = s.messages[threadId] || [];
           if (currentList.length === 0) return {};
@@ -376,15 +380,20 @@ export const useChatStore = create<ChatState>()(
         }));
         saveMessages(threadId, history).catch(() => {});
       },
-      setStreamingThread: (threadId, isStreaming) => set((state) => {
-        const next = new Set(state.streamingThreadIds);
-        if (isStreaming) {
-          next.add(threadId);
-        } else {
-          next.delete(threadId);
+      setStreamingThread: (threadId, isStreaming) => {
+        set((state) => {
+          const next = new Set(state.streamingThreadIds);
+          if (isStreaming) {
+            next.add(threadId);
+          } else {
+            next.delete(threadId);
+          }
+          return { streamingThreadIds: next };
+        });
+        if (!isStreaming) {
+          scheduleMessagePersist(threadId);
         }
-        return { streamingThreadIds: next };
-      }),
+      },
       isThreadStreaming: (threadId) => get().streamingThreadIds.has(threadId),
       clearStore: () => {
         set({ threads: [], activeThreadId: null, messages: {}, streamingThreadIds: new Set() });
