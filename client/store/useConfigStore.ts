@@ -96,7 +96,32 @@ export interface DeviceAgentPermissions {
   sideloads: PermissionTier;
   permission_toggles: PermissionTier;
   root_shizuku: PermissionTier;
+  contacts: PermissionTier;
 }
+
+export const DEFAULT_DEVICE_AGENT_PERMISSIONS: DeviceAgentPermissions = {
+  screen_read: 'auto',
+  info: 'auto',
+  screenshot: 'auto',
+  open_app: 'auto',
+  scroll: 'auto',
+  swipe: 'confirm',
+  press_key: 'auto',
+  set_volume: 'auto',
+  type: 'confirm',
+  tap: 'confirm',
+  send_communication: 'confirm',
+  calls: 'confirm',
+  purchases: 'confirm',
+  deletions: 'confirm',
+  settings_changes: 'confirm',
+  play_installs: 'confirm',
+  passwords_otps: 'deny',
+  sideloads: 'deny',
+  permission_toggles: 'deny',
+  root_shizuku: 'deny',
+  contacts: 'auto',
+};
 
 interface ConfigState {
   apiUrl: string;
@@ -194,28 +219,7 @@ export const useConfigStore = create<ConfigState>()(
       { label: '📊 Data Analyst', text: 'Analyze key features of 2026 FIFA World Cup matches', agent: 'analyst' },
       { label: '✍️ Prompt Architect', text: 'Help draft detailed system prompt for weather assistant bot', agent: 'prompt builder' }
     ],
-    deviceAgentPermissions: {
-      screen_read: 'auto',
-      info: 'auto',
-      screenshot: 'auto',
-      open_app: 'auto',
-      scroll: 'auto',
-      swipe: 'confirm',
-      press_key: 'auto',
-      set_volume: 'auto',
-      type: 'confirm',
-      tap: 'confirm',
-      send_communication: 'confirm',
-      calls: 'confirm',
-      purchases: 'confirm',
-      deletions: 'confirm',
-      settings_changes: 'confirm',
-      play_installs: 'confirm',
-      passwords_otps: 'deny',
-      sideloads: 'deny',
-      permission_toggles: 'deny',
-      root_shizuku: 'deny',
-    },
+    deviceAgentPermissions: { ...DEFAULT_DEVICE_AGENT_PERMISSIONS },
       osPermissions: {
         notifications: 'undetermined',
         camera: 'undetermined',
@@ -291,6 +295,7 @@ export const useConfigStore = create<ConfigState>()(
           maxTokens: 4096,
           gpuBackendPreference: 'auto',
           gpuQuantPreference: 'auto',
+          deviceAgentPermissions: { ...DEFAULT_DEVICE_AGENT_PERMISSIONS },
           suggestionStarters: [
             { label: '👩🏫 Teach Concept', text: 'Teach intuition behind binary search trace example', agent: 'teacher' },
             { label: '📊 Data Analyst', text: 'Analyze key features 2026 FIFA World Cup matches', agent: 'analyst' },

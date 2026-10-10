@@ -1,5 +1,5 @@
 import { ensureStandaloneRunner } from './helpers/standaloneRunner';
-import { classifyAction, evaluateSafety } from '../utils/safetyManager';
+import { classifyAction, evaluateSafety, getCategoryLabel } from '../utils/safetyManager';
 import { useConfigStore } from '../store/useConfigStore';
 
 ensureStandaloneRunner();
@@ -32,6 +32,9 @@ describe('Safety Manager Helper', () => {
       expect(classifyAction('device_scroll')).toBe('scroll');
       expect(classifyAction('device_press_key')).toBe('press_key');
       expect(classifyAction('device_set_volume')).toBe('set_volume');
+      expect(classifyAction('device_call')).toBe('calls');
+      expect(classifyAction('device_sms')).toBe('send_communication');
+      expect(classifyAction('device_contact')).toBe('contacts');
     });
   });
 
@@ -118,6 +121,104 @@ describe('Safety Manager Helper', () => {
       } finally {
         useConfigStore.getState().setDeviceAgentPermission('tap', previous);
       }
+    });
+
+    describe('call, sms, and contacts safety tiers (#377)', () => {
+      it('should return accurate category labels for calls, send_communication, and contacts', () => {
+        expect(getCategoryLabel('calls')).toBe('Make Phone Calls');
+        expect(getCategoryLabel('send_communication')).toBe('Send Communications');
+        expect(getCategoryLabel('contacts')).toBe('Search Contacts');
+      });
+
+      it('should require confirmation for device_call with shipped defaults (confirm-before-call)', async () => {
+        const mockRequest = jest.fn().mockResolvedValue({ status: 'success', result: 'Approved' });
+        const { useSafetyStore } = require('../store/useSafetyStore');
+        const originalRequest = useSafetyStore.getState().requestApproval;
+        useSafetyStore.setState({ requestApproval: mockRequest });
+
+        try {
+          const res = await evaluateSafety('device_call', '+1234567890');
+          expect(mockRequest).toHaveBeenCalledTimes(1);
+          expect(mockRequest.mock.calls[0][0].toolName).toBe('device_call');
+          expect(mockRequest.mock.calls[0][0].target).toBe('+1234567890');
+          expect(res).toEqual({ status: 'success', result: 'Approved' });
+        } finally {
+          useSafetyStore.setState({ requestApproval: originalRequest });
+        }
+      });
+
+      it('should require confirmation for device_sms with shipped defaults (confirm-before-send)', async () => {
+        const mockRequest = jest.fn().mockResolvedValue({ status: 'success', result: 'Approved' });
+        const { useSafetyStore } = require('../store/useSafetyStore');
+        const originalRequest = useSafetyStore.getState().requestApproval;
+        useSafetyStore.setState({ requestApproval: mockRequest });
+
+        try {
+          const res = await evaluateSafety('device_sms', '+1234567890', 'Hello there');
+          expect(mockRequest).toHaveBeenCalledTimes(1);
+          expect(mockRequest.mock.calls[0][0].toolName).toBe('device_sms');
+          expect(mockRequest.mock.calls[0][0].target).toBe('+1234567890');
+          expect(mockRequest.mock.calls[0][0].value).toBe('Hello there');
+          expect(res).toEqual({ status: 'success', result: 'Approved' });
+        } finally {
+          useSafetyStore.setState({ requestApproval: originalRequest });
+        }
+      });
+
+      it('should allow device_contact automatically with shipped defaults (read-only auto tier)', async () => {
+        const res = await evaluateSafety('device_contact', 'Alice');
+        expect(res.status).toBe('success');
+        expect(res.result).toBe('Allowed automatically');
+      });
+
+      it('should block device_call when calls tier is set to deny', async () => {
+        const previous = useConfigStore.getState().deviceAgentPermissions.calls;
+        useConfigStore.getState().setDeviceAgentPermission('calls', 'deny');
+        try {
+          const res = await evaluateSafety('device_call', '+1234567890');
+          expect(res.status).toBe('error');
+          expect(res.result).toContain('Make Phone Calls');
+          expect(res.result).toContain('Blocked (Deny)');
+        } finally {
+          useConfigStore.getState().setDeviceAgentPermission('calls', previous);
+        }
+      });
+
+      it('should block device_sms when send_communication tier is set to deny', async () => {
+        const previous = useConfigStore.getState().deviceAgentPermissions.send_communication;
+        useConfigStore.getState().setDeviceAgentPermission('send_communication', 'deny');
+        try {
+          const res = await evaluateSafety('device_sms', '+1234567890', 'Hello');
+          expect(res.status).toBe('error');
+          expect(res.result).toContain('Send Communications');
+          expect(res.result).toContain('Blocked (Deny)');
+        } finally {
+          useConfigStore.getState().setDeviceAgentPermission('send_communication', previous);
+        }
+      });
+
+      it('should block device_contact when contacts tier is set to deny', async () => {
+        const previous = useConfigStore.getState().deviceAgentPermissions.contacts;
+        useConfigStore.getState().setDeviceAgentPermission('contacts', 'deny');
+        try {
+          const res = await evaluateSafety('device_contact', 'Alice');
+          expect(res.status).toBe('error');
+          expect(res.result).toContain('Search Contacts');
+          expect(res.result).toContain('Blocked (Deny)');
+        } finally {
+          useConfigStore.getState().setDeviceAgentPermission('contacts', previous);
+        }
+      });
+
+      it('should safely fall back to auto if persisted permissions predate the contacts key', async () => {
+        const currentPerms = { ...useConfigStore.getState().deviceAgentPermissions };
+        delete (currentPerms as any).contacts;
+        useConfigStore.setState({ deviceAgentPermissions: currentPerms });
+
+        const res = await evaluateSafety('device_contact', 'Bob');
+        expect(res.status).toBe('success');
+        expect(res.result).toBe('Allowed automatically');
+      });
     });
   });
 

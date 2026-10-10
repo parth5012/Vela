@@ -236,7 +236,7 @@ export function ensureStandaloneRunner(): boolean {
  *
  * The opening brace is searched from the marker START, so markers may either
  * be a plain declaration ("function foo") or include the brace themselves
- * ("deviceAgentPermissions: {"). None of the targeted signatures contain
+ * ("DEFAULT_DEVICE_AGENT_PERMISSIONS: DeviceAgentPermissions = {" or "deviceAgentPermissions: {"). None of the targeted signatures contain
  * braces before their body, so this single rule covers both shapes.
  */
 export function extractBlock(source: string, startMarker: string): string {

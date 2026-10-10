@@ -22,6 +22,12 @@ describe('toolRegistry', () => {
     expect(cloud).toContain('device_screen_read')
     expect(local).toContain('device_click')
     expect(cloud).toContain('device_tap')
+    expect(local).toContain('device_call')
+    expect(cloud).toContain('device_call')
+    expect(local).toContain('device_sms')
+    expect(cloud).toContain('device_sms')
+    expect(local).toContain('device_contact')
+    expect(cloud).toContain('device_contact')
   })
 
   it('omits server-only tools from standalone modes', () => {

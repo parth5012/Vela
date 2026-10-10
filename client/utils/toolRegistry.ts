@@ -110,6 +110,16 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
   device('device_set_volume', 'Sets volume level 0-100.'),
   device('device_screenshot', 'Takes a screenshot.'),
   device('device_info', 'Battery, screen, OS info.'),
+  device('device_call', 'Initiates a phone call to a specified phone number.', {
+    target: { type: 'string', description: 'Phone number to call.', required: true },
+  }),
+  device('device_sms', 'Composes an SMS message to a specified recipient.', {
+    target: { type: 'string', description: 'Recipient phone number.', required: true },
+    value: { type: 'string', description: 'Message body to send.', required: true },
+  }),
+  device('device_contact', 'Searches on-device contacts by name query.', {
+    target: { type: 'string', description: 'Contact name or search term.', required: false },
+  }),
   device('device_app_permission_grant', 'Grants runtime permission via Shizuku.', undefined, true),
   device('device_app_permission_revoke', 'Revokes runtime permission via Shizuku.', undefined, true),
   device('device_setting_put', 'Writes system/secure/global setting via Shizuku.', undefined, true),
