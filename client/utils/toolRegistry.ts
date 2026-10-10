@@ -106,8 +106,19 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
   device('device_scroll', 'Scrolls in a direction.'),
   device('device_swipe', 'Swipes in a direction.'),
   device('device_press_key', 'Presses a system key (BACK/HOME/ENTER).'),
-  device('device_open_app', 'Opens an app by name or package.'),
-  device('device_set_volume', 'Sets volume level 0-100.'),
+  device('device_open_app', 'Opens an app by name or package.', {
+    target: { type: 'string', description: 'Package name or app label to launch.', required: true },
+  }),
+  device('device_set_volume', 'Sets volume level 0-100.', {
+    target: { type: 'number', description: 'Volume level percent (0-100).', required: true },
+  }),
+  device('device_set_brightness', 'Sets screen brightness level 0-100.', {
+    target: { type: 'number', description: 'Brightness level percent (0-100).', required: true },
+  }),
+  device('device_set_alarm', 'Sets an alarm (time HH:MM) or timer (seconds).', {
+    target: { type: 'string', description: 'Alarm time (e.g. "07:30") or timer duration.', required: true },
+    value: { type: 'string', description: 'Optional label or message.', required: false },
+  }),
   device('device_screenshot', 'Takes a screenshot.'),
   device('device_info', 'Battery, screen, OS info.'),
   device('device_call', 'Initiates a phone call to a specified phone number.', {

@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Normal install-time permission (no runtime dialog) required by
+         AlarmClock.ACTION_SET_ALARM / ACTION_SET_TIMER. OEMs that enforce it
+         throw SecurityException on startActivity without it; the native layer
+         turns that into an honest success:false rather than a crash. -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+
     <!-- Package visibility (Android 11+): lets getShizukuStatus() see whether
          the Shizuku manager app is installed. applicationId, not the Gradle
          namespace 'moe.shizuku.manager'. -->

@@ -8,6 +8,11 @@ interface DeviceAgentNative {
   makeCall(phoneNumber: string): Promise<{ success: boolean; message?: string; error?: string }>;
   sendSms(phoneNumber: string, message: string): Promise<{ success: boolean; message?: string; error?: string }>;
   searchContacts(query: string): Promise<{ success: boolean; contacts?: Array<{ contactId: string; lookupKey: string; name: string }>; error?: string } | Array<{ contactId: string; lookupKey: string; name: string }>>;
+  setAlarm(hour: number, minutes: number, message: string, skipUi: boolean): Promise<{ success: boolean; message?: string; error?: string }>;
+  setTimer(lengthSeconds: number, message: string, skipUi: boolean): Promise<{ success: boolean; message?: string; error?: string }>;
+  setBrightness(percent: number): Promise<{ success: boolean; canWrite?: boolean; message?: string; error?: string }>;
+  setVolume(percent: number): Promise<{ success: boolean; message?: string; error?: string }>;
+  openApp(packageNameOrLabel: string): Promise<{ success: boolean; message?: string; error?: string }>;
   /** Reads Shizuku availability: manager installed, server running, permission granted. */
   getShizukuStatus(): Promise<ShizukuStatus>;
   /**

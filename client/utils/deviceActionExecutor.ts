@@ -7,6 +7,7 @@ import {
   describeShizukuState,
   isShizukuTool,
   parseOpResult,
+  ShizukuStatus,
 } from './shizuku';
 
 /**
@@ -46,21 +47,304 @@ function requiredNativeMethod(toolName: string): string {
   if (toolName === 'device_call') return 'makeCall';
   if (toolName === 'device_sms') return 'sendSms';
   if (toolName === 'device_contact') return 'searchContacts';
+  if (toolName === 'device_set_alarm') return 'setAlarm';
+  if (toolName === 'device_set_brightness') return 'setBrightness';
+  if (toolName === 'device_set_volume') return 'setVolume';
+  if (toolName === 'device_open_app') return 'openApp';
   if (isShizukuTool(toolName)) return 'runPrivilegedOp';
   return 'performAction';
 }
 
 /**
  * True for tools that change device state (everything routed through
- * `performAction` or the privileged Shizuku service, plus call and SMS). Derived
- * from the dispatch path rather than a hand-kept list, so a new mutating tool is
- * classified correctly by default.
+ * `performAction` or the privileged Shizuku service, plus call, SMS,
+ * alarm, brightness, volume, and app launch). Derived from the dispatch path
+ * rather than a hand-kept list, so a new mutating tool is classified
+ * correctly by default.
  */
 function isMutating(toolName: string): boolean {
-  if (toolName === 'device_call' || toolName === 'device_sms') return true;
+  if (
+    toolName === 'device_call' ||
+    toolName === 'device_sms' ||
+    toolName === 'device_set_alarm' ||
+    toolName === 'device_set_brightness' ||
+    toolName === 'device_set_volume' ||
+    toolName === 'device_open_app'
+  ) {
+    return true;
+  }
   if (toolName === 'device_contact') return false;
   const method = requiredNativeMethod(toolName);
   return method === 'performAction' || method === 'runPrivilegedOp';
+}
+
+interface ParsedAlarm {
+  isTimer: boolean;
+  hour: number;
+  minutes: number;
+  lengthSeconds: number;
+  message: string;
+  skipUi: boolean;
+}
+
+function parseAlarmJson(raw: string): { success: true; data: ParsedAlarm } | { success: false; error: string } | null {
+  if (!raw.startsWith('{')) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null) return null;
+    const isTimer = Boolean(parsed.timer || parsed.length !== undefined || parsed.lengthSeconds !== undefined);
+    const lengthSeconds = Number(parsed.lengthSeconds ?? parsed.length ?? 0);
+    const hour = Number(parsed.hour ?? 0);
+    const minutes = Number(parsed.minutes ?? 0);
+    const message = String(parsed.message ?? '');
+    const skipUi = parsed.skipUi !== false;
+
+    if (isTimer) {
+      if (lengthSeconds <= 0) {
+        return { success: false, error: 'timer length must be greater than 0 seconds.' };
+      }
+      return { success: true, data: { isTimer: true, hour: 0, minutes: 0, lengthSeconds, message, skipUi } };
+    }
+    if (isNaN(hour) || hour < 0 || hour > 23 || isNaN(minutes) || minutes < 0 || minutes > 59) {
+      return { success: false, error: 'hour must be 0-23 and minutes 0-59 for device_set_alarm.' };
+    }
+    return { success: true, data: { isTimer: false, hour, minutes, lengthSeconds: 0, message, skipUi } };
+  } catch {
+    return { success: false, error: 'invalid JSON format for alarm parameters.' };
+  }
+}
+
+function parseAlarmInput(
+  target?: string,
+  value?: string
+): { success: true; data: ParsedAlarm } | { success: false; error: string } {
+  const t = (target || '').trim();
+  const v = (value || '').trim();
+
+  const fromJson = parseAlarmJson(t) ?? parseAlarmJson(v);
+  if (fromJson) return fromJson;
+
+  if (t.toLowerCase().startsWith('timer:') || v.toLowerCase().startsWith('timer:')) {
+    const rawLen = t.toLowerCase().startsWith('timer:') ? t.slice(6) : v.slice(6);
+    const lengthSeconds = parseInt(rawLen, 10);
+    if (isNaN(lengthSeconds) || lengthSeconds <= 0) {
+      return { success: false, error: 'timer length must be greater than 0 seconds.' };
+    }
+    const message = t.toLowerCase().startsWith('timer:') ? v : '';
+    return { success: true, data: { isTimer: true, hour: 0, minutes: 0, lengthSeconds, message, skipUi: true } };
+  }
+
+  if (t.toLowerCase() === 'timer') {
+    const lengthSeconds = parseInt(v, 10);
+    if (isNaN(lengthSeconds) || lengthSeconds <= 0) {
+      return { success: false, error: 'timer length must be greater than 0 seconds.' };
+    }
+    return { success: true, data: { isTimer: true, hour: 0, minutes: 0, lengthSeconds, message: '', skipUi: true } };
+  }
+
+  const timeStr = t || v;
+  if (!timeStr) {
+    return { success: false, error: 'alarm time or timer duration is required for device_set_alarm.' };
+  }
+
+  const timeMatch = timeStr.match(/^(\d{1,2}):(\d{2})(?::\d{2})?(?:\s*(am|pm))?$/i);
+  if (timeMatch) {
+    let hour = parseInt(timeMatch[1], 10);
+    const minutes = parseInt(timeMatch[2], 10);
+    const meridiem = timeMatch[3]?.toLowerCase();
+
+    if (meridiem === 'pm' && hour < 12) hour += 12;
+    if (meridiem === 'am' && hour === 12) hour = 0;
+
+    if (hour < 0 || hour > 23 || minutes < 0 || minutes > 59) {
+      return { success: false, error: 'hour must be 0-23 and minutes 0-59 for device_set_alarm.' };
+    }
+    const message = t ? v : '';
+    return { success: true, data: { isTimer: false, hour, minutes, lengthSeconds: 0, message, skipUi: true } };
+  }
+
+  const meridiemOnlyMatch = timeStr.match(/^(\d{1,2})\s*(am|pm)$/i);
+  if (meridiemOnlyMatch) {
+    let hour = parseInt(meridiemOnlyMatch[1], 10);
+    const meridiem = meridiemOnlyMatch[2].toLowerCase();
+    if (meridiem === 'pm' && hour < 12) hour += 12;
+    if (meridiem === 'am' && hour === 12) hour = 0;
+    if (hour < 0 || hour > 23) {
+      return { success: false, error: 'hour must be 0-23 for device_set_alarm.' };
+    }
+    const message = t ? v : '';
+    return { success: true, data: { isTimer: false, hour, minutes: 0, lengthSeconds: 0, message, skipUi: true } };
+  }
+
+  return { success: false, error: 'valid alarm time (e.g. "07:30") or timer duration is required.' };
+}
+
+function parsePercent(target?: string, value?: string): number | null {
+  const raw = target !== undefined && target !== '' ? target : value;
+  if (raw === undefined || raw === '') return null;
+  const num = Number(raw);
+  if (isNaN(num) || num < 0 || num > 100) return null;
+  return num;
+}
+
+async function executeBrightnessWithShizuku(
+  percent: number,
+  nativeError: string
+): Promise<DeviceActionResult> {
+  const nativeAny = DeviceAgentNative as unknown as {
+    getShizukuStatus?: () => Promise<ShizukuStatus>;
+  };
+  if (typeof nativeAny.getShizukuStatus !== 'function') {
+    return { outcome: 'failed', observation: `Action failed: ${nativeError}` };
+  }
+  try {
+    const status = await nativeAny.getShizukuStatus();
+    if (deriveShizukuState(status) !== 'ready') {
+      return { outcome: 'failed', observation: `Action failed: ${nativeError}` };
+    }
+    const brightnessVal = Math.round((percent / 100) * 255);
+    const shizukuResult = await executeShizukuOp(
+      'device_setting_put',
+      'system/screen_brightness',
+      String(brightnessVal)
+    );
+    if (shizukuResult.outcome === 'executed') {
+      return {
+        outcome: 'executed',
+        observation: `Brightness set to ${percent}% via Shizuku (system/screen_brightness).`,
+      };
+    }
+    return shizukuResult;
+  } catch {
+    return { outcome: 'failed', observation: `Action failed: ${nativeError}` };
+  }
+}
+
+async function handleSetAlarm(target?: string, value?: string): Promise<DeviceActionResult> {
+  const parsed = parseAlarmInput(target, value);
+  if (!parsed.success) {
+    return {
+      outcome: 'failed',
+      observation: `Action failed: ${parsed.error}`,
+    };
+  }
+  const nativeAny = DeviceAgentNative as unknown as {
+    setAlarm: (h: number, m: number, msg: string, skip: boolean) => Promise<{ success: boolean; message?: string; error?: string }>;
+    setTimer?: (l: number, msg: string, skip: boolean) => Promise<{ success: boolean; message?: string; error?: string }>;
+  };
+  const res = parsed.data.isTimer && typeof nativeAny.setTimer === 'function'
+    ? await nativeAny.setTimer(parsed.data.lengthSeconds, parsed.data.message, parsed.data.skipUi)
+    : await nativeAny.setAlarm(parsed.data.hour, parsed.data.minutes, parsed.data.message, parsed.data.skipUi);
+
+  if (!res || typeof res !== 'object' || typeof res.success !== 'boolean') {
+    return {
+      outcome: 'failed',
+      observation: 'Action failed: device agent returned no acknowledgement for device_set_alarm. Alarm was not confirmed.',
+    };
+  }
+  if (res.success === false) {
+    return {
+      outcome: 'failed',
+      observation: `Action failed: ${res.error || 'Failed to set alarm.'}`,
+    };
+  }
+  return {
+    outcome: 'executed',
+    observation: res.message || 'Alarm set successfully',
+  };
+}
+
+async function handleSetBrightness(target?: string, value?: string): Promise<DeviceActionResult> {
+  const percent = parsePercent(target, value);
+  if (percent === null) {
+    return {
+      outcome: 'failed',
+      observation: 'Action failed: brightness percent must be a number between 0 and 100.',
+    };
+  }
+  const res = await (DeviceAgentNative as unknown as {
+    setBrightness: (p: number) => Promise<{ success: boolean; canWrite?: boolean; message?: string; error?: string }>;
+  }).setBrightness(percent);
+
+  if (!res || typeof res !== 'object' || typeof res.success !== 'boolean') {
+    return {
+      outcome: 'failed',
+      observation: 'Action failed: device agent returned no acknowledgement for device_set_brightness. Brightness change was not confirmed.',
+    };
+  }
+  if (res.success === true) {
+    return {
+      outcome: 'executed',
+      observation: res.message || `Brightness set to ${percent}%`,
+    };
+  }
+  if (res.canWrite === false || (res.error && res.error.includes('WRITE_SETTINGS'))) {
+    return executeBrightnessWithShizuku(percent, res.error || 'Permission WRITE_SETTINGS not granted.');
+  }
+  return {
+    outcome: 'failed',
+    observation: `Action failed: ${res.error || 'Failed to set brightness.'}`,
+  };
+}
+
+async function handleSetVolume(target?: string, value?: string): Promise<DeviceActionResult> {
+  const percent = parsePercent(target, value);
+  if (percent === null) {
+    return {
+      outcome: 'failed',
+      observation: 'Action failed: volume percent must be a number between 0 and 100.',
+    };
+  }
+  const res = await (DeviceAgentNative as unknown as {
+    setVolume: (p: number) => Promise<{ success: boolean; message?: string; error?: string }>;
+  }).setVolume(percent);
+
+  if (!res || typeof res !== 'object' || typeof res.success !== 'boolean') {
+    return {
+      outcome: 'failed',
+      observation: 'Action failed: device agent returned no acknowledgement for device_set_volume. Volume change was not confirmed.',
+    };
+  }
+  if (res.success === false) {
+    return {
+      outcome: 'failed',
+      observation: `Action failed: ${res.error || 'Failed to set volume.'}`,
+    };
+  }
+  return {
+    outcome: 'executed',
+    observation: res.message || `Volume set to ${percent}%`,
+  };
+}
+
+async function handleOpenApp(target?: string, value?: string): Promise<DeviceActionResult> {
+  const query = (target || value || '').trim();
+  if (!query) {
+    return {
+      outcome: 'failed',
+      observation: 'Action failed: package name or app label is required for device_open_app.',
+    };
+  }
+  const res = await (DeviceAgentNative as unknown as {
+    openApp: (q: string) => Promise<{ success: boolean; message?: string; error?: string }>;
+  }).openApp(query);
+
+  if (!res || typeof res !== 'object' || typeof res.success !== 'boolean') {
+    return {
+      outcome: 'failed',
+      observation: `Action failed: device agent returned no acknowledgement for device_open_app. App launch was not confirmed.`,
+    };
+  }
+  if (res.success === false) {
+    return {
+      outcome: 'failed',
+      observation: `Action failed: ${res.error || `Failed to open app "${query}".`}`,
+    };
+  }
+  return {
+    outcome: 'executed',
+    observation: res.message || `Opened app: ${query}`,
+  };
 }
 
 /**
@@ -210,13 +494,20 @@ export async function executeDeviceAction(
           observation: contacts.length > 0 ? JSON.stringify(contacts) : `No contacts found matching "${query}".`,
         };
       }
+      case 'device_set_alarm':
+        return await handleSetAlarm(target, value);
+      case 'device_set_brightness':
+        return await handleSetBrightness(target, value);
+      case 'device_set_volume':
+        return await handleSetVolume(target, value);
+      case 'device_open_app':
+        return await handleOpenApp(target, value);
       default: {
         let action = 'click';
         if (toolName === 'device_type') action = 'type';
         else if (toolName === 'device_scroll') action = 'scrollforward';
         else if (toolName === 'device_swipe') action = 'scrollforward';
         else if (toolName === 'device_press_key') action = 'click';
-        else if (toolName === 'device_set_volume') action = 'click';
 
         const targetRef = target || '';
         const val = value || '';

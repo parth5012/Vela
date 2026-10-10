@@ -6,12 +6,16 @@ import android.graphics.Bitmap
 import android.view.accessibility.AccessibilityNodeInfo
 import android.accessibilityservice.AccessibilityService
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.media.AudioManager
 import android.net.Uri
 import android.os.IBinder
+import android.provider.AlarmClock
 import android.provider.ContactsContract
+import android.provider.Settings
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.CountDownLatch
@@ -305,6 +309,196 @@ class DeviceAgentModule : Module() {
                     "error" to (e.message ?: "Failed to query contacts"),
                     "contacts" to emptyList<Map<String, String>>()
                 )
+            }
+        }
+
+        AsyncFunction("setAlarm") { hour: Int, minutes: Int, message: String, skipUi: Boolean ->
+            val context = appContext.reactContext
+                ?: return@AsyncFunction mapOf("success" to false, "error" to "App context unavailable")
+
+            if (hour < 0 || hour > 23 || minutes < 0 || minutes > 59) {
+                return@AsyncFunction mapOf(
+                    "success" to false,
+                    "error" to "Invalid alarm time: hour must be 0-23 and minutes 0-59 (got $hour:$minutes)"
+                )
+            }
+
+            try {
+                val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
+                    putExtra(AlarmClock.EXTRA_HOUR, hour)
+                    putExtra(AlarmClock.EXTRA_MINUTES, minutes)
+                    if (message.isNotBlank()) {
+                        putExtra(AlarmClock.EXTRA_MESSAGE, message)
+                    }
+                    putExtra(AlarmClock.EXTRA_SKIP_UI, skipUi)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(intent)
+                val formattedTime = String.format("%02d:%02d", hour, minutes)
+                mapOf(
+                    "success" to true,
+                    "message" to "Alarm set for $formattedTime${if (message.isNotBlank()) " ($message)" else ""}"
+                )
+            } catch (e: Exception) {
+                mapOf("success" to false, "error" to (e.message ?: "Failed to set alarm"))
+            }
+        }
+
+        AsyncFunction("setTimer") { lengthSeconds: Int, message: String, skipUi: Boolean ->
+            val context = appContext.reactContext
+                ?: return@AsyncFunction mapOf("success" to false, "error" to "App context unavailable")
+
+            if (lengthSeconds <= 0) {
+                return@AsyncFunction mapOf(
+                    "success" to false,
+                    "error" to "Timer length must be greater than 0 seconds (got $lengthSeconds)"
+                )
+            }
+
+            try {
+                val intent = Intent(AlarmClock.ACTION_SET_TIMER).apply {
+                    putExtra(AlarmClock.EXTRA_LENGTH, lengthSeconds)
+                    if (message.isNotBlank()) {
+                        putExtra(AlarmClock.EXTRA_MESSAGE, message)
+                    }
+                    putExtra(AlarmClock.EXTRA_SKIP_UI, skipUi)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(intent)
+                mapOf(
+                    "success" to true,
+                    "message" to "Timer set for $lengthSeconds seconds${if (message.isNotBlank()) " ($message)" else ""}"
+                )
+            } catch (e: Exception) {
+                mapOf("success" to false, "error" to (e.message ?: "Failed to set timer"))
+            }
+        }
+
+        AsyncFunction("setBrightness") { percent: Int ->
+            val context = appContext.reactContext
+                ?: return@AsyncFunction mapOf("success" to false, "error" to "App context unavailable")
+
+            if (percent < 0 || percent > 100) {
+                return@AsyncFunction mapOf("success" to false, "error" to "Brightness percent must be between 0 and 100")
+            }
+
+            if (!Settings.System.canWrite(context)) {
+                return@AsyncFunction mapOf(
+                    "success" to false,
+                    "canWrite" to false,
+                    "error" to "Permission android.permission.WRITE_SETTINGS not granted. Grant 'Modify system settings' in Android Settings to change brightness directly, or use Shizuku."
+                )
+            }
+
+            try {
+                val brightness = Math.round((percent / 100.0) * 255).toInt().coerceIn(0, 255)
+                Settings.System.putInt(
+                    context.contentResolver,
+                    Settings.System.SCREEN_BRIGHTNESS,
+                    brightness
+                )
+                mapOf("success" to true, "message" to "Brightness set to $percent%")
+            } catch (e: Exception) {
+                mapOf("success" to false, "error" to (e.message ?: "Failed to set brightness"))
+            }
+        }
+
+        AsyncFunction("setVolume") { percent: Int ->
+            val context = appContext.reactContext
+                ?: return@AsyncFunction mapOf("success" to false, "error" to "App context unavailable")
+
+            if (percent < 0 || percent > 100) {
+                return@AsyncFunction mapOf("success" to false, "error" to "Volume percent must be between 0 and 100")
+            }
+
+            try {
+                val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                    ?: return@AsyncFunction mapOf("success" to false, "error" to "AudioManager unavailable")
+
+                val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                val targetVolume = Math.round((percent / 100.0) * maxVolume).toInt().coerceIn(0, maxVolume)
+                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVolume, 0)
+                mapOf("success" to true, "message" to "Volume set to $percent%")
+            } catch (e: Exception) {
+                mapOf("success" to false, "error" to (e.message ?: "Failed to set volume"))
+            }
+        }
+
+        AsyncFunction("openApp") { packageNameOrLabel: String ->
+            val context = appContext.reactContext
+                ?: return@AsyncFunction mapOf("success" to false, "error" to "App context unavailable")
+
+            val query = packageNameOrLabel.trim()
+            if (query.isEmpty()) {
+                return@AsyncFunction mapOf("success" to false, "error" to "Package name or app label is required")
+            }
+
+            val pm = context.packageManager
+
+            // 1. Direct package lookup
+            val directIntent = pm.getLaunchIntentForPackage(query)
+            if (directIntent != null) {
+                try {
+                    directIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    context.startActivity(directIntent)
+                    return@AsyncFunction mapOf("success" to true, "message" to "Opened app $query")
+                } catch (e: Exception) {
+                    return@AsyncFunction mapOf(
+                        "success" to false,
+                        "error" to (e.message ?: "Failed to launch package $query")
+                    )
+                }
+            }
+
+            // 2. Name matching: bounded scan over launcher activities (ACTION_MAIN + CATEGORY_LAUNCHER, max 200)
+            try {
+                val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+                val resolveInfos = pm.queryIntentActivities(launcherIntent, 0)
+                val cleanQuery = query.lowercase()
+                val maxScan = minOf(resolveInfos.size, 200)
+
+                var matchedPackage: String? = null
+                var matchedLabel: String? = null
+
+                // Pass 1: exact label match (case-insensitive)
+                for (i in 0 until maxScan) {
+                    val ri = resolveInfos[i]
+                    val label = ri.loadLabel(pm)?.toString() ?: ""
+                    if (label.lowercase() == cleanQuery) {
+                        matchedPackage = ri.activityInfo.packageName
+                        matchedLabel = label
+                        break
+                    }
+                }
+
+                // Pass 2: substring match if no exact match
+                if (matchedPackage == null) {
+                    for (i in 0 until maxScan) {
+                        val ri = resolveInfos[i]
+                        val label = ri.loadLabel(pm)?.toString() ?: ""
+                        if (label.lowercase().contains(cleanQuery)) {
+                            matchedPackage = ri.activityInfo.packageName
+                            matchedLabel = label
+                            break
+                        }
+                    }
+                }
+
+                if (matchedPackage != null) {
+                    val launchIntent = pm.getLaunchIntentForPackage(matchedPackage)
+                    if (launchIntent != null) {
+                        launchIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        context.startActivity(launchIntent)
+                        return@AsyncFunction mapOf(
+                            "success" to true,
+                            "message" to "Opened ${matchedLabel ?: matchedPackage} ($matchedPackage)"
+                        )
+                    }
+                }
+
+                mapOf("success" to false, "error" to "No launchable app matches \"$query\"")
+            } catch (e: Exception) {
+                mapOf("success" to false, "error" to (e.message ?: "Failed to search and open app"))
             }
         }
 
