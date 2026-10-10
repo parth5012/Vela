@@ -24,7 +24,7 @@ const LOW_RISK_ACTIONS: PermissionItem[] = [
   { key: 'scroll', label: 'Scroll Page', description: 'Scroll up, down, left, or right' },
   { key: 'swipe', label: 'Swipe Gestures', description: 'Perform generic swipe gestures' },
   { key: 'press_key', label: 'Hardware Key Injection', description: 'Simulate Home, Back, Volume, Power presses' },
-  { key: 'set_volume', label: 'Change Volume', description: 'Set media, ring, or alarm volume levels' },
+  { key: 'set_volume', label: 'Change Volume', description: 'Set media volume level (0-100)' },
   { key: 'type', label: 'Type Text', description: 'Type non-sensitive text into focused input fields' },
   { key: 'tap', label: 'Tap Screen', description: 'Tap coordinates or perform navigation-style clicks' },
   { key: 'contacts', label: 'Search Contacts', description: 'Search and read contacts on the device' },

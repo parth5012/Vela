@@ -32,6 +32,8 @@ describe('Safety Manager Helper', () => {
       expect(classifyAction('device_scroll')).toBe('scroll');
       expect(classifyAction('device_press_key')).toBe('press_key');
       expect(classifyAction('device_set_volume')).toBe('set_volume');
+      expect(classifyAction('device_set_brightness')).toBe('settings_changes');
+      expect(classifyAction('device_set_alarm')).toBe('settings_changes');
       expect(classifyAction('device_call')).toBe('calls');
       expect(classifyAction('device_sms')).toBe('send_communication');
       expect(classifyAction('device_contact')).toBe('contacts');
@@ -216,6 +218,50 @@ describe('Safety Manager Helper', () => {
         useConfigStore.setState({ deviceAgentPermissions: currentPerms });
 
         const res = await evaluateSafety('device_contact', 'Bob');
+        expect(res.status).toBe('success');
+        expect(res.result).toBe('Allowed automatically');
+      });
+
+      it('should require confirmation for device_set_alarm (settings_changes tier)', async () => {
+        const mockRequest = jest.fn().mockResolvedValue({ status: 'success', result: 'Approved' });
+        const { useSafetyStore } = require('../store/useSafetyStore');
+        const originalRequest = useSafetyStore.getState().requestApproval;
+        useSafetyStore.setState({ requestApproval: mockRequest });
+
+        try {
+          const res = await evaluateSafety('device_set_alarm', '07:30', 'Wake up');
+          expect(mockRequest).toHaveBeenCalledTimes(1);
+          expect(mockRequest.mock.calls[0][0].toolName).toBe('device_set_alarm');
+          expect(res).toEqual({ status: 'success', result: 'Approved' });
+        } finally {
+          useSafetyStore.setState({ requestApproval: originalRequest });
+        }
+      });
+
+      it('should require confirmation for device_set_brightness (settings_changes tier)', async () => {
+        const mockRequest = jest.fn().mockResolvedValue({ status: 'success', result: 'Approved' });
+        const { useSafetyStore } = require('../store/useSafetyStore');
+        const originalRequest = useSafetyStore.getState().requestApproval;
+        useSafetyStore.setState({ requestApproval: mockRequest });
+
+        try {
+          const res = await evaluateSafety('device_set_brightness', '80');
+          expect(mockRequest).toHaveBeenCalledTimes(1);
+          expect(mockRequest.mock.calls[0][0].toolName).toBe('device_set_brightness');
+          expect(res).toEqual({ status: 'success', result: 'Approved' });
+        } finally {
+          useSafetyStore.setState({ requestApproval: originalRequest });
+        }
+      });
+
+      it('should allow device_set_volume automatically with default set_volume tier', async () => {
+        const res = await evaluateSafety('device_set_volume', '50');
+        expect(res.status).toBe('success');
+        expect(res.result).toBe('Allowed automatically');
+      });
+
+      it('should allow benign device_open_app automatically with default open_app tier', async () => {
+        const res = await evaluateSafety('device_open_app', 'Spotify');
         expect(res.status).toBe('success');
         expect(res.result).toBe('Allowed automatically');
       });

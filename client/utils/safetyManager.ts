@@ -72,6 +72,8 @@ export function classifyAction(
   if (toolName === 'device_swipe') return 'swipe';
   if (toolName === 'device_press_key') return 'press_key';
   if (toolName === 'device_set_volume') return 'set_volume';
+  if (toolName === 'device_set_brightness') return 'settings_changes';
+  if (toolName === 'device_set_alarm') return 'settings_changes';
   if (toolName === 'device_type') return 'type';
   if (toolName === 'device_tap') return 'tap';
   if (toolName === 'device_call') return 'calls';

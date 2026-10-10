@@ -28,6 +28,14 @@ describe('toolRegistry', () => {
     expect(cloud).toContain('device_sms')
     expect(local).toContain('device_contact')
     expect(cloud).toContain('device_contact')
+    expect(local).toContain('device_set_alarm')
+    expect(cloud).toContain('device_set_alarm')
+    expect(local).toContain('device_set_brightness')
+    expect(cloud).toContain('device_set_brightness')
+    expect(local).toContain('device_set_volume')
+    expect(cloud).toContain('device_set_volume')
+    expect(local).toContain('device_open_app')
+    expect(cloud).toContain('device_open_app')
   })
 
   it('omits server-only tools from standalone modes', () => {

@@ -351,4 +351,367 @@ describe('executeDeviceAction outcomes (#308)', () => {
       expect(result.observation).toContain('returned no acknowledgement');
     });
   });
+
+  describe('device_set_alarm (#378)', () => {
+    it('dispatches to setAlarm and never calls performAction', async () => {
+      const performAction = jest.fn();
+      const setAlarm = jest.fn().mockResolvedValue({ success: true, message: 'Alarm set for 07:30' });
+      mockHolder.mod = { setAlarm, performAction };
+
+      const result = await executeDeviceAction('device_set_alarm', '07:30', 'Wake up');
+
+      expect(setAlarm).toHaveBeenCalledWith(7, 30, 'Wake up', true);
+      expect(performAction).not.toHaveBeenCalled();
+      expect(result.outcome).toBe('executed');
+      expect(result.observation).toBe('Alarm set for 07:30');
+    });
+
+    it('dispatches to setTimer when timer parameters are supplied', async () => {
+      const performAction = jest.fn();
+      const setAlarm = jest.fn();
+      const setTimer = jest.fn().mockResolvedValue({ success: true, message: 'Timer set for 300 seconds' });
+      mockHolder.mod = { setAlarm, setTimer, performAction };
+
+      const result = await executeDeviceAction('device_set_alarm', 'timer:300', 'Boil pasta');
+
+      expect(setTimer).toHaveBeenCalledWith(300, 'Boil pasta', true);
+      expect(setAlarm).not.toHaveBeenCalled();
+      expect(performAction).not.toHaveBeenCalled();
+      expect(result.outcome).toBe('executed');
+      expect(result.observation).toBe('Timer set for 300 seconds');
+    });
+
+    it('reports failed pre-dispatch when alarm time format is invalid', async () => {
+      const setAlarm = jest.fn();
+      mockHolder.mod = { setAlarm };
+
+      const result = await executeDeviceAction('device_set_alarm', 'not-a-time');
+
+      expect(result.outcome).toBe('failed');
+      expect(result.observation).toContain('valid alarm time');
+      expect(setAlarm).not.toHaveBeenCalled();
+    });
+
+    it('reports failed pre-dispatch when hour or minute is out of bounds', async () => {
+      const setAlarm = jest.fn();
+      mockHolder.mod = { setAlarm };
+
+      const result = await executeDeviceAction('device_set_alarm', '25:99');
+
+      expect(result.outcome).toBe('failed');
+      expect(result.observation).toContain('hour must be 0-23 and minutes 0-59');
+      expect(setAlarm).not.toHaveBeenCalled();
+    });
+
+    it('reports unavailable when the module lacks setAlarm', async () => {
+      mockHolder.mod = { performAction: jest.fn() };
+
+      const result = await executeDeviceAction('device_set_alarm', '07:30');
+
+      expect(result.outcome).toBe('unavailable');
+      expect(result.observation).toContain('the module does not provide setAlarm()');
+    });
+
+    it('reports indeterminate when setAlarm throws after dispatch', async () => {
+      mockHolder.mod = {
+        setAlarm: jest.fn().mockRejectedValue(new Error('alarm manager crash')),
+      };
+
+      const result = await executeDeviceAction('device_set_alarm', '07:30');
+
+      expect(result.outcome).toBe('indeterminate');
+      expect(result.observation).toContain('UNKNOWN');
+      expect(result.observation).toContain('device_set_alarm');
+      expect(result.observation).toContain('before repeating');
+    });
+
+    it('reports failed when setAlarm returns structured failure', async () => {
+      mockHolder.mod = {
+        setAlarm: jest.fn().mockResolvedValue({
+          success: false,
+          error: 'No application available to handle alarm',
+        }),
+      };
+
+      const result = await executeDeviceAction('device_set_alarm', '07:30');
+
+      expect(result.outcome).toBe('failed');
+      expect(result.observation).toContain('No application available to handle alarm');
+    });
+
+    it('reports failed when setAlarm resolves with no acknowledgement', async () => {
+      mockHolder.mod = {
+        setAlarm: jest.fn().mockResolvedValue(null),
+      };
+
+      const result = await executeDeviceAction('device_set_alarm', '07:30');
+
+      expect(result.outcome).toBe('failed');
+      expect(result.observation).toContain('returned no acknowledgement');
+    });
+  });
+
+  describe('device_set_brightness (#378)', () => {
+    it('dispatches to setBrightness and never calls performAction', async () => {
+      const performAction = jest.fn();
+      const setBrightness = jest.fn().mockResolvedValue({ success: true, message: 'Brightness set to 80%' });
+      mockHolder.mod = { setBrightness, performAction };
+
+      const result = await executeDeviceAction('device_set_brightness', '80');
+
+      expect(setBrightness).toHaveBeenCalledWith(80);
+      expect(performAction).not.toHaveBeenCalled();
+      expect(result.outcome).toBe('executed');
+      expect(result.observation).toBe('Brightness set to 80%');
+    });
+
+    it('reports failed pre-dispatch when brightness percent is out of range', async () => {
+      const setBrightness = jest.fn();
+      mockHolder.mod = { setBrightness };
+
+      const result = await executeDeviceAction('device_set_brightness', '150');
+
+      expect(result.outcome).toBe('failed');
+      expect(result.observation).toContain('brightness percent must be a number between 0 and 100');
+      expect(setBrightness).not.toHaveBeenCalled();
+    });
+
+    it('reports unavailable when the module lacks setBrightness', async () => {
+      mockHolder.mod = { performAction: jest.fn() };
+
+      const result = await executeDeviceAction('device_set_brightness', '50');
+
+      expect(result.outcome).toBe('unavailable');
+      expect(result.observation).toContain('the module does not provide setBrightness()');
+    });
+
+    it('reports indeterminate when setBrightness throws after dispatch', async () => {
+      mockHolder.mod = {
+        setBrightness: jest.fn().mockRejectedValue(new Error('display service crash')),
+      };
+
+      const result = await executeDeviceAction('device_set_brightness', '50');
+
+      expect(result.outcome).toBe('indeterminate');
+      expect(result.observation).toContain('UNKNOWN');
+      expect(result.observation).toContain('device_set_brightness');
+      expect(result.observation).toContain('before repeating');
+    });
+
+    it('falls back to Shizuku settings_put when native canWrite is false and Shizuku is ready', async () => {
+      const performAction = jest.fn();
+      const setBrightness = jest.fn().mockResolvedValue({
+        success: false,
+        canWrite: false,
+        error: 'Permission android.permission.WRITE_SETTINGS not granted',
+      });
+      const getShizukuStatus = jest.fn().mockResolvedValue({
+        installed: true,
+        serverRunning: true,
+        permissionGranted: true,
+      });
+      const runPrivilegedOp = jest.fn().mockResolvedValue('exit=0\n');
+      mockHolder.mod = { setBrightness, getShizukuStatus, runPrivilegedOp, performAction };
+
+      const result = await executeDeviceAction('device_set_brightness', '50');
+
+      expect(setBrightness).toHaveBeenCalledWith(50);
+      expect(runPrivilegedOp).toHaveBeenCalledWith('settings_put', ['system', 'screen_brightness', '128']);
+      expect(performAction).not.toHaveBeenCalled();
+      expect(result.outcome).toBe('executed');
+      expect(result.observation).toContain('Brightness set to 50% via Shizuku');
+    });
+
+    it('reports honest failure when native canWrite is false and Shizuku is not ready', async () => {
+      const setBrightness = jest.fn().mockResolvedValue({
+        success: false,
+        canWrite: false,
+        error: 'Permission android.permission.WRITE_SETTINGS not granted. Grant "Modify system settings".',
+      });
+      const getShizukuStatus = jest.fn().mockResolvedValue({
+        installed: false,
+        serverRunning: false,
+        permissionGranted: false,
+      });
+      mockHolder.mod = { setBrightness, getShizukuStatus };
+
+      const result = await executeDeviceAction('device_set_brightness', '50');
+
+      expect(result.outcome).toBe('failed');
+      expect(result.observation).toContain('WRITE_SETTINGS not granted');
+    });
+
+    it('reports failed when setBrightness resolves with no acknowledgement', async () => {
+      mockHolder.mod = {
+        setBrightness: jest.fn().mockResolvedValue(undefined),
+      };
+
+      const result = await executeDeviceAction('device_set_brightness', '50');
+
+      expect(result.outcome).toBe('failed');
+      expect(result.observation).toContain('returned no acknowledgement');
+    });
+  });
+
+  describe('device_set_volume (#378)', () => {
+    it('dispatches to setVolume and never calls performAction', async () => {
+      const performAction = jest.fn();
+      const setVolume = jest.fn().mockResolvedValue({ success: true, message: 'Volume set to 60%' });
+      mockHolder.mod = { setVolume, performAction };
+
+      const result = await executeDeviceAction('device_set_volume', '60');
+
+      expect(setVolume).toHaveBeenCalledWith(60);
+      expect(performAction).not.toHaveBeenCalled();
+      expect(result.outcome).toBe('executed');
+      expect(result.observation).toBe('Volume set to 60%');
+    });
+
+    it('reports failed pre-dispatch when volume percent is out of range', async () => {
+      const setVolume = jest.fn();
+      mockHolder.mod = { setVolume };
+
+      const result = await executeDeviceAction('device_set_volume', '-5');
+
+      expect(result.outcome).toBe('failed');
+      expect(result.observation).toContain('volume percent must be a number between 0 and 100');
+      expect(setVolume).not.toHaveBeenCalled();
+    });
+
+    it('reports unavailable when the module lacks setVolume', async () => {
+      mockHolder.mod = { performAction: jest.fn() };
+
+      const result = await executeDeviceAction('device_set_volume', '50');
+
+      expect(result.outcome).toBe('unavailable');
+      expect(result.observation).toContain('the module does not provide setVolume()');
+    });
+
+    it('reports indeterminate when setVolume throws after dispatch', async () => {
+      mockHolder.mod = {
+        setVolume: jest.fn().mockRejectedValue(new Error('audio service dead')),
+      };
+
+      const result = await executeDeviceAction('device_set_volume', '50');
+
+      expect(result.outcome).toBe('indeterminate');
+      expect(result.observation).toContain('UNKNOWN');
+      expect(result.observation).toContain('device_set_volume');
+      expect(result.observation).toContain('before repeating');
+    });
+
+    it('reports failed when setVolume returns structured failure', async () => {
+      mockHolder.mod = {
+        setVolume: jest.fn().mockResolvedValue({
+          success: false,
+          error: 'AudioManager unavailable',
+        }),
+      };
+
+      const result = await executeDeviceAction('device_set_volume', '50');
+
+      expect(result.outcome).toBe('failed');
+      expect(result.observation).toContain('AudioManager unavailable');
+    });
+
+    it('reports failed when setVolume resolves with no acknowledgement', async () => {
+      mockHolder.mod = {
+        setVolume: jest.fn().mockResolvedValue(null),
+      };
+
+      const result = await executeDeviceAction('device_set_volume', '50');
+
+      expect(result.outcome).toBe('failed');
+      expect(result.observation).toContain('returned no acknowledgement');
+    });
+  });
+
+  describe('device_open_app (#378)', () => {
+    it('dispatches to openApp and never calls performAction', async () => {
+      const performAction = jest.fn();
+      const openApp = jest.fn().mockResolvedValue({ success: true, message: 'Opened Spotify (com.spotify.music)' });
+      mockHolder.mod = { openApp, performAction };
+
+      const result = await executeDeviceAction('device_open_app', 'Spotify');
+
+      expect(openApp).toHaveBeenCalledWith('Spotify');
+      expect(performAction).not.toHaveBeenCalled();
+      expect(result.outcome).toBe('executed');
+      expect(result.observation).toContain('Opened Spotify');
+    });
+
+    it('reports failed pre-dispatch when query is empty', async () => {
+      const openApp = jest.fn();
+      mockHolder.mod = { openApp };
+
+      const result = await executeDeviceAction('device_open_app', '');
+
+      expect(result.outcome).toBe('failed');
+      expect(result.observation).toContain('package name or app label is required');
+      expect(openApp).not.toHaveBeenCalled();
+    });
+
+    it('reports unavailable when the module lacks openApp', async () => {
+      mockHolder.mod = { performAction: jest.fn() };
+
+      const result = await executeDeviceAction('device_open_app', 'YouTube');
+
+      expect(result.outcome).toBe('unavailable');
+      expect(result.observation).toContain('the module does not provide openApp()');
+    });
+
+    it('reports indeterminate when openApp throws after dispatch', async () => {
+      mockHolder.mod = {
+        openApp: jest.fn().mockRejectedValue(new Error('activity manager crash')),
+      };
+
+      const result = await executeDeviceAction('device_open_app', 'YouTube');
+
+      expect(result.outcome).toBe('indeterminate');
+      expect(result.observation).toContain('UNKNOWN');
+      expect(result.observation).toContain('device_open_app');
+      expect(result.observation).toContain('before repeating');
+    });
+
+    it('reports failed when openApp returns structured failure (no matching app)', async () => {
+      mockHolder.mod = {
+        openApp: jest.fn().mockResolvedValue({
+          success: false,
+          error: 'No launchable app matches "FakeApp"',
+        }),
+      };
+
+      const result = await executeDeviceAction('device_open_app', 'FakeApp');
+
+      expect(result.outcome).toBe('failed');
+      expect(result.observation).toContain('No launchable app matches "FakeApp"');
+    });
+
+    it('reports failed when openApp resolves with no acknowledgement', async () => {
+      mockHolder.mod = {
+        openApp: jest.fn().mockResolvedValue(undefined),
+      };
+
+      const result = await executeDeviceAction('device_open_app', 'YouTube');
+
+      expect(result.outcome).toBe('failed');
+      expect(result.observation).toContain('returned no acknowledgement');
+    });
+  });
+
+  describe('device_tap and device_click fallback integrity (#378)', () => {
+    it('routes device_tap and device_click to performAction click', async () => {
+      const performAction = jest.fn().mockResolvedValue(true);
+      mockHolder.mod = { performAction };
+
+      const resTap = await executeDeviceAction('device_tap', 'button_1');
+      expect(performAction).toHaveBeenCalledWith('click', 'button_1', '', '');
+      expect(resTap.outcome).toBe('executed');
+
+      performAction.mockClear();
+      const resClick = await executeDeviceAction('device_click', 'button_2');
+      expect(performAction).toHaveBeenCalledWith('click', 'button_2', '', '');
+      expect(resClick.outcome).toBe('executed');
+    });
+  });
 });
