@@ -5,6 +5,7 @@ import expo.modules.kotlin.modules.ModuleDefinition
 import android.graphics.Bitmap
 import android.view.accessibility.AccessibilityNodeInfo
 import android.accessibilityservice.AccessibilityService
+import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -34,6 +35,12 @@ class DeviceAgentModule : Module() {
         private const val SHIZUKU_MANAGER_PACKAGE = "moe.shizuku.privileged.api"
         private const val BIND_TIMEOUT_SECONDS = 10L
         private const val PERMISSION_WAIT_SECONDS = 60L
+
+        private val ALLOWED_SETTINGS_ACTIONS = setOf(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Settings.ACTION_ACCESSIBILITY_SETTINGS,
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+        )
 
         fun clearNodeMap() {
             for (node in nodeMap.values) {
@@ -560,6 +567,44 @@ class DeviceAgentModule : Module() {
 
         AsyncFunction("runPrivilegedOp") { op: String, args: List<String> ->
             callShizukuOp(op, args)
+        }
+
+        AsyncFunction("checkSelfPermission") { permissionName: String ->
+            val context = appContext.reactContext
+                ?: return@AsyncFunction mapOf("success" to false, "status" to "undetermined", "error" to "App context unavailable")
+            try {
+                val granted = context.checkSelfPermission(permissionName) == PackageManager.PERMISSION_GRANTED
+                mapOf("success" to true, "status" to if (granted) "granted" else "denied")
+            } catch (e: Exception) {
+                mapOf("success" to false, "status" to "undetermined", "error" to (e.message ?: "Failed to check permission"))
+            }
+        }
+
+        AsyncFunction("openSettingsAction") { action: String, needsPackageUri: Boolean ->
+            val context = appContext.reactContext
+                ?: return@AsyncFunction mapOf("success" to false, "error" to "App context unavailable")
+
+            if (action !in ALLOWED_SETTINGS_ACTIONS) {
+                return@AsyncFunction mapOf(
+                    "success" to false,
+                    "error" to "Settings action '$action' is not allowed"
+                )
+            }
+
+            try {
+                val intent = Intent(action).apply {
+                    if (needsPackageUri) {
+                        data = Uri.parse("package:" + context.packageName)
+                    }
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+                mapOf("success" to true, "message" to "Settings action $action opened")
+            } catch (e: ActivityNotFoundException) {
+                mapOf("success" to false, "error" to (e.message ?: "Activity not found for $action"))
+            } catch (e: Exception) {
+                mapOf("success" to false, "error" to (e.message ?: "Failed to open settings action $action"))
+            }
         }
     }
 

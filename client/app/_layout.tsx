@@ -4,7 +4,7 @@ import { useRouter, useSegments, useRootNavigationState, Slot } from 'expo-route
 import { Drawer } from 'expo-router/drawer';
 import { ActivityIndicator, View, StyleSheet, Pressable, Text, AppState } from 'react-native';
 import { useConfigStore } from '../store/useConfigStore';
-import { checkPermission } from '../utils/permissionManager';
+import { checkPermission, type OSPermission } from '../utils/permissionManager';
 import { useChatStore } from '../store/useChatStore';
 import DrawerContent from '../components/ui/DrawerContent';
 import HealthIndicator from '../components/ui/HealthIndicator';
@@ -203,13 +203,15 @@ export default function RootLayout() {
   useEffect(() => {
     if (!hasHydrated) return;
     const checkPermissionsAndUpdateStore = async () => {
-      const perms: Array<'notifications' | 'camera' | 'microphone' | 'storage' | 'accessibility' | 'background'> = [
+      const perms: OSPermission[] = [
         'notifications',
         'camera',
         'microphone',
         'storage',
         'accessibility',
         'background',
+        'phone',
+        'contacts',
       ];
       for (const perm of perms) {
         try {

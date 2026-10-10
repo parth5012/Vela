@@ -1,5 +1,6 @@
 import { Linking, Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import type { DeviceAgentNative } from '../modules/device-agent';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -10,9 +11,16 @@ export type OSPermission =
   | 'microphone'
   | 'storage'
   | 'accessibility'
-  | 'background';
+  | 'background'
+  | 'phone'
+  | 'contacts';
 
 export type PermissionStatus = 'granted' | 'denied' | 'undetermined';
+
+export type SettingsDeepLinkTarget =
+  | OSPermission
+  | 'overlay'
+  | 'restricted_settings';
 
 // ---------------------------------------------------------------------------
 // Helpers — map expo status string to PermissionStatus
@@ -86,6 +94,34 @@ export async function checkPermission(perm: OSPermission): Promise<PermissionSta
         // Background execution / exact alarms — no direct check on this OS version
         return 'undetermined';
       }
+      case 'phone': {
+        try {
+          const DeviceAgent = require('../modules/device-agent').default;
+          if (DeviceAgent && typeof DeviceAgent.checkSelfPermission === 'function') {
+            const res = await DeviceAgent.checkSelfPermission('android.permission.CALL_PHONE');
+            if (res && (res.status === 'granted' || res.status === 'denied')) {
+              return res.status;
+            }
+          }
+        } catch {
+          // native module not available
+        }
+        return 'undetermined';
+      }
+      case 'contacts': {
+        try {
+          const DeviceAgent = require('../modules/device-agent').default;
+          if (DeviceAgent && typeof DeviceAgent.checkSelfPermission === 'function') {
+            const res = await DeviceAgent.checkSelfPermission('android.permission.READ_CONTACTS');
+            if (res && (res.status === 'granted' || res.status === 'denied')) {
+              return res.status;
+            }
+          }
+        } catch {
+          // native module not available
+        }
+        return 'undetermined';
+      }
       default:
         return 'undetermined';
     }
@@ -135,7 +171,9 @@ export async function requestPermission(perm: OSPermission): Promise<PermissionS
       }
       case 'accessibility':
       case 'storage':
-      case 'background': {
+      case 'background':
+      case 'phone':
+      case 'contacts': {
         // No direct request API — guide user to Settings
         await openSettings(perm);
         return 'undetermined';
@@ -165,6 +203,10 @@ export function getRationale(perm: OSPermission): string {
       return 'Accessibility lets Vela read screen content to automate tasks you approve. You can revoke this anytime in Settings.';
     case 'background':
       return 'Background permission allows Vela to finish tasks after you leave the app. No continuous tracking.';
+    case 'phone':
+      return 'Phone access allows Vela to initiate phone calls directly when you approve. No calls are placed without your confirmation.';
+    case 'contacts':
+      return 'Contacts access allows Vela to search and read device contacts to address messages or calls you approve.';
     default:
       return 'Vela requests this permission only to complete tasks you explicitly approve.';
   }
@@ -217,44 +259,123 @@ export const APP_PERMISSIONS: PermissionMeta[] = [
     icon: '🔄',
     description: 'Complete tasks in background',
   },
+  {
+    perm: 'phone',
+    label: 'Phone Calls',
+    icon: '📞',
+    description: 'Direct phone calling (CALL_PHONE)',
+  },
+  {
+    perm: 'contacts',
+    label: 'Contacts',
+    icon: '👥',
+    description: 'Read and search contacts (READ_CONTACTS)',
+  },
 ];
 
 // ---------------------------------------------------------------------------
-// buildSettingsDeepLink — returns identifier for the settings screen
+// buildSettingsDeepLink — returns action string or URI for Settings
 // ---------------------------------------------------------------------------
-export function buildSettingsDeepLink(perm: OSPermission): string {
-  if (perm === 'accessibility') {
+export function buildSettingsDeepLink(target: SettingsDeepLinkTarget): string {
+  if (target === 'accessibility') {
     return 'android.settings.ACCESSIBILITY_SETTINGS';
   }
-  // Generic app settings fallback
-  return 'app-settings';
+  if (target === 'overlay') {
+    return 'android.settings.action.MANAGE_OVERLAY_PERMISSION';
+  }
+  // Restricted settings (Android 13+ / API 33+ sideload guard), Phone, Contacts,
+  // and general app permissions all navigate to the application details screen.
+  // We return the real Android Intent action string.
+  return 'android.settings.APPLICATION_DETAILS_SETTINGS';
+}
+
+export interface OpenSettingsResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+}
+
+/**
+ * Returns which native DeviceAgentModule method is required for `target`.
+ * Used by the capability guard so missing native methods do not silently
+ * degrade into Linking.openSettings().
+ */
+function requiredNativeMethod(target: SettingsDeepLinkTarget): string | null {
+  if (target === 'overlay' || target === 'accessibility') {
+    return 'openSettingsAction';
+  }
+  return null;
+}
+
+function getDeviceAgentModule(): DeviceAgentNative | null {
+  try {
+    const mod = require('../modules/device-agent');
+    return mod?.default ?? mod ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Capability guard: check if native openSettingsAction is available.
+ */
+export function canOpenSettingsAction(): boolean {
+  if (Platform.OS !== 'android') return false;
+  const deviceAgent = getDeviceAgentModule();
+  return Boolean(deviceAgent && typeof deviceAgent.openSettingsAction === 'function');
 }
 
 // ---------------------------------------------------------------------------
 // openSettings — actually launches Settings UI
 // ---------------------------------------------------------------------------
-export async function openSettings(perm: OSPermission): Promise<void> {
-  if (perm === 'accessibility' && Platform.OS === 'android') {
+export async function openSettings(
+  target: SettingsDeepLinkTarget = 'notifications'
+): Promise<OpenSettingsResult> {
+  const method = requiredNativeMethod(target);
+  if (method) {
+    if (Platform.OS !== 'android') {
+      return {
+        success: false,
+        error: `${target} settings are only supported on Android`,
+      };
+    }
+    const deviceAgent = getDeviceAgentModule();
+    if (!deviceAgent) {
+      return {
+        success: false,
+        error: 'DeviceAgentModule did not load',
+      };
+    }
+    if (typeof (deviceAgent as unknown as Record<string, unknown>)[method] !== 'function') {
+      return {
+        success: false,
+        error: `the module does not provide ${method}()`,
+      };
+    }
+    const action = buildSettingsDeepLink(target);
+    const needsPackageUri = target === 'overlay';
     try {
-      const IntentLauncher = require('expo-intent-launcher');
-      const launcher = IntentLauncher.default ?? IntentLauncher;
-      if (launcher?.startActivityAsync) {
-        await launcher.startActivityAsync('android.settings.ACCESSIBILITY_SETTINGS');
-        return;
-      }
-    } catch {
-      // expo-intent-launcher not installed — fall through
+      const res = await (deviceAgent as {
+        openSettingsAction?: (act: string, needsPkg: boolean) => Promise<OpenSettingsResult>;
+      }).openSettingsAction!(action, needsPackageUri);
+      return res ?? { success: true };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { success: false, error: message };
     }
   }
-  // Fallback: open generic app settings
+
+  // App details settings path (restricted_settings, phone, contacts, notifications, general)
   try {
     await Linking.openSettings();
-  } catch {
-    // Some platforms may not support openSettings
+    return { success: true };
+  } catch (err: unknown) {
     try {
       await Linking.openURL('app-settings:');
+      return { success: true };
     } catch {
-      // ignore
+      const message = err instanceof Error ? err.message : String(err);
+      return { success: false, error: message };
     }
   }
 }
@@ -277,6 +398,8 @@ export async function checkAllPermissions(): Promise<Record<OSPermission, Permis
     'storage',
     'accessibility',
     'background',
+    'phone',
+    'contacts',
   ];
   const result = {} as Record<OSPermission, PermissionStatus>;
   for (const p of perms) {
