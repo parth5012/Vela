@@ -450,7 +450,7 @@ describe('localAgentLoop real engine envelope (function_calls)', () => {
       const events: any[] = [];
       const result = await runLocalAgentLoop('Start task', {
         unchangedThreshold: 2,
-        maxSteps: 6,
+        maxSteps: 8,
         onEvent: (ev) => events.push(ev),
       });
 

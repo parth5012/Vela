@@ -611,7 +611,7 @@ describe('localAgentLoop', () => {
       const events: any[] = [];
       const result = await runLocalAgentLoop('Start task', {
         unchangedThreshold: 2,
-        maxSteps: 6,
+        maxSteps: 8,
         onEvent: (e) => events.push(e),
       });
 
@@ -846,6 +846,37 @@ describe('localAgentLoop', () => {
       expect(recoveryEvents).toHaveLength(0);
       expect(result.completed).toBe(true);
       expect(result.finalResponse).toBe('Opened settings successfully.');
+    });
+
+    it('Finding repro: provides observation window after unchanged hierarchy back before escalating to home_reset', async () => {
+      // Arrange
+      async function* continuousRead() {
+        yield '{"name": "device_screen_read", "arguments": {}}';
+      }
+
+      (localLlm.streamLocalLlmResponse as jest.Mock).mockImplementation(() => continuousRead());
+      (safetyManager.evaluateSafety as jest.Mock).mockResolvedValue({ status: 'success', result: 'allowed' });
+      (deviceActionExecutor.executeDeviceAction as jest.Mock).mockResolvedValue({
+        outcome: 'executed',
+        observation: 'Screen tree: Static frozen screen',
+      });
+
+      // Act
+      const result = await runLocalAgentLoop('Start task', {
+        unchangedThreshold: 2,
+        maxSteps: 8,
+      });
+
+      // Assert
+      // Step 4 triggered back recovery for unchanged hierarchy
+      expect(result.steps[3].recoveryAction).toBe('back');
+      // Step 5 (immediately following back) must execute model action to observe screen, NOT home_reset
+      expect(result.steps[4].recoveryAction).toBeUndefined();
+      expect(result.steps[4].toolCall?.toolName).toBe('device_screen_read');
+      // Step 6 executes model action for second unchanged observation
+      expect(result.steps[5].recoveryAction).toBeUndefined();
+      // Step 7 escalates to home_reset only after full observation window proves screen is still unchanged
+      expect(result.steps[6].recoveryAction).toBe('home_reset');
     });
   });
 });
