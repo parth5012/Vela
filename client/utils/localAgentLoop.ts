@@ -725,6 +725,7 @@ export async function runLocalAgentLoop(
       const isUnchangedRecovery = consecutiveUnchangedCount >= unchangedThreshold;
       if (isUnchangedRecovery) {
         lastRecoveryAction = 'back';
+        consecutiveUnchangedCount = 0;
       }
       const recoveryToolCall: ParsedToolCall = {
         toolName: 'device_press_key',
