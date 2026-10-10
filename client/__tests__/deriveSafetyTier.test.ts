@@ -45,7 +45,10 @@ if (!typeAliasMatch) {
 
 /** Default tiers parsed live from the real store initializer. */
 function parseDefaultTiers(storeSource: string): Record<string, PolicyTier> {
-  const block = extractBlock(storeSource, 'deviceAgentPermissions: {');
+  const marker = storeSource.includes('DEFAULT_DEVICE_AGENT_PERMISSIONS: DeviceAgentPermissions = {')
+    ? 'DEFAULT_DEVICE_AGENT_PERMISSIONS: DeviceAgentPermissions = {'
+    : 'deviceAgentPermissions: {';
+  const block = extractBlock(storeSource, marker);
   const tiers: Record<string, PolicyTier> = {};
   const pattern = /([a-z_]+):\s*'(auto|confirm|deny)'/g;
   let match: RegExpExecArray | null;
@@ -82,6 +85,7 @@ const FALLBACK_TIERS: Record<string, PolicyTier> = {
   sideloads: 'deny',
   permission_toggles: 'deny',
   root_shizuku: 'deny',
+  contacts: 'auto',
 };
 
 interface ExtractedModule {

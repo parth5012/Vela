@@ -43,17 +43,22 @@ function requiredNativeMethod(toolName: string): string {
   if (toolName === 'device_screen_read') return 'getScreenTree';
   if (toolName === 'device_info') return 'getDeviceInfo';
   if (toolName === 'device_screenshot') return 'takeScreenshot';
+  if (toolName === 'device_call') return 'makeCall';
+  if (toolName === 'device_sms') return 'sendSms';
+  if (toolName === 'device_contact') return 'searchContacts';
   if (isShizukuTool(toolName)) return 'runPrivilegedOp';
   return 'performAction';
 }
 
 /**
  * True for tools that change device state (everything routed through
- * `performAction` or the privileged Shizuku service). Derived from the
- * dispatch path rather than a hand-kept list, so a new mutating tool is
+ * `performAction` or the privileged Shizuku service, plus call and SMS). Derived
+ * from the dispatch path rather than a hand-kept list, so a new mutating tool is
  * classified correctly by default.
  */
 function isMutating(toolName: string): boolean {
+  if (toolName === 'device_call' || toolName === 'device_sms') return true;
+  if (toolName === 'device_contact') return false;
   const method = requiredNativeMethod(toolName);
   return method === 'performAction' || method === 'runPrivilegedOp';
 }
@@ -124,6 +129,86 @@ export async function executeDeviceAction(
           };
         }
         return { outcome: 'executed', observation: uri };
+      }
+      case 'device_call': {
+        const phoneNumber = target || value || '';
+        if (!phoneNumber) {
+          return {
+            outcome: 'failed',
+            observation: 'Action failed: phone number is required for device_call.',
+          };
+        }
+        const res = await DeviceAgentNative.makeCall(phoneNumber);
+        if (!res || typeof res !== 'object' || typeof res.success !== 'boolean') {
+          return {
+            outcome: 'failed',
+            observation: `Action failed: device agent returned no acknowledgement for device_call. Call to ${phoneNumber} was not confirmed.`,
+          };
+        }
+        if (res.success === false) {
+          return {
+            outcome: 'failed',
+            observation: `Action failed: ${res.error || 'Failed to initiate call.'}`,
+          };
+        }
+        return {
+          outcome: 'executed',
+          observation: res.message || `Call initiated to ${phoneNumber}`,
+        };
+      }
+      case 'device_sms': {
+        const phoneNumber = target || '';
+        const message = value || '';
+        if (!phoneNumber) {
+          return {
+            outcome: 'failed',
+            observation: 'Action failed: recipient phone number is required for device_sms.',
+          };
+        }
+        const res = await DeviceAgentNative.sendSms(phoneNumber, message);
+        if (!res || typeof res !== 'object' || typeof res.success !== 'boolean') {
+          return {
+            outcome: 'failed',
+            observation: `Action failed: device agent returned no acknowledgement for device_sms. SMS composer for ${phoneNumber} was not confirmed.`,
+          };
+        }
+        if (res.success === false) {
+          return {
+            outcome: 'failed',
+            observation: `Action failed: ${res.error || 'Failed to send SMS.'}`,
+          };
+        }
+        return {
+          outcome: 'executed',
+          observation: res.message || `SMS composer opened for ${phoneNumber}`,
+        };
+      }
+      case 'device_contact': {
+        const query = target || value || '';
+        const res = await DeviceAgentNative.searchContacts(query);
+        if (Array.isArray(res)) {
+          return {
+            outcome: 'executed',
+            observation: res.length > 0 ? JSON.stringify(res) : `No contacts found matching "${query}".`,
+          };
+        }
+        if (!res || typeof res !== 'object' || typeof res.success !== 'boolean') {
+          return {
+            outcome: 'failed',
+            observation: `Action failed: device agent returned no acknowledgement for device_contact.`,
+          };
+        }
+        if (res.success === false) {
+          return {
+            outcome: 'failed',
+            observation: `Action failed: ${res.error || 'Failed to search contacts.'}`,
+          };
+        }
+        const contacts = res.contacts || [];
+        return {
+          outcome: 'executed',
+          observation: contacts.length > 0 ? JSON.stringify(contacts) : `No contacts found matching "${query}".`,
+        };
       }
       default: {
         let action = 'click';

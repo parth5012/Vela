@@ -74,6 +74,9 @@ export function classifyAction(
   if (toolName === 'device_set_volume') return 'set_volume';
   if (toolName === 'device_type') return 'type';
   if (toolName === 'device_tap') return 'tap';
+  if (toolName === 'device_call') return 'calls';
+  if (toolName === 'device_sms') return 'send_communication';
+  if (toolName === 'device_contact') return 'contacts';
 
   // 4. Shizuku allowlisted privileged tools (utils/shizuku.ts) — each lands in
   // an explicit tier; none may inherit the default 'tap' bucket.
@@ -113,6 +116,7 @@ export function getCategoryLabel(category: keyof DeviceAgentPermissions): string
     case 'sideloads': return 'Sideload Applications';
     case 'permission_toggles': return 'Toggle Permission Settings';
     case 'root_shizuku': return 'Root & Shizuku Operations';
+    case 'contacts': return 'Search Contacts';
     default: return String(category);
   }
 }

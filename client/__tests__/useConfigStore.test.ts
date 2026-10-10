@@ -330,7 +330,21 @@ describe('useConfigStore', () => {
     const perms = useConfigStore.getState().deviceAgentPermissions;
     expect(perms.tap).toBe('deny');
     expect(perms.type).toBe('confirm'); // untouched
-    expect(Object.keys(perms).length).toBe(20); // no categories lost
+    expect(perms.contacts).toBe('auto'); // contacts initialized with auto
+    expect(Object.keys(perms).length).toBe(21); // no categories lost (21 categories including contacts)
+  });
+
+  it('should reset deviceAgentPermissions to defaults on clearConfig', () => {
+    useConfigStore.getState().setDeviceAgentPermission('contacts', 'deny');
+    useConfigStore.getState().setDeviceAgentPermission('tap', 'auto');
+    expect(useConfigStore.getState().deviceAgentPermissions.contacts).toBe('deny');
+    expect(useConfigStore.getState().deviceAgentPermissions.tap).toBe('auto');
+
+    useConfigStore.getState().clearConfig();
+    const perms = useConfigStore.getState().deviceAgentPermissions;
+    expect(perms.contacts).toBe('auto');
+    expect(perms.tap).toBe('confirm');
+    expect(Object.keys(perms).length).toBe(21);
   });
 
   it('should have default suggestion starters', () => {

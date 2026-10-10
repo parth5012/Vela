@@ -6,9 +6,12 @@ import android.graphics.Bitmap
 import android.view.accessibility.AccessibilityNodeInfo
 import android.accessibilityservice.AccessibilityService
 import android.content.ComponentName
+import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.IBinder
+import android.provider.ContactsContract
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.CountDownLatch
@@ -197,6 +200,111 @@ class DeviceAgentModule : Module() {
                 )
             } else {
                 promise.reject("UNSUPPORTED_VERSION", "Screenshot requires Android R (API 30) or above", null)
+            }
+        }
+
+        AsyncFunction("makeCall") { phoneNumber: String ->
+            val context = appContext.reactContext
+                ?: return@AsyncFunction mapOf("success" to false, "error" to "App context unavailable")
+
+            if (context.checkSelfPermission(android.Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
+                return@AsyncFunction mapOf(
+                    "success" to false,
+                    "error" to "Permission android.permission.CALL_PHONE not granted. Grant Phone permission in Android App Settings to place calls directly."
+                )
+            }
+
+            try {
+                val uri = Uri.parse("tel:${Uri.encode(phoneNumber)}")
+                val intent = Intent(Intent.ACTION_CALL, uri).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(intent)
+                mapOf("success" to true, "message" to "Call initiated to $phoneNumber")
+            } catch (e: Exception) {
+                mapOf("success" to false, "error" to (e.message ?: "Failed to initiate call"))
+            }
+        }
+
+        AsyncFunction("sendSms") { phoneNumber: String, message: String ->
+            val context = appContext.reactContext
+                ?: return@AsyncFunction mapOf("success" to false, "error" to "App context unavailable")
+
+            try {
+                val uri = Uri.parse("smsto:${Uri.encode(phoneNumber)}")
+                val intent = Intent(Intent.ACTION_SENDTO, uri).apply {
+                    putExtra("sms_body", message)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(intent)
+                mapOf("success" to true, "message" to "SMS composer opened for $phoneNumber")
+            } catch (e: Exception) {
+                mapOf("success" to false, "error" to (e.message ?: "Failed to open SMS composer"))
+            }
+        }
+
+        AsyncFunction("searchContacts") { query: String ->
+            val context = appContext.reactContext
+                ?: return@AsyncFunction mapOf(
+                    "success" to false,
+                    "error" to "App context unavailable",
+                    "contacts" to emptyList<Map<String, String>>()
+                )
+
+            if (context.checkSelfPermission(android.Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+                return@AsyncFunction mapOf(
+                    "success" to false,
+                    "error" to "Permission android.permission.READ_CONTACTS not granted. Grant Contacts permission in Android App Settings to search contacts.",
+                    "contacts" to emptyList<Map<String, String>>()
+                )
+            }
+
+            val contacts = mutableListOf<Map<String, String>>()
+            val resolver = context.contentResolver
+            val uri = ContactsContract.Contacts.CONTENT_URI
+            val projection = arrayOf(
+                ContactsContract.Contacts._ID,
+                ContactsContract.Contacts.LOOKUP_KEY,
+                ContactsContract.Contacts.DISPLAY_NAME_PRIMARY
+            )
+            val selection = if (query.isNotBlank()) {
+                "${ContactsContract.Contacts.DISPLAY_NAME_PRIMARY} LIKE ?"
+            } else {
+                null
+            }
+            val selectionArgs = if (query.isNotBlank()) {
+                arrayOf("%$query%")
+            } else {
+                null
+            }
+            val sortOrder = "${ContactsContract.Contacts.DISPLAY_NAME_PRIMARY} ASC"
+
+            try {
+                resolver.query(uri, projection, selection, selectionArgs, sortOrder)?.use { cursor ->
+                    val idIndex = cursor.getColumnIndex(ContactsContract.Contacts._ID)
+                    val lookupIndex = cursor.getColumnIndex(ContactsContract.Contacts.LOOKUP_KEY)
+                    val nameIndex = cursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME_PRIMARY)
+
+                    while (cursor.moveToNext() && contacts.size < 10) {
+                        val id = if (idIndex != -1) cursor.getString(idIndex) ?: "" else ""
+                        val lookupKey = if (lookupIndex != -1) cursor.getString(lookupIndex) ?: "" else ""
+                        val name = if (nameIndex != -1) cursor.getString(nameIndex) ?: "" else ""
+                        contacts.add(
+                            mapOf(
+                                "contactId" to id,
+                                "lookupKey" to lookupKey,
+                                "name" to name
+                            )
+                        )
+                    }
+                }
+                mapOf("success" to true, "contacts" to contacts)
+            } catch (e: Exception) {
+                mapOf(
+                    "success" to false,
+                    "error" to (e.message ?: "Failed to query contacts"),
+                    "contacts" to emptyList<Map<String, String>>()
+                )
             }
         }
 

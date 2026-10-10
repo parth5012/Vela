@@ -5,6 +5,9 @@ interface DeviceAgentNative {
   performAction(action: string, target: string, value: string, ref: string): Promise<boolean>;
   getDeviceInfo(): Promise<Record<string, any>>;
   takeScreenshot(): Promise<string>;
+  makeCall(phoneNumber: string): Promise<{ success: boolean; message?: string; error?: string }>;
+  sendSms(phoneNumber: string, message: string): Promise<{ success: boolean; message?: string; error?: string }>;
+  searchContacts(query: string): Promise<{ success: boolean; contacts?: Array<{ contactId: string; lookupKey: string; name: string }>; error?: string } | Array<{ contactId: string; lookupKey: string; name: string }>>;
   /** Reads Shizuku availability: manager installed, server running, permission granted. */
   getShizukuStatus(): Promise<ShizukuStatus>;
   /**

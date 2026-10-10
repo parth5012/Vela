@@ -116,4 +116,239 @@ describe('executeDeviceAction outcomes (#308)', () => {
     expect(result.outcome).toBe('simulated');
     expect(result.observation).toContain('[Mock mode]');
   });
+
+  describe('device_call (#377)', () => {
+    it('dispatches to makeCall and never calls performAction', async () => {
+      const performAction = jest.fn();
+      const makeCall = jest.fn().mockResolvedValue({ success: true, message: 'Call placed' });
+      mockHolder.mod = { makeCall, performAction };
+
+      const result = await executeDeviceAction('device_call', '+1234567890');
+
+      expect(makeCall).toHaveBeenCalledWith('+1234567890');
+      expect(performAction).not.toHaveBeenCalled();
+      expect(result.outcome).toBe('executed');
+      expect(result.observation).toBe('Call placed');
+    });
+
+    it('reports failed pre-dispatch when phone number is missing', async () => {
+      const makeCall = jest.fn();
+      mockHolder.mod = { makeCall };
+
+      const result = await executeDeviceAction('device_call', '');
+
+      expect(result.outcome).toBe('failed');
+      expect(result.observation).toContain('phone number is required');
+      expect(makeCall).not.toHaveBeenCalled();
+    });
+
+    it('reports unavailable when the module lacks makeCall', async () => {
+      mockHolder.mod = { performAction: jest.fn() };
+
+      const result = await executeDeviceAction('device_call', '+1234567890');
+
+      expect(result.outcome).toBe('unavailable');
+      expect(result.observation).toContain('the module does not provide makeCall()');
+    });
+
+    it('reports indeterminate when makeCall throws after dispatch', async () => {
+      mockHolder.mod = {
+        makeCall: jest.fn().mockRejectedValue(new Error('telephony service crash')),
+      };
+
+      const result = await executeDeviceAction('device_call', '+1234567890');
+
+      expect(result.outcome).toBe('indeterminate');
+      expect(result.observation).toContain('UNKNOWN');
+      expect(result.observation).toContain('device_call');
+      expect(result.observation).toContain('before repeating');
+    });
+
+    it('reports failed when makeCall returns structured failure (e.g. permission absent)', async () => {
+      mockHolder.mod = {
+        makeCall: jest.fn().mockResolvedValue({
+          success: false,
+          error: 'Permission android.permission.CALL_PHONE not granted',
+        }),
+      };
+
+      const result = await executeDeviceAction('device_call', '+1234567890');
+
+      expect(result.outcome).toBe('failed');
+      expect(result.observation).toContain('CALL_PHONE not granted');
+    });
+
+    it('reports failed when makeCall resolves with no acknowledgement (undefined/null/non-object/missing success)', async () => {
+      mockHolder.mod = {
+        makeCall: jest.fn().mockResolvedValue(undefined),
+      };
+
+      const result = await executeDeviceAction('device_call', '+1234567890');
+
+      expect(result.outcome).toBe('failed');
+      expect(result.observation).toContain('returned no acknowledgement');
+      expect(result.observation.toLowerCase()).not.toContain('before repeating');
+    });
+  });
+
+  describe('device_sms (#377)', () => {
+    it('dispatches to sendSms and never calls performAction', async () => {
+      const performAction = jest.fn();
+      const sendSms = jest.fn().mockResolvedValue({ success: true, message: 'SMS composer opened' });
+      mockHolder.mod = { sendSms, performAction };
+
+      const result = await executeDeviceAction('device_sms', '+1234567890', 'Hello there');
+
+      expect(sendSms).toHaveBeenCalledWith('+1234567890', 'Hello there');
+      expect(performAction).not.toHaveBeenCalled();
+      expect(result.outcome).toBe('executed');
+      expect(result.observation).toBe('SMS composer opened');
+    });
+
+    it('reports failed pre-dispatch when recipient is missing', async () => {
+      const sendSms = jest.fn();
+      mockHolder.mod = { sendSms };
+
+      const result = await executeDeviceAction('device_sms', '', 'Hello');
+
+      expect(result.outcome).toBe('failed');
+      expect(result.observation).toContain('recipient phone number is required');
+      expect(sendSms).not.toHaveBeenCalled();
+    });
+
+    it('reports unavailable when the module lacks sendSms', async () => {
+      mockHolder.mod = { performAction: jest.fn() };
+
+      const result = await executeDeviceAction('device_sms', '+1234567890', 'Hello');
+
+      expect(result.outcome).toBe('unavailable');
+      expect(result.observation).toContain('the module does not provide sendSms()');
+    });
+
+    it('reports indeterminate when sendSms throws after dispatch', async () => {
+      mockHolder.mod = {
+        sendSms: jest.fn().mockRejectedValue(new Error('activity not found')),
+      };
+
+      const result = await executeDeviceAction('device_sms', '+1234567890', 'Hello');
+
+      expect(result.outcome).toBe('indeterminate');
+      expect(result.observation).toContain('UNKNOWN');
+      expect(result.observation).toContain('device_sms');
+      expect(result.observation).toContain('before repeating');
+    });
+
+    it('reports failed when sendSms returns structured failure', async () => {
+      mockHolder.mod = {
+        sendSms: jest.fn().mockResolvedValue({
+          success: false,
+          error: 'No SMS application available on device',
+        }),
+      };
+
+      const result = await executeDeviceAction('device_sms', '+1234567890', 'Hello');
+
+      expect(result.outcome).toBe('failed');
+      expect(result.observation).toContain('No SMS application available');
+    });
+
+    it('reports failed when sendSms resolves with no acknowledgement (undefined/null/non-object/missing success)', async () => {
+      mockHolder.mod = {
+        sendSms: jest.fn().mockResolvedValue(null),
+      };
+
+      const result = await executeDeviceAction('device_sms', '+1234567890', 'Hello');
+
+      expect(result.outcome).toBe('failed');
+      expect(result.observation).toContain('returned no acknowledgement');
+      expect(result.observation.toLowerCase()).not.toContain('before repeating');
+    });
+  });
+
+  describe('device_contact (#377)', () => {
+    it('dispatches to searchContacts and never calls performAction', async () => {
+      const performAction = jest.fn();
+      const searchContacts = jest.fn().mockResolvedValue({
+        success: true,
+        contacts: [{ name: 'Alice', contactId: '1', lookupKey: 'key1' }],
+      });
+      mockHolder.mod = { searchContacts, performAction };
+
+      const result = await executeDeviceAction('device_contact', 'Alice');
+
+      expect(searchContacts).toHaveBeenCalledWith('Alice');
+      expect(performAction).not.toHaveBeenCalled();
+      expect(result.outcome).toBe('executed');
+      expect(result.observation).toContain('Alice');
+    });
+
+    it('reports executed with honest observation on empty contact results', async () => {
+      mockHolder.mod = {
+        searchContacts: jest.fn().mockResolvedValue({ success: true, contacts: [] }),
+      };
+
+      const result = await executeDeviceAction('device_contact', 'Nobody');
+
+      expect(result.outcome).toBe('executed');
+      expect(result.observation).toContain('No contacts found matching "Nobody"');
+    });
+
+    it('reports executed with honest observation when searchContacts returns empty array directly', async () => {
+      mockHolder.mod = {
+        searchContacts: jest.fn().mockResolvedValue([]),
+      };
+
+      const result = await executeDeviceAction('device_contact', 'Ghost');
+
+      expect(result.outcome).toBe('executed');
+      expect(result.observation).toContain('No contacts found matching "Ghost"');
+    });
+
+    it('reports unavailable when the module lacks searchContacts', async () => {
+      mockHolder.mod = { performAction: jest.fn() };
+
+      const result = await executeDeviceAction('device_contact', 'Alice');
+
+      expect(result.outcome).toBe('unavailable');
+      expect(result.observation).toContain('the module does not provide searchContacts()');
+    });
+
+    it('reports failed (NOT indeterminate) when searchContacts throws because it is read-only', async () => {
+      mockHolder.mod = {
+        searchContacts: jest.fn().mockRejectedValue(new Error('ContentResolver crash')),
+      };
+
+      const result = await executeDeviceAction('device_contact', 'Alice');
+
+      expect(result.outcome).toBe('failed');
+      expect(result.observation).toContain('Action failed');
+      expect(result.observation).not.toContain('UNKNOWN');
+      expect(result.observation).not.toContain('before repeating');
+    });
+
+    it('reports failed when searchContacts returns structured failure (e.g. permission missing)', async () => {
+      mockHolder.mod = {
+        searchContacts: jest.fn().mockResolvedValue({
+          success: false,
+          error: 'Permission android.permission.READ_CONTACTS not granted',
+        }),
+      };
+
+      const result = await executeDeviceAction('device_contact', 'Alice');
+
+      expect(result.outcome).toBe('failed');
+      expect(result.observation).toContain('READ_CONTACTS not granted');
+    });
+
+    it('reports failed when searchContacts resolves with no acknowledgement (undefined/non-object/missing success)', async () => {
+      mockHolder.mod = {
+        searchContacts: jest.fn().mockResolvedValue(undefined),
+      };
+
+      const result = await executeDeviceAction('device_contact', 'Alice');
+
+      expect(result.outcome).toBe('failed');
+      expect(result.observation).toContain('returned no acknowledgement');
+    });
+  });
 });
