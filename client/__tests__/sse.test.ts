@@ -429,4 +429,56 @@ describe('streamAgentResponse', () => {
     expect(chunks.join('')).toBe('Recovered!');
     expect(completed).toBe(true);
   });
+
+  it('does NOT retry if chunks have already been emitted (avoids replay)', async () => {
+    let callCount = 0;
+    const chunks: string[] = [];
+    let error: Error | undefined;
+
+    (globalThis as any).fetch = jest.fn().mockImplementation(() => {
+      callCount++;
+      const mockStream = {
+        getReader() {
+          let count = 0;
+          return {
+            async read() {
+              if (count === 0) {
+                count++;
+                return {
+                  value: new TextEncoder().encode('data: {"type": "content", "delta": "Partial output"}\n\n'),
+                  done: false,
+                };
+              }
+              throw new Error('Network request failed');
+            },
+          };
+        },
+      };
+      return Promise.resolve({ ok: true, body: mockStream });
+    });
+
+    await streamAgentResponse(
+      'http://localhost',
+      'key',
+      'thread-1',
+      'hi',
+      (chunk) => chunks.push(chunk),
+      () => {},
+      (err) => {
+        error = err;
+      },
+      undefined,
+      undefined,
+      undefined,
+      90000,
+      {
+        delays: [10, 20, 30, 40],
+        sleepFn: jest.fn().mockResolvedValue(undefined),
+      }
+    );
+
+    expect(callCount).toBe(1); // exactly 1 attempt, no retry
+    expect(chunks).toEqual(['Partial output']); // chunk emitted exactly once
+    expect(error?.message).toContain('Network request failed');
+  });
 });

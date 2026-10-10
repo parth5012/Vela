@@ -54,8 +54,8 @@ export function isTransientError(error: unknown): boolean {
     }
   }
 
-  // Network errors, aborted stream timeouts, or connection failures are retryable
-  return true;
+  if (err?.name === 'TimeoutError' || err?.name === 'AbortError') return true;
+  return /network|failed to fetch|timed out|idle for|ECONNRESET|socket/i.test(message);
 }
 
 export function defaultSleep(ms: number): Promise<void> {
