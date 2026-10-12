@@ -16,6 +16,7 @@
     "ai": "^7.0.124",
     "device-agent": "file:./modules/device-agent",
     "drizzle-orm": "^0.45.2",
+    "effect": "^4.0.3",
     "expo": "~57.0.2",
     "expo-auth-session": "^57.0.5",
     "expo-background-task": "^57.0.9",
@@ -102,7 +103,7 @@
       "<rootDir>/__tests__/helpers/"
     ],
     "transformIgnorePatterns": [
-      "node_modules/(?!(\\.pnpm/.*node_modules/)?((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|ai|@ai-sdk/.*|@openrouter/.*|@workflow/.*))"
+      "node_modules/(?!(\\.pnpm/.*node_modules/)?((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|ai|@ai-sdk/.*|@openrouter/.*|@workflow/.*|effect))"
     ]
   },
   "private": true,
