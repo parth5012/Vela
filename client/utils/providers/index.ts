@@ -19,6 +19,8 @@ export interface StreamCloudOptions {
   temperature?: number;
   maxTokens?: number;
   messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
+  tools?: Record<string, any>;
+  maxSteps?: number;
   onToken: (token: string) => void;
   onDone: () => void;
   onError: (error: Error) => void;
@@ -126,14 +128,21 @@ export async function streamCloudResponse(options: StreamCloudOptions): Promise<
   try {
     const languageModel = getLanguageModel(provider, apiKey, model, baseUrl);
 
-    const result = streamText({
+    const streamOptions: any = {
       model: languageModel,
       system: systemPrompt,
       messages: messages as any,
       temperature: typeof temperature === 'number' ? temperature : 0.7,
       maxOutputTokens: typeof maxTokens === 'number' ? maxTokens : undefined,
       abortSignal: signal,
-    });
+    };
+
+    if (options.tools && Object.keys(options.tools).length > 0) {
+      streamOptions.tools = options.tools;
+      streamOptions.maxSteps = typeof options.maxSteps === 'number' ? options.maxSteps : 5;
+    }
+
+    const result = streamText(streamOptions);
 
     for await (const chunk of result.textStream) {
       if (signal?.aborted) {
