@@ -63,12 +63,12 @@ describe('toolRegistry', () => {
   it('hides not-yet-wired tools from standalone discovery but keeps them for server', () => {
     const local = filterAvailable('local').map((tool) => tool.name)
 
-    expect(local).not.toContain('save_user_memory')
-    expect(local).not.toContain('delete_user_memory')
+    expect(local).toContain('save_user_memory')
+    expect(local).toContain('delete_user_memory')
     expect(local).not.toContain('webview_browser')
     expect(local).toContain('web_search')
     expect(local).toContain('device_screen_read')
-    expect(filterAvailable('server').map((tool) => tool.name)).toContain('save_user_memory')
+    expect(filterAvailable('server').map((tool) => tool.name)).toContain('webview_browser')
   })
 
   it('drops Shizuku tools only when Shizuku is known absent', () => {

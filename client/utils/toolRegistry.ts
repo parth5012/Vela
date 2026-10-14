@@ -63,7 +63,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     requiresServer: false,
     availableInLocal: true,
     availableInCloud: true,
-    standaloneReady: false,
+    standaloneReady: true,
     parameters: {
       conversation_id: { type: 'string', description: 'Active conversation id.', required: true },
       fact: { type: 'string', description: 'Single independent fact.', required: true },
@@ -75,7 +75,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     requiresServer: false,
     availableInLocal: true,
     availableInCloud: true,
-    standaloneReady: false,
+    standaloneReady: true,
     parameters: {
       conversation_id: { type: 'string', description: 'Active conversation id.', required: true },
       fact: { type: 'string', description: 'Fact to forget.', required: true },

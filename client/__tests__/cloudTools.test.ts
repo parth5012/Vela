@@ -5,8 +5,10 @@ describe('cloudTools', () => {
     const names = listCloudToolNames()
 
     expect(names).toContain('device_screen_read')
+    expect(names).toContain('save_user_memory')
+    expect(names).toContain('delete_user_memory')
     expect(names).not.toContain('gmail_send_email')
-    expect(names).not.toContain('save_user_memory')
+    expect(names).not.toContain('webview_browser')
   })
 
   it('builds description map for Vercel tool wiring', () => {
@@ -68,5 +70,28 @@ describe('cloudTools', () => {
       toolName: 'device_tap',
       result: { success: true, output: 'Tapped' },
     })
+  })
+
+  it('executes save_user_memory and delete_user_memory via injected memory store', async () => {
+    const saveMemory = jest.fn(async (_convId: string, fact: string) => `Saved: ${fact}`)
+    const deleteMemory = jest.fn(async (_convId: string, fact: string) => `Deleted: ${fact}`)
+
+    const saveResult = await executeCloudTool(
+      'save_user_memory',
+      { conversation_id: 'conv-1', fact: 'User likes dark mode' },
+      { memoryStore: { saveMemory, deleteMemory } }
+    )
+    expect(saveResult.success).toBe(true)
+    expect(saveResult.output).toBe('Saved: User likes dark mode')
+    expect(saveMemory).toHaveBeenCalledWith('conv-1', 'User likes dark mode')
+
+    const delResult = await executeCloudTool(
+      'delete_user_memory',
+      { conversation_id: 'conv-1', fact: 'User likes dark mode' },
+      { memoryStore: { saveMemory, deleteMemory } }
+    )
+    expect(delResult.success).toBe(true)
+    expect(delResult.output).toBe('Deleted: User likes dark mode')
+    expect(deleteMemory).toHaveBeenCalledWith('conv-1', 'User likes dark mode')
   })
 })
