@@ -77,6 +77,8 @@ export interface LocalAgentLoopOptions {
   initialScreenContent?: string;
   onEvent?: (event: AgentTurnEvent) => void;
   onToken?: (token: string) => void;
+  tavilyKey?: string;
+  searchFn?: (query: string) => Promise<string>;
 }
 
 export interface LocalAgentLoopResult {
@@ -87,12 +89,18 @@ export interface LocalAgentLoopResult {
   stoppedBySafety?: boolean;
 }
 
-import { filterAvailable } from './toolRegistry';
+import { filterAvailable, isAvailable } from './toolRegistry';
+import { searchStandalone } from './standaloneSearch';
+import { buildUnavailableHint } from './standalonePrompt';
 
 export const ALLOWED_DEVICE_TOOLS = new Set(
   filterAvailable('local')
     .filter((tool) => tool.name.startsWith('device_'))
     .map((tool) => tool.name)
+);
+
+export const ALLOWED_LOCAL_TOOLS = new Set(
+  filterAvailable('local').map((tool) => tool.name)
 );
 
 /**
@@ -1001,8 +1009,10 @@ export async function runLocalAgentLoop(
       continue;
     }
 
-    if (!ALLOWED_DEVICE_TOOLS.has(toolCall.toolName)) {
-      const observation = `Error: Unknown device tool "${toolCall.toolName}".`;
+    if (!ALLOWED_LOCAL_TOOLS.has(toolCall.toolName)) {
+      const observation = isAvailable(toolCall.toolName, 'server')
+        ? buildUnavailableHint(toolCall.toolName)
+        : `Error: Unknown tool "${toolCall.toolName}".`;
       steps.push({
         step,
         prompt: currentPrompt,
@@ -1019,6 +1029,51 @@ export async function runLocalAgentLoop(
         step,
         error: observation,
       });
+      currentPrompt += `\n${stepResponse}\nObservation: ${observation}\n`;
+      if (maxStepsEnabled && step >= maxSteps) {
+        finalResponse = stepResponse;
+        completed = false;
+        break;
+      }
+      step++;
+      continue;
+    }
+
+    if (toolCall.toolName === 'web_search') {
+      const query = toolCall.arguments?.query || toolCall.target || toolCall.value || '';
+      options.onEvent?.({
+        type: 'tool_executing',
+        toolName: 'web_search',
+        target: query,
+        step,
+      });
+      let observation: string;
+      try {
+        if (options.searchFn) {
+          observation = await options.searchFn(query);
+        } else {
+          observation = await searchStandalone(query, { tavilyKey: options.tavilyKey });
+        }
+      } catch (err: any) {
+        observation = `Search failed: ${err?.message || String(err)}`;
+      }
+
+      steps.push({
+        step,
+        prompt: currentPrompt,
+        response: stepResponse,
+        toolCall,
+        safetyStatus: 'success',
+        observation,
+      });
+
+      options.onEvent?.({
+        type: 'tool_observation',
+        toolName: 'web_search',
+        observation,
+        step,
+      });
+
       currentPrompt += `\n${stepResponse}\nObservation: ${observation}\n`;
       if (maxStepsEnabled && step >= maxSteps) {
         finalResponse = stepResponse;

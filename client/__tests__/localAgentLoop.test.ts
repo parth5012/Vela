@@ -464,5 +464,58 @@ describe('localAgentLoop real engine envelope (function_calls)', () => {
       );
       expect(events.some((e) => e.type === 'recovery' && e.recoveryType === 'home_reset')).toBe(true);
     });
+
+    it('executes web_search via searchFn and feeds observation back to next step', async () => {
+      async function* searchCallStep() {
+        yield '{"name": "web_search", "arguments": {"query": "Vela AI"}}';
+      }
+      async function* finalReplyStep() {
+        yield 'Here are the search results for Vela AI.';
+      }
+      mockStream
+        .mockReturnValueOnce(searchCallStep() as any)
+        .mockReturnValueOnce(finalReplyStep() as any);
+
+      const searchFn = jest.fn(async (q: string) => `Found articles about ${q}`);
+      const events: any[] = [];
+
+      const result = await runLocalAgentLoop('Search for Vela AI', {
+        searchFn,
+        onEvent: (ev) => events.push(ev),
+      });
+
+      expect(searchFn).toHaveBeenCalledWith('Vela AI');
+      expect(deviceActionExecutor.executeDeviceAction).not.toHaveBeenCalled();
+      expect(result.completed).toBe(true);
+      expect(result.totalSteps).toBe(2);
+      expect(result.steps[0].toolCall?.toolName).toBe('web_search');
+      expect(result.steps[0].observation).toBe('Found articles about Vela AI');
+      expect(result.finalResponse).toBe('Here are the search results for Vela AI.');
+      expect(events.some((e) => e.type === 'tool_executing' && e.toolName === 'web_search')).toBe(true);
+      expect(events.some((e) => e.type === 'tool_observation' && e.toolName === 'web_search')).toBe(true);
+    });
+
+    it('surfaces unavailable hint for server-only tools without failing loop', async () => {
+      async function* serverToolStep() {
+        yield '{"name": "gmail_send_email", "arguments": {"to": "test@example.com"}}';
+      }
+      async function* fallbackReplyStep() {
+        yield 'I cannot send email right now because server mode is required.';
+      }
+      mockStream
+        .mockReturnValueOnce(serverToolStep() as any)
+        .mockReturnValueOnce(fallbackReplyStep() as any);
+
+      const events: any[] = [];
+      const result = await runLocalAgentLoop('Send an email', {
+        onEvent: (ev) => events.push(ev),
+      });
+
+      expect(deviceActionExecutor.executeDeviceAction).not.toHaveBeenCalled();
+      expect(result.completed).toBe(true);
+      expect(result.steps[0].toolCall?.toolName).toBe('gmail_send_email');
+      expect(result.steps[0].observation).toContain('is unavailable in standalone mode — connect to server for full access.');
+      expect(result.finalResponse).toContain('I cannot send email right now');
+    });
   });
 });
