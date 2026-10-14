@@ -1015,7 +1015,7 @@ export async function runLocalAgentLoop(
     if (!ALLOWED_LOCAL_TOOLS.has(toolCall.toolName)) {
       const observation = isAvailable(toolCall.toolName, 'server')
         ? buildUnavailableHint(toolCall.toolName)
-        : `Error: Unknown tool "${toolCall.toolName}".`;
+        : `Error: Unknown device tool "${toolCall.toolName}".`;
       steps.push({
         step,
         prompt: currentPrompt,
