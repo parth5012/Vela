@@ -1,3 +1,5 @@
+import { tool } from 'ai'
+import { z } from 'zod'
 import { StandaloneCapabilities, filterAvailable, isAvailable } from './toolRegistry'
 import { executeDeviceAction } from './deviceActionExecutor'
 
@@ -32,6 +34,52 @@ export function buildCloudToolDescriptions(caps: StandaloneCapabilities = {}): R
     descriptions[tool.name] = tool.description
   }
   return descriptions
+}
+
+export function buildVercelCloudTools(
+  caps: StandaloneCapabilities = {},
+  deps: CloudExecutorDeps = {},
+  callbacks?: {
+    onToolCall?: (call: { toolName: string; args: any }) => void
+    onToolResult?: (res: { toolName: string; result: any }) => void
+  }
+): Record<string, any> {
+  const tools = filterAvailable('cloud', caps)
+  const vercelTools: Record<string, any> = {}
+
+  for (const t of tools) {
+    const schemaObj: Record<string, z.ZodTypeAny> = {}
+    if (t.parameters) {
+      for (const [key, param] of Object.entries(t.parameters)) {
+        let base: z.ZodTypeAny
+        if (param.type === 'number') {
+          base = z.number()
+        } else if (param.type === 'boolean') {
+          base = z.boolean()
+        } else {
+          base = z.string()
+        }
+        base = base.describe(param.description)
+        if (!param.required) {
+          base = base.optional()
+        }
+        schemaObj[key] = base
+      }
+    }
+
+    vercelTools[t.name] = (tool as any)({
+      description: t.description,
+      parameters: z.object(schemaObj),
+      execute: async (args: any) => {
+        callbacks?.onToolCall?.({ toolName: t.name, args })
+        const res = await executeCloudTool(t.name, args || {}, deps)
+        callbacks?.onToolResult?.({ toolName: t.name, result: res })
+        return res.output
+      },
+    })
+  }
+
+  return vercelTools
 }
 
 export async function executeCloudTool(

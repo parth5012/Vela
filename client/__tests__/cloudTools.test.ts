@@ -1,4 +1,4 @@
-import { buildCloudToolDescriptions, executeCloudTool, listCloudToolNames } from '../utils/cloudTools'
+import { buildCloudToolDescriptions, buildVercelCloudTools, executeCloudTool, listCloudToolNames } from '../utils/cloudTools'
 
 describe('cloudTools', () => {
   it('lists cloud tools without server-only entries', () => {
@@ -50,5 +50,23 @@ describe('cloudTools', () => {
 
     expect(result.success).toBe(false)
     expect(result.output).toContain('Search failed')
+  })
+
+  it('builds Vercel AI SDK compatible tool definitions and executes through callbacks', async () => {
+    const executeDevice = jest.fn(async () => ({ outcome: 'executed' as const, observation: 'Tapped' }))
+    const onToolCall = jest.fn()
+    const onToolResult = jest.fn()
+
+    const tools = buildVercelCloudTools({}, { executeDevice }, { onToolCall, onToolResult })
+    expect(tools.device_tap).toBeDefined()
+    expect(tools.device_tap.description).toContain('Taps an element')
+
+    const output = await tools.device_tap.execute({ target: '100,200' })
+    expect(output).toBe('Tapped')
+    expect(onToolCall).toHaveBeenCalledWith({ toolName: 'device_tap', args: { target: '100,200' } })
+    expect(onToolResult).toHaveBeenCalledWith({
+      toolName: 'device_tap',
+      result: { success: true, output: 'Tapped' },
+    })
   })
 })

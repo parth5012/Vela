@@ -174,5 +174,43 @@ describe('Cloud Provider Layer', () => {
 
       spyStreamText.mockRestore();
     });
+
+    it('passes tools and maxSteps to streamText when tools are provided', async () => {
+      const ai = require('ai');
+      const spyStreamText = jest.spyOn(ai, 'streamText').mockReturnValueOnce({
+        textStream: (async function* () {
+          yield 'Result with tool';
+        })(),
+      } as any);
+
+      const mockTools = {
+        mock_tool: {
+          description: 'mock',
+          parameters: {},
+          execute: jest.fn(),
+        },
+      };
+
+      await streamCloudResponse({
+        provider: 'openai',
+        apiKey: 'sk-test',
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: 'run tool' }],
+        tools: mockTools,
+        maxSteps: 3,
+        onToken: jest.fn(),
+        onDone: jest.fn(),
+        onError: jest.fn(),
+      });
+
+      expect(spyStreamText).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tools: mockTools,
+          maxSteps: 3,
+        })
+      );
+
+      spyStreamText.mockRestore();
+    });
   });
 });
