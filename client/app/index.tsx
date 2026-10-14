@@ -47,6 +47,7 @@ import { streamCloudResponse } from '../utils/providers';
 import { buildContextMessages } from '../utils/providers/context';
 import { buildLocalPromptBlock } from '../utils/standalonePrompt';
 import { buildVercelCloudTools } from '../utils/cloudTools';
+import { saveMemory, deleteMemory } from '../db/memoryRepository';
 import { filterAvailable } from '../utils/toolRegistry';
 import { isSkillCommand, SKILL_PROMPTS, SKILL_METADATA } from '../utils/skillPrompts';
 import type { SkillId } from '../utils/skillPrompts';
@@ -694,7 +695,13 @@ export default function ChatScreen() {
 
     const cloudTools = buildVercelCloudTools(
       {},
-      {},
+      {
+        evaluateSafety,
+        memoryStore: {
+          saveMemory: (convId, fact) => saveMemory(convId || threadId, fact),
+          deleteMemory: (convId, fact) => deleteMemory(convId || threadId, fact),
+        },
+      },
       {
         onToolCall: (call) => {
           appendToken(threadId, `\n\n🔧 *Executing ${call.toolName}...*\n`);

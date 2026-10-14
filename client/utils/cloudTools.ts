@@ -2,6 +2,8 @@ import { tool } from 'ai'
 import { z } from 'zod'
 import { StandaloneCapabilities, filterAvailable, isAvailable } from './toolRegistry'
 import { executeDeviceAction } from './deviceActionExecutor'
+import { evaluateSafety } from './safetyManager'
+import { searchStandalone } from './standaloneSearch'
 import { saveMemory as defaultSaveMemory, deleteMemory as defaultDeleteMemory } from '../db/memoryRepository'
 
 export interface CloudToolResult {
@@ -10,6 +12,7 @@ export interface CloudToolResult {
 }
 
 export type DeviceExecutor = typeof executeDeviceAction
+export type SafetyEvaluator = typeof evaluateSafety
 
 export interface WebSearchFn {
   (query: string): Promise<string>
@@ -22,6 +25,7 @@ export interface MemoryStoreOps {
 
 export interface CloudExecutorDeps {
   executeDevice?: DeviceExecutor
+  evaluateSafety?: SafetyEvaluator
   webSearch?: WebSearchFn
   memoryStore?: MemoryStoreOps
 }
@@ -74,9 +78,11 @@ export function buildVercelCloudTools(
       }
     }
 
+    const schema = z.object(schemaObj)
     vercelTools[t.name] = (tool as any)({
       description: t.description,
-      parameters: z.object(schemaObj),
+      parameters: schema,
+      inputSchema: schema,
       execute: async (args: any) => {
         callbacks?.onToolCall?.({ toolName: t.name, args })
         const res = await executeCloudTool(t.name, args || {}, deps)
@@ -99,15 +105,25 @@ export async function executeCloudTool(
   const executeDevice = deps.executeDevice ?? executeDeviceAction
 
   if (isDeviceTool(toolName)) {
+    if (deps.evaluateSafety) {
+      try {
+        const safety = await deps.evaluateSafety(toolName, args.target, args.value ?? args.text)
+        if (safety.status === 'error') {
+          return { success: false, output: safety.result }
+        }
+      } catch (e: any) {
+        return { success: false, output: `Safety evaluation failed: ${e?.message || e}` }
+      }
+    }
     const action = await executeDevice(toolName, args.target, args.value ?? args.text)
     const success = action.outcome === 'executed' || action.outcome === 'simulated'
     return { success, output: action.observation }
   }
 
   if (toolName === 'web_search') {
-    if (!deps.webSearch) return { success: false, output: 'Web search is not configured.' }
+    const searchFn = deps.webSearch ?? ((q: string) => searchStandalone(q))
     try {
-      const output = await deps.webSearch(args.query ?? args.q ?? '')
+      const output = await searchFn(args.query ?? args.q ?? '')
       return { success: true, output }
     } catch (error) {
       return { success: false, output: `Search failed: ${(error as { message?: string } | undefined)?.message || String(error)}` }
@@ -119,7 +135,7 @@ export async function executeCloudTool(
   }
 
   if (toolName === 'save_user_memory') {
-    const conversationId = String(args.conversation_id || '')
+    const conversationId = String(args.conversation_id || 'default')
     const fact = String(args.fact || '')
     try {
       const saveFn = deps.memoryStore?.saveMemory || defaultSaveMemory
@@ -131,7 +147,7 @@ export async function executeCloudTool(
   }
 
   if (toolName === 'delete_user_memory') {
-    const conversationId = String(args.conversation_id || '')
+    const conversationId = String(args.conversation_id || 'default')
     const fact = String(args.fact || '')
     try {
       const deleteFn = deps.memoryStore?.deleteMemory || defaultDeleteMemory
