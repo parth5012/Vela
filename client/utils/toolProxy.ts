@@ -49,7 +49,8 @@ export async function parseAndExecuteTools(
 
     // Standalone / client execution path (local or cloud modes, or when no server API URL)
     if (connectionMode !== 'server' || !apiUrl) {
-      if (isAvailable(block.toolName, 'local')) {
+      const mode = connectionMode === 'cloud' ? 'cloud' : 'local';
+      if (isAvailable(block.toolName, mode) || isAvailable(block.toolName, 'local')) {
         const res = await executeCloudTool(block.toolName, { ...parsedArgs, conversation_id: threadId });
         responseText = res.output;
       } else if (isAvailable(block.toolName, 'server')) {

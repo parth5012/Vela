@@ -65,7 +65,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     availableInCloud: true,
     standaloneReady: true,
     parameters: {
-      conversation_id: { type: 'string', description: 'Active conversation id.', required: true },
+      conversation_id: { type: 'string', description: 'Active conversation id (optional, defaults to current conversation).', required: false },
       fact: { type: 'string', description: 'Single independent fact.', required: true },
     },
   },
@@ -77,7 +77,7 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     availableInCloud: true,
     standaloneReady: true,
     parameters: {
-      conversation_id: { type: 'string', description: 'Active conversation id.', required: true },
+      conversation_id: { type: 'string', description: 'Active conversation id (optional, defaults to current conversation).', required: false },
       fact: { type: 'string', description: 'Fact to forget.', required: true },
     },
   },

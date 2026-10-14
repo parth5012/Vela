@@ -49,6 +49,30 @@ describe('memoryRepository (local SQLite / standalone memory store)', () => {
     expect(all[0].fact).toBe('User lives in Berlin');
   });
 
+  it('prioritizes exact match when substring could match other facts', async () => {
+    await saveMemory('conv-1', 'User likes tea');
+    await saveMemory('conv-1', 'User likes tea and coffee');
+
+    const delRes = await deleteMemory('conv-1', 'User likes tea');
+    expect(delRes).toContain("Successfully deleted memory: 'User likes tea'");
+
+    const remaining = await listMemories('conv-1');
+    expect(remaining.length).toBe(1);
+    expect(remaining[0].fact).toBe('User likes tea and coffee');
+  });
+
+  it('rejects ambiguous substring deletion when multiple facts match', async () => {
+    await saveMemory('conv-1', 'User prefers dark theme');
+    await saveMemory('conv-1', 'User prefers light theme on weekends');
+
+    const delRes = await deleteMemory('conv-1', 'User prefers');
+    expect(delRes).toContain('Multiple matching memories found');
+    expect(delRes).toContain('Please specify exact text to delete');
+
+    const remaining = await listMemories('conv-1');
+    expect(remaining.length).toBe(2);
+  });
+
   it('returns not found message when trying to delete non-existent fact', async () => {
     await saveMemory('conv-1', 'User likes tea');
     const delRes = await deleteMemory('conv-1', 'User likes coffee');

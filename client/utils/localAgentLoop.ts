@@ -1032,6 +1032,10 @@ export async function runLocalAgentLoop(
         step,
         error: observation,
       });
+      options.onEvent?.({
+        type: 'step_complete',
+        step,
+      });
       currentPrompt += `\n${stepResponse}\nObservation: ${observation}\n`;
       if (maxStepsEnabled && step >= maxSteps) {
         finalResponse = stepResponse;
@@ -1076,7 +1080,10 @@ export async function runLocalAgentLoop(
         observation,
         step,
       });
-
+      options.onEvent?.({
+        type: 'step_complete',
+        step,
+      });
       currentPrompt += `\n${stepResponse}\nObservation: ${observation}\n`;
       if (maxStepsEnabled && step >= maxSteps) {
         finalResponse = stepResponse;
@@ -1119,7 +1126,10 @@ export async function runLocalAgentLoop(
         observation,
         step,
       });
-
+      options.onEvent?.({
+        type: 'step_complete',
+        step,
+      });
       currentPrompt += `\n${stepResponse}\nObservation: ${observation}\n`;
       if (maxStepsEnabled && step >= maxSteps) {
         finalResponse = stepResponse;
@@ -1162,7 +1172,10 @@ export async function runLocalAgentLoop(
         observation,
         step,
       });
-
+      options.onEvent?.({
+        type: 'step_complete',
+        step,
+      });
       currentPrompt += `\n${stepResponse}\nObservation: ${observation}\n`;
       if (maxStepsEnabled && step >= maxSteps) {
         finalResponse = stepResponse;
