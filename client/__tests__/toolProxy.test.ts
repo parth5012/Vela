@@ -127,5 +127,20 @@ describe('toolProxy parser', () => {
       expect(result.hasInvocations).toBe(true);
       expect(result.updatedContent).toContain('Error: Unknown tool "imaginary_tool".');
     });
+
+    it('executes device tool in standalone mode and returns tool output', async () => {
+      const content = '<call name="device_screen_read">{}</call>';
+
+      const result = await parseAndExecuteTools(
+        content,
+        'thread_123',
+        undefined,
+        undefined,
+        'local'
+      );
+
+      expect(result.hasInvocations).toBe(true);
+      expect(result.updatedContent).toContain('<response name="device_screen_read">');
+    });
   });
 });

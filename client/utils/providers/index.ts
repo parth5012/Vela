@@ -1,5 +1,5 @@
 import '@stardazed/streams-text-encoding';
-import { streamText, LanguageModel } from 'ai';
+import { streamText, stepCountIs, LanguageModel } from 'ai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createAnthropic } from '@ai-sdk/anthropic';
@@ -139,7 +139,7 @@ export async function streamCloudResponse(options: StreamCloudOptions): Promise<
 
     if (options.tools && Object.keys(options.tools).length > 0) {
       streamOptions.tools = options.tools;
-      streamOptions.maxSteps = typeof options.maxSteps === 'number' ? options.maxSteps : 5;
+      streamOptions.stopWhen = stepCountIs(typeof options.maxSteps === 'number' ? options.maxSteps : 5);
     }
 
     const result = streamText(streamOptions);

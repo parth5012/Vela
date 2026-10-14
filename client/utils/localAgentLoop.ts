@@ -1095,7 +1095,7 @@ export async function runLocalAgentLoop(
     }
 
     if (toolCall.toolName === 'save_user_memory') {
-      const convId = toolCall.arguments?.conversation_id || options.conversationId || 'default';
+      const convId = options.conversationId || toolCall.arguments?.conversation_id || 'default';
       const fact = toolCall.arguments?.fact || toolCall.value || toolCall.target || '';
       options.onEvent?.({
         type: 'tool_executing',
@@ -1141,7 +1141,7 @@ export async function runLocalAgentLoop(
     }
 
     if (toolCall.toolName === 'delete_user_memory') {
-      const convId = toolCall.arguments?.conversation_id || options.conversationId || 'default';
+      const convId = options.conversationId || toolCall.arguments?.conversation_id || 'default';
       const fact = toolCall.arguments?.fact || toolCall.value || toolCall.target || '';
       options.onEvent?.({
         type: 'tool_executing',
