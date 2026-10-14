@@ -45,6 +45,9 @@ import { compileLocalPrompt } from '../utils/promptCompiler';
 import { parseAndExecuteTools } from '../utils/toolProxy';
 import { streamCloudResponse } from '../utils/providers';
 import { buildContextMessages } from '../utils/providers/context';
+import { buildLocalPromptBlock } from '../utils/standalonePrompt';
+import { buildVercelCloudTools } from '../utils/cloudTools';
+import { filterAvailable } from '../utils/toolRegistry';
 import { isSkillCommand, SKILL_PROMPTS, SKILL_METADATA } from '../utils/skillPrompts';
 import type { SkillId } from '../utils/skillPrompts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -557,9 +560,14 @@ export default function ChatScreen() {
 
         // Inject active skill prompt if set (standalone mode)
         const threadSkill = activeThread?.active_skill as SkillId | undefined;
-        const skillAugmented = threadSkill && SKILL_PROMPTS[threadSkill]
+        let skillAugmented = threadSkill && SKILL_PROMPTS[threadSkill]
           ? `${agentPrompt}\n\n# Active Skill Instructions\n${SKILL_PROMPTS[threadSkill]}`
           : agentPrompt;
+
+        const localToolsBlock = buildLocalPromptBlock();
+        if (localToolsBlock) {
+          skillAugmented = `${skillAugmented}\n\n# Available Tools\n${localToolsBlock}`;
+        }
 
         // 2. Compile prompt using LLM native chat template
         const compiledPrompt = compileLocalPrompt({
@@ -567,7 +575,7 @@ export default function ChatScreen() {
           history: currentHistory,
           query: userQuery,
           compactInstructions: "Format calls as <call name=\"tool\">PARAMS</call>.",
-          toolDeclarations: ["webview_browser", "consolidate", "oauth_token"],
+          toolDeclarations: filterAvailable('local').map((t) => t.name),
           modelName: localModelName,
         });
 
@@ -614,7 +622,8 @@ export default function ChatScreen() {
             lastMessageSnapshot.content,
             threadId,
             apiUrl,
-            apiKey
+            apiKey,
+            connectionMode
           );
 
           if (hasInvocations) {
@@ -683,6 +692,21 @@ export default function ChatScreen() {
       maxMessages: config.contextCompression ? 30 : 100,
     });
 
+    const cloudTools = buildVercelCloudTools(
+      {},
+      {},
+      {
+        onToolCall: (call) => {
+          appendToken(threadId, `\n\n🔧 *Executing ${call.toolName}...*\n`);
+        },
+        onToolResult: (res) => {
+          if (!res.result?.success) {
+            appendToken(threadId, `\n⚠️ *Tool output: ${res.result?.output}*\n`);
+          }
+        },
+      }
+    );
+
     try {
       await streamCloudResponse({
         provider,
@@ -693,6 +717,7 @@ export default function ChatScreen() {
         temperature: config.temperature,
         maxTokens: config.maxTokens,
         messages: contextMessages,
+        tools: cloudTools,
         signal: controller.signal,
         onToken: (chunk) => {
           pendingTokensMapRef.current[threadId] = (pendingTokensMapRef.current[threadId] || '') + chunk;
