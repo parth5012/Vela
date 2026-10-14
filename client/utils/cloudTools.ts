@@ -2,6 +2,7 @@ import { tool } from 'ai'
 import { z } from 'zod'
 import { StandaloneCapabilities, filterAvailable, isAvailable } from './toolRegistry'
 import { executeDeviceAction } from './deviceActionExecutor'
+import { saveMemory as defaultSaveMemory, deleteMemory as defaultDeleteMemory } from '../db/memoryRepository'
 
 export interface CloudToolResult {
   success: boolean
@@ -14,9 +15,15 @@ export interface WebSearchFn {
   (query: string): Promise<string>
 }
 
+export interface MemoryStoreOps {
+  saveMemory?: (conversationId: string, fact: string) => Promise<string>
+  deleteMemory?: (conversationId: string, fact: string) => Promise<string>
+}
+
 export interface CloudExecutorDeps {
   executeDevice?: DeviceExecutor
   webSearch?: WebSearchFn
+  memoryStore?: MemoryStoreOps
 }
 
 export function listCloudToolNames(caps: StandaloneCapabilities = {}): string[] {
@@ -111,8 +118,28 @@ export async function executeCloudTool(
     return { success: false, output: 'WebView automation runs through the WebView flow, not wired here yet.' }
   }
 
-  if (toolName === 'save_user_memory' || toolName === 'delete_user_memory') {
-    return { success: false, output: 'Local memory store is not wired yet.' }
+  if (toolName === 'save_user_memory') {
+    const conversationId = String(args.conversation_id || '')
+    const fact = String(args.fact || '')
+    try {
+      const saveFn = deps.memoryStore?.saveMemory || defaultSaveMemory
+      const output = await saveFn(conversationId, fact)
+      return { success: true, output }
+    } catch (err: any) {
+      return { success: false, output: `Failed to save memory: ${err?.message || String(err)}` }
+    }
+  }
+
+  if (toolName === 'delete_user_memory') {
+    const conversationId = String(args.conversation_id || '')
+    const fact = String(args.fact || '')
+    try {
+      const deleteFn = deps.memoryStore?.deleteMemory || defaultDeleteMemory
+      const output = await deleteFn(conversationId, fact)
+      return { success: true, output }
+    } catch (err: any) {
+      return { success: false, output: `Failed to delete memory: ${err?.message || String(err)}` }
+    }
   }
 
   return { success: false, output: `Unknown cloud tool "${toolName}".` }

@@ -5,8 +5,8 @@ describe('standalonePrompt', () => {
     const block = buildLocalPromptBlock()
 
     expect(block).toContain('device_screen_read')
+    expect(block).toContain('save_user_memory')
     expect(block).not.toContain('gmail_send_email')
-    expect(block).not.toContain('save_user_memory')
     expect(block).not.toContain('webview_browser')
   })
 

@@ -517,5 +517,57 @@ describe('localAgentLoop real engine envelope (function_calls)', () => {
       expect(result.steps[0].observation).toContain('is unavailable in standalone mode — connect to server for full access.');
       expect(result.finalResponse).toContain('I cannot send email right now');
     });
+
+    it('executes save_user_memory via saveMemoryFn in localAgentLoop', async () => {
+      async function* saveStep() {
+        yield '{"name": "save_user_memory", "arguments": {"fact": "User is a software engineer"}}';
+      }
+      async function* doneStep() {
+        yield 'Saved that to memory.';
+      }
+      mockStream
+        .mockReturnValueOnce(saveStep() as any)
+        .mockReturnValueOnce(doneStep() as any);
+
+      const saveMemoryFn = jest.fn(async (_c: string, fact: string) => `Saved: ${fact}`);
+      const events: any[] = [];
+      const result = await runLocalAgentLoop('Remember I am a software engineer', {
+        conversationId: 'thread-42',
+        saveMemoryFn,
+        onEvent: (ev) => events.push(ev),
+      });
+
+      expect(saveMemoryFn).toHaveBeenCalledWith('thread-42', 'User is a software engineer');
+      expect(result.completed).toBe(true);
+      expect(result.steps[0].toolCall?.toolName).toBe('save_user_memory');
+      expect(result.steps[0].observation).toBe('Saved: User is a software engineer');
+      expect(events.some((e) => e.type === 'tool_executing' && e.toolName === 'save_user_memory')).toBe(true);
+      expect(events.some((e) => e.type === 'tool_observation' && e.toolName === 'save_user_memory')).toBe(true);
+    });
+
+    it('executes delete_user_memory via deleteMemoryFn in localAgentLoop', async () => {
+      async function* deleteStep() {
+        yield '{"name": "delete_user_memory", "arguments": {"fact": "software engineer"}}';
+      }
+      async function* doneStep() {
+        yield 'Removed that memory.';
+      }
+      mockStream
+        .mockReturnValueOnce(deleteStep() as any)
+        .mockReturnValueOnce(doneStep() as any);
+
+      const deleteMemoryFn = jest.fn(async (_c: string, fact: string) => `Deleted: ${fact}`);
+      const events: any[] = [];
+      const result = await runLocalAgentLoop('Forget that I am an engineer', {
+        conversationId: 'thread-42',
+        deleteMemoryFn,
+        onEvent: (ev) => events.push(ev),
+      });
+
+      expect(deleteMemoryFn).toHaveBeenCalledWith('thread-42', 'software engineer');
+      expect(result.completed).toBe(true);
+      expect(result.steps[0].toolCall?.toolName).toBe('delete_user_memory');
+      expect(result.steps[0].observation).toBe('Deleted: software engineer');
+    });
   });
 });

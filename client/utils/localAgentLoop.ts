@@ -79,6 +79,8 @@ export interface LocalAgentLoopOptions {
   onToken?: (token: string) => void;
   tavilyKey?: string;
   searchFn?: (query: string) => Promise<string>;
+  saveMemoryFn?: (conversationId: string, fact: string) => Promise<string>;
+  deleteMemoryFn?: (conversationId: string, fact: string) => Promise<string>;
 }
 
 export interface LocalAgentLoopResult {
@@ -92,6 +94,7 @@ export interface LocalAgentLoopResult {
 import { filterAvailable, isAvailable } from './toolRegistry';
 import { searchStandalone } from './standaloneSearch';
 import { buildUnavailableHint } from './standalonePrompt';
+import { saveMemory as defaultSaveMemory, deleteMemory as defaultDeleteMemory } from '../db/memoryRepository';
 
 export const ALLOWED_DEVICE_TOOLS = new Set(
   filterAvailable('local')
@@ -1070,6 +1073,92 @@ export async function runLocalAgentLoop(
       options.onEvent?.({
         type: 'tool_observation',
         toolName: 'web_search',
+        observation,
+        step,
+      });
+
+      currentPrompt += `\n${stepResponse}\nObservation: ${observation}\n`;
+      if (maxStepsEnabled && step >= maxSteps) {
+        finalResponse = stepResponse;
+        completed = false;
+        break;
+      }
+      step++;
+      continue;
+    }
+
+    if (toolCall.toolName === 'save_user_memory') {
+      const convId = toolCall.arguments?.conversation_id || options.conversationId || 'default';
+      const fact = toolCall.arguments?.fact || toolCall.value || toolCall.target || '';
+      options.onEvent?.({
+        type: 'tool_executing',
+        toolName: 'save_user_memory',
+        target: fact,
+        step,
+      });
+      let observation: string;
+      try {
+        const saveFn = options.saveMemoryFn || defaultSaveMemory;
+        observation = await saveFn(convId, fact);
+      } catch (err: any) {
+        observation = `Failed to save memory: ${err?.message || String(err)}`;
+      }
+
+      steps.push({
+        step,
+        prompt: currentPrompt,
+        response: stepResponse,
+        toolCall,
+        safetyStatus: 'success',
+        observation,
+      });
+
+      options.onEvent?.({
+        type: 'tool_observation',
+        toolName: 'save_user_memory',
+        observation,
+        step,
+      });
+
+      currentPrompt += `\n${stepResponse}\nObservation: ${observation}\n`;
+      if (maxStepsEnabled && step >= maxSteps) {
+        finalResponse = stepResponse;
+        completed = false;
+        break;
+      }
+      step++;
+      continue;
+    }
+
+    if (toolCall.toolName === 'delete_user_memory') {
+      const convId = toolCall.arguments?.conversation_id || options.conversationId || 'default';
+      const fact = toolCall.arguments?.fact || toolCall.value || toolCall.target || '';
+      options.onEvent?.({
+        type: 'tool_executing',
+        toolName: 'delete_user_memory',
+        target: fact,
+        step,
+      });
+      let observation: string;
+      try {
+        const deleteFn = options.deleteMemoryFn || defaultDeleteMemory;
+        observation = await deleteFn(convId, fact);
+      } catch (err: any) {
+        observation = `Failed to delete memory: ${err?.message || String(err)}`;
+      }
+
+      steps.push({
+        step,
+        prompt: currentPrompt,
+        response: stepResponse,
+        toolCall,
+        safetyStatus: 'success',
+        observation,
+      });
+
+      options.onEvent?.({
+        type: 'tool_observation',
+        toolName: 'delete_user_memory',
         observation,
         step,
       });

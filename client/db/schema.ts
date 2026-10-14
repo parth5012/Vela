@@ -152,3 +152,14 @@ export const checkIns = sqliteTable('check_ins', {
 
 export type CheckInEntity = typeof checkIns.$inferSelect;
 export type InsertCheckInEntity = typeof checkIns.$inferInsert;
+
+export const memories = sqliteTable('memories', {
+  id: text('id').primaryKey(),
+  conversation_id: text('conversation_id').notNull(),
+  fact: text('fact').notNull(),
+  created_at: integer('created_at').notNull(),
+});
+
+export type MemoryEntity = typeof memories.$inferSelect;
+export type InsertMemoryEntity = typeof memories.$inferInsert;
+
