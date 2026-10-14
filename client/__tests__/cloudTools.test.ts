@@ -67,10 +67,11 @@ describe('cloudTools', () => {
 
   it('builds Vercel AI SDK compatible tool definitions and executes through callbacks', async () => {
     const executeDevice = jest.fn(async () => ({ outcome: 'executed' as const, observation: 'Tapped' }))
+    const evaluateSafety = jest.fn(async () => ({ status: 'success' as const, result: 'Allowed' }))
     const onToolCall = jest.fn()
     const onToolResult = jest.fn()
 
-    const tools = buildVercelCloudTools({}, { executeDevice }, { onToolCall, onToolResult })
+    const tools = buildVercelCloudTools({}, { executeDevice, evaluateSafety }, { onToolCall, onToolResult })
     expect(tools.device_tap).toBeDefined()
     expect(tools.device_tap.description).toContain('Taps an element')
 

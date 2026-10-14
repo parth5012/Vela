@@ -704,10 +704,18 @@ export default function ChatScreen() {
       },
       {
         onToolCall: (call) => {
+          if (pendingTokensMapRef.current[threadId]) {
+            appendToken(threadId, pendingTokensMapRef.current[threadId]);
+            pendingTokensMapRef.current[threadId] = '';
+          }
           appendToken(threadId, `\n\n🔧 *Executing ${call.toolName}...*\n`);
         },
         onToolResult: (res) => {
           if (!res.result?.success) {
+            if (pendingTokensMapRef.current[threadId]) {
+              appendToken(threadId, pendingTokensMapRef.current[threadId]);
+              pendingTokensMapRef.current[threadId] = '';
+            }
             appendToken(threadId, `\n⚠️ *Tool output: ${res.result?.output}*\n`);
           }
         },

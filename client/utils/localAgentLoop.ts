@@ -96,12 +96,6 @@ import { searchStandalone } from './standaloneSearch';
 import { buildUnavailableHint } from './standalonePrompt';
 import { saveMemory as defaultSaveMemory, deleteMemory as defaultDeleteMemory } from '../db/memoryRepository';
 
-export const ALLOWED_DEVICE_TOOLS = new Set(
-  filterAvailable('local')
-    .filter((tool) => tool.name.startsWith('device_'))
-    .map((tool) => tool.name)
-);
-
 export const ALLOWED_LOCAL_TOOLS = new Set(
   filterAvailable('local').map((tool) => tool.name)
 );
@@ -1094,21 +1088,24 @@ export async function runLocalAgentLoop(
       continue;
     }
 
-    if (toolCall.toolName === 'save_user_memory') {
+    if (toolCall.toolName === 'save_user_memory' || toolCall.toolName === 'delete_user_memory') {
+      const isSave = toolCall.toolName === 'save_user_memory';
       const convId = options.conversationId || toolCall.arguments?.conversation_id || 'default';
       const fact = toolCall.arguments?.fact || toolCall.value || toolCall.target || '';
       options.onEvent?.({
         type: 'tool_executing',
-        toolName: 'save_user_memory',
+        toolName: toolCall.toolName,
         target: fact,
         step,
       });
       let observation: string;
       try {
-        const saveFn = options.saveMemoryFn || defaultSaveMemory;
-        observation = await saveFn(convId, fact);
+        const actionFn = isSave
+          ? (options.saveMemoryFn || defaultSaveMemory)
+          : (options.deleteMemoryFn || defaultDeleteMemory);
+        observation = await actionFn(convId, fact);
       } catch (err: any) {
-        observation = `Failed to save memory: ${err?.message || String(err)}`;
+        observation = `Failed to ${isSave ? 'save' : 'delete'} memory: ${err?.message || String(err)}`;
       }
 
       steps.push({
@@ -1122,53 +1119,7 @@ export async function runLocalAgentLoop(
 
       options.onEvent?.({
         type: 'tool_observation',
-        toolName: 'save_user_memory',
-        observation,
-        step,
-      });
-      options.onEvent?.({
-        type: 'step_complete',
-        step,
-      });
-      currentPrompt += `\n${stepResponse}\nObservation: ${observation}\n`;
-      if (maxStepsEnabled && step >= maxSteps) {
-        finalResponse = stepResponse;
-        completed = false;
-        break;
-      }
-      step++;
-      continue;
-    }
-
-    if (toolCall.toolName === 'delete_user_memory') {
-      const convId = options.conversationId || toolCall.arguments?.conversation_id || 'default';
-      const fact = toolCall.arguments?.fact || toolCall.value || toolCall.target || '';
-      options.onEvent?.({
-        type: 'tool_executing',
-        toolName: 'delete_user_memory',
-        target: fact,
-        step,
-      });
-      let observation: string;
-      try {
-        const deleteFn = options.deleteMemoryFn || defaultDeleteMemory;
-        observation = await deleteFn(convId, fact);
-      } catch (err: any) {
-        observation = `Failed to delete memory: ${err?.message || String(err)}`;
-      }
-
-      steps.push({
-        step,
-        prompt: currentPrompt,
-        response: stepResponse,
-        toolCall,
-        safetyStatus: 'success',
-        observation,
-      });
-
-      options.onEvent?.({
-        type: 'tool_observation',
-        toolName: 'delete_user_memory',
+        toolName: toolCall.toolName,
         observation,
         step,
       });

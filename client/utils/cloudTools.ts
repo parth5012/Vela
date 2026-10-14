@@ -104,9 +104,10 @@ export async function executeCloudTool(
   const executeDevice = deps.executeDevice ?? executeDeviceAction
 
   if (isDeviceTool(toolName)) {
-    if (deps.evaluateSafety) {
+    const safetyCheck = deps.evaluateSafety ?? evaluateSafety
+    if (safetyCheck) {
       try {
-        const safety = await deps.evaluateSafety(toolName, args.target, args.value ?? args.text)
+        const safety = await safetyCheck(toolName, args.target, args.value ?? args.text)
         if (safety.status === 'error') {
           return { success: false, output: safety.result }
         }
