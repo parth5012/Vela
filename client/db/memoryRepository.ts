@@ -155,14 +155,15 @@ export async function deleteMemory(conversationId: string, fact: string): Promis
 }
 
 export async function listMemories(conversationId?: string): Promise<MemoryEntity[]> {
+  const convId = conversationId !== undefined ? (conversationId || 'default') : undefined;
   if (db) {
     try {
       ensureMemoriesTable();
-      if (conversationId) {
+      if (convId) {
         return await db
           .select()
           .from(memories)
-          .where(eq(memories.conversation_id, conversationId))
+          .where(eq(memories.conversation_id, convId))
           .orderBy(asc(memories.created_at));
       }
       return await db.select().from(memories).orderBy(asc(memories.created_at));
@@ -171,8 +172,8 @@ export async function listMemories(conversationId?: string): Promise<MemoryEntit
     }
   }
 
-  if (conversationId) {
-    return inMemoryStore.filter((m) => m.conversation_id === conversationId);
+  if (convId) {
+    return inMemoryStore.filter((m) => m.conversation_id === convId);
   }
   return [...inMemoryStore];
 }
