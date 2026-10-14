@@ -175,7 +175,7 @@ describe('Cloud Provider Layer', () => {
       spyStreamText.mockRestore();
     });
 
-    it('passes tools and maxSteps to streamText when tools are provided', async () => {
+    it('passes tools and stopWhen to streamText when tools are provided', async () => {
       const ai = require('ai');
       const spyStreamText = jest.spyOn(ai, 'streamText').mockReturnValueOnce({
         textStream: (async function* () {
@@ -206,7 +206,7 @@ describe('Cloud Provider Layer', () => {
       expect(spyStreamText).toHaveBeenCalledWith(
         expect.objectContaining({
           tools: mockTools,
-          maxSteps: 3,
+          stopWhen: expect.any(Function),
         })
       );
 

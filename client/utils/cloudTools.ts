@@ -79,9 +79,8 @@ export function buildVercelCloudTools(
     }
 
     const schema = z.object(schemaObj)
-    vercelTools[t.name] = (tool as any)({
+    vercelTools[t.name] = tool({
       description: t.description,
-      parameters: schema,
       inputSchema: schema,
       execute: async (args: any) => {
         callbacks?.onToolCall?.({ toolName: t.name, args })

@@ -698,8 +698,8 @@ export default function ChatScreen() {
       {
         evaluateSafety,
         memoryStore: {
-          saveMemory: (convId, fact) => saveMemory(convId || threadId, fact),
-          deleteMemory: (convId, fact) => deleteMemory(convId || threadId, fact),
+          saveMemory: (_convId, fact) => saveMemory(threadId, fact),
+          deleteMemory: (_convId, fact) => deleteMemory(threadId, fact),
         },
       },
       {
