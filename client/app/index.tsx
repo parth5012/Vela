@@ -1280,7 +1280,7 @@ export default function ChatScreen() {
             {segment.children.map((child: any, childIdx: number) => renderSegment(child, childIdx))}
           </View>
         ) : isThoughtOrIntent ? null : (
-          <Text style={[styles.rawText, { color: colors.text, fontSize: sizes.sub, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }]}>
+          <Text style={[styles.rawText, { color: colors.text, fontSize: sizes.sub, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }]}>
             {segment.content || (segment.type === 'skill' ? '(Executing skill...)' : '(Executing...)')}
           </Text>
         )}
@@ -1317,10 +1317,11 @@ export default function ChatScreen() {
                   return (
                     <Pressable
                       key={p.id}
-                      style={[
+                      style={({ pressed }) => [
                         styles.agentBarCell,
                         { borderColor: colors.glassBorder, backgroundColor: 'rgba(0,0,0,0.25)' },
-                        isSelected && { borderColor: aurora.acc1, backgroundColor: aurora.acc1 + '1f' }
+                        isSelected && { borderColor: aurora.acc1, backgroundColor: aurora.acc1 + '1f' },
+                        pressed && { opacity: 0.8, transform: [{ scale: 0.96 }] }
                       ]}
                       onPress={() => {
                         setThreadAgent(activeThreadId, p.id);
@@ -1476,32 +1477,32 @@ export default function ChatScreen() {
 
                     {showActionBar && (
                       <View style={styles.actionBar}>
-                        <Pressable style={styles.actionBtn} onPress={() => handleCopyText(message.content)}>
+                        <Pressable style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.7, transform: [{ scale: 0.95 }] }]} onPress={() => handleCopyText(message.content)}>
                           <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Copy</Text>
                         </Pressable>
                 {!isUser && (
                   <>
-                      <Pressable style={styles.actionBtn} onPress={() => setViewerContent(message.content)}>
+                      <Pressable style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.7, transform: [{ scale: 0.95 }] }]} onPress={() => setViewerContent(message.content)}>
                       <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>View</Text>
                     </Pressable>
-                      <Pressable style={styles.actionBtn} onPress={() => handleCopyCodeBlocks(message.content)}>
+                      <Pressable style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.7, transform: [{ scale: 0.95 }] }]} onPress={() => handleCopyCodeBlocks(message.content)}>
                               <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Code</Text>
                             </Pressable>
-                            <Pressable style={styles.actionBtn} onPress={() => handleRegenerate(message)}>
+                            <Pressable style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.7, transform: [{ scale: 0.95 }] }]} onPress={() => handleRegenerate(message)}>
                               <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Retry</Text>
                             </Pressable>
-                            <Pressable style={styles.actionBtn} onPress={() => toggleRaw(message.id)}>
+                            <Pressable style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.7, transform: [{ scale: 0.95 }] }]} onPress={() => toggleRaw(message.id)}>
                               <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Raw</Text>
                             </Pressable>
                           </>
                         )}
-                        <Pressable style={styles.actionBtn} onPress={() => handleBranch(message)}>
+                        <Pressable style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.7, transform: [{ scale: 0.95 }] }]} onPress={() => handleBranch(message)}>
                           <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Branch</Text>
                         </Pressable>
-                        <Pressable style={styles.actionBtn} onPress={() => handleDownloadMd(message)}>
+                        <Pressable style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.7, transform: [{ scale: 0.95 }] }]} onPress={() => handleDownloadMd(message)}>
                           <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Download</Text>
                         </Pressable>
-                        <Pressable style={styles.actionBtn} onPress={() => handleShowInfo(message)}>
+                        <Pressable style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.7, transform: [{ scale: 0.95 }] }]} onPress={() => handleShowInfo(message)}>
                           <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Info</Text>
                         </Pressable>
                       </View>
@@ -1539,7 +1540,7 @@ export default function ChatScreen() {
                   style={({ pressed }) => [
                     styles.suggestionCard,
                     { backgroundColor: colors.glass, borderColor: colors.glassBorder },
-                    pressed && { borderColor: aurora.acc1, opacity: 0.85 }
+                    pressed && { borderColor: aurora.acc1, opacity: 0.85, transform: [{ scale: 0.98 }] }
                   ]}
                   onPress={() => handleSendWelcome(item.text, item.agent)}
                 >
@@ -1565,7 +1566,7 @@ export default function ChatScreen() {
                       styles.agentPill,
                       { backgroundColor: 'rgba(0,0,0,0.25)', borderColor: colors.glassBorder },
                       isSelected && { backgroundColor: aurora.acc1, borderColor: aurora.acc1 },
-                      pressed && { opacity: 0.8 }
+                      pressed && { opacity: 0.8, transform: [{ scale: 0.96 }] }
                     ]}
                     onPress={() => setDefaultAgent(p.id)}
                   >
@@ -1583,7 +1584,11 @@ export default function ChatScreen() {
       {/* Model Mode Selector */}
       <View style={[styles.modelSwitcherContainer, { backgroundColor: colors.glass, borderTopColor: colors.glassBorder }]}>
         <Pressable
-          style={[styles.switcherButton, { borderColor: colors.glassBorder, backgroundColor: 'rgba(0,0,0,0.25)' }]}
+          style={({ pressed }) => [
+            styles.switcherButton,
+            { borderColor: colors.glassBorder, backgroundColor: 'rgba(0,0,0,0.25)' },
+            pressed && { opacity: 0.82, transform: [{ scale: 0.98 }] }
+          ]}
           onPress={handleToggleLocalMode}
         >
           <Text style={[styles.switcherLabel, { color: colors.text }]}>
@@ -1638,7 +1643,7 @@ export default function ChatScreen() {
             styles.sendButton,
             { backgroundColor: isCurrentThreadStreaming ? '#ef4444' : aurora.acc1, shadowColor: aurora.acc1 },
             !isCurrentThreadStreaming && !input.trim() && { backgroundColor: colors.textDark, shadowOpacity: 0 },
-            pressed && { opacity: 0.8 }
+            pressed && { opacity: 0.82, transform: [{ scale: 0.95 }] }
           ]}
           onPress={handleSendPress}
           disabled={!isCurrentThreadStreaming && !input.trim()}

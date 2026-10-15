@@ -43,7 +43,11 @@ export function AuroraScreen({
   return (
     <LinearGradient colors={[colors.skyTop, colors.skyBottom]} style={styles.screen}>
       <View style={styles.header}>
-        <Pressable onPress={handleBack} hitSlop={10} style={styles.backBtn}>
+        <Pressable
+          onPress={handleBack}
+          hitSlop={10}
+          style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7, transform: [{ scale: 0.96 }] }]}
+        >
           <Text style={[styles.backText, { color: colors.textMuted, fontSize: sizes.text }]}>‹ Back</Text>
         </Pressable>
         <Text
@@ -143,10 +147,11 @@ export function PillGroup<T extends string>({
         return (
           <Pressable
             key={o.value}
-            style={[
+            style={({ pressed }) => [
               styles.pill,
               { backgroundColor: 'rgba(0,0,0,0.25)', borderColor: colors.glassBorder },
-              selected && { borderColor: aurora.acc1, borderWidth: 2 },
+              selected && { borderColor: aurora.acc1, borderWidth: 1.5, backgroundColor: aurora.acc1 + '15' },
+              pressed && { opacity: 0.8, transform: [{ scale: 0.97 }] }
             ]}
             onPress={() => onChange(o.value)}
           >
@@ -182,10 +187,11 @@ export function ChipGroup({
         return (
           <Pressable
             key={o.value}
-            style={[
+            style={({ pressed }) => [
               styles.chip,
               { backgroundColor: 'rgba(0,0,0,0.25)', borderColor: colors.glassBorder },
-              selected && { borderColor: aurora.acc1 },
+              selected && { borderColor: aurora.acc1, backgroundColor: aurora.acc1 + '15' },
+              pressed && { opacity: 0.8, transform: [{ scale: 0.96 }] }
             ]}
             onPress={() => onChange(o.value)}
           >
@@ -223,13 +229,13 @@ export function PrimaryButton({
         {
           backgroundColor: aurora.acc1,
           shadowColor: aurora.acc1,
-          shadowOpacity: 0.45,
-          shadowRadius: 12,
-          shadowOffset: { width: 0, height: 6 },
-          elevation: 8,
+          shadowOpacity: 0.35,
+          shadowRadius: 10,
+          shadowOffset: { width: 0, height: 4 },
+          elevation: 6,
         },
-        pressed && { opacity: 0.8 },
-        (disabled || loading) && { opacity: 0.6 },
+        pressed && { opacity: 0.82, transform: [{ scale: 0.97 }] },
+        (disabled || loading) && { opacity: 0.5 },
       ]}
       onPress={onPress}
       disabled={disabled || loading}
@@ -256,7 +262,10 @@ export function DangerButton({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel || label}
-      style={({ pressed }) => [styles.danger, pressed && { backgroundColor: 'rgba(239, 68, 68, 0.18)' }]}
+      style={({ pressed }) => [
+        styles.danger,
+        pressed && { backgroundColor: 'rgba(239, 68, 68, 0.18)', transform: [{ scale: 0.97 }] }
+      ]}
       onPress={onPress}
     >
       <Text style={styles.dangerText}>{label}</Text>
@@ -284,9 +293,9 @@ export function SecondaryButton({
         styles.secondary,
         {
           borderColor: colors.glassBorder,
-          backgroundColor: 'rgba(255, 255, 255, 0.08)',
+          backgroundColor: 'rgba(255, 255, 255, 0.05)',
         },
-        pressed && { opacity: 0.7 },
+        pressed && { opacity: 0.7, transform: [{ scale: 0.97 }] },
         disabled && { opacity: 0.4 },
       ]}
       onPress={onPress}
@@ -317,10 +326,11 @@ export function AccentDots() {
         return (
           <Pressable
             key={color}
-            style={[
+            style={({ pressed }) => [
               styles.accentDot,
               { backgroundColor: ACCENT_COLORS[color] },
               selected && { borderColor: aurora.acc1, borderWidth: 2 },
+              pressed && { opacity: 0.8, transform: [{ scale: 0.92 }] },
             ]}
             onPress={() => setAccentColor(color)}
             accessibilityRole="button"

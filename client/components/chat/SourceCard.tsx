@@ -30,8 +30,8 @@ export default function SourceCard({ src, colors, sizes, accentHex }: { src: Sea
     <Pressable
       style={({ pressed }) => [
         styles.sourceCard,
-        { backgroundColor: 'rgba(0,0,0,0.25)', borderColor: colors.glassBorder },
-        pressed && { opacity: 0.8 }
+        { backgroundColor: 'rgba(0,0,0,0.3)', borderColor: colors.glassBorder },
+        pressed && { opacity: 0.82, transform: [{ scale: 0.97 }] }
       ]}
       onPress={handlePress}
     >
@@ -63,37 +63,39 @@ export default function SourceCard({ src, colors, sizes, accentHex }: { src: Sea
 const styles = StyleSheet.create({
   sourceCard: {
     borderWidth: 1,
-    borderRadius: 10,
-    padding: 8,
-    width: 140,
+    borderRadius: 8,
+    padding: 9,
+    width: 144,
   },
   sourceHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 5,
     gap: 6,
   },
   sourceFavicon: {
     width: 14,
     height: 14,
-    borderRadius: 2,
+    borderRadius: 3,
   },
   sourceIconFallback: {
     width: 14,
     height: 14,
-    borderRadius: 2,
+    borderRadius: 3,
     justifyContent: 'center',
     alignItems: 'center',
   },
   sourceIconFallbackText: {
     fontSize: 8,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   sourceSiteName: {
     flex: 1,
     fontWeight: '600',
+    letterSpacing: -0.1,
   },
   sourceTitle: {
     fontWeight: '500',
+    lineHeight: 16,
   },
 });

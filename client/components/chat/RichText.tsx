@@ -51,26 +51,26 @@ export default function RichText({
       }
 
       return (
-        <View key={node.key} style={[styles.codeBlockWrapper, { backgroundColor: colors.background, borderColor: colors.border }]}>
-          <View style={[styles.codeBlockHeader, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.codeBlockLang, { color: colors.textDark }]}>
-              {lang.toUpperCase() || 'CODE'}
-            </Text>
-            <Pressable 
-              style={({ pressed }) => [styles.codeCopyBtn, pressed && { opacity: 0.7 }]} 
-              onPress={async () => {
-                await Clipboard.setStringAsync(codeText);
-              }}
-            >
-              <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, fontWeight: 'bold' }}>Copy</Text>
-            </Pressable>
+          <View style={[styles.codeBlockWrapper, { backgroundColor: colors.background, borderColor: colors.border }]}>
+            <View style={[styles.codeBlockHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.codeBlockLang, { color: colors.textDark, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }]}>
+                {lang.toUpperCase() || 'CODE'}
+              </Text>
+              <Pressable 
+                style={({ pressed }) => [styles.codeCopyBtn, pressed && { opacity: 0.7, transform: [{ scale: 0.95 }] }]} 
+                onPress={async () => {
+                  await Clipboard.setStringAsync(codeText);
+                }}
+              >
+                <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, fontWeight: '600', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>Copy</Text>
+              </Pressable>
+            </View>
+            <ScrollView horizontal={true} showsHorizontalScrollIndicator={true} style={{ width: '100%', maxWidth: '100%' }} contentContainerStyle={{ flexGrow: 1 }}>
+              <Text style={[styles.codeText, { color: colors.text, fontSize: sizes.text - 1, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }]}>
+                {codeText.replace(/\n$/, '')}
+              </Text>
+            </ScrollView>
           </View>
-          <ScrollView horizontal={true} showsHorizontalScrollIndicator={true} style={{ width: '100%', maxWidth: '100%' }} contentContainerStyle={{ flexGrow: 1 }}>
-            <Text style={[styles.codeText, { color: colors.text, fontSize: sizes.text - 1, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }]}>
-              {codeText.replace(/\n$/, '')}
-            </Text>
-          </ScrollView>
-        </View>
       );
     },
     code_block: (node: any) => {
@@ -78,18 +78,18 @@ export default function RichText({
       return (
         <View key={node.key} style={[styles.codeBlockWrapper, { backgroundColor: colors.background, borderColor: colors.border }]}>
           <View style={[styles.codeBlockHeader, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.codeBlockLang, { color: colors.textDark }]}>CODE</Text>
+            <Text style={[styles.codeBlockLang, { color: colors.textDark, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }]}>CODE</Text>
             <Pressable 
-              style={({ pressed }) => [styles.codeCopyBtn, pressed && { opacity: 0.7 }]} 
+              style={({ pressed }) => [styles.codeCopyBtn, pressed && { opacity: 0.7, transform: [{ scale: 0.95 }] }]} 
               onPress={async () => {
                 await Clipboard.setStringAsync(codeText);
               }}
             >
-              <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, fontWeight: 'bold' }}>Copy</Text>
+              <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, fontWeight: '600', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>Copy</Text>
             </Pressable>
           </View>
           <ScrollView horizontal={true} showsHorizontalScrollIndicator={true} style={{ width: '100%', maxWidth: '100%' }} contentContainerStyle={{ flexGrow: 1 }}>
-            <Text style={[styles.codeText, { color: colors.text, fontSize: sizes.text - 1, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }]}>
+            <Text style={[styles.codeText, { color: colors.text, fontSize: sizes.text - 1, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }]}>
               {codeText.replace(/\n$/, '')}
             </Text>
           </ScrollView>
@@ -102,7 +102,7 @@ export default function RichText({
     body: {
       color: colors.text,
       fontSize: sizes.text,
-      lineHeight: sizes.text * 1.45,
+      lineHeight: sizes.text * 1.5,
     },
     link: {
       color: accentHex,
@@ -111,9 +111,12 @@ export default function RichText({
     code_inline: {
       backgroundColor: colors.card,
       color: colors.text,
-      fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-      paddingHorizontal: 4,
+      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+      paddingHorizontal: 5,
+      paddingVertical: 1,
       borderRadius: 4,
+      borderWidth: 1,
+      borderColor: colors.border,
       fontSize: sizes.text - 1,
     },
     code_block: {
@@ -125,6 +128,7 @@ export default function RichText({
       marginVertical: 8,
       color: colors.text,
       fontSize: sizes.text - 1,
+      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     },
     fence: {
       backgroundColor: colors.background,
@@ -135,13 +139,14 @@ export default function RichText({
       marginVertical: 8,
       color: colors.text,
       fontSize: sizes.text - 1,
+      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     },
     blockquote: {
-      backgroundColor: colors.card,
+      backgroundColor: 'rgba(255, 255, 255, 0.03)',
       borderColor: accentHex,
-      borderLeftWidth: 4,
+      borderLeftWidth: 3,
       paddingHorizontal: 12,
-      paddingVertical: 6,
+      paddingVertical: 8,
       marginVertical: 8,
       borderRadius: 4,
       color: colors.textMuted,
@@ -267,22 +272,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderBottomWidth: 1,
   },
   codeBlockLang: {
     fontSize: 10,
-    fontWeight: 'bold',
-    letterSpacing: 1,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   codeCopyBtn: {
-    paddingVertical: 2,
-    paddingHorizontal: 6,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
     borderRadius: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
   },
   codeText: {
     padding: 12,
-    lineHeight: 18,
+    lineHeight: 20,
   },
 });

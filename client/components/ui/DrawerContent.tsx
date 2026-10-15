@@ -151,9 +151,12 @@ const handleJournal = () => {
         }}
       >
         <Text style={[styles.logo, { color: accentHex }]}>VELA</Text>
-        <Text style={[styles.nodeStatus, { color: colors.textDark }]} numberOfLines={1}>
-          Node: {(apiUrl || '').replace(/^https?:\/\//, '')}
-        </Text>
+        <View style={styles.nodePill}>
+          <View style={styles.nodeStatusDot} />
+          <Text style={[styles.nodeStatus, { color: colors.textDark }]} numberOfLines={1}>
+            {(apiUrl || 'local').replace(/^https?:\/\//, '')}
+          </Text>
+        </View>
       </Pressable>
 
       {/* Browser — prominent top placement per #156 */}
@@ -216,7 +219,8 @@ const handleJournal = () => {
         style={({ pressed }) => [
           styles.newChatButton, 
           { backgroundColor: colors.card, borderColor: colors.border },
-          pressed && styles.newChatButtonPressed
+          pressed && styles.newChatButtonPressed,
+          { transform: [{ scale: pressed ? 0.96 : 1.0 }] }
         ]}
         onPress={handleNewChat}
         accessibilityRole="button"
@@ -251,7 +255,7 @@ const handleJournal = () => {
             styles.settingsButton, 
             pressed && styles.settingsButtonPressed, 
             pressed && { backgroundColor: colors.card },
-            { marginBottom: 8, minHeight: 48, justifyContent: 'center' }
+            { minHeight: 44, justifyContent: 'center', transform: [{ scale: pressed ? 0.96 : 1.0 }] }
           ]}
           onPress={() => {
             router.navigate('/');
@@ -268,7 +272,7 @@ const handleJournal = () => {
             styles.settingsButton, 
             pressed && styles.settingsButtonPressed,
             pressed && { backgroundColor: colors.card },
-            { marginBottom: 8, flexDirection: 'row', alignItems: 'center', minHeight: 48 }
+            { flexDirection: 'row', alignItems: 'center', minHeight: 44, transform: [{ scale: pressed ? 0.96 : 1.0 }] }
           ]}
           onPress={handleRefresh}
           disabled={isSyncing}
@@ -276,43 +280,43 @@ const handleJournal = () => {
           {isSyncing ? (
             <ActivityIndicator size="small" color={accentHex} style={{ marginRight: 10 }} />
           ) : (
-            <Text style={{ marginRight: 10, fontSize: 14 }}>🔄</Text>
+            <Text style={{ marginRight: 10, fontSize: 13 }}>🔄</Text>
           )}
           <Text style={[styles.settingsButtonText, { color: colors.textMuted }]}>
             {isSyncing ? 'Syncing...' : 'Refresh Chats'}
           </Text>
         </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        style={({ pressed }) => [
-          styles.settingsButton,
-          pressed && styles.settingsButtonPressed,
-          pressed && { backgroundColor: colors.card },
-          { marginBottom: 8, minHeight: 48, justifyContent: 'center' }
-        ]}
-        onPress={handleTasks}
-      >
-        <Text style={[styles.settingsButtonText, { color: colors.textMuted }]}>📋 Tasks</Text>
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        style={({ pressed }) => [
-          styles.settingsButton,
-          pressed && styles.settingsButtonPressed,
-          pressed && { backgroundColor: colors.card },
-          { marginBottom: 8, minHeight: 48, justifyContent: 'center' }
-        ]}
-        onPress={handleJournal}
-      >
-        <Text style={[styles.settingsButtonText, { color: colors.textMuted }]}>📝 Journal</Text>
-      </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          style={({ pressed }) => [
+            styles.settingsButton,
+            pressed && styles.settingsButtonPressed,
+            pressed && { backgroundColor: colors.card },
+            { minHeight: 44, justifyContent: 'center', transform: [{ scale: pressed ? 0.96 : 1.0 }] }
+          ]}
+          onPress={handleTasks}
+        >
+          <Text style={[styles.settingsButtonText, { color: colors.textMuted }]}>📋 Tasks</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          style={({ pressed }) => [
+            styles.settingsButton,
+            pressed && styles.settingsButtonPressed,
+            pressed && { backgroundColor: colors.card },
+            { minHeight: 44, justifyContent: 'center', transform: [{ scale: pressed ? 0.96 : 1.0 }] }
+          ]}
+          onPress={handleJournal}
+        >
+          <Text style={[styles.settingsButtonText, { color: colors.textMuted }]}>📝 Journal</Text>
+        </Pressable>
         <Pressable
           accessibilityRole="button"
           style={({ pressed }) => [
             styles.settingsButton, 
             pressed && styles.settingsButtonPressed,
             pressed && { backgroundColor: colors.card },
-            { minHeight: 48, justifyContent: 'center' }
+            { minHeight: 44, justifyContent: 'center', transform: [{ scale: pressed ? 0.96 : 1.0 }] }
           ]}
           onPress={handleSettings}
         >

@@ -297,9 +297,10 @@ export default function TasksScreen() {
           <Pressable
             key={filter}
             onPress={() => setActiveFilter(filter as any)}
-            style={[
+            style={({ pressed }) => [
               styles.filterTab,
-              activeFilter === filter && { backgroundColor: aurora.acc1, borderColor: aurora.acc1 }
+              activeFilter === filter && { backgroundColor: aurora.acc1, borderColor: aurora.acc1 },
+              pressed && { opacity: 0.8, transform: [{ scale: 0.96 }] }
             ]}
           >
             <Text
@@ -325,7 +326,10 @@ export default function TasksScreen() {
         ) : (
           filteredTasks.map((task) => (
             <Card key={task.id} style={styles.taskCard}>
-              <Pressable onPress={() => handleOpenDetail(task)} style={styles.cardHeader}>
+              <Pressable
+                onPress={() => handleOpenDetail(task)}
+                style={({ pressed }) => [styles.cardHeader, pressed && { opacity: 0.85 }]}
+              >
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.taskTitle, { color: colors.text, fontSize: sizes.title }]}>
                     {task.title}
@@ -339,7 +343,8 @@ export default function TasksScreen() {
                 <View style={styles.statusIndicator}>
                   <Text style={[styles.badge, { 
                     backgroundColor: task.status === 'active' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                    color: task.status === 'active' ? '#10b981' : '#ef4444'
+                    color: task.status === 'active' ? '#10b981' : '#ef4444',
+                    borderColor: task.status === 'active' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)',
                   }]}>
                     {task.status.toUpperCase()}
                   </Text>
@@ -373,27 +378,39 @@ export default function TasksScreen() {
                   <Pressable
                     onPress={() => handleTriggerManualRun(task)}
                     disabled={runningTaskId !== null}
-                    style={[styles.actionBtn, { backgroundColor: 'rgba(59, 130, 246, 0.15)' }]}
+                    style={({ pressed }) => [
+                      styles.actionBtn,
+                      { backgroundColor: 'rgba(59, 130, 246, 0.12)', borderColor: 'rgba(59, 130, 246, 0.3)' },
+                      pressed && { opacity: 0.75, transform: [{ scale: 0.95 }] },
+                    ]}
                   >
                     {runningTaskId === task.id ? (
                       <ActivityIndicator size="small" color="#3b82f6" />
                     ) : (
-                      <Text style={[styles.actionBtnText, { color: '#3b82f6' }]}>Run Now</Text>
+                      <Text style={[styles.actionBtnText, { color: '#60a5fa' }]}>Run Now</Text>
                     )}
                   </Pressable>
 
                   <Pressable
                     onPress={() => handleOpenForm(task)}
-                    style={[styles.actionBtn, { backgroundColor: 'rgba(245, 158, 11, 0.15)' }]}
+                    style={({ pressed }) => [
+                      styles.actionBtn,
+                      { backgroundColor: 'rgba(245, 158, 11, 0.12)', borderColor: 'rgba(245, 158, 11, 0.3)' },
+                      pressed && { opacity: 0.75, transform: [{ scale: 0.95 }] },
+                    ]}
                   >
-                    <Text style={[styles.actionBtnText, { color: '#f59e0b' }]}>Edit</Text>
+                    <Text style={[styles.actionBtnText, { color: '#fbbf24' }]}>Edit</Text>
                   </Pressable>
 
                   <Pressable
                     onPress={() => handleDeleteTask(task.id)}
-                    style={[styles.actionBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)' }]}
+                    style={({ pressed }) => [
+                      styles.actionBtn,
+                      { backgroundColor: 'rgba(239, 68, 68, 0.12)', borderColor: 'rgba(239, 68, 68, 0.3)' },
+                      pressed && { opacity: 0.75, transform: [{ scale: 0.95 }] },
+                    ]}
                   >
-                    <Text style={[styles.actionBtnText, { color: '#ef4444' }]}>Delete</Text>
+                    <Text style={[styles.actionBtnText, { color: '#f87171' }]}>Delete</Text>
                   </Pressable>
                 </View>
               </View>

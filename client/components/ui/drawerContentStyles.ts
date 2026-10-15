@@ -1,12 +1,11 @@
 /**
  * Module: client/components/ui/drawerContentStyles
- * Intent: Static stylesheet for DrawerContent (extracted verbatim).
+ * Intent: Modern Precision / Shadcn-Linear style static stylesheet for DrawerContent.
+ * Responsibilities: Owns the `styles` object with crisp 1px borders, concentric radii, and micro-typography.
  * Public API: styles.
- * Invariants: No component-scope references — safe to move without behavior change.
- * Side Effects: none (StyleSheet.create is pure).
- * Maintenance: Update this block when exports, invariants, side effects, or ownership change.
+ * Invariants: Pure StyleSheet.create.
  */
-import { StyleSheet } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 
 export const styles = StyleSheet.create({
   container: {
@@ -15,28 +14,48 @@ export const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 20,
-    paddingVertical: 24,
+    paddingTop: 18,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#18181b',
   },
   logo: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '900',
     color: '#818cf8',
     letterSpacing: 4,
-    marginBottom: 4,
+    marginBottom: 6,
+  },
+  nodePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#27272a',
+    backgroundColor: '#121215',
+    alignSelf: 'flex-start',
+  },
+  nodeStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10b981',
   },
   nodeStatus: {
-    fontSize: 12,
+    fontSize: 11,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     color: '#71717a',
+    letterSpacing: 0.2,
   },
   browserRow: {
     marginHorizontal: 16,
-    marginTop: 16,
+    marginTop: 14,
     marginBottom: 4,
     borderWidth: 1,
-    borderLeftWidth: 3,
-    borderRadius: 10,
+    borderRadius: 12,
     minHeight: 48,
     justifyContent: 'center',
     paddingVertical: 10,
@@ -47,7 +66,7 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
   },
   browserIcon: {
-    fontSize: 18,
+    fontSize: 16,
     marginRight: 10,
   },
   browserTextCol: {
@@ -60,9 +79,9 @@ export const styles = StyleSheet.create({
     gap: 6,
   },
   browserDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   pulsingDot: {
     width: 6,
@@ -71,9 +90,10 @@ export const styles = StyleSheet.create({
     opacity: 0.9,
   },
   browserTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     flexShrink: 1,
+    letterSpacing: 0.2,
   },
   browserAiRow: {
     flexDirection: 'row',
@@ -82,51 +102,59 @@ export const styles = StyleSheet.create({
   },
   browserAiText: {
     fontSize: 11,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     flexShrink: 1,
   },
   browserUrl: {
     fontSize: 11,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    letterSpacing: 0.2,
   },
   newChatButton: {
-    backgroundColor: '#18181b',
+    backgroundColor: '#121215',
     borderColor: '#27272a',
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: 10,
     marginHorizontal: 16,
-    marginVertical: 16,
-    paddingVertical: 12,
+    marginVertical: 12,
+    paddingVertical: 11,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 48,
+    minHeight: 44,
   },
   newChatButtonPressed: {
-    backgroundColor: '#27272a',
+    backgroundColor: '#18181b',
+    borderColor: '#3f3f46',
   },
   newChatButtonText: {
     color: '#f4f4f5',
     fontWeight: '600',
-    fontSize: 14,
+    fontSize: 13,
+    letterSpacing: 0.3,
   },
   threadsContainer: {
     flex: 1,
   },
   threadsContent: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
+    paddingBottom: 16,
   },
   sectionTitle: {
     fontSize: 11,
     fontWeight: '700',
     color: '#71717a',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
     marginBottom: 8,
-    paddingLeft: 4,
+    marginTop: 8,
+    paddingLeft: 6,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   emptyText: {
     fontSize: 13,
-    color: '#3f3f46',
+    color: '#52525b',
     textAlign: 'center',
-    marginTop: 20,
+    marginTop: 24,
   },
   threadItem: {
     flexDirection: 'row',
@@ -134,24 +162,31 @@ export const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 10,
     paddingHorizontal: 12,
-    borderRadius: 6,
+    borderRadius: 8,
     marginBottom: 4,
+    minHeight: 44,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   activeThreadItem: {
     backgroundColor: '#18181b',
+    borderColor: '#27272a',
   },
   threadTextCol: {
     flex: 1,
     marginRight: 8,
-    gap: 2,
+    gap: 3,
   },
   threadTitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#a1a1aa',
     flex: 1,
+    fontWeight: '400',
   },
   threadTimestamp: {
-    fontSize: 11,
+    fontSize: 10,
+    fontVariant: ['tabular-nums'],
+    letterSpacing: 0.2,
   },
   pinnedThreadTitle: {
     color: '#e4e4e7',
@@ -159,33 +194,40 @@ export const styles = StyleSheet.create({
   },
   activeThreadTitle: {
     color: '#f4f4f5',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   deleteButton: {
-    padding: 4,
+    padding: 6,
   },
   deleteButtonText: {
     color: '#52525b',
     fontSize: 12,
   },
   footer: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: '#18181b',
+    gap: 2,
   },
   settingsButton: {
-    paddingVertical: 10,
+    paddingVertical: 9,
     paddingHorizontal: 12,
-    borderRadius: 6,
+    borderRadius: 8,
     backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: 'transparent',
+    minHeight: 44,
+    justifyContent: 'center',
   },
   settingsButtonPressed: {
     backgroundColor: '#18181b',
+    borderColor: '#27272a',
   },
   settingsButtonText: {
     color: '#a1a1aa',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
+    letterSpacing: 0.2,
   },
 });

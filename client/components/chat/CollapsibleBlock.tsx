@@ -201,7 +201,10 @@ export default function CollapsibleBlock({
     ]}>
       {/* Header Pressable */}
       <Pressable
-        style={styles.header}
+        style={({ pressed }) => [
+          styles.header,
+          pressed && { opacity: 0.82, transform: [{ scale: 0.995 }] },
+        ]}
         onPress={toggleCollapse}
         accessibilityRole="button"
         accessibilityLabel={(collapsed ? 'Expand ' : 'Collapse ') + title}
@@ -271,7 +274,7 @@ export default function CollapsibleBlock({
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 10,
+    borderRadius: 8,
     borderWidth: 1,
     marginVertical: 6,
     overflow: 'hidden',
@@ -296,26 +299,33 @@ const styles = StyleSheet.create({
   },
   title: {
     fontWeight: '600',
+    letterSpacing: -0.2,
   },
   inputLabel: {
-    marginTop: 2,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    marginTop: 3,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    letterSpacing: -0.1,
   },
   arrow: {
-    fontWeight: 'bold',
+    fontWeight: '600',
     marginLeft: 8,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: 12,
   },
   safetyPill: {
-    paddingHorizontal: 7,
+    paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 10,
+    borderRadius: 4,
     alignItems: 'center',
     justifyContent: 'center',
   },
   safetyPillText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
-    lineHeight: 14,
+    lineHeight: 13,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   content: {
     borderTopWidth: 1,

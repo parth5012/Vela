@@ -27,10 +27,11 @@ export default function ThreadRow({ thread, isActive, streaming, colors, accentH
   const timeAgo = thread.updated_at ? formatDistanceToNow(thread.updated_at) : '';
   return (
     <Pressable
-      style={[
+      style={({ pressed }) => [
         styles.threadItem,
         isActive && styles.activeThreadItem,
-        isActive && { backgroundColor: colors.card }
+        isActive && { backgroundColor: colors.card, borderColor: colors.border },
+        { transform: [{ scale: pressed ? 0.98 : 1.0 }] },
       ]}
       onPress={() => onSelect(thread.id)}
       onLongPress={() => onOpenOptions(thread)}

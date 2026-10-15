@@ -51,23 +51,31 @@ function HeaderRightActions() {
   };
 
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 12 }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 12, gap: 4 }}>
       <Pressable
         onPress={handleToggle}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         style={({ pressed }) => ({
           flexDirection: 'row',
           alignItems: 'center',
-          backgroundColor: isBrowserRoute ? '#312e81' : '#1e1b4b',
-          paddingHorizontal: 8,
-          paddingVertical: 4,
-          borderRadius: 6,
-          marginRight: 8,
+          backgroundColor: isBrowserRoute ? 'rgba(99, 102, 241, 0.15)' : 'rgba(24, 24, 27, 0.8)',
+          paddingHorizontal: 10,
+          paddingVertical: 5,
+          borderRadius: 8,
           borderWidth: 1,
-          borderColor: isBrowserRoute ? '#818cf8' : '#4f46e5',
-          opacity: pressed ? 0.7 : 1,
+          borderColor: isBrowserRoute ? 'rgba(99, 102, 241, 0.4)' : '#27272a',
+          opacity: pressed ? 0.8 : 1,
+          transform: [{ scale: pressed ? 0.96 : 1.0 }],
         })}
       >
-        <Text style={{ color: '#e0e7ff', fontSize: 12, fontWeight: 'bold' }}>
+        <Text
+          style={{
+            color: isBrowserRoute ? '#818cf8' : '#a1a1aa',
+            fontSize: 12,
+            fontWeight: '600',
+            letterSpacing: 0.3,
+          }}
+        >
           {isBrowserRoute ? '💬 Chat' : '🌐 Webview'}
         </Text>
       </Pressable>
@@ -276,6 +284,8 @@ export default function RootLayout() {
             backgroundColor: '#09090b',
             shadowColor: 'transparent',
             elevation: 0,
+            borderBottomWidth: 1,
+            borderBottomColor: '#27272a',
           },
           headerTitleStyle: {
             fontWeight: '900',

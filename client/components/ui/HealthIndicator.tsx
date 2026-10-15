@@ -112,6 +112,7 @@ export default function HealthIndicator() {
       onPress={() => checkHealth(true)}
       style={({ pressed }) => [
         styles.container,
+        { transform: [{ scale: pressed ? 0.96 : 1.0 }] },
         pressed && styles.containerPressed,
       ]}
       hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -119,7 +120,9 @@ export default function HealthIndicator() {
       {status === 'checking' ? (
         <ActivityIndicator size="small" color="#818cf8" style={styles.loader} />
       ) : (
-        <View style={[styles.dot, getDotStyle()]} />
+        <View style={styles.dotOuter}>
+          <View style={[styles.dot, getDotStyle()]} />
+        </View>
       )}
     </Pressable>
   );
@@ -131,6 +134,8 @@ const styles = StyleSheet.create({
     marginRight: 16,
     justifyContent: 'center',
     alignItems: 'center',
+    minWidth: 32,
+    minHeight: 32,
   },
   containerPressed: {
     opacity: 0.7,
@@ -139,10 +144,17 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
   },
+  dotOuter: {
+    padding: 2,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
   dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   dotOnline: {
     backgroundColor: '#10b981',
