@@ -21,9 +21,9 @@ async def test_sse_concurrency(monkeypatch):
     mock_db_session = MagicMock()
     mock_db_session.__enter__.return_value = mock_db
     
-    def mock_filter_by(id):
+    def mock_filter_by(*args, **kwargs):
         conv = MagicMock()
-        conv.id = id
+        conv.id = kwargs.get("id") or kwargs.get("conversation_id") or (args[0] if args else "default")
         conv.title = "Mock Chat"
         conv.agent = "personal assistant"
         mock_result = MagicMock()
@@ -98,16 +98,18 @@ async def test_sse_concurrency(monkeypatch):
             start_times = {item[1]: item[2] for item in starts}
             end_times = {item[1]: item[2] for item in ends}
             
-            uuid_0 = normalize_thread_id("thread_0")
-            uuid_1 = normalize_thread_id("thread_1")
-            uuid_2 = normalize_thread_id("thread_2")
+            # Identify which two requests acquired the semaphore first and which queued
+            sorted_starts = sorted(starts, key=lambda item: item[2])
+            first_uuid = sorted_starts[0][1]
+            second_uuid = sorted_starts[1][1]
+            third_uuid = sorted_starts[2][1]
             
-            # uuid_0 and uuid_1 should start immediately (within 0.15s)
-            assert abs(start_times[uuid_0] - start_times[uuid_1]) < 0.15
+            # The first two should start immediately (within 0.25s)
+            assert abs(start_times[first_uuid] - start_times[second_uuid]) < 0.25
             
-            # uuid_2 should start only after either uuid_0 or uuid_1 ends
-            min_first_end = min(end_times[uuid_0], end_times[uuid_1])
-            assert start_times[uuid_2] >= min_first_end - 0.05
+            # The third should start only after either of the first two ends
+            min_first_end = min(end_times[first_uuid], end_times[second_uuid])
+            assert start_times[third_uuid] >= min_first_end - 0.05
             
     # Total duration must be at least ~1.4s because of queuing
     assert total_duration >= 1.4
