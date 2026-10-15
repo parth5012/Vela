@@ -13,7 +13,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useConfigStore } from '../../store/useConfigStore';
-import { ACCENT_COLORS } from '../../utils/theme';
+import { ACCENT_COLORS, hexToRgba } from '../../utils/theme';
 import { useAurora } from '../../hooks/useAurora';
 import { styles } from './settingsKitStyles';
 
@@ -146,7 +146,7 @@ export function PillGroup<T extends string>({
             style={({ pressed }) => [
               styles.pill,
               { backgroundColor: 'rgba(0,0,0,0.25)', borderColor: colors.glassBorder },
-              selected && { borderColor: aurora.acc1, borderWidth: 1.5, backgroundColor: aurora.acc1 + '14' },
+              selected && { borderColor: aurora.acc1, borderWidth: 1.5, backgroundColor: hexToRgba(aurora.acc1, 0.08) },
               pressed && { transform: [{ scale: 0.96 }], opacity: 0.85 },
             ]}
             onPress={() => onChange(o.value)}
@@ -186,7 +186,7 @@ export function ChipGroup({
             style={({ pressed }) => [
               styles.chip,
               { backgroundColor: 'rgba(0,0,0,0.25)', borderColor: colors.glassBorder },
-              selected && { borderColor: aurora.acc1, backgroundColor: aurora.acc1 + '14' },
+              selected && { borderColor: aurora.acc1, backgroundColor: hexToRgba(aurora.acc1, 0.08) },
               pressed && { transform: [{ scale: 0.96 }], opacity: 0.85 },
             ]}
             onPress={() => onChange(o.value)}

@@ -23,12 +23,21 @@ export const ACCENT_AURORA: Record<keyof typeof ACCENT_COLORS, [string, string]>
   blue: ['#0284c7', '#7dd3fc'],
 };
 
-function hexToRgba(hex: string, alpha: number): string {
+export function hexToRgba(hex: string, alpha: number): string {
   const h = hex.replace('#', '');
   const r = parseInt(h.substring(0, 2), 16);
   const g = parseInt(h.substring(2, 4), 16);
   const b = parseInt(h.substring(4, 6), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+export function getContrastForeground(hex: string): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return yiq >= 140 ? '#0e0d0b' : '#ffffff';
 }
 
 export type AccentName = keyof typeof ACCENT_COLORS;
@@ -220,14 +229,16 @@ export function getAurora(
 ): AuroraGradient {
   if (accentColor && ACCENT_AURORA[accentColor]) {
     const [acc1, acc2] = ACCENT_AURORA[accentColor];
-    return { acc1, acc2, glow: hexToRgba(acc1, 0.4), onAccent: '#0e0d0b' };
+    return { acc1, acc2, glow: hexToRgba(acc1, 0.4), onAccent: getContrastForeground(acc1) };
   }
   const t = theme ? THEME_COLORS[theme] : undefined;
+  const acc1 = t?.aurora1 ?? '#d97706';
+  const acc2 = t?.aurora2 ?? '#fbbf24';
   return {
-    acc1: t?.aurora1 ?? '#d97706',
-    acc2: t?.aurora2 ?? '#fbbf24',
+    acc1,
+    acc2,
     glow: t?.glow ?? 'rgba(217, 119, 6, 0.35)',
-    onAccent: '#0e0d0b',
+    onAccent: getContrastForeground(acc1),
   };
 }
 

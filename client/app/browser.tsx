@@ -242,6 +242,8 @@ export default function BrowserScreen() {
 
         <Pressable
           onPress={handleClose}
+          accessibilityRole="button"
+          accessibilityLabel="Return to chat"
           style={({ pressed }) => [
             styles.toolbarButton,
             {

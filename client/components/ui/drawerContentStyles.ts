@@ -141,7 +141,11 @@ export const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   activeThreadItem: {
-    borderWidth: 1,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 2,
   },
   threadTextCol: {
     flex: 1,
@@ -181,10 +185,12 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 12,
     backgroundColor: 'transparent',
-    minHeight: 44,
+    minHeight: 48,
+    justifyContent: 'center',
   },
   settingsButtonPressed: {
-    opacity: 0.8,
+    opacity: 0.85,
+    transform: [{ scale: 0.96 }],
   },
   settingsButtonText: {
     fontSize: 14,

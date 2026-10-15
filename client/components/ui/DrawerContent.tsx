@@ -248,8 +248,7 @@ const handleJournal = () => {
           accessibilityRole="button"
           style={({ pressed }) => [
             styles.settingsButton, 
-            pressed && [styles.settingsButtonPressed, { transform: [{ scale: 0.96 }], backgroundColor: colors.card }],
-            { minHeight: 48, justifyContent: 'center' }
+            pressed && [styles.settingsButtonPressed, { backgroundColor: colors.card }],
           ]}
           onPress={() => {
             router.navigate('/');
@@ -264,8 +263,8 @@ const handleJournal = () => {
           accessibilityRole="button"
           style={({ pressed }) => [
             styles.settingsButton, 
-            pressed && [styles.settingsButtonPressed, { transform: [{ scale: 0.96 }], backgroundColor: colors.card }],
-            { flexDirection: 'row', alignItems: 'center', minHeight: 48 }
+            { flexDirection: 'row', alignItems: 'center' },
+            pressed && [styles.settingsButtonPressed, { backgroundColor: colors.card }],
           ]}
           onPress={handleRefresh}
           disabled={isSyncing}
@@ -283,8 +282,7 @@ const handleJournal = () => {
           accessibilityRole="button"
           style={({ pressed }) => [
             styles.settingsButton,
-            pressed && [styles.settingsButtonPressed, { transform: [{ scale: 0.96 }], backgroundColor: colors.card }],
-            { minHeight: 48, justifyContent: 'center' }
+            pressed && [styles.settingsButtonPressed, { backgroundColor: colors.card }],
           ]}
           onPress={handleTasks}
         >
@@ -294,8 +292,7 @@ const handleJournal = () => {
           accessibilityRole="button"
           style={({ pressed }) => [
             styles.settingsButton,
-            pressed && [styles.settingsButtonPressed, { transform: [{ scale: 0.96 }], backgroundColor: colors.card }],
-            { minHeight: 48, justifyContent: 'center' }
+            pressed && [styles.settingsButtonPressed, { backgroundColor: colors.card }],
           ]}
           onPress={handleJournal}
         >
@@ -305,8 +302,7 @@ const handleJournal = () => {
           accessibilityRole="button"
           style={({ pressed }) => [
             styles.settingsButton, 
-            pressed && [styles.settingsButtonPressed, { transform: [{ scale: 0.96 }], backgroundColor: colors.card }],
-            { minHeight: 48, justifyContent: 'center' }
+            pressed && [styles.settingsButtonPressed, { backgroundColor: colors.card }],
           ]}
           onPress={handleSettings}
         >

@@ -80,7 +80,7 @@ export default function SettingsIndexScreen() {
                 style={({ pressed }) => [
                   styles.row,
                   i > 0 && { borderTopWidth: 1, borderTopColor: colors.glassBorder },
-                  pressed && { backgroundColor: 'rgba(255, 255, 255, 0.03)', opacity: 0.85, transform: [{ scale: 0.99 }] },
+                  pressed && { backgroundColor: 'rgba(255, 255, 255, 0.04)', opacity: 0.85 },
                 ]}
                 onPress={() => router.push(row.route as never)}
               >

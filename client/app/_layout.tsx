@@ -36,7 +36,7 @@ Notifications.setNotificationHandler({
 import { initializeDatabase } from '../db/client';
 import { wireOfflineSync, flushPendingMessages } from '../utils/offlineSync';
 import { runAgentDataBootstrap } from '../utils/seedAgents';
-import { THEME_COLORS, getAurora } from '../utils/theme';
+import { THEME_COLORS, getAurora, hexToRgba } from '../utils/theme';
 
 function HeaderRightActions() {
   const router = useRouter();
@@ -63,7 +63,7 @@ function HeaderRightActions() {
         style={({ pressed }) => ({
           flexDirection: 'row',
           alignItems: 'center',
-          backgroundColor: isBrowserRoute ? aurora.acc1 + '22' : 'rgba(255, 255, 255, 0.05)',
+          backgroundColor: isBrowserRoute ? hexToRgba(aurora.acc1, 0.14) : colors.glass,
           paddingHorizontal: 12,
           paddingVertical: 7,
           borderRadius: 20,

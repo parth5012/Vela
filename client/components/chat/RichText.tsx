@@ -142,7 +142,7 @@ export default function RichText({
       fontSize: sizes.text - 1,
     },
     blockquote: {
-      backgroundColor: 'rgba(217, 169, 109, 0.05)',
+      backgroundColor: colors.bubbleAssistant || 'rgba(217, 169, 109, 0.05)',
       borderColor: accentHex,
       borderLeftWidth: 3,
       paddingHorizontal: 14,

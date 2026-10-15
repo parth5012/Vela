@@ -194,8 +194,8 @@ export default function CollapsibleBlock({
     <View style={[
       styles.container,
       {
-        backgroundColor: isThoughtOrIntent ? 'rgba(217, 169, 109, 0.04)' : themeColors.card,
-        borderColor: isThoughtOrIntent ? 'rgba(217, 169, 109, 0.18)' : accentHex + '33',
+        backgroundColor: isThoughtOrIntent ? (themeColors.bubbleAssistant || 'rgba(217, 169, 109, 0.04)') : themeColors.card,
+        borderColor: isThoughtOrIntent ? (themeColors.bubbleAssistantBorder || 'rgba(217, 169, 109, 0.18)') : accentHex + '33',
         borderStyle: 'solid',
       }
     ]}>
@@ -215,7 +215,7 @@ export default function CollapsibleBlock({
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <Text style={[
                 styles.title,
-                { color: isThoughtOrIntent ? '#e0a96d' : themeColors.text, fontSize: themeSizes.text }
+                { color: isThoughtOrIntent ? (themeColors.status || '#e0a96d') : themeColors.text, fontSize: themeSizes.text }
               ]}>
                 {title}
               </Text>

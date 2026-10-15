@@ -54,7 +54,7 @@ export default function SourceCard({ src, colors, sizes, accentHex }: { src: Sea
           {src.siteName || 'Web Page'}
         </Text>
       </View>
-      <Text style={[styles.sourceTitle, { color: colors.textMuted, fontSize: sizes.text - 1, lineHeight: 16 }]} numberOfLines={2}>
+      <Text style={[styles.sourceTitle, { color: colors.textMuted, fontSize: sizes.text - 1, lineHeight: Math.round((sizes.text - 1) * 1.3) }]} numberOfLines={2}>
         {src.title}
       </Text>
     </Pressable>

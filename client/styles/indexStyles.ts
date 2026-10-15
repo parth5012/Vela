@@ -29,7 +29,7 @@ export const styles = StyleSheet.create({
   },
   agentBar: {
     borderBottomWidth: 1,
-    paddingVertical: 10,
+    paddingVertical: 8,
   },
   agentBarScroll: {
     paddingHorizontal: 16,
@@ -139,6 +139,7 @@ export const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.1)',
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
     minHeight: 32,
+    minWidth: 44,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -312,8 +313,9 @@ export const styles = StyleSheet.create({
   },
   sendButton: {
     borderRadius: 22,
-    width: 44,
+    minWidth: 44,
     height: 44,
+    paddingHorizontal: 12,
     justifyContent: 'center',
     alignItems: 'center',
     shadowOpacity: 0.45,

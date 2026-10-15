@@ -299,7 +299,7 @@ export default function TasksScreen() {
             onPress={() => setActiveFilter(filter as any)}
             style={({ pressed }) => [
               styles.filterTab,
-              { backgroundColor: 'rgba(255, 255, 255, 0.04)', borderColor: colors.glassBorder },
+              { backgroundColor: colors.glass, borderColor: colors.glassBorder },
               activeFilter === filter && { backgroundColor: aurora.acc1, borderColor: aurora.acc1 },
               pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] }
             ]}
@@ -378,6 +378,7 @@ export default function TasksScreen() {
                     style={({ pressed }) => [
                       styles.actionBtn,
                       { backgroundColor: 'rgba(59, 130, 246, 0.15)', borderColor: 'rgba(59, 130, 246, 0.3)' },
+                      runningTaskId !== null && runningTaskId !== task.id && { opacity: 0.4 },
                       pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] },
                     ]}
                   >
