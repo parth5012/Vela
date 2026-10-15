@@ -97,6 +97,8 @@ export default function RootLayout() {
   // Rules of Hooks and crashes ContextNavigator on remount.
   const currentUrl = useBrowserStore((s) => s.currentUrl);
   const isBrowserVisible = useBrowserStore((s) => s.isVisible);
+  const currentTheme = useConfigStore((state) => state.theme);
+  const currentAccent = useConfigStore((state) => state.accentColor);
 
   useEffect(() => {
     if (hasHydrated && chatHasHydrated) {
@@ -272,8 +274,6 @@ export default function RootLayout() {
   const isBrowserRoute = segments[0] === 'browser';
   const shouldShowWebview = isBrowserVisible && isBrowserRoute;
 
-  const currentTheme = useConfigStore((state) => state.theme);
-  const currentAccent = useConfigStore((state) => state.accentColor);
   const currentColors = THEME_COLORS[currentTheme] || THEME_COLORS.deep;
   const currentAurora = getAurora(currentAccent, currentTheme);
 
