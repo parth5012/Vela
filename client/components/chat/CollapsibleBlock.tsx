@@ -194,14 +194,17 @@ export default function CollapsibleBlock({
     <View style={[
       styles.container,
       {
-        backgroundColor: isThoughtOrIntent ? 'rgba(255, 255, 255, 0.03)' : themeColors.card,
-        borderColor: isThoughtOrIntent ? themeColors.border : accentHex + '33',
+        backgroundColor: isThoughtOrIntent ? 'rgba(217, 169, 109, 0.04)' : themeColors.card,
+        borderColor: isThoughtOrIntent ? 'rgba(217, 169, 109, 0.18)' : accentHex + '33',
         borderStyle: 'solid',
       }
     ]}>
       {/* Header Pressable */}
       <Pressable
-        style={styles.header}
+        style={({ pressed }) => [
+          styles.header,
+          pressed && { opacity: 0.8 }
+        ]}
         onPress={toggleCollapse}
         accessibilityRole="button"
         accessibilityLabel={(collapsed ? 'Expand ' : 'Collapse ') + title}
@@ -212,7 +215,7 @@ export default function CollapsibleBlock({
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <Text style={[
                 styles.title,
-                { color: themeColors.text, fontSize: themeSizes.text + 1 }
+                { color: isThoughtOrIntent ? '#e0a96d' : themeColors.text, fontSize: themeSizes.text }
               ]}>
                 {title}
               </Text>
@@ -227,7 +230,7 @@ export default function CollapsibleBlock({
             {formattedInput ? (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 2, maxWidth: '100%' }}>
                 <Text
-                  style={[styles.inputLabel, { color: themeColors.textDark, fontSize: themeSizes.sub }]}
+                  style={[styles.inputLabel, { color: themeColors.textDark, fontSize: themeSizes.sub - 1 }]}
                 >
                   Args: {formattedInput}
                 </Text>
@@ -235,7 +238,7 @@ export default function CollapsibleBlock({
             ) : null}
           </View>
         </View>
-        <Text style={[styles.arrow, { color: themeColors.textDark, fontSize: themeSizes.text }]}>
+        <Text style={[styles.arrow, { color: themeColors.textDark, fontSize: themeSizes.sub }]}>
           {collapsed ? '▼' : '▲'}
         </Text>
       </Pressable>
@@ -271,7 +274,7 @@ export default function CollapsibleBlock({
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 10,
+    borderRadius: 14,
     borderWidth: 1,
     marginVertical: 6,
     overflow: 'hidden',
@@ -282,8 +285,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 10,
+    minHeight: 44,
   },
   headerTextContainer: {
     flexDirection: 'row',
@@ -296,6 +300,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontWeight: '600',
+    letterSpacing: 0.2,
   },
   inputLabel: {
     marginTop: 2,
@@ -306,16 +311,17 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   safetyPill: {
-    paddingHorizontal: 7,
+    paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 10,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
   safetyPillText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     lineHeight: 14,
+    letterSpacing: 0.3,
   },
   content: {
     borderTopWidth: 1,
