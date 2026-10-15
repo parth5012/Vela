@@ -7,9 +7,11 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useConfigStore } from '../../store/useConfigStore';
+import { getAurora } from '../../utils/theme';
 
 export default function HealthIndicator() {
-  const { apiUrl, apiKey, isConfigured } = useConfigStore();
+  const { apiUrl, apiKey, isConfigured, theme, accentColor } = useConfigStore();
+  const aurora = getAurora(accentColor, theme);
   const [status, setStatus] = useState<'unknown' | 'checking' | 'online' | 'offline'>('unknown');
   const [latency, setLatency] = useState<number | null>(null);
 
@@ -117,7 +119,7 @@ export default function HealthIndicator() {
       hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
     >
       {status === 'checking' ? (
-        <ActivityIndicator size="small" color="#818cf8" style={styles.loader} />
+        <ActivityIndicator size="small" color={aurora.acc1} style={styles.loader} />
       ) : (
         <View style={[styles.dot, getDotStyle()]} />
       )}
