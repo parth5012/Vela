@@ -297,9 +297,11 @@ export default function TasksScreen() {
           <Pressable
             key={filter}
             onPress={() => setActiveFilter(filter as any)}
-            style={[
+            style={({ pressed }) => [
               styles.filterTab,
-              activeFilter === filter && { backgroundColor: aurora.acc1, borderColor: aurora.acc1 }
+              { backgroundColor: 'rgba(255, 255, 255, 0.04)', borderColor: colors.glassBorder },
+              activeFilter === filter && { backgroundColor: aurora.acc1, borderColor: aurora.acc1 },
+              pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] }
             ]}
           >
             <Text
@@ -373,27 +375,39 @@ export default function TasksScreen() {
                   <Pressable
                     onPress={() => handleTriggerManualRun(task)}
                     disabled={runningTaskId !== null}
-                    style={[styles.actionBtn, { backgroundColor: 'rgba(59, 130, 246, 0.15)' }]}
+                    style={({ pressed }) => [
+                      styles.actionBtn,
+                      { backgroundColor: 'rgba(59, 130, 246, 0.15)', borderColor: 'rgba(59, 130, 246, 0.3)' },
+                      pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] },
+                    ]}
                   >
                     {runningTaskId === task.id ? (
                       <ActivityIndicator size="small" color="#3b82f6" />
                     ) : (
-                      <Text style={[styles.actionBtnText, { color: '#3b82f6' }]}>Run Now</Text>
+                      <Text style={[styles.actionBtnText, { color: '#60a5fa' }]}>Run Now</Text>
                     )}
                   </Pressable>
 
                   <Pressable
                     onPress={() => handleOpenForm(task)}
-                    style={[styles.actionBtn, { backgroundColor: 'rgba(245, 158, 11, 0.15)' }]}
+                    style={({ pressed }) => [
+                      styles.actionBtn,
+                      { backgroundColor: 'rgba(245, 158, 11, 0.15)', borderColor: 'rgba(245, 158, 11, 0.3)' },
+                      pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] },
+                    ]}
                   >
-                    <Text style={[styles.actionBtnText, { color: '#f59e0b' }]}>Edit</Text>
+                    <Text style={[styles.actionBtnText, { color: '#fbbf24' }]}>Edit</Text>
                   </Pressable>
 
                   <Pressable
                     onPress={() => handleDeleteTask(task.id)}
-                    style={[styles.actionBtn, { backgroundColor: 'rgba(239, 68, 68, 0.15)' }]}
+                    style={({ pressed }) => [
+                      styles.actionBtn,
+                      { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderColor: 'rgba(239, 68, 68, 0.3)' },
+                      pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] },
+                    ]}
                   >
-                    <Text style={[styles.actionBtnText, { color: '#ef4444' }]}>Delete</Text>
+                    <Text style={[styles.actionBtnText, { color: '#f87171' }]}>Delete</Text>
                   </Pressable>
                 </View>
               </View>
@@ -443,9 +457,10 @@ export default function TasksScreen() {
                   <Pressable
                     key={r}
                     onPress={() => setFormRecurrence(r as any)}
-                    style={[
+                    style={({ pressed }) => [
                       styles.rPill,
-                      formRecurrence === r && { backgroundColor: aurora.acc1, borderColor: aurora.acc1 }
+                      formRecurrence === r && { backgroundColor: aurora.acc1, borderColor: aurora.acc1 },
+                      pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] }
                     ]}
                   >
                     <Text style={[styles.rPillText, { color: formRecurrence === r ? aurora.onAccent : colors.textMuted }]}>
@@ -463,9 +478,10 @@ export default function TasksScreen() {
                   <Pressable
                     key={p.id}
                     onPress={() => setFormAgent(p.id)}
-                    style={[
+                    style={({ pressed }) => [
                       styles.rPill,
                       formAgent === p.id && { backgroundColor: aurora.acc1, borderColor: aurora.acc1 },
+                      pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] }
                     ]}
                   >
                     <Text style={[styles.rPillText, { color: formAgent === p.id ? aurora.onAccent : colors.textMuted }]}>
@@ -476,9 +492,10 @@ export default function TasksScreen() {
                 {formAgent && !agents.some((p) => p.id === formAgent) ? (
                   <Pressable
                     onPress={() => setFormAgent(formAgent)}
-                    style={[
+                    style={({ pressed }) => [
                       styles.rPill,
                       { backgroundColor: aurora.acc1, borderColor: aurora.acc1 },
+                      pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] }
                     ]}
                   >
                     <Text style={[styles.rPillText, { color: aurora.onAccent }]}>
@@ -501,9 +518,10 @@ export default function TasksScreen() {
                   <Pressable
                     key={opt.label}
                     onPress={() => setFormConnectionMode(opt.value as any)}
-                    style={[
+                    style={({ pressed }) => [
                       styles.rPill,
                       formConnectionMode === opt.value && { backgroundColor: aurora.acc1, borderColor: aurora.acc1 },
+                      pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] }
                     ]}
                   >
                     <Text style={[styles.rPillText, { color: formConnectionMode === opt.value ? aurora.onAccent : colors.textMuted }]}>
@@ -538,7 +556,11 @@ export default function TasksScreen() {
               </View>
               <Pressable
                 onPress={() => setIsFormModalVisible(false)}
-                style={[styles.cancelBtn, { borderColor: colors.glassBorder }]}
+                style={({ pressed }) => [
+                  styles.cancelBtn,
+                  { borderColor: colors.glassBorder },
+                  pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] }
+                ]}
               >
                 <Text style={{ color: colors.text, fontWeight: 'bold' }}>Cancel</Text>
               </Pressable>

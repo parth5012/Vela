@@ -166,7 +166,14 @@ export default function BrowserScreen() {
           returnKeyType="go"
           selectTextOnFocus
         />
-        <Pressable onPress={handleGo} style={[styles.goButton, { backgroundColor: accentHex }]}>
+        <Pressable
+          onPress={handleGo}
+          style={({ pressed }) => [
+            styles.goButton,
+            { backgroundColor: accentHex },
+            pressed && { opacity: 0.85, transform: [{ scale: 0.95 }] },
+          ]}
+        >
           <Text style={styles.goButtonText}>Go</Text>
         </Pressable>
       </View>
@@ -176,7 +183,11 @@ export default function BrowserScreen() {
         <Pressable
           onPress={handleBack}
           disabled={!canGoBack}
-          style={[styles.toolbarButton, !canGoBack && styles.toolbarButtonDisabled]}
+          style={({ pressed }) => [
+            styles.toolbarButton,
+            !canGoBack && styles.toolbarButtonDisabled,
+            pressed && canGoBack && { opacity: 0.7, transform: [{ scale: 0.92 }] },
+          ]}
         >
           <Text style={[styles.toolbarButtonText, { color: canGoBack ? colors.text : colors.textDark }]}>◀</Text>
         </Pressable>
@@ -184,19 +195,34 @@ export default function BrowserScreen() {
         <Pressable
           onPress={handleForward}
           disabled={!canGoForward}
-          style={[styles.toolbarButton, !canGoForward && styles.toolbarButtonDisabled]}
+          style={({ pressed }) => [
+            styles.toolbarButton,
+            !canGoForward && styles.toolbarButtonDisabled,
+            pressed && canGoForward && { opacity: 0.7, transform: [{ scale: 0.92 }] },
+          ]}
         >
           <Text style={[styles.toolbarButtonText, { color: canGoForward ? colors.text : colors.textDark }]}>▶</Text>
         </Pressable>
 
-        <Pressable onPress={handleRefresh} style={styles.toolbarButton}>
+        <Pressable
+          onPress={handleRefresh}
+          style={({ pressed }) => [
+            styles.toolbarButton,
+            pressed && { opacity: 0.7, transform: [{ scale: 0.92 }] },
+          ]}
+        >
           <Text style={[styles.toolbarButtonText, { color: colors.text }]}>⟳</Text>
         </Pressable>
 
         {/* Cookie Sync button + Sync Status Badge dot */}
         <Pressable
           onPress={() => setShowCookieSync(true)}
-          style={[styles.toolbarButton, styles.cookieSyncButton, { borderColor: colors.border }]}
+          style={({ pressed }) => [
+            styles.toolbarButton,
+            styles.cookieSyncButton,
+            { borderColor: colors.border },
+            pressed && { opacity: 0.7, transform: [{ scale: 0.92 }] },
+          ]}
           accessibilityLabel="Cookie Sync"
           accessibilityRole="button"
         >
@@ -214,9 +240,25 @@ export default function BrowserScreen() {
           </Text>
         </View>
 
-      <Pressable onPress={handleClose} style={[styles.toolbarButton, { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.background, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: colors.border }]}>
-        <Text style={[styles.toolbarButtonText, { color: colors.text, fontSize: sizes.sub, fontWeight: 'bold' }]}>💬 Chat</Text>
-      </Pressable>
+        <Pressable
+          onPress={handleClose}
+          style={({ pressed }) => [
+            styles.toolbarButton,
+            {
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: colors.background,
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+              borderRadius: 14,
+              borderWidth: 1,
+              borderColor: colors.border,
+            },
+            pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] },
+          ]}
+        >
+          <Text style={[styles.toolbarButtonText, { color: colors.text, fontSize: sizes.sub, fontWeight: '700' }]}>💬 Chat</Text>
+        </Pressable>
       </View>
 
       {/* WebView area — the actual WebView is mounted in _layout.tsx and made visible here */}
@@ -246,8 +288,8 @@ export default function BrowserScreen() {
                       {
                         backgroundColor: colors.glass,
                         borderColor: colors.glassBorder,
-                        opacity: pressed ? 0.7 : 1,
                       },
+                      pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] },
                     ]}
                     accessibilityRole="button"
                     accessibilityLabel={`Open ${link.label}`}
