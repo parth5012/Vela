@@ -1,0 +1,30 @@
+[
+  {
+    "id": "ragas_mem_001",
+    "question": "What is my current shipping address?",
+    "contexts": [
+      "User profile note: Shipping address updated to 200 New Ave, Apt 4B.",
+      "Previous order #102 delivered to 100 Old St in 2024."
+    ],
+    "ground_truth": "Your current shipping address is 200 New Ave, Apt 4B.",
+    "forbidden_in_answer": ["100 Old St"]
+  },
+  {
+    "id": "ragas_mem_002",
+    "question": "What are my dietary restrictions?",
+    "contexts": [
+      "Dietary preference: Strictly vegetarian, severe peanut allergy."
+    ],
+    "ground_truth": "You are strictly vegetarian and have a severe peanut allergy.",
+    "forbidden_in_answer": ["eats meat", "no allergies"]
+  },
+  {
+    "id": "ragas_mem_003",
+    "question": "What is my flight date?",
+    "contexts": [
+      "Travel itinerary: Flight to Chicago confirmed for Friday at 9am."
+    ],
+    "ground_truth": "Your flight is on Friday at 9am.",
+    "forbidden_in_answer": ["Saturday", "Sunday"]
+  }
+]

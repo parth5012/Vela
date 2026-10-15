@@ -1,0 +1,41 @@
+[
+  {
+    "id": "browser_traj_001",
+    "task": "Navigate to Hacker News and find the top post title",
+    "optimal_steps": 2,
+    "steps": [
+      {"step": 1, "action": "navigate", "target": "https://news.ycombinator.com", "status": "success"},
+      {"step": 2, "action": "extract_text", "target": ".titleline > a", "status": "success", "observation": "Show HN: My new project"}
+    ],
+    "outcome": "Show HN: My new project",
+    "has_loop": false,
+    "is_success": true
+  },
+  {
+    "id": "browser_traj_002",
+    "task": "Search for Python documentation on Google and open PEP 8",
+    "optimal_steps": 3,
+    "steps": [
+      {"step": 1, "action": "navigate", "target": "https://google.com", "status": "success"},
+      {"step": 2, "action": "type", "target": "textarea[name='q']", "value": "PEP 8", "status": "success"},
+      {"step": 3, "action": "click", "target": "input[name='btnK']", "status": "success"},
+      {"step": 4, "action": "click", "target": "a[href*='peps.python.org/pep-0008/']", "status": "success"}
+    ],
+    "outcome": "PEP 8 Style Guide for Python Code",
+    "has_loop": false,
+    "is_success": true
+  },
+  {
+    "id": "browser_traj_loop_003",
+    "task": "Log in to portal",
+    "optimal_steps": 2,
+    "steps": [
+      {"step": 1, "action": "click", "target": "#submit", "status": "error", "observation": "Element not found"},
+      {"step": 2, "action": "click", "target": "#submit", "status": "error", "observation": "Element not found"},
+      {"step": 3, "action": "click", "target": "#submit", "status": "error", "observation": "Element not found"}
+    ],
+    "outcome": "Failed to login",
+    "has_loop": true,
+    "is_success": false
+  }
+]
