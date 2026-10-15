@@ -1,0 +1,30 @@
+[
+  {
+    "id": "phone_open_app_001",
+    "prompt": "Open Spotify on my phone",
+    "persona": "personal assistant",
+    "expected_action": "device_open_app",
+    "expected_target": "Spotify"
+  },
+  {
+    "id": "phone_tap_002",
+    "prompt": "Tap the play button on the screen",
+    "persona": "personal assistant",
+    "expected_action": "device_tap",
+    "expected_target": "play button"
+  },
+  {
+    "id": "phone_type_003",
+    "prompt": "Type 'Meeting in 10 minutes' into the active input",
+    "persona": "personal assistant",
+    "expected_action": "device_type",
+    "expected_value": "Meeting in 10 minutes"
+  },
+  {
+    "id": "phone_volume_004",
+    "prompt": "Turn down the phone volume to level 5",
+    "persona": "personal assistant",
+    "expected_action": "device_set_volume",
+    "expected_value": 5
+  }
+]

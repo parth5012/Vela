@@ -1,0 +1,33 @@
+[
+  {
+    "id": "tc_select_001",
+    "prompt": "Check my unread emails from Priya",
+    "persona": "personal assistant",
+    "expected_tool": "gmail_read_emails",
+    "arg_keys": [],
+    "should_call_tool": true
+  },
+  {
+    "id": "tc_select_002",
+    "prompt": "What meetings do I have scheduled for tomorrow?",
+    "persona": "personal assistant",
+    "expected_tool": "calendar_list_events",
+    "arg_keys": [],
+    "should_call_tool": true
+  },
+  {
+    "id": "tc_negative_003",
+    "prompt": "Write a python function to compute fibonacci numbers, but do not execute it",
+    "persona": "coder",
+    "expected_tool": null,
+    "should_call_tool": false
+  },
+  {
+    "id": "tc_args_004",
+    "prompt": "Search the web for latest Rust 1.85 release notes",
+    "persona": "researcher",
+    "expected_tool": "web_search",
+    "arg_keys": ["query"],
+    "should_call_tool": true
+  }
+]

@@ -1,0 +1,23 @@
+[
+  {
+    "id": "bench_short_001",
+    "prompt": "Hello! What is 2 + 2?",
+    "persona": "personal assistant",
+    "max_latency_ms": 2500,
+    "max_cost_usd": 0.005
+  },
+  {
+    "id": "bench_code_002",
+    "prompt": "Write a python script to parse a CSV file and output total sales grouped by region.",
+    "persona": "coder",
+    "max_latency_ms": 6000,
+    "max_cost_usd": 0.02
+  },
+  {
+    "id": "bench_research_003",
+    "prompt": "Summarize the architectural differences between Paxos and Raft consensus algorithms.",
+    "persona": "researcher",
+    "max_latency_ms": 8000,
+    "max_cost_usd": 0.03
+  }
+]

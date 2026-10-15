@@ -1,0 +1,111 @@
+name: System-Level Evals (Nightly & Manual)
+
+# Scheduled nightly run + manual on-demand triggers.
+# Disabled by default until production rollout: gated on VELA_SYSTEM_EVALS_ENABLED secret/var.
+
+on:
+  schedule:
+    - cron: '0 3 * * *'  # 03:00 UTC every night
+  workflow_dispatch:
+    inputs:
+      family:
+        description: 'Specific eval family to execute (or "all")'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - safety
+          - multi-turn
+          - tool-calling
+          - cost-latency
+          - browser-automation
+          - phone-automation
+          - workspace-automation
+          - memory
+      mode:
+        description: 'Execution mode (smoke or nightly)'
+        required: true
+        default: 'nightly'
+        type: choice
+        options:
+          - smoke
+          - nightly
+      force_live:
+        description: 'Force execution even if master gate is disabled'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  # Master gate: defaults to '0' (disabled) until configured in GitHub Repo Variables
+  VELA_SYSTEM_EVALS_ENABLED: ${{ vars.VELA_SYSTEM_EVALS_ENABLED || '0' }}
+
+jobs:
+  check-gate:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.gate.outputs.should_run }}
+    steps:
+      - id: gate
+        run: |
+          if [ "${{ inputs.force_live }}" = "true" ] || [ "$VELA_SYSTEM_EVALS_ENABLED" = "1" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "System evals GATE OPEN: proceeding with execution."
+          else
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            echo "System evals GATE CLOSED: VELA_SYSTEM_EVALS_ENABLED is not 1. Skipping suite."
+          fi
+
+  eval-matrix:
+    needs: check-gate
+    if: needs.check-gate.outputs.should_run == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        family:
+          - safety
+          - multi-turn
+          - tool-calling
+          - cost-latency
+          - browser-automation
+          - phone-automation
+          - workspace-automation
+          - memory
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Setup Python
+        run: uv python install 3.11
+
+      - name: Install System Evals Dependencies
+        run: |
+          uv pip install --system -r system-evals/requirements.txt
+          uv pip install --system -r backend/requirements.txt
+
+      - name: Run Family Evaluation
+        if: inputs.family == 'all' || inputs.family == matrix.family || github.event_name == 'schedule'
+        env:
+          VELA_SYSTEM_EVALS_ENABLED: "1"
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
+        run: |
+          python system-evals/runner.py \
+            --family "${{ matrix.family }}" \
+            --mode "${{ inputs.mode || 'nightly' }}" \
+            --live \
+            --output "system-evals/reports/${{ matrix.family }}_report.json"
+
+      - name: Upload Family Report Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report-${{ matrix.family }}
+          path: system-evals/reports/
+          if-no-files-found: ignore

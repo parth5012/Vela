@@ -225,6 +225,9 @@ async def chatbot_node(state: AgentState) -> dict:
     # content writes) can never overwrite a prior turn's agent_response.
     # T3 transaction rule: no session.commit() here; get_db_session owns it.
     db_conv_id = state.get("db_conv_id")
+    # In eval mode or if conv_id starts with eval-, bypass persistent Experience creation to avoid memory DB pollution
+    if os.getenv("VELA_EVAL_MODE") == "1" or str(db_conv_id).startswith("eval-"):
+        db_conv_id = None
     is_tool_call = bool(getattr(response_msg, "tool_calls", None))
     experience_id = state.get("experience_id")
     if db_conv_id and db_conv_id != "conv-123":
@@ -265,10 +268,33 @@ async def chatbot_node(state: AgentState) -> dict:
         result["experience_id"] = experience_id
     return result
 
+def get_tool_node():
+    """Returns the ToolNode for the workflow, wrapping with dry-run/mock interceptor in eval mode."""
+    if os.getenv("VELA_EVAL_MODE") == "1" or os.getenv("VELA_TOOL_MODE") == "dry_run":
+        def dry_run_tool_executor(state: AgentState):
+            messages = state["messages"]
+            last_message = messages[-1]
+            tool_outputs = []
+            for tool_call in getattr(last_message, "tool_calls", []):
+                t_name = tool_call.get("name")
+                t_args = tool_call.get("args", {})
+                t_id = tool_call.get("id")
+                # Fail-closed safe response
+                from langchain_core.messages import ToolMessage
+                tool_outputs.append(
+                    ToolMessage(
+                        content=json.dumps({"status": "dry_run_intercepted", "tool": t_name, "args": t_args}),
+                        tool_call_id=t_id,
+                    )
+                )
+            return {"messages": tool_outputs}
+        return dry_run_tool_executor
+    return ToolNode(tools_list)
+
 workflow = StateGraph(AgentState)
 workflow.add_node("supervisor", supervisor_node)
 workflow.add_node("chatbot", chatbot_node)
-workflow.add_node("tools", ToolNode(tools_list))
+workflow.add_node("tools", get_tool_node())
 
 workflow.set_entry_point("supervisor")
 workflow.add_conditional_edges(
