@@ -136,7 +136,7 @@ export const THEME_COLORS: Record<ThemeName, ThemeColors> = {
     border: '#18181b',
     text: '#fafafa',
     textMuted: '#a1a1aa',
-    textDark: '#52525b',
+    textDark: '#7a7a88',
     bubbleUser: '#09090b',
     bubbleUserBorder: '#27272a',
     bubbleAssistant: 'rgba(255, 255, 255, 0.02)',

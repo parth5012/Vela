@@ -29,7 +29,6 @@ export const styles = StyleSheet.create({
   nodePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
@@ -37,12 +36,6 @@ export const styles = StyleSheet.create({
     borderColor: '#27272a',
     backgroundColor: '#121215',
     alignSelf: 'flex-start',
-  },
-  nodeStatusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#10b981',
   },
   nodeStatus: {
     fontSize: 11,

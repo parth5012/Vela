@@ -151,12 +151,13 @@ const handleJournal = () => {
         }}
       >
         <Text style={[styles.logo, { color: accentHex }]}>VELA</Text>
-        <View style={styles.nodePill}>
-          <View style={styles.nodeStatusDot} />
-          <Text style={[styles.nodeStatus, { color: colors.textDark }]} numberOfLines={1}>
-            {(apiUrl || 'local').replace(/^https?:\/\//, '')}
-          </Text>
-        </View>
+        {apiUrl ? (
+          <View style={styles.nodePill}>
+            <Text style={[styles.nodeStatus, { color: colors.textDark }]} numberOfLines={1}>
+              {apiUrl.replace(/^https?:\/\//, '')}
+            </Text>
+          </View>
+        ) : null}
       </Pressable>
 
       {/* Browser — prominent top placement per #156 */}
