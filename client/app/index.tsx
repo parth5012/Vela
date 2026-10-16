@@ -1539,7 +1539,7 @@ export default function ChatScreen() {
                   style={({ pressed }) => [
                     styles.suggestionCard,
                     { backgroundColor: colors.glass, borderColor: colors.glassBorder },
-                    pressed && { borderColor: aurora.acc1, opacity: 0.85 }
+                    pressed && { borderColor: aurora.acc1, opacity: 0.9, transform: [{ scale: 0.98 }] }
                   ]}
                   onPress={() => handleSendWelcome(item.text, item.agent)}
                 >
@@ -1565,7 +1565,7 @@ export default function ChatScreen() {
                       styles.agentPill,
                       { backgroundColor: 'rgba(0,0,0,0.25)', borderColor: colors.glassBorder },
                       isSelected && { backgroundColor: aurora.acc1, borderColor: aurora.acc1 },
-                      pressed && { opacity: 0.8 }
+                      pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] }
                     ]}
                     onPress={() => setDefaultAgent(p.id)}
                   >
@@ -1583,7 +1583,11 @@ export default function ChatScreen() {
       {/* Model Mode Selector */}
       <View style={[styles.modelSwitcherContainer, { backgroundColor: colors.glass, borderTopColor: colors.glassBorder }]}>
         <Pressable
-          style={[styles.switcherButton, { borderColor: colors.glassBorder, backgroundColor: 'rgba(0,0,0,0.25)' }]}
+          style={({ pressed }) => [
+            styles.switcherButton,
+            { borderColor: colors.glassBorder, backgroundColor: 'rgba(0,0,0,0.25)' },
+            pressed && { opacity: 0.85, transform: [{ scale: 0.97 }] }
+          ]}
           onPress={handleToggleLocalMode}
         >
           <Text style={[styles.switcherLabel, { color: colors.text }]}>
@@ -1621,34 +1625,41 @@ export default function ChatScreen() {
       {/* Unifying Input container at bottom */}
       <View
         style={[
-          styles.inputContainer,
-          { backgroundColor: colors.glass, borderTopColor: colors.glassBorder, paddingBottom: Math.max(12, insets.bottom) }
+          styles.inputWrapper,
+          { backgroundColor: colors.background, borderTopColor: colors.glassBorder, paddingBottom: Math.max(12, insets.bottom) }
         ]}
       >
-        <TextInput
-          style={[styles.input, { backgroundColor: 'rgba(0,0,0,0.25)', borderColor: colors.glassBorder, color: colors.text, fontSize: sizes.text }]}
-          placeholder={activeThreadId ? "Ask a question or request a task..." : "Ask Vela anything..."}
-          placeholderTextColor={colors.textDark}
-          value={input}
-          onChangeText={setInput}
-          multiline
-        />
-        <Pressable
-          style={({ pressed }) => [
-            styles.sendButton,
-            { backgroundColor: isCurrentThreadStreaming ? '#ef4444' : aurora.acc1, shadowColor: aurora.acc1 },
-            !isCurrentThreadStreaming && !input.trim() && { backgroundColor: colors.textDark, shadowOpacity: 0 },
-            pressed && { opacity: 0.8 }
+        <View
+          style={[
+            styles.inputContainer,
+            { backgroundColor: colors.card, borderColor: colors.glassBorder }
           ]}
-          onPress={handleSendPress}
-          disabled={!isCurrentThreadStreaming && !input.trim()}
-          accessibilityRole="button"
-          accessibilityLabel={isCurrentThreadStreaming ? 'Stop generating' : 'Send message'}
         >
-          <Text style={[styles.sendButtonText, { fontSize: sizes.text }]}>
-            {isCurrentThreadStreaming ? 'Stop' : 'Send'}
-          </Text>
-        </Pressable>
+          <TextInput
+            style={[styles.input, { color: colors.text, fontSize: sizes.text }]}
+            placeholder={activeThreadId ? "Ask a question or request a task..." : "Ask Vela anything..."}
+            placeholderTextColor={colors.textDark}
+            value={input}
+            onChangeText={setInput}
+            multiline
+          />
+          <Pressable
+            style={({ pressed }) => [
+              styles.sendButton,
+              { backgroundColor: isCurrentThreadStreaming ? '#ef4444' : aurora.acc1, shadowColor: aurora.acc1 },
+              !isCurrentThreadStreaming && !input.trim() && { backgroundColor: colors.textDark, shadowOpacity: 0 },
+              pressed && { opacity: 0.85, transform: [{ scale: 0.94 }] }
+            ]}
+            onPress={handleSendPress}
+            disabled={!isCurrentThreadStreaming && !input.trim()}
+            accessibilityRole="button"
+            accessibilityLabel={isCurrentThreadStreaming ? 'Stop generating' : 'Send message'}
+          >
+            <Text style={[styles.sendButtonText, { fontSize: sizes.text }]}>
+              {isCurrentThreadStreaming ? 'Stop' : 'Send'}
+            </Text>
+          </Pressable>
+        </View>
       </View>
 
         <MessageOptionsModal

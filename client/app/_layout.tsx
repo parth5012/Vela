@@ -36,10 +36,15 @@ Notifications.setNotificationHandler({
 import { initializeDatabase } from '../db/client';
 import { wireOfflineSync, flushPendingMessages } from '../utils/offlineSync';
 import { runAgentDataBootstrap } from '../utils/seedAgents';
+import { THEME_COLORS, getAurora, hexToRgba } from '../utils/theme';
 
 function HeaderRightActions() {
   const router = useRouter();
   const segments = useSegments();
+  const theme = useConfigStore((state) => state.theme);
+  const accentColor = useConfigStore((state) => state.accentColor);
+  const colors = THEME_COLORS[theme] || THEME_COLORS.deep;
+  const aurora = getAurora(accentColor, theme);
   const isBrowserRoute = segments[0] === 'browser';
 
   const handleToggle = () => {
@@ -51,23 +56,24 @@ function HeaderRightActions() {
   };
 
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 12 }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 14, gap: 10 }}>
       <Pressable
         onPress={handleToggle}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         style={({ pressed }) => ({
           flexDirection: 'row',
           alignItems: 'center',
-          backgroundColor: isBrowserRoute ? '#312e81' : '#1e1b4b',
-          paddingHorizontal: 8,
-          paddingVertical: 4,
-          borderRadius: 6,
-          marginRight: 8,
+          backgroundColor: isBrowserRoute ? hexToRgba(aurora.acc1, 0.14) : colors.glass,
+          paddingHorizontal: 12,
+          paddingVertical: 7,
+          borderRadius: 20,
           borderWidth: 1,
-          borderColor: isBrowserRoute ? '#818cf8' : '#4f46e5',
-          opacity: pressed ? 0.7 : 1,
+          borderColor: isBrowserRoute ? aurora.acc1 : colors.glassBorder,
+          transform: [{ scale: pressed ? 0.96 : 1 }],
+          opacity: pressed ? 0.8 : 1,
         })}
       >
-        <Text style={{ color: '#e0e7ff', fontSize: 12, fontWeight: 'bold' }}>
+        <Text style={{ color: isBrowserRoute ? aurora.acc1 : colors.text, fontSize: 12, fontWeight: '600', letterSpacing: 0.3 }}>
           {isBrowserRoute ? '💬 Chat' : '🌐 Webview'}
         </Text>
       </Pressable>
@@ -91,6 +97,8 @@ export default function RootLayout() {
   // Rules of Hooks and crashes ContextNavigator on remount.
   const currentUrl = useBrowserStore((s) => s.currentUrl);
   const isBrowserVisible = useBrowserStore((s) => s.isVisible);
+  const currentTheme = useConfigStore((state) => state.theme);
+  const currentAccent = useConfigStore((state) => state.accentColor);
 
   useEffect(() => {
     if (hasHydrated && chatHasHydrated) {
@@ -266,27 +274,32 @@ export default function RootLayout() {
   const isBrowserRoute = segments[0] === 'browser';
   const shouldShowWebview = isBrowserVisible && isBrowserRoute;
 
+  const currentColors = THEME_COLORS[currentTheme] || THEME_COLORS.deep;
+  const currentAurora = getAurora(currentAccent, currentTheme);
+
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: currentColors.background }}>
       <Drawer
         drawerContent={() => <DrawerContent />}
         screenOptions={{
           drawerType: 'front',
           headerStyle: {
-            backgroundColor: '#09090b',
+            backgroundColor: currentColors.background,
+            borderBottomColor: currentColors.glassBorder,
+            borderBottomWidth: StyleSheet.hairlineWidth,
             shadowColor: 'transparent',
             elevation: 0,
           },
           headerTitleStyle: {
             fontWeight: '900',
-            color: '#818cf8',
+            color: currentAurora.acc1,
             fontSize: 16,
           },
-        headerTintColor: '#e4e4e7',
-        headerRight: () => <HeaderRightActions />,
-        drawerStyle: {
-            backgroundColor: '#09090b',
-            width: 280,
+          headerTintColor: currentColors.text,
+          headerRight: () => <HeaderRightActions />,
+          drawerStyle: {
+            backgroundColor: currentColors.background,
+            width: 290,
           },
         }}
       >
@@ -302,7 +315,7 @@ export default function RootLayout() {
             headerTitleStyle: {
               fontWeight: '900',
               letterSpacing: 3,
-              color: '#818cf8',
+              color: currentAurora.acc1,
               fontSize: 16,
             },
           }}
@@ -313,44 +326,44 @@ export default function RootLayout() {
             headerTitle: 'Settings',
             headerTitleStyle: {
               fontWeight: '600',
-              color: '#e4e4e7',
+              color: currentColors.text,
               fontSize: 16,
             },
           }}
         />
-<Drawer.Screen
-name="browser"
-options={{
-headerTitle: 'Browser',
-headerTitleStyle: {
-fontWeight: '600',
-color: '#e4e4e7',
-fontSize: 16,
-}
-}}
-/>
-<Drawer.Screen
-name="tasks"
-options={{
-headerTitle: 'Tasks',
-headerTitleStyle: {
-fontWeight: '600',
-color: '#e4e4e7',
-fontSize: 16,
-}
-}}
-/>
-<Drawer.Screen
-name="journal"
-options={{
-headerTitle: 'Journal',
-headerTitleStyle: {
-fontWeight: '600',
-color: '#e4e4e7',
-fontSize: 16,
-}
-}}
-/>
+        <Drawer.Screen
+          name="browser"
+          options={{
+            headerTitle: 'Browser',
+            headerTitleStyle: {
+              fontWeight: '600',
+              color: currentColors.text,
+              fontSize: 16,
+            },
+          }}
+        />
+        <Drawer.Screen
+          name="tasks"
+          options={{
+            headerTitle: 'Tasks',
+            headerTitleStyle: {
+              fontWeight: '600',
+              color: currentColors.text,
+              fontSize: 16,
+            },
+          }}
+        />
+        <Drawer.Screen
+          name="journal"
+          options={{
+            headerTitle: 'Journal',
+            headerTitleStyle: {
+              fontWeight: '600',
+              color: currentColors.text,
+              fontSize: 16,
+            },
+          }}
+        />
       </Drawer>
 
       {/* Persistent WebView — always mounted, visibility toggled by offscreen positioning */}

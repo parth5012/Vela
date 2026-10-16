@@ -15,7 +15,13 @@ jest.mock('drizzle-orm/expo-sqlite/migrator', () => ({
 }));
 
 import { threads, messages, operationLog, tasks, taskRuns, messageVectors } from '../db/schema';
-import db, { initializeDatabase } from '../db/client';
+import db, {
+  initializeDatabase,
+  sanitizeMigrationSql,
+  getSanitizedMigrations,
+  _resetInitPromiseForTest,
+} from '../db/client';
+import migrations from '../db/migrations/migrations';
 import { applyMigrations, migrationKeys, migrationTags } from './helpers/sqliteMigrations';
 
 describe('Database client schema', () => {
@@ -66,9 +72,59 @@ describe('Database client schema', () => {
   });
 
   it('should execute migrations when initializeDatabase is called', async () => {
+    _resetInitPromiseForTest();
     const { migrate } = require('drizzle-orm/expo-sqlite/migrator');
     await initializeDatabase();
     expect(migrate).toHaveBeenCalled();
+  });
+
+  it('deduplicates concurrent initializeDatabase calls with a singleton promise', async () => {
+    _resetInitPromiseForTest();
+    const p1 = initializeDatabase();
+    const p2 = initializeDatabase();
+    expect(p1).toBe(p2);
+    await p1;
+  });
+});
+
+describe('migration parsing and safety', () => {
+  it('strips trailing breakpoints and blank statements from SQL', () => {
+    const raw = 'ALTER TABLE `tasks` ADD `connection_mode` text;\r\n--> statement-breakpoint\r\n';
+    const cleaned = sanitizeMigrationSql(raw);
+    expect(cleaned).toBe('ALTER TABLE `tasks` ADD `connection_mode` text;');
+    expect(cleaned.split('--> statement-breakpoint')).toHaveLength(1);
+  });
+
+  it('preserves multiple valid statements when separated by breakpoints', () => {
+    const raw = 'CREATE TABLE `a` (id text);\n--> statement-breakpoint\nCREATE TABLE `b` (id text);\n--> statement-breakpoint\n';
+    const cleaned = sanitizeMigrationSql(raw);
+    const parts = cleaned.split('--> statement-breakpoint');
+    expect(parts).toHaveLength(2);
+    expect(parts[0].trim()).toBe('CREATE TABLE `a` (id text);');
+    expect(parts[1].trim()).toBe('CREATE TABLE `b` (id text);');
+  });
+
+  it('sanitizes every migration in the bundle without leaving empty queries', () => {
+    const sanitized = getSanitizedMigrations(migrations);
+    for (const [key, sql] of Object.entries(sanitized.migrations)) {
+      const parts = sql.split('--> statement-breakpoint');
+      for (const part of parts) {
+        expect(part.trim().length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('verifies all shipped migration SQL files have no empty statements', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const dir = path.join(__dirname, '../db/migrations');
+    const files = fs.readdirSync(dir).filter((f: string) => f.endsWith('.sql'));
+    for (const file of files) {
+      const content = fs.readFileSync(path.join(dir, file), 'utf8');
+      const parts = content.split('--> statement-breakpoint');
+      const empties = parts.filter((p: string) => p.trim().length === 0);
+      expect(empties).toHaveLength(0);
+    }
   });
 });
 

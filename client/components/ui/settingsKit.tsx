@@ -13,7 +13,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useConfigStore } from '../../store/useConfigStore';
-import { ACCENT_COLORS } from '../../utils/theme';
+import { ACCENT_COLORS, hexToRgba } from '../../utils/theme';
 import { useAurora } from '../../hooks/useAurora';
 import { styles } from './settingsKitStyles';
 
@@ -143,10 +143,11 @@ export function PillGroup<T extends string>({
         return (
           <Pressable
             key={o.value}
-            style={[
+            style={({ pressed }) => [
               styles.pill,
               { backgroundColor: 'rgba(0,0,0,0.25)', borderColor: colors.glassBorder },
-              selected && { borderColor: aurora.acc1, borderWidth: 2 },
+              selected && { borderColor: aurora.acc1, borderWidth: 1.5, backgroundColor: hexToRgba(aurora.acc1, 0.08) },
+              pressed && { transform: [{ scale: 0.96 }], opacity: 0.85 },
             ]}
             onPress={() => onChange(o.value)}
           >
@@ -182,10 +183,11 @@ export function ChipGroup({
         return (
           <Pressable
             key={o.value}
-            style={[
+            style={({ pressed }) => [
               styles.chip,
               { backgroundColor: 'rgba(0,0,0,0.25)', borderColor: colors.glassBorder },
-              selected && { borderColor: aurora.acc1 },
+              selected && { borderColor: aurora.acc1, backgroundColor: hexToRgba(aurora.acc1, 0.08) },
+              pressed && { transform: [{ scale: 0.96 }], opacity: 0.85 },
             ]}
             onPress={() => onChange(o.value)}
           >
@@ -228,7 +230,7 @@ export function PrimaryButton({
           shadowOffset: { width: 0, height: 6 },
           elevation: 8,
         },
-        pressed && { opacity: 0.8 },
+        pressed && { transform: [{ scale: 0.96 }], opacity: 0.9 },
         (disabled || loading) && { opacity: 0.6 },
       ]}
       onPress={onPress}
@@ -256,7 +258,10 @@ export function DangerButton({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel || label}
-      style={({ pressed }) => [styles.danger, pressed && { backgroundColor: 'rgba(239, 68, 68, 0.18)' }]}
+      style={({ pressed }) => [
+        styles.danger,
+        pressed && { backgroundColor: 'rgba(239, 68, 68, 0.22)', transform: [{ scale: 0.96 }] }
+      ]}
       onPress={onPress}
     >
       <Text style={styles.dangerText}>{label}</Text>
@@ -284,9 +289,9 @@ export function SecondaryButton({
         styles.secondary,
         {
           borderColor: colors.glassBorder,
-          backgroundColor: 'rgba(255, 255, 255, 0.08)',
+          backgroundColor: 'rgba(255, 255, 255, 0.06)',
         },
-        pressed && { opacity: 0.7 },
+        pressed && { opacity: 0.75, transform: [{ scale: 0.96 }] },
         disabled && { opacity: 0.4 },
       ]}
       onPress={onPress}
@@ -317,18 +322,20 @@ export function AccentDots() {
         return (
           <Pressable
             key={color}
-            style={[
+            style={({ pressed }) => [
               styles.accentDot,
               { backgroundColor: ACCENT_COLORS[color] },
-              selected && { borderColor: aurora.acc1, borderWidth: 2 },
+              selected && { borderColor: aurora.acc1, borderWidth: 2.5 },
+              pressed && { transform: [{ scale: 0.96 }], opacity: 0.85 },
             ]}
             onPress={() => setAccentColor(color)}
             accessibilityRole="button"
             accessibilityLabel={`Accent ${color}`}
             accessibilityState={{ selected }}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
           >
             {selected ? (
-              <Text style={{ color: '#0b0b1a', fontSize: 13, fontWeight: '700' }}>✓</Text>
+              <Text style={{ color: '#0e0d0b', fontSize: 13, fontWeight: '800' }}>✓</Text>
             ) : null}
           </Pressable>
         );

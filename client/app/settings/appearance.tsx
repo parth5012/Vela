@@ -11,12 +11,12 @@ import {
 } from '../../components/ui/settingsKit';
 
 const THEME_OPTIONS = [
-  { value: 'deep' as const, label: 'Aurora' },
-  { value: 'slate' as const, label: 'Slate' },
-  { value: 'cyberpunk' as const, label: 'Neon' },
-  { value: 'oled' as const, label: 'Void' },
-  { value: 'dracula' as const, label: 'Dusk' },
-  { value: 'nordic' as const, label: 'Frost' },
+  { value: 'deep' as const, label: 'Warm Stone' },
+  { value: 'oled' as const, label: 'Espresso Noir' },
+  { value: 'cyberpunk' as const, label: 'Terracotta' },
+  { value: 'nordic' as const, label: 'Velvet Emerald' },
+  { value: 'dracula' as const, label: 'Dusk Plum' },
+  { value: 'slate' as const, label: 'Mineral Slate' },
 ];
 
 const FONT_OPTIONS = [

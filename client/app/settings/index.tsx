@@ -80,11 +80,11 @@ export default function SettingsIndexScreen() {
                 style={({ pressed }) => [
                   styles.row,
                   i > 0 && { borderTopWidth: 1, borderTopColor: colors.glassBorder },
-                  pressed && { opacity: 0.7 },
+                  pressed && { backgroundColor: 'rgba(255, 255, 255, 0.04)', opacity: 0.85 },
                 ]}
                 onPress={() => router.push(row.route as never)}
               >
-                <View style={[styles.rowIcon, { borderColor: colors.glassBorder }]}>
+                <View style={[styles.rowIcon, { borderColor: colors.glassBorder, backgroundColor: 'rgba(0, 0, 0, 0.2)' }]}>
                   <Text style={{ fontSize: sizes.sub + 4 }}>{row.icon}</Text>
                 </View>
                 <View style={styles.rowBody}>
@@ -95,7 +95,7 @@ export default function SettingsIndexScreen() {
                     {row.hint}
                   </Text>
                 </View>
-                <Text style={[styles.chevron, { color: colors.textDark, fontSize: sizes.text }]}>›</Text>
+                <Text style={[styles.chevron, { color: colors.textDark, fontSize: sizes.text + 2 }]}>›</Text>
               </Pressable>
             ))}
           </Card>
