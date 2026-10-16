@@ -6,4 +6,3 @@ CREATE TABLE `message_vectors` (
 	FOREIGN KEY (`message_id`) REFERENCES `messages`(`id`) ON UPDATE no action ON DELETE cascade
 );
 
---> statement-breakpoint

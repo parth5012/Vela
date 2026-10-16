@@ -10,4 +10,3 @@ CREATE TABLE `check_ins` (
 	`created_at` integer NOT NULL
 );
 
---> statement-breakpoint
