@@ -158,6 +158,9 @@ importers:
       stable-diffusion:
         specifier: file:./modules/stable-diffusion
         version: file:modules/stable-diffusion(expo@57.0.9)
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
       zustand:
         specifier: ^5.0.1
         version: 5.0.14(@types/react@19.2.17)(react@19.2.3)(use-sync-external-store@1.6.0(react@19.2.3))
@@ -6291,7 +6294,7 @@ snapshots:
       metro-resolver: 0.84.4
       metro-runtime: 0.84.4
       metro-source-map: 0.84.4(supports-color@8.1.1)
-      metro-symbolicate: 0.84.4
+      metro-symbolicate: 0.84.4(supports-color@8.1.1)
       metro-transform-plugins: 0.84.4(supports-color@8.1.1)
       metro-transform-worker: 0.84.4(supports-color@8.1.1)
     transitivePeerDependencies:
@@ -9463,7 +9466,7 @@ snapshots:
       '@babel/types': 7.29.7
       flow-enums-runtime: 0.0.6
       invariant: 2.2.4
-      metro-symbolicate: 0.84.4
+      metro-symbolicate: 0.84.4(supports-color@8.1.1)
       nullthrows: 1.1.1
       ob1: 0.84.4
       source-map: 0.5.7
@@ -9471,7 +9474,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  metro-symbolicate@0.84.4:
+  metro-symbolicate@0.84.4(supports-color@8.1.1):
     dependencies:
       flow-enums-runtime: 0.0.6
       invariant: 2.2.4
@@ -9479,6 +9482,8 @@ snapshots:
       nullthrows: 1.1.1
       source-map: 0.5.7
       vlq: 1.0.1
+    transitivePeerDependencies:
+      - supports-color
 
   metro-transform-plugins@0.84.4(supports-color@8.1.1):
     dependencies:
@@ -9542,7 +9547,7 @@ snapshots:
       metro-resolver: 0.84.4
       metro-runtime: 0.84.4
       metro-source-map: 0.84.4(supports-color@8.1.1)
-      metro-symbolicate: 0.84.4
+      metro-symbolicate: 0.84.4(supports-color@8.1.1)
       metro-transform-plugins: 0.84.4(supports-color@8.1.1)
       metro-transform-worker: 0.84.4(supports-color@8.1.1)
       mime-types: 3.0.2
