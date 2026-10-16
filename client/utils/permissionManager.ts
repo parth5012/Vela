@@ -1,6 +1,6 @@
 import { Linking, Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
 import type { DeviceAgentNative } from '../modules/device-agent';
+import { notificationsApi } from './notificationsCompat';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -38,6 +38,8 @@ export async function checkPermission(perm: OSPermission): Promise<PermissionSta
   try {
     switch (perm) {
       case 'notifications': {
+        const Notifications = notificationsApi();
+        if (!Notifications) return 'undetermined';
         const { status } = await Notifications.getPermissionsAsync();
         return mapExpoStatus(status);
       }
@@ -137,6 +139,8 @@ export async function requestPermission(perm: OSPermission): Promise<PermissionS
   try {
     switch (perm) {
       case 'notifications': {
+        const Notifications = notificationsApi();
+        if (!Notifications) return 'undetermined';
         const { status } = await Notifications.requestPermissionsAsync();
         return mapExpoStatus(status);
       }

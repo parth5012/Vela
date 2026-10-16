@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
+import { notificationsApi } from './notificationsCompat';
 import * as TaskManager from 'expo-task-manager';
 import * as BackgroundTask from 'expo-background-task';
 import { db } from '../db/client';
@@ -17,6 +17,8 @@ export const FOREGROUND_NOTIFICATION_ID = 'vela-foreground-task-running';
 export const APPROVAL_NOTIFICATION_ID = 'vela-approval-required';
 
 async function presentNotification(identifier: string, content: any) {
+  const Notifications = notificationsApi();
+  if (!Notifications) return;
   try {
     await Notifications.scheduleNotificationAsync({
       identifier,
@@ -29,6 +31,8 @@ async function presentNotification(identifier: string, content: any) {
 }
 
 export async function cancelNotification(identifier: string) {
+  const Notifications = notificationsApi();
+  if (!Notifications) return;
   try {
     await Notifications.cancelScheduledNotificationAsync(identifier);
   } catch (error) {
@@ -55,6 +59,8 @@ export async function showApprovalNotification(
   executionId: string,
   action: string
 ) {
+  const Notifications = notificationsApi();
+  if (!Notifications) return;
   await presentNotification(APPROVAL_NOTIFICATION_ID, {
     title: 'Vela needs your approval',
     body: action || 'A task requires your confirmation to continue.',

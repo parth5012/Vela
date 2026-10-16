@@ -1,4 +1,4 @@
-import * as Notifications from 'expo-notifications';
+import { notificationsApi } from './notificationsCompat';
 import { eq } from 'drizzle-orm';
 import db from '../db/client';
 import { tasks, checkIns } from '../db/schema';
@@ -158,6 +158,8 @@ export async function presentCheckinNotification(
   title: string,
   body: string
 ): Promise<void> {
+  const Notifications = notificationsApi();
+  if (!Notifications) return;
   try {
     await Notifications.scheduleNotificationAsync({
       identifier,

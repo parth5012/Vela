@@ -1,9 +1,12 @@
 import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
+import type { Subscription } from 'expo-notifications';
 import { useConfigStore } from '../store/useConfigStore';
+import { notificationsApi } from './notificationsCompat';
 
 async function ensureAndroidChannels(): Promise<void> {
   if (Platform.OS !== 'android') return;
+  const Notifications = notificationsApi();
+  if (!Notifications) return;
   try {
     await Notifications.setNotificationChannelAsync('vela_task_completion', {
       name: 'Vela Task Completion',
@@ -64,6 +67,11 @@ async function postTokenToBackend(token: string): Promise<boolean> {
 
 export async function registerAndPostToken(): Promise<string | null> {
   try {
+    const Notifications = notificationsApi();
+    if (!Notifications) {
+      console.log('[pushRegistration] expo-notifications unavailable — skipping registration');
+      return null;
+    }
     await ensureAndroidChannels();
 
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
@@ -99,7 +107,9 @@ export async function registerAndPostToken(): Promise<string | null> {
   }
 }
 
-export function setupTokenRefreshListener(): Notifications.Subscription | null {
+export function setupTokenRefreshListener(): Subscription | null {
+  const Notifications = notificationsApi();
+  if (!Notifications) return null;
   try {
     const subscription = Notifications.addPushTokenListener(async (event) => {
       const newToken = (event as { data?: string })?.data ?? (event as unknown as string);

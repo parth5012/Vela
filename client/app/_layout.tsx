@@ -16,13 +16,14 @@ import {
   handleWebViewMessage,
 } from '../store/useBrowserStore';
 import { registerVelaBackgroundTask } from '../utils/backgroundTasks';
-import * as Notifications from 'expo-notifications';
+import type { Subscription } from 'expo-notifications';
+import { notificationsApi } from '../utils/notificationsCompat';
 import { SafetyDialog } from '../components/ui/SafetyDialog';
 import { persistentWebviewContainerStyle, persistentWebviewPointerEvents } from '../utils/persistentWebviewStyle';
 import { registerAndPostToken, setupTokenRefreshListener } from '../utils/pushRegistration';
 import { routeByType } from '../utils/notificationRouting';
 
-Notifications.setNotificationHandler({
+notificationsApi()?.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
     shouldPlaySound: true,
@@ -125,7 +126,7 @@ export default function RootLayout() {
   // useConfigStore.getState() at call time (same pattern as backgroundTasks).
   useEffect(() => {
     if (!hasHydrated || !isConfigured) return;
-    let refreshSub: Notifications.Subscription | null = null;
+    let refreshSub: Subscription | null = null;
     let cancelled = false;
     // Fire registration; on success register refresh listener. Failures are silent+logged inside util.
     registerAndPostToken().then((token) => {
@@ -155,8 +156,13 @@ export default function RootLayout() {
   // Hook-safe: placed before early return with hasHydrated && isRouterReady guard.
   useEffect(() => {
     if (!hasHydrated || !isRouterReady) return;
-    let foregroundSub: Notifications.Subscription | null = null;
-    let responseSub: Notifications.Subscription | null = null;
+    // In Expo Go the expo-notifications module cannot be evaluated at all
+    // (see utils/notificationsCompat.ts) — skip listener wiring. Nothing is
+    // created here, so returning without a cleanup function is safe.
+    const Notifications = notificationsApi();
+    if (!Notifications) return;
+    let foregroundSub: Subscription | null = null;
+    let responseSub: Subscription | null = null;
     let cancelled = false;
 
     const selectThread = (id: string | null) => useChatStore.getState().selectThread(id);

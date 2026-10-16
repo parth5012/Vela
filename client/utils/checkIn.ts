@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
+import { notificationsApi } from './notificationsCompat';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const CHECKIN_CHANNEL_ID = 'vela_check_in';
@@ -36,6 +36,8 @@ function allScheduleIds(): string[] {
  */
 export async function ensureCheckinChannel(muted: boolean): Promise<void> {
   if (Platform.OS !== 'android') return;
+  const Notifications = notificationsApi();
+  if (!Notifications) return;
   try {
     await Notifications.setNotificationChannelAsync(CHECKIN_CHANNEL_ID, {
       name: 'Vela Daily Check-in',
@@ -71,6 +73,8 @@ export async function saveCheckinSettings(settings: CheckinSettings): Promise<vo
 }
 
 async function notificationsAllowed(): Promise<boolean> {
+  const Notifications = notificationsApi();
+  if (!Notifications) return false;
   try {
     const { status } = await Notifications.getPermissionsAsync();
     return status === 'granted';
@@ -80,6 +84,8 @@ async function notificationsAllowed(): Promise<boolean> {
 }
 
 export async function cancelDailyCheckin(): Promise<void> {
+  const Notifications = notificationsApi();
+  if (!Notifications) return;
   for (const id of allScheduleIds()) {
     try {
       await Notifications.cancelScheduledNotificationAsync(id);
@@ -95,6 +101,8 @@ export async function cancelDailyCheckin(): Promise<void> {
  * Returns the schedule ids, or [] when notifications are not granted.
  */
 export async function scheduleDailyCheckin(settings: CheckinSettings): Promise<string[]> {
+  const Notifications = notificationsApi();
+  if (!Notifications) return [];
   if (!(await notificationsAllowed())) {
     return [];
   }
