@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import useConfigStore from '../../store/useConfigStore';
-import AuroraScreen, {
+import { useConfigStore } from '../../store/useConfigStore';
+import {
+  AuroraScreen,
   Card,
   Label,
   PillGroup,
@@ -199,7 +200,7 @@ export default function BriefingSettingsScreen() {
               {
                 color: colors.text,
                 borderColor: colors.glassBorder,
-                backgroundColor: colors.surface,
+                backgroundColor: colors.card,
                 fontSize: sizes.sub,
               },
             ]}
@@ -223,7 +224,7 @@ export default function BriefingSettingsScreen() {
                     styles.dayPill,
                     {
                       borderColor: active ? accent : colors.glassBorder,
-                      backgroundColor: active ? accent + '33' : colors.surface,
+                      backgroundColor: active ? accent + '33' : colors.card,
                     },
                   ]}
                 >
@@ -245,7 +246,7 @@ export default function BriefingSettingsScreen() {
                 styles.togglePill,
                 {
                   borderColor: sections.today ? accent : colors.glassBorder,
-                  backgroundColor: sections.today ? accent + '22' : colors.surface,
+                  backgroundColor: sections.today ? accent + '22' : colors.card,
                 },
               ]}
             >
@@ -260,7 +261,7 @@ export default function BriefingSettingsScreen() {
                 styles.togglePill,
                 {
                   borderColor: sections.inbox ? accent : colors.glassBorder,
-                  backgroundColor: sections.inbox ? accent + '22' : colors.surface,
+                  backgroundColor: sections.inbox ? accent + '22' : colors.card,
                 },
               ]}
             >
@@ -275,7 +276,7 @@ export default function BriefingSettingsScreen() {
                 styles.togglePill,
                 {
                   borderColor: sections.radar ? accent : colors.glassBorder,
-                  backgroundColor: sections.radar ? accent + '22' : colors.surface,
+                  backgroundColor: sections.radar ? accent + '22' : colors.card,
                 },
               ]}
             >
@@ -310,7 +311,7 @@ export default function BriefingSettingsScreen() {
                 flex: 1,
                 color: colors.text,
                 borderColor: colors.glassBorder,
-                backgroundColor: colors.surface,
+                backgroundColor: colors.card,
                 fontSize: sizes.sub,
               },
             ]}
@@ -338,7 +339,7 @@ export default function BriefingSettingsScreen() {
                 • {item.text}
               </Text>
               <Pressable onPress={() => handleDeleteWatchItem(item.id)}>
-                <Text style={{ color: colors.error || '#ef4444', fontSize: sizes.sub }}>Delete</Text>
+                <Text style={{ color: '#ef4444', fontSize: sizes.sub }}>Delete</Text>
               </Pressable>
             </View>
           ))
@@ -354,7 +355,7 @@ export default function BriefingSettingsScreen() {
         </Text>
         <Pressable
           onPress={() => router.push('/briefing' as any)}
-          style={[styles.historyBtn, { borderColor: colors.glassBorder, backgroundColor: colors.surface }]}
+          style={[styles.historyBtn, { borderColor: colors.glassBorder, backgroundColor: colors.card }]}
         >
           <Text style={{ color: accent, fontWeight: 'bold', fontSize: sizes.sub }}>
             📜 View Past Briefings

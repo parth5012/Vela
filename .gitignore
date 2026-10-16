@@ -2,6 +2,7 @@
 .venv
 __pycache__/
 .pytest_cache
+system-evals/reports/
 GEMINI.md
 .gemini/
 graphify-out/
@@ -31,3 +32,5 @@ dist/
 client/e2e/results/
 # Generated eval HTML report (regenerated on every eval run)
 backend/evals/report/
+# Needle engine archives — fetched at build by client/modules/needle/scripts/fetch-engine.js (#293)
+client/modules/needle/android/engine/

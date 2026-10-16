@@ -12,7 +12,8 @@ const GROUPS: CategoryGroup[] = [
   {
     title: 'Connection & Accounts',
     rows: [
-      { icon: '⚡', label: 'Server & API Key', hint: 'URL, key, test connection', route: '/settings/connection' },
+      { icon: '⚡', label: 'Server & API Key', hint: 'URL, key, connection mode', route: '/settings/connection' },
+      { icon: '☁️', label: 'Cloud Providers', hint: 'Gemini, OpenAI, Claude, OpenRouter, Groq', route: '/settings/cloud-providers' },
       { icon: '🔑', label: 'Google Workspace', hint: 'Gmail · Calendar · Drive', route: '/settings/connection' },
     ],
   },
@@ -20,6 +21,7 @@ const GROUPS: CategoryGroup[] = [
     title: 'Permissions',
     rows: [
       { icon: '🛡️', label: 'Permissions', hint: 'App & agent permissions', route: '/settings/permissions' },
+      { icon: '🔌', label: 'Shizuku Setup', hint: 'Privileged ops · pairing guide', route: '/settings/shizuku' },
     ],
   },
   {
@@ -32,7 +34,7 @@ const GROUPS: CategoryGroup[] = [
   {
     title: 'Agent',
     rows: [
-      { icon: '🤖', label: 'Persona Prompt', hint: 'Persona, model, temperature, system prompt', route: '/settings/agent' },
+      { icon: '🤖', label: 'Agent Prompt', hint: 'Agent, model, temperature, system prompt', route: '/settings/agent' },
       { icon: '🛡️', label: 'Device Agent Permissions', hint: 'Auto/Ask/Block safety settings', route: '/settings/device-agent' }
     ]
   },
@@ -40,6 +42,7 @@ const GROUPS: CategoryGroup[] = [
     title: 'Local AI',
     rows: [
       { icon: '📱', label: 'Local Mode & Models', hint: 'On-device inference, downloads', route: '/settings/local-ai' },
+      { icon: '🧾', label: 'JSON Extraction', hint: 'Schema in, typed JSON out — on-device', route: '/settings/extract' },
     ],
   },
   {

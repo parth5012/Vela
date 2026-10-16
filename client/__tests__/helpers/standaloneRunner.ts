@@ -20,8 +20,9 @@
  *
  * It also provides extractBlock()/transpileAndEval(), used to exercise REAL
  * production code that cannot simply be imported in Node:
- *  - deriveSafetyTier() lives in app/index.tsx, whose module graph drags in
- *    react-native/expo — unloadable outside a RN runtime.
+ *  - deriveSafetyTier() lives in utils/deriveSafetyTier.ts (moved out of
+ *    app/index.tsx), which imports the config store — still unloadable
+ *    outside a RN runtime (zustand v5/AsyncStorage, see next bullet).
  *  - classifyAction() sits in utils/safetyManager.ts which imports the config
  *    store (zustand v5 is ESM-only, AsyncStorage/SecureStore are native).
  *  - shouldPrompt() sits in utils/permissionManager.ts which imports
@@ -235,7 +236,7 @@ export function ensureStandaloneRunner(): boolean {
  *
  * The opening brace is searched from the marker START, so markers may either
  * be a plain declaration ("function foo") or include the brace themselves
- * ("deviceAgentPermissions: {"). None of the targeted signatures contain
+ * ("DEFAULT_DEVICE_AGENT_PERMISSIONS: DeviceAgentPermissions = {" or "deviceAgentPermissions: {"). None of the targeted signatures contain
  * braces before their body, so this single rule covers both shapes.
  */
 export function extractBlock(source: string, startMarker: string): string {

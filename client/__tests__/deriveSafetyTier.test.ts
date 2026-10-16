@@ -6,7 +6,8 @@
  * react-native/expo module graph in, so it cannot be imported under plain
  * Node. Instead this suite extracts, at runtime:
  *   - classifyAction()            from utils/safetyManager.ts  (real policy classifier)
- *   - SafetyTierLabel + deriveSafetyTier() from app/index.tsx   (code under test)
+ *   - SafetyTierLabel + deriveSafetyTier() from utils/deriveSafetyTier.ts (code under test;
+ *     moved out of app/index.tsx in the Batch-2 index Phase 1 extraction)
  * and evaluates them in a sandbox where ONLY useConfigStore is stubbed. The
  * stub's default tiers are parsed live from store/useConfigStore.ts (with a
  * drift guard), so tier changes in the real store fail loudly here.
@@ -30,20 +31,24 @@ type TierLabel = 'auto' | 'ask' | 'blocked';
 
 const safetyManagerSource = readSource('utils/safetyManager.ts');
 const indexSource = readSource('app/index.tsx');
+const deriveSource = readSource('utils/deriveSafetyTier.ts');
 const configStoreSource = readSource('store/useConfigStore.ts');
 const messageParserSource = readSource('utils/messageParser.ts');
 
 const classifyActionSource = extractBlock(safetyManagerSource, 'function classifyAction');
-const deriveFunctionSource = extractBlock(indexSource, 'function deriveSafetyTier');
+const deriveFunctionSource = extractBlock(deriveSource, 'function deriveSafetyTier');
 
-const typeAliasMatch = indexSource.match(/type SafetyTierLabel = [^;\n]+;/);
+const typeAliasMatch = deriveSource.match(/type SafetyTierLabel = [^;\n]+;/);
 if (!typeAliasMatch) {
-  throw new Error("Could not find 'type SafetyTierLabel' in app/index.tsx");
+  throw new Error("Could not find 'type SafetyTierLabel' in utils/deriveSafetyTier.ts");
 }
 
 /** Default tiers parsed live from the real store initializer. */
 function parseDefaultTiers(storeSource: string): Record<string, PolicyTier> {
-  const block = extractBlock(storeSource, 'deviceAgentPermissions: {');
+  const marker = storeSource.includes('DEFAULT_DEVICE_AGENT_PERMISSIONS: DeviceAgentPermissions = {')
+    ? 'DEFAULT_DEVICE_AGENT_PERMISSIONS: DeviceAgentPermissions = {'
+    : 'deviceAgentPermissions: {';
+  const block = extractBlock(storeSource, marker);
   const tiers: Record<string, PolicyTier> = {};
   const pattern = /([a-z_]+):\s*'(auto|confirm|deny)'/g;
   let match: RegExpExecArray | null;
@@ -80,6 +85,7 @@ const FALLBACK_TIERS: Record<string, PolicyTier> = {
   sideloads: 'deny',
   permission_toggles: 'deny',
   root_shizuku: 'deny',
+  contacts: 'auto',
 };
 
 interface ExtractedModule {
@@ -366,11 +372,11 @@ describe('#160 wiring pins', () => {
   });
 
   it('keeps deriveSafetyTier at module level, outside the component', () => {
-    const fnIdx = indexSource.indexOf('function deriveSafetyTier');
-    const componentIdx = indexSource.indexOf('export default function ChatScreen');
-    expect(fnIdx).toBeGreaterThan(-1);
-    expect(componentIdx).toBeGreaterThan(-1);
-    expect(fnIdx).toBeLessThan(componentIdx);
+    // Moved to utils/deriveSafetyTier.ts (index Phase 1 extraction): defined at
+    // module scope there, imported by the screen, never redefined inside it.
+    expect(deriveSource).toMatch(/export function deriveSafetyTier/);
+    expect(indexSource).not.toMatch(/function deriveSafetyTier/);
+    expect(indexSource).toMatch(/from '\.\.\/utils\/deriveSafetyTier'/);
   });
 
   it('MessageSegment carries the optional safetyTier field (type-only parser change)', () => {

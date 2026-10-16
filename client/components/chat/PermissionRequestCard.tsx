@@ -18,6 +18,8 @@ const PERM_LABELS: Record<OSPermission, { icon: string; label: string }> = {
   storage: { icon: '💾', label: 'Storage' },
   accessibility: { icon: '♿', label: 'Accessibility' },
   background: { icon: '🔄', label: 'Background' },
+  phone: { icon: '📞', label: 'Phone' },
+  contacts: { icon: '👥', label: 'Contacts' },
 };
 
 export default function PermissionRequestCard({

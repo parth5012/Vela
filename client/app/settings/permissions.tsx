@@ -95,6 +95,8 @@ export default function PermissionsHubScreen() {
     storage: 'granted',
     accessibility: 'undetermined',
     background: 'undetermined',
+    phone: 'undetermined',
+    contacts: 'undetermined',
   });
   const [loadingPerm, setLoadingPerm] = useState<OSPermission | null>(null);
   const [bulkLoading, setBulkLoading] = useState(false);

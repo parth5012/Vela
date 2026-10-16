@@ -1,5 +1,4 @@
 import os
-import json
 from langchain_core.tools import tool
 from utils.llm import get_llm, get_embeddings
 from db.session import get_db_session

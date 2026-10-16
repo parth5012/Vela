@@ -1,7 +1,6 @@
-from sqlalchemy.sql.operators import startswith_op
 from telegram import Update, Bot
 from collections import deque
-from langchain_core.messages import HumanMessage, AIMessage, ToolCall
+from langchain_core.messages import HumanMessage, AIMessage
 from agent.graph import graph
 from utils.logger import StructuredLogger
 from db.database import PostgresDB
@@ -77,8 +76,7 @@ class TelegramGateway:
                 "agent": "personal assistant"
             }
             
-            # Run graph execution (Toggle between streaming and invoking below)
-            # sent_replies = await self._run_streaming(chat_id, inputs)
+            # Run graph execution
             sent_replies = await self._run_invoking(chat_id, inputs)
                                 
             if not sent_replies or sent_replies[-1].strip().startswith("Error invoking LLM"):
@@ -101,33 +99,6 @@ class TelegramGateway:
         except Exception as e:
             self.logger.error("Error processing update webhook", error=str(e))
             return f"Error: {str(e)}"
-
-    async def _run_streaming(self, chat_id: int, inputs: dict) -> list[str]:
-        sent_replies = []
-        try:
-            async for chunk in graph.astream(inputs, stream_mode="updates"):
-                for node_name, node_output in chunk.items():
-                    if node_name == "chatbot" and "messages" in node_output:
-                        for msg in node_output["messages"]:
-                            msg_text = _get_message_text(msg.content)
-                            if isinstance(msg, AIMessage) and msg_text.strip():
-                                self.logger.info("Sending streamed AI message to Telegram", chat_id=chat_id)
-                                try:
-                                    await self.bot.send_message(chat_id=chat_id, text=msg_text)
-                                    sent_replies.append(msg_text)
-                                except Exception as send_err:
-                                    self.logger.error("Failed to send intermediate message to Telegram", error=str(send_err))
-                            elif isinstance(msg, ToolCall) and msg_text.strip():
-                                self.logger.info("Sending streamed tool call message to Telegram", chat_id=chat_id)
-                                try:
-                                    await self.bot.send_message(chat_id=chat_id, text=f'> _{msg_text}_')
-                                    sent_replies.append(msg_text)
-                                except Exception as send_err:
-                                    self.logger.error("Failed to send tool call message to Telegram", error=str(send_err))
-        except (asyncio.CancelledError, GeneratorExit) as cancel_err:
-            self.logger.info("Graph streaming task cancelled or closed gracefully", chat_id=chat_id, error=type(cancel_err).__name__)
-            raise
-        return sent_replies
 
     async def _run_invoking(self, chat_id: int, inputs: dict) -> list[str]:
         self.logger.info("Invoking LangGraph supervisor graph (non-streaming)", chat_id=chat_id)

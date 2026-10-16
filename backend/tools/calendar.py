@@ -2,8 +2,7 @@
 
 from datetime import datetime, timezone, timedelta
 from langchain_core.tools import tool
-from googleapiclient.discovery import build
-from utils.auth_gate import get_authenticated_service, AUTH_REQUIRED
+from utils.auth_gate import get_authenticated_service
 from utils.logger import StructuredLogger
 
 logger = StructuredLogger("CalendarTool")

@@ -289,14 +289,14 @@ describe('messageParser', () => {
 
 describe('messageParser phantom tool_call guard (#150)', () => {
   it('parses the mock-server thought response to exactly [thought, text] with zero tool_call segments', () => {
-    const text = '<thought>User asked: what is the capital of France. I should answer directly.</thought>[PERSONA] The capital of France is Paris.';
+    const text = '<thought>User asked: what is the capital of France. I should answer directly.</thought>[AGENT] The capital of France is Paris.';
     const result = parseMessage(text);
     expect(result).toHaveLength(2);
     expect(result[0].type).toBe('thought');
     expect(result[0].isClosed).toBe(true);
     expect(result[1]).toEqual({
       type: 'text',
-      content: '[PERSONA] The capital of France is Paris.',
+      content: '[AGENT] The capital of France is Paris.',
       isClosed: true
     });
     expect(result.some((s) => s.type === 'tool_call')).toBe(false);

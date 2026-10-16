@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Modal, Switch, ActivityIndicator, Alert, TextInput } from 'react-native';
-import { useRouter } from 'expo-router';
+import { View, Text, Pressable, ScrollView, Modal, Switch, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import db, { initializeDatabase } from '../db/client';
 import { tasks, taskRuns, TaskEntity, TaskRunEntity } from '../db/schema';
-import { eq, desc } from 'drizzle-orm';
-import { useConfigStore } from '../store/useConfigStore';
+import { eq } from 'drizzle-orm';
 import { AuroraScreen, Card, PrimaryButton } from '../components/ui/settingsKit';
 import { useAurora } from '../hooks/useAurora';
 import { calculateNextRun } from '../utils/backgroundTasks';
+import { runTask } from '../utils/taskRunner';
 import { isUserVisibleTask } from '../utils/checkinScheduler';
-import { DEFAULT_PERSONAS } from '../utils/personas';
+import { useAgents } from '../hooks/useAgents';
+import { useConfigStore } from '../store/useConfigStore';
+import { styles } from '../styles/tasksStyles';
 
 const generateId = () => {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -21,9 +22,8 @@ const generateId = () => {
 };
 
 export default function TasksScreen() {
-  const router = useRouter();
   const { colors, sizes, aurora } = useAurora();
-  const { apiUrl, apiKey } = useConfigStore();
+  const appConnectionMode = useConfigStore((s) => s.connectionMode);
 
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'paused'>('all');
   const [taskList, setTaskList] = useState<TaskEntity[]>([]);
@@ -37,7 +37,9 @@ export default function TasksScreen() {
   const [formRecurrence, setFormRecurrence] = useState<'15m' | '1h' | '12h' | '24h' | 'weekly'>('24h');
   const [formPrompt, setFormPrompt] = useState('');
   const [formAgent, setFormAgent] = useState('personal assistant');
-  const [personas, setPersonas] = useState(DEFAULT_PERSONAS);
+  const [formConnectionMode, setFormConnectionMode] = useState<'server' | 'local' | 'cloud' | null>(null);
+  // #357: shared DB-backed agent selector — no local copy, no second fetch.
+  const agents = useAgents();
 
   // Detail/Run History State
   const [selectedTask, setSelectedTask] = useState<TaskEntity | null>(null);
@@ -48,33 +50,6 @@ export default function TasksScreen() {
   useEffect(() => {
     loadTasks();
   }, []);
-
-  useEffect(() => {
-    if (apiUrl && apiKey) {
-      const fetchPersonas = async () => {
-        try {
-          const res = await fetch(`${apiUrl}/chat/personas`, {
-            headers: { Authorization: `Bearer ${apiKey}` },
-          });
-          if (res.ok) {
-            const data = await res.json();
-            const mapped = data.map((p: any) => {
-              let icon = '🤖';
-              if (p.id === 'teacher') icon = '👩🏫';
-              else if (p.id === 'analyst') icon = '📊';
-              else if (p.id === 'prompt builder') icon = '✍️';
-              const fallback = DEFAULT_PERSONAS.find((d) => d.id === p.id);
-              return { ...p, icon: p.icon || fallback?.icon || icon };
-            });
-            setPersonas(mapped);
-          }
-        } catch (err) {
-          console.error('[fetchPersonas] Failed:', err);
-        }
-      };
-      fetchPersonas();
-    }
-  }, [apiUrl, apiKey]);
 
   const loadTasks = async () => {
     try {
@@ -115,6 +90,7 @@ export default function TasksScreen() {
       setFormRecurrence(task.recurrence_rule as any);
       setFormPrompt(task.task_prompt);
       setFormAgent(task.linked_agent || 'personal assistant');
+      setFormConnectionMode(task.connection_mode ?? null);
     } else {
       setEditingTask(null);
       setFormTitle('');
@@ -122,6 +98,7 @@ export default function TasksScreen() {
       setFormRecurrence('24h');
       setFormPrompt('');
       setFormAgent('personal assistant');
+      setFormConnectionMode(null);
     }
     setIsFormModalVisible(true);
   };
@@ -153,6 +130,7 @@ export default function TasksScreen() {
             recurrence_rule: formRecurrence,
             task_prompt: formPrompt.trim(),
             linked_agent: formAgent.trim(),
+            connection_mode: formConnectionMode,
             next_run: nextRunTime,
           })
           .where(eq(tasks.id, editingTask.id));
@@ -164,6 +142,7 @@ export default function TasksScreen() {
           recurrence_rule: formRecurrence,
           task_prompt: formPrompt.trim(),
           linked_agent: formAgent.trim(),
+          connection_mode: formConnectionMode,
           status: 'active',
           last_run: null,
           next_run: calculateNextRun(formRecurrence, now),
@@ -228,15 +207,14 @@ export default function TasksScreen() {
 
   const handleTriggerManualRun = async (task: TaskEntity) => {
     if (runningTaskId) return;
+    if (!db) return;
 
     const runId = generateId();
     const startedAt = Date.now();
 
+    setRunningTaskId(task.id);
+
     try {
-      setRunningTaskId(task.id);
-
-      if (!db) return;
-
       await db.insert(taskRuns).values({
         id: runId,
         task_id: task.id,
@@ -248,52 +226,17 @@ export default function TasksScreen() {
         loadRunHistory(task.id);
       }
 
-      if (!apiUrl || !apiKey) {
-        throw new Error('API URL or Key is not configured in Settings.');
-      }
-
-      const response = await fetch(`${apiUrl}/api/tasks/run`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          task_id: task.id,
-          title: task.title,
-          prompt: task.task_prompt,
-          agent: task.linked_agent || 'personal assistant',
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP Error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      if (data.status === 'success') {
-        await db.update(taskRuns)
-          .set({
-            status: 'completed',
-            completed_at: Date.now(),
-            output: data.output,
-          })
-          .where(eq(taskRuns.id, runId));
-      } else {
-        throw new Error(data.output || 'Unknown backend error');
-      }
-
-      const nextRunTime = calculateNextRun(task.recurrence_rule, startedAt);
-      await db.update(tasks)
+      const output = await runTask(task, task.connection_mode);
+      await db.update(taskRuns)
         .set({
-          last_run: startedAt,
-          next_run: nextRunTime,
+          status: 'completed',
+          completed_at: Date.now(),
+          output,
         })
-        .where(eq(tasks.id, task.id));
-
+        .where(eq(taskRuns.id, runId));
     } catch (err: any) {
       Alert.alert('Task failed', err.name === 'TypeError' ? 'Network unavailable' : (err.message || 'Execution failed'));
-      if (db) {
+      try {
         await db.update(taskRuns)
           .set({
             status: 'failed',
@@ -301,8 +244,22 @@ export default function TasksScreen() {
             output: err.name === 'TypeError' ? 'Network unavailable' : (err.message || 'Execution failed'),
           })
           .where(eq(taskRuns.id, runId));
+      } catch (rowErr) {
+        console.warn('[tasks] Failed to record failed run:', rowErr);
       }
     } finally {
+      try {
+        const nextRunTime = calculateNextRun(task.recurrence_rule, startedAt);
+        await db.update(tasks)
+          .set({
+            last_run: startedAt,
+            next_run: nextRunTime,
+          })
+          .where(eq(tasks.id, task.id));
+      } catch (scheduleErr) {
+        console.warn('[tasks] Failed to advance schedule:', scheduleErr);
+      }
+
       setRunningTaskId(null);
       loadTasks();
       if (selectedTask?.id === task.id) {
@@ -395,6 +352,9 @@ export default function TasksScreen() {
                 </Text>
                 <Text style={[styles.metaText, { color: colors.textMuted }]}>
                   🤖 {task.linked_agent || 'personal assistant'}
+                </Text>
+                <Text style={[styles.metaText, { color: colors.textMuted }]}>
+                  🌐 {task.connection_mode || 'default'}
                 </Text>
               </View>
 
@@ -499,7 +459,7 @@ export default function TasksScreen() {
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.textMuted }]}>Trigger Agent</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recurrencePills}>
-                {personas.map((p) => (
+                {agents.map((p) => (
                   <Pressable
                     key={p.id}
                     onPress={() => setFormAgent(p.id)}
@@ -513,7 +473,7 @@ export default function TasksScreen() {
                     </Text>
                   </Pressable>
                 ))}
-                {formAgent && !personas.some((p) => p.id === formAgent) ? (
+                {formAgent && !agents.some((p) => p.id === formAgent) ? (
                   <Pressable
                     onPress={() => setFormAgent(formAgent)}
                     style={[
@@ -527,6 +487,36 @@ export default function TasksScreen() {
                   </Pressable>
                 ) : null}
               </ScrollView>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={[styles.inputLabel, { color: colors.textMuted }]}>Connection Mode</Text>
+              <View style={styles.recurrencePills}>
+                {[
+                  { value: null, label: 'App default' },
+                  { value: 'server', label: 'Server' },
+                  { value: 'local', label: 'Local' },
+                  { value: 'cloud', label: 'Cloud' },
+                ].map((opt) => (
+                  <Pressable
+                    key={opt.label}
+                    onPress={() => setFormConnectionMode(opt.value as any)}
+                    style={[
+                      styles.rPill,
+                      formConnectionMode === opt.value && { backgroundColor: aurora.acc1, borderColor: aurora.acc1 },
+                    ]}
+                  >
+                    <Text style={[styles.rPillText, { color: formConnectionMode === opt.value ? aurora.onAccent : colors.textMuted }]}>
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              {formConnectionMode === null && (
+                <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 4 }}>
+                  Inherits app mode ({appConnectionMode})
+                </Text>
+              )}
             </View>
 
             <View style={styles.inputGroup}>
@@ -576,6 +566,9 @@ export default function TasksScreen() {
                   <Text style={{ color: colors.textMuted, fontSize: 13 }}>
                     Agent: <Text style={{ color: colors.text }}>{selectedTask.linked_agent || 'personal assistant'}</Text>
                   </Text>
+                  <Text style={{ color: colors.textMuted, fontSize: 13 }}>
+                    Mode: <Text style={{ color: colors.text }}>{selectedTask.connection_mode || `App default (${appConnectionMode})`}</Text>
+                  </Text>
                 </View>
               </View>
 
@@ -607,9 +600,26 @@ export default function TasksScreen() {
                         </Text>
                       ) : null}
                       {run.output ? (
-                        <View style={[styles.outputContainer, { backgroundColor: 'rgba(0,0,0,0.3)', borderColor: colors.glassBorder }]}>
-                          <Text style={{ color: '#a5b4fc', fontSize: 11, fontWeight: 'bold', marginBottom: 4 }}>OUTPUT LOG</Text>
-                          <Text style={{ color: '#e0e7ff', fontSize: 12, fontFamily: 'monospace' }}>
+                        <View style={[
+                          styles.outputContainer,
+                          {
+                            backgroundColor: run.status === 'failed' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(0,0,0,0.3)',
+                            borderColor: run.status === 'failed' ? 'rgba(239, 68, 68, 0.35)' : colors.glassBorder,
+                          }
+                        ]}>
+                          <Text style={{
+                            color: run.status === 'failed' ? '#f87171' : '#a5b4fc',
+                            fontSize: 11,
+                            fontWeight: 'bold',
+                            marginBottom: 4,
+                          }}>
+                            {run.status === 'failed' ? 'FAILURE REASON' : 'OUTPUT LOG'}
+                          </Text>
+                          <Text style={{
+                            color: run.status === 'failed' ? '#fca5a5' : '#e0e7ff',
+                            fontSize: 12,
+                            fontFamily: 'monospace',
+                          }}>
                             {run.output}
                           </Text>
                         </View>
@@ -629,200 +639,3 @@ export default function TasksScreen() {
     </AuroraScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  filterContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginVertical: 10,
-  },
-  filterTab: {
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  filterTabText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  listContainer: {
-    flex: 1,
-    marginTop: 10,
-    paddingHorizontal: 4,
-  },
-  emptyText: {
-    textAlign: 'center',
-    marginVertical: 40,
-    fontSize: 14,
-  },
-  taskCard: {
-    padding: 16,
-    marginBottom: 16,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    paddingBottom: 8,
-  },
-  taskTitle: {
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  taskDesc: {
-    fontSize: 13,
-  },
-  statusIndicator: {
-    marginLeft: 8,
-  },
-  badge: {
-    fontSize: 10,
-    fontWeight: '900',
-    paddingVertical: 2,
-    paddingHorizontal: 6,
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  cardMeta: {
-    borderTopWidth: 1,
-    paddingTop: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  metaText: {
-    fontSize: 12,
-  },
-  cardActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  toggleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  toggleLabel: {
-    fontSize: 12,
-    marginRight: 6,
-  },
-  actionsRow: {
-    flexDirection: 'row',
-  },
-  actionBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    marginLeft: 8,
-  },
-  actionBtnText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  modalScreen: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  modalScroll: {
-    width: '100%',
-    paddingHorizontal: 20,
-    paddingBottom: 40,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '900',
-    textAlign: 'center',
-    marginVertical: 20,
-  },
-  inputGroup: {
-    marginBottom: 16,
-    width: '100%',
-  },
-  inputLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 6,
-  },
-  textInput: {
-    height: 44,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    fontSize: 14,
-  },
-  recurrencePills: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  rPill: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: 'transparent',
-    backgroundColor: 'rgba(0,0,0,0.25)',
-    marginHorizontal: 2,
-    borderRadius: 8,
-  },
-  rPillText: {
-    fontSize: 11,
-    fontWeight: 'bold',
-  },
-  textArea: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    minHeight: 100,
-    textAlignVertical: 'top',
-  },
-  modalActions: {
-    flexDirection: 'row',
-    marginTop: 20,
-  },
-  cancelBtn: {
-    flex: 1,
-    marginLeft: 8,
-    height: 48,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  detailHeader: {
-    paddingHorizontal: 20,
-    paddingTop: 10,
-  },
-  detailMetaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-  },
-  historyTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    paddingHorizontal: 20,
-    marginTop: 15,
-    marginBottom: 10,
-  },
-  runCard: {
-    padding: 12,
-    marginBottom: 12,
-  },
-  runCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  outputContainer: {
-    padding: 8,
-    borderRadius: 6,
-    borderWidth: 1,
-    marginTop: 4,
-  },
-});

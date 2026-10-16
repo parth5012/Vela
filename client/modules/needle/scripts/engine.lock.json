@@ -1,0 +1,54 @@
+{
+  "comment": "Pinned upstream needle engine archives (Wayfinder #293, decision: fetch-at-build, no binaries in git). sha256 is the HF LFS oid (x-linked-etag), independently re-verified by hashing the downloaded bytes; bytes is the HF x-linked-size. Regenerate only together with a research check of the upstream repo (research #292 pinned needle3@27c0a9a5, needle2@32e9e3a9, 2026-09-29).",
+  "pinnedAt": "2026-09-29",
+  "engines": [
+    {
+      "model": "needle3",
+      "abi": "arm64-v8a",
+      "upstreamAbi": "android-arm64",
+      "url": "https://huggingface.co/Cactus-Compute/needle3/resolve/main/android-arm64/libneedle.a",
+      "sha256": "b8e73952054686f68e4319dcf69ad72a3de57faab73b73d9a67898f2c9d66110",
+      "bytes": 1664680
+    },
+    {
+      "model": "needle3",
+      "abi": "armeabi-v7a",
+      "upstreamAbi": "android-armv7",
+      "url": "https://huggingface.co/Cactus-Compute/needle3/resolve/main/android-armv7/libneedle.a",
+      "sha256": "162d98ef1e9d91db670ccc2f40d0de5a45d4184bf62995f4ae62a9dea52d862c",
+      "bytes": 1291188
+    },
+    {
+      "model": "needle3",
+      "abi": "riscv64",
+      "upstreamAbi": "android-riscv64",
+      "url": "https://huggingface.co/Cactus-Compute/needle3/resolve/main/android-riscv64/libneedle.a",
+      "sha256": "92396186b83ed15dd385d4e2084fdb722f0f4ab434096ae7c3de02bb1055959d",
+      "bytes": 3715858
+    },
+    {
+      "model": "needle2",
+      "abi": "arm64-v8a",
+      "upstreamAbi": "android-arm64",
+      "url": "https://huggingface.co/Cactus-Compute/needle2/resolve/main/android-arm64/libneedle.a",
+      "sha256": "93738ae3a9488cbc3104eb65bf49093683c26eb01b0d257e980e499d1d06a9f4",
+      "bytes": 20729982
+    },
+    {
+      "model": "needle2",
+      "abi": "armeabi-v7a",
+      "upstreamAbi": "android-armv7",
+      "url": "https://huggingface.co/Cactus-Compute/needle2/resolve/main/android-armv7/libneedle.a",
+      "sha256": "9b5a7354f3ba5263b0821c348da82c13937798da4f28d266a06927dde84c8c7f",
+      "bytes": 17965132
+    },
+    {
+      "model": "needle2",
+      "abi": "riscv64",
+      "upstreamAbi": "android-riscv64",
+      "url": "https://huggingface.co/Cactus-Compute/needle2/resolve/main/android-riscv64/libneedle.a",
+      "sha256": "812cc5268f91b0fd7ee5fccb4df95840e7be327677d2b6ce02c7d8a5b2ee6815",
+      "bytes": 29161064
+    }
+  ]
+}

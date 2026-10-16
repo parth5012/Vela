@@ -1,25 +1,26 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, Alert, StyleSheet, TextInput, Modal, ScrollView, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system/legacy';
 import * as DocumentPicker from 'expo-document-picker';
-import * as Sharing from 'expo-sharing';
 import { useConfigStore } from '../../store/useConfigStore';
 import {
-  isLocalLlmDown,
   localModelStorageKey,
   LOCAL_MODELS,
-  getLoadedModelName,
-  subscribeLocalModelLoadedState,
-  initializeLocalModel,
-  unloadLocalModel,
 } from '../../utils/localLlm';
 import {
   detectRamBytes,
   getModelStatusForRam,
   getOptimalSettingsForRam,
   getDynamicModelStatusForRam,
+  detectGpuVendor,
+  getGpuBackendPreference,
+  type GpuVendor,
 } from '../../utils/ramDetection';
+import {
+  getGpuCrashFlagDetails,
+  clearGpuCrashFlag,
+  type GpuCrashFlagDetails,
+} from '../../utils/liteRtCrashFlag';
 import {
   getCustomModels,
   deleteCustomModel,
@@ -31,7 +32,9 @@ import {
   CustomModelRecord,
   CustomModelDownloadProgress,
   SupportedModelFormat,
+  NeedleVariant,
 } from '../../utils/customModelStorage';
+import { useModelDownload } from '../../hooks/useModelDownload';
 import {
   AuroraScreen,
   Card,
@@ -53,10 +56,24 @@ const NETWORK_OPTIONS = [
   { value: 'any' as const, label: 'Any Network' },
 ];
 
+const GPU_BACKEND_OPTIONS = [
+  { value: 'auto' as const, label: 'Auto' },
+  { value: 'opencl' as const, label: 'OpenCL' },
+  { value: 'vulkan' as const, label: 'Vulkan' },
+  { value: 'cpu' as const, label: 'CPU' },
+];
+
+const GPU_QUANT_OPTIONS = [
+  { value: 'auto' as const, label: 'Auto' },
+  { value: 'q4_0' as const, label: 'Q4_0' },
+  { value: 'q4_k_m' as const, label: 'Q4_K_M' },
+  { value: 'q8_0' as const, label: 'Q8_0' },
+];
+
 /**
  * Wayfinder #173 Audit — Local AI Rows
  * Model rows: LOCAL_MODELS filtered by getModelStatusForRam (recommended/borderline/unsupported) — filtered when showUnsupportedModels=false.
- * Cactus Needle 45M is 'recommended' on <4.5GB and 4.5-7.5GB tiers (ramDetection.ts), so it is
+ * Needle rows (format cact: Needle-2 45M, Needle-3 (20-layer)) are 'recommended' on <4.5GB and 4.5-7.5GB tiers (ramDetection.ts), so they are
  * never hidden when showUnsupportedModels=false — no duplicated tier logic here, just the shared helper.
  * Download state: useConfigStore localModelDownloadProgress nullable; isDownloading = progress!==null; isActiveDownloading = isSelected && progress!==null.
  * Progress lives inline under filename when isActiveDownloading (View h8 radius4 bg rgba(255,255,255,0.08) + fill aurora.acc1 width `${progress}%`) plus global Card fallback when isDownloading.
@@ -65,8 +82,9 @@ const NETWORK_OPTIONS = [
  * Wayfinder #230 — Needle engine pill: NeedleModule.hasNativeLibrary() true → 'Accelerated' (#10b981), false → 'Mock Fallback' (#fb923c) block-with-warning, never silent mock.
  */
 export default function LocalAiScreen() {
-  const isLocalMode = useConfigStore((s) => s.isLocalMode);
-  const setIsLocalMode = useConfigStore((s) => s.setIsLocalMode);
+  const connectionMode = useConfigStore((s) => s.connectionMode);
+  const setConnectionMode = useConfigStore((s) => s.setConnectionMode);
+  const isLocalMode = connectionMode === 'local';
   const localModelName = useConfigStore((s) => s.localModelName);
   const setLocalModelName = useConfigStore((s) => s.setLocalModelName);
   const localModelDownloadProgress = useConfigStore((s) => s.localModelDownloadProgress);
@@ -76,7 +94,6 @@ export default function LocalAiScreen() {
 
   const { colors, sizes, aurora } = useAurora();
   const isMounted = useRef(true);
-  const [downloadedModels, setDownloadedModels] = useState<Record<string, boolean>>({});
 
   const detectedRamBytes = useConfigStore((s) => s.detectedRamBytes);
   const setDetectedRamBytes = useConfigStore((s) => s.setDetectedRamBytes);
@@ -86,8 +103,14 @@ export default function LocalAiScreen() {
   const setLocalContextSize = useConfigStore((s) => s.setLocalContextSize);
   const localMaxTokens = useConfigStore((s) => s.localMaxTokens);
   const setLocalMaxTokens = useConfigStore((s) => s.setLocalMaxTokens);
+  const gpuBackendPreference = useConfigStore((s) => s.gpuBackendPreference);
+  const setGpuBackendPreference = useConfigStore((s) => s.setGpuBackendPreference);
+  const gpuQuantPreference = useConfigStore((s) => s.gpuQuantPreference);
+  const setGpuQuantPreference = useConfigStore((s) => s.setGpuQuantPreference);
 
   const [showUnsupportedModels, setShowUnsupportedModels] = useState(false);
+  const [detectedGpuVendor, setDetectedGpuVendor] = useState<GpuVendor | null>(null);
+  const [gpuCrashDetails, setGpuCrashDetails] = useState<GpuCrashFlagDetails | null>(null);
 
   // Wayfinder #230: Needle engine runtime state. Synchronous boolean, safe on
   // web/Jest where the native module is absent (hasNativeLibrary() → false).
@@ -98,12 +121,6 @@ export default function LocalAiScreen() {
       return false;
     }
   });
-  // Active built-in model DownloadResumable so Cancel can pauseAsync + clean up.
-  const downloadResumableRef = useRef<any>(null);
-  // CodeReview #234: suppresses the erroneous 'Download Failed' alert when the
-  // user cancels — the pauseAsync rejection / aborted downloadAsync surfaces
-  // through the same catch path as a real network failure.
-  const isCancelledRef = useRef(false);
 
   useEffect(() => {
     if (detectedRamBytes === null) {
@@ -113,7 +130,30 @@ export default function LocalAiScreen() {
         }
       });
     }
-  }, [detectedRamBytes]);
+  }, [detectedRamBytes, setDetectedRamBytes]);
+
+  useEffect(() => {
+    detectGpuVendor().then((vendor) => {
+      if (isMounted.current) {
+        setDetectedGpuVendor(vendor);
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    getGpuCrashFlagDetails().then((details) => {
+      if (isMounted.current) {
+        setGpuCrashDetails(details);
+      }
+    });
+  }, []);
+
+  const handleClearGpuCrash = async () => {
+    await clearGpuCrashFlag();
+    if (isMounted.current) {
+      setGpuCrashDetails(null);
+    }
+  };
 
   const handleApplyRecommendation = () => {
     if (detectedRamBytes) {
@@ -151,7 +191,6 @@ export default function LocalAiScreen() {
       setLocalModelName(modelName);
     }
   };
-  const [loadedModelName, setLoadedModelName] = useState<string | null>(getLoadedModelName());
   const [customModels, setCustomModels] = useState<CustomModelRecord[]>([]);
   const [showAddCustomModal, setShowAddCustomModal] = useState(false);
   const [customTab, setCustomTab] = useState<'url' | 'file'>('url');
@@ -162,6 +201,7 @@ export default function LocalAiScreen() {
   const [preflightResult, setPreflightResult] = useState<{
     valid: boolean;
     format: SupportedModelFormat | null;
+    variant?: NeedleVariant | null;
     contentLength?: number;
     error?: string;
   } | null>(null);
@@ -249,7 +289,7 @@ export default function LocalAiScreen() {
         setCustomFormat(res.format);
       }
     } catch (err: any) {
-      setPreflightResult({ valid: false, format: null, error: err?.message });
+      setPreflightResult({ valid: false, format: null, variant: null, error: err?.message });
     } finally {
       setIsPreflighting(false);
     }
@@ -307,8 +347,6 @@ export default function LocalAiScreen() {
       Alert.alert('Import Failed', err?.message || 'Failed to import model file');
     }
   };
-  const [modelBusy, setModelBusy] = useState(false);
-
   useEffect(() => {
     isMounted.current = true;
     return () => {
@@ -316,435 +354,21 @@ export default function LocalAiScreen() {
     };
   }, []);
 
-  // Keep the "loaded in RAM" badge in sync with the engine's actual state.
-  useEffect(() => {
-    const unsubscribe = subscribeLocalModelLoadedState(() => {
-      if (isMounted.current) {
-        setLoadedModelName(getLoadedModelName());
-      }
-    });
-    setLoadedModelName(getLoadedModelName());
-    return unsubscribe;
-  }, []);
-
-  // Check downloaded status of models on focus/load and when localModelName changes
-  useEffect(() => {
-    let cancelled = false;
-
-    const checkDownloaded = async () => {
-      try {
-        const statuses = await Promise.all(
-          LOCAL_MODELS.map((m) => AsyncStorage.getItem(localModelStorageKey(m.name)))
-        );
-        if (cancelled || !isMounted.current) return;
-        setDownloadedModels(
-          LOCAL_MODELS.reduce<Record<string, boolean>>((acc, model, idx) => {
-            acc[model.name] = statuses[idx] === 'true';
-            return acc;
-          }, {})
-        );
-      } catch (err) {
-        console.warn('[local-ai] Failed to read downloaded model status:', err);
-      }
-    };
-
-    checkDownloaded();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [localModelName]);
+  const {
+    downloadedModels,
+    modelBusy,
+    isActiveModelDownloaded,
+    isActiveModelLoaded,
+    handleLoadIntoRam,
+    handleUnloadFromRam,
+    handleDownloadModel,
+    handleCancelDownload,
+    handleDeleteModel,
+    handleExportModel,
+    handleImportModel,
+  } = useModelDownload({ customModels, needleHasNative, isMounted });
 
   const isDownloading = localModelDownloadProgress !== null;
-  const isActiveModelDownloaded = !!downloadedModels[localModelName];
-  const isActiveModelLoaded = loadedModelName === localModelName;
-
-  const handleLoadIntoRam = async () => {
-    if (isLocalLlmDown) {
-      Alert.alert('Local Model Down', 'The local LLM is currently down/unavailable.');
-      return;
-    }
-    // Wayfinder #230 / #232: block-with-warning on mock Needle runtime (never silent mock).
-    // CodeReview #234: gate covers built-in Needle row AND any custom .cact model
-    // (custom .cact models run through the Needle engine, so they bypass silently otherwise).
-    const isNeedleModel =
-      localModelName === 'Cactus Needle 45M' ||
-      LOCAL_MODELS.find((m) => m.name === localModelName)?.format === 'cact' ||
-      customModels.find((m) => m.name === localModelName)?.format === 'cact';
-    if (isNeedleModel && !needleHasNative) {
-      Alert.alert(
-        'Needle Engine Unavailable',
-        'The Needle native library is not packaged in this build (mock fallback stub is active). On-device Needle inference is blocked. Use a dev build with the Needle native module.'
-      );
-      return;
-    }
-    if (!isActiveModelDownloaded) {
-      Alert.alert('Not Downloaded', `Download ${localModelName} first before loading it into RAM.`);
-      return;
-    }
-    if (modelBusy) return;
-    setModelBusy(true);
-    try {
-      await initializeLocalModel(true);
-    } catch (err: any) {
-      Alert.alert('Load Failed', err?.message || 'The model could not be loaded.');
-    } finally {
-      if (isMounted.current) setModelBusy(false);
-    }
-  };
-
-  const handleUnloadFromRam = async () => {
-    if (modelBusy) return;
-    setModelBusy(true);
-    try {
-      await unloadLocalModel();
-    } catch (err: any) {
-      Alert.alert('Unload Failed', err?.message || 'The model could not be unloaded.');
-    } finally {
-      if (isMounted.current) setModelBusy(false);
-    }
-  };
-
-  const handleDownloadModel = async () => {
-    if (isLocalLlmDown) {
-      Alert.alert('Local Model Down', 'The local LLM is currently down/unavailable.');
-      return;
-    }
-
-    const selectedModel = LOCAL_MODELS.find((m) => m.name === localModelName);
-    if (!selectedModel) {
-      Alert.alert('Error', 'Selected model not found.');
-      return;
-    }
-
-    // Check space
-    try {
-      const freeBytes = await FileSystem.getFreeDiskStorageAsync();
-      const freeGB = freeBytes / (1024 * 1024 * 1024);
-      const sizeMatch = selectedModel.size.match(/([\d.]+)/);
-      const requiredSpace = sizeMatch ? parseFloat(sizeMatch[1]) * 1.2 : 2.0;
-
-      if (freeGB < requiredSpace) {
-        Alert.alert(
-          'Low Storage Space',
-          `You need at least ${requiredSpace.toFixed(1)}GB free space to download the ${localModelName} model.`
-        );
-        return;
-      }
-    } catch (err) {
-      console.warn('Failed to verify free space:', err);
-    }
-
-    const downloadModel = async () => {
-      isCancelledRef.current = false;
-      const modelDir = `${FileSystem.documentDirectory}models/`;
-      const modelUri = `${modelDir}${selectedModel.filename}`;
-
-      try {
-        const dirInfo = await FileSystem.getInfoAsync(modelDir);
-        if (!dirInfo.exists) {
-          await FileSystem.makeDirectoryAsync(modelDir, { intermediates: true });
-        }
-
-        setLocalModelDownloadProgress(0);
-
-        const downloadResumable = FileSystem.createDownloadResumable(
-          selectedModel.downloadUrl,
-          modelUri,
-          { headers: { Accept: 'application/octet-stream' } },
-          (downloadProgress) => {
-            const { totalBytesWritten, totalBytesExpectedToWrite } = downloadProgress;
-            if (!isMounted.current || totalBytesExpectedToWrite <= 0) return;
-            const progress = Math.min(
-              100,
-              Math.round((totalBytesWritten / totalBytesExpectedToWrite) * 100)
-            );
-            setLocalModelDownloadProgress(progress);
-          }
-        );
-        downloadResumableRef.current = downloadResumable;
-
-        const result = await downloadResumable.downloadAsync();
-        downloadResumableRef.current = null;
-
-        // CodeReview #234: user-cancelled — skip success handling AND the
-        // 'Download Failed' alert; progress already reset by handleCancelDownload.
-        if (isCancelledRef.current) {
-          isCancelledRef.current = false;
-          if (isMounted.current) {
-            setLocalModelDownloadProgress(null);
-          }
-          return;
-        }
-
-        if (result && result.status === 200) {
-          const info = await FileSystem.getInfoAsync(modelUri);
-          const bytes = info.exists && 'size' in info ? (info.size as number) : 0;
-          const MIN_MODEL_BYTES = 10 * 1024 * 1024;
-          if (bytes < MIN_MODEL_BYTES) {
-            await FileSystem.deleteAsync(modelUri, { idempotent: true });
-            throw new Error(
-              `The server returned ${bytes} bytes instead of a model file. The repository may require authentication.`
-            );
-          }
-
-          await AsyncStorage.setItem(localModelStorageKey(localModelName), 'true');
-          await AsyncStorage.setItem(`${localModelStorageKey(localModelName)}_path`, modelUri);
-
-          if (isMounted.current) {
-            setDownloadedModels((prev) => ({ ...prev, [localModelName]: true }));
-            setLocalModelDownloadProgress(null);
-          }
-          Alert.alert('Download Complete', `${localModelName} model downloaded and ready for offline inference.`);
-        } else {
-          const status = result?.status ?? 'unknown';
-          const reason =
-            status === 401 || status === 403
-              ? 'the model repository requires authentication or accepting a license'
-              : status === 404
-              ? 'the model file no longer exists at that URL'
-              : `the server responded with status ${status}`;
-          throw new Error(`Download refused because ${reason}.`);
-        }
-      } catch (downloadError: any) {
-        console.error('[handleDownloadModel] Download failed:', downloadError);
-        downloadResumableRef.current = null;
-        // CodeReview #234: pauseAsync/abort during cancel rejects here — not a
-        // real failure, so reset progress silently without the alert.
-        if (isCancelledRef.current) {
-          isCancelledRef.current = false;
-          if (isMounted.current) {
-            setLocalModelDownloadProgress(null);
-          }
-          return;
-        }
-        try {
-          const partial = await FileSystem.getInfoAsync(modelUri);
-          if (partial.exists) {
-            await FileSystem.deleteAsync(modelUri, { idempotent: true });
-          }
-        } catch (cleanupError) {
-          console.warn('[handleDownloadModel] Failed to clean up partial file:', cleanupError);
-        }
-        if (isMounted.current) {
-          setLocalModelDownloadProgress(null);
-        }
-        Alert.alert(
-          'Download Failed',
-          `Failed to download ${localModelName}: ${downloadError.message || 'Network error'}. Please check your connection and try again.`
-        );
-      }
-    };
-
-    if (wifiOnlyDownload) {
-      Alert.alert(
-        'Confirm Cellular Download',
-        `You are on a cellular connection. Continuing will download ${selectedModel.size} (${selectedModel.filename}). Proceed?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Download', onPress: downloadModel },
-        ]
-      );
-    } else {
-      await downloadModel();
-    }
-  };
-
-  // Spec #174 cancel flow: pause the resumable, delete the partial file, reset progress.
-  const handleCancelDownload = async () => {
-    isCancelledRef.current = true;
-    const resumable = downloadResumableRef.current;
-    if (resumable) {
-      try {
-        await resumable.pauseAsync();
-      } catch {
-        // Ignore pause failure during cancel (mirrors cancelCustomModelDownload).
-      }
-      downloadResumableRef.current = null;
-    }
-    try {
-      const selectedModel = LOCAL_MODELS.find((m) => m.name === localModelName);
-      if (selectedModel) {
-        const modelUri = `${FileSystem.documentDirectory}models/${selectedModel.filename}`;
-        const partial = await FileSystem.getInfoAsync(modelUri);
-        if (partial.exists) {
-          await FileSystem.deleteAsync(modelUri, { idempotent: true });
-        }
-      }
-    } catch (err) {
-      console.warn('[handleCancelDownload] Failed to clean up partial file:', err);
-    }
-    if (isMounted.current) {
-      setLocalModelDownloadProgress(null);
-    }
-  };
-
-  const handleDeleteModel = () => {
-    Alert.alert(
-      'Delete Model',
-      `Are you sure you want to delete the downloaded ${localModelName} model file?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const selectedModel = LOCAL_MODELS.find((m) => m.name === localModelName);
-              if (selectedModel) {
-                const modelUri = `${FileSystem.documentDirectory}models/${selectedModel.filename}`;
-                const fileInfo = await FileSystem.getInfoAsync(modelUri);
-                if (fileInfo.exists) {
-                  await FileSystem.deleteAsync(modelUri);
-                }
-              }
-              await AsyncStorage.removeItem(localModelStorageKey(localModelName));
-              await AsyncStorage.removeItem(`${localModelStorageKey(localModelName)}_path`);
-            } catch (err) {
-              console.warn('[handleDeleteModel] Failed to delete model file:', err);
-            }
-            if (isMounted.current) {
-              setDownloadedModels((prev) => ({ ...prev, [localModelName]: false }));
-            }
-            Alert.alert('Model Deleted', `${localModelName} has been removed from storage.`);
-            if (isLocalMode) {
-              setIsLocalMode(false);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const handleExportModel = async () => {
-    const selectedModel = LOCAL_MODELS.find((m) => m.name === localModelName);
-    if (!selectedModel) {
-      Alert.alert('Error', 'Selected model not found.');
-      return;
-    }
-
-    const modelDir = `${FileSystem.documentDirectory}models/`;
-    const modelUri = `${modelDir}${selectedModel.filename}`;
-
-    try {
-      const fileInfo = await FileSystem.getInfoAsync(modelUri);
-      if (!fileInfo.exists) {
-        Alert.alert('File Not Found', 'The model file could not be found in internal storage.');
-        return;
-      }
-
-      const canShare = await Sharing.isAvailableAsync();
-      if (!canShare) {
-        Alert.alert('Export Not Supported', 'Sharing is not available on this device.');
-        return;
-      }
-
-      await Sharing.shareAsync(modelUri, {
-        dialogTitle: `Export ${selectedModel.name}`,
-        mimeType: 'application/octet-stream',
-      });
-    } catch (err: any) {
-      console.error('Export failed:', err);
-      Alert.alert('Export Failed', err?.message || 'Failed to export model.');
-    }
-  };
-
-  const handleImportModel = async () => {
-    if (isLocalLlmDown) {
-      Alert.alert('Local Model Down', 'The local LLM is currently down/unavailable.');
-      return;
-    }
-
-    const selectedModel = LOCAL_MODELS.find((m) => m.name === localModelName);
-    if (!selectedModel) {
-      Alert.alert('Error', 'Selected model not found.');
-      return;
-    }
-
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: '*/*',
-        copyToCacheDirectory: true,
-      });
-
-      if (result.canceled || !result.assets || result.assets.length === 0) {
-        return;
-      }
-
-      const asset = result.assets[0];
-      const pickedUri = asset.uri;
-      const pickedName = asset.name;
-
-      const isValidExtension = pickedName.toLowerCase().endsWith(`.${selectedModel.format}`);
-
-      if (!isValidExtension) {
-        Alert.alert(
-          'Invalid File Format',
-          `The selected file "${pickedName}" does not match the expected format for "${selectedModel.name}" (needs to be a .${selectedModel.format} file).`
-        );
-        return;
-      }
-
-      if (pickedName.toLowerCase() !== selectedModel.filename.toLowerCase()) {
-        Alert.alert(
-          'Filename Mismatch',
-          `The file is named "${pickedName}", but the app expects "${selectedModel.filename}". The file will be imported and renamed to match the expected name to prevent configuration errors. Proceed?`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Import',
-              onPress: () => copyAndSaveImport(pickedUri, selectedModel),
-            },
-          ]
-        );
-      } else {
-        await copyAndSaveImport(pickedUri, selectedModel);
-      }
-    } catch (err: any) {
-      console.error('Import failed:', err);
-      Alert.alert('Import Failed', err?.message || 'Failed to import model.');
-    }
-  };
-
-  const copyAndSaveImport = async (pickedUri: string, selectedModel: typeof LOCAL_MODELS[0]) => {
-    const modelDir = `${FileSystem.documentDirectory}models/`;
-    const modelUri = `${modelDir}${selectedModel.filename}`;
-
-    try {
-      setModelBusy(true);
-
-      const dirInfo = await FileSystem.getInfoAsync(modelDir);
-      if (!dirInfo.exists) {
-        await FileSystem.makeDirectoryAsync(modelDir, { intermediates: true });
-      }
-
-      await FileSystem.copyAsync({
-        from: pickedUri,
-        to: modelUri,
-      });
-
-      const fileInfo = await FileSystem.getInfoAsync(modelUri);
-      if (!fileInfo.exists) {
-        throw new Error('Copied file could not be verified on disk.');
-      }
-
-      await AsyncStorage.setItem(localModelStorageKey(selectedModel.name), 'true');
-      await AsyncStorage.setItem(`${localModelStorageKey(selectedModel.name)}_path`, modelUri);
-
-      if (isMounted.current) {
-        setDownloadedModels((prev) => ({ ...prev, [selectedModel.name]: true }));
-      }
-
-      Alert.alert('Import Complete', `"${selectedModel.name}" has been successfully imported and is ready to use!`);
-    } catch (err: any) {
-      console.error('Copy failed:', err);
-      Alert.alert('Import Failed', `Failed to copy model file: ${err.message}`);
-    } finally {
-      if (isMounted.current) {
-        setModelBusy(false);
-      }
-    }
-  };
 
   return (
     <AuroraScreen
@@ -756,7 +380,16 @@ export default function LocalAiScreen() {
         <PillGroup
           options={MODE_OPTIONS}
           value={isLocalMode ? 'local' : 'cloud'}
-          onChange={(v) => setIsLocalMode(v === 'local')}
+          onChange={(v) => {
+            if (v === 'local') {
+              setConnectionMode('local');
+            } else {
+              const hasCloud = Boolean(
+                useConfigStore.getState().cloudApiKeys?.[useConfigStore.getState().activeCloudProvider || 'gemini']
+              );
+              setConnectionMode(hasCloud ? 'cloud' : 'server');
+            }
+          }}
         />
         <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, lineHeight: 16 }}>
           Local mode uses {localModelName || 'the selected model'} entirely on-device. A mock fallback is always labeled as a mock.
@@ -781,7 +414,7 @@ export default function LocalAiScreen() {
         </View>
         {!needleHasNative ? (
           <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, lineHeight: 16, marginTop: 6 }}>
-            Native Needle library not detected in this build. Loading Cactus Needle 45M is blocked with a warning — mock output is never served silently.
+            Native Needle library not detected in this build. Loading a Needle model (.cact) is blocked with a warning — mock output is never served silently.
           </Text>
         ) : null}
       </Card>
@@ -868,7 +501,7 @@ export default function LocalAiScreen() {
                       {statusText}
                     </Text>
                   </View>
-                  {model.name === 'Cactus Needle 45M' ? (
+                  {model.format === 'cact' ? (
                     <View
                       style={{ backgroundColor: 'rgba(0,0,0,0.3)', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, borderWidth: 1, borderColor: needleHasNative ? '#10b981' : '#fb923c' }}
                       accessibilityRole="text"
@@ -891,7 +524,7 @@ export default function LocalAiScreen() {
                 <Text style={{ color: colors.textDark, fontSize: sizes.sub - 1, marginTop: 4, fontFamily: 'monospace' }}>
                   {model.filename}
                 </Text>
-                {model.name === 'Cactus Needle 45M' && !needleHasNative ? (
+                {model.format === 'cact' && !needleHasNative ? (
                   <Text style={{ color: '#fb923c', fontSize: sizes.sub - 1, marginTop: 4, fontWeight: '600' }}>
                     Mock fallback active — loading is blocked until the native library is packaged.
                   </Text>
@@ -1084,6 +717,160 @@ export default function LocalAiScreen() {
         </View>
         <Text style={{ color: colors.textDark, fontSize: sizes.sub - 1, marginTop: 6, lineHeight: 14 }}>
           Allocating larger context size uses more memory and can cause model loaded in RAM to OOM crash.
+        </Text>
+      </Card>
+
+      <Card>
+        <Label>GPU Acceleration & Backend</Label>
+        {gpuCrashDetails ? (
+          <View
+            style={{
+              backgroundColor: 'rgba(239, 68, 68, 0.15)',
+              borderColor: '#ef4444',
+              borderWidth: 1,
+              borderRadius: 8,
+              padding: 10,
+              marginBottom: 12,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+            accessibilityRole="alert"
+            accessibilityLabel="LiteRT GPU crash detected: fell back to CPU-safe mode"
+          >
+            <View style={{ flex: 1, marginRight: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                <Text style={{ color: '#ef4444', fontSize: sizes.sub - 1, fontWeight: '700' }}>
+                  ⚠️ GPU Crash Detected
+                </Text>
+                <View
+                  style={{
+                    backgroundColor: 'rgba(0,0,0,0.3)',
+                    paddingHorizontal: 6,
+                    paddingVertical: 1,
+                    borderRadius: 4,
+                    borderWidth: 1,
+                    borderColor: '#ef4444',
+                  }}
+                >
+                  <Text style={{ color: '#f87171', fontSize: 10, fontWeight: '700' }}>
+                    CPU-Safe Fallback
+                  </Text>
+                </View>
+              </View>
+              <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, lineHeight: 15 }}>
+                LiteRT hit a GPU crash — running on CPU for this session. GPU will be retried next launch.
+              </Text>
+              <Text style={{ color: colors.textDark, fontSize: sizes.sub - 2, marginTop: 2, fontStyle: 'italic' }}>
+                Mock honesty: local inference runs on CPU or mock fallback; GPU will be retried next launch.
+              </Text>
+            </View>
+            <Pressable
+              onPress={handleClearGpuCrash}
+              accessibilityRole="button"
+              accessibilityLabel="Clear GPU crash flag"
+              style={{
+                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                borderColor: colors.glassBorder,
+                borderWidth: 1,
+                borderRadius: 6,
+                paddingHorizontal: 8,
+                paddingVertical: 5,
+                alignSelf: 'center',
+              }}
+            >
+              <Text style={{ color: colors.text, fontSize: sizes.sub - 1, fontWeight: '600' }}>
+                Clear
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingVertical: 8,
+            borderBottomWidth: 1,
+            borderBottomColor: 'rgba(255,255,255,0.06)',
+            marginBottom: 10,
+          }}
+        >
+          <Text style={{ color: colors.textMuted, fontSize: sizes.sub }}>Detected Hardware</Text>
+          <View
+            style={{
+              backgroundColor: 'rgba(0,0,0,0.3)',
+              paddingHorizontal: 8,
+              paddingVertical: 3,
+              borderRadius: 6,
+              borderWidth: 1,
+              borderColor: detectedGpuVendor && detectedGpuVendor !== 'unknown' ? '#10b981' : '#fb923c',
+            }}
+            accessibilityRole="text"
+            accessibilityLabel={
+              detectedGpuVendor && detectedGpuVendor !== 'unknown'
+                ? `Detected GPU: ${detectedGpuVendor}`
+                : 'Unknown GPU — using CPU-safe default'
+            }
+          >
+            <Text
+              style={{
+                color: detectedGpuVendor && detectedGpuVendor !== 'unknown' ? '#10b981' : '#fb923c',
+                fontSize: sizes.sub - 1,
+                fontWeight: '700',
+              }}
+            >
+              {detectedGpuVendor === null
+                ? 'Detecting GPU…'
+                : detectedGpuVendor === 'unknown'
+                ? 'Unknown GPU — using CPU-safe default'
+                : detectedGpuVendor === 'adreno'
+                ? 'Adreno → OpenCL'
+                : detectedGpuVendor === 'mali'
+                ? 'Mali → Vulkan'
+                : detectedGpuVendor === 'xclipse'
+                ? 'Xclipse → Vulkan'
+                : 'Google Tensor → CPU (Gemma guard)'}
+            </Text>
+          </View>
+        </View>
+
+        <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, lineHeight: 16, marginBottom: 8 }}>
+          {detectedGpuVendor === 'tensor'
+            ? 'Tensor chip detected: Gemma Q4_K_M is guarded to CPU to avoid driver kernel faults. Other models map to safe CPU execution.'
+            : detectedGpuVendor === 'unknown'
+            ? 'GPU vendor could not be confirmed natively. Vela defaults safely to CPU to avoid driver faults.'
+            : `PrivateLM target preference: ${getGpuBackendPreference(
+                detectedGpuVendor ?? 'unknown',
+                gpuBackendPreference,
+                localModelName
+              ).toUpperCase()} (engine integration pending).`}
+        </Text>
+
+        <View style={{ marginTop: 6, marginBottom: 12 }}>
+          <Text style={{ color: colors.text, fontSize: sizes.sub, fontWeight: '600', marginBottom: 6 }}>
+            Backend Preference (Override)
+          </Text>
+          <PillGroup
+            options={GPU_BACKEND_OPTIONS}
+            value={gpuBackendPreference}
+            onChange={(v) => setGpuBackendPreference(v)}
+          />
+        </View>
+
+        <View style={{ marginTop: 2 }}>
+          <Text style={{ color: colors.text, fontSize: sizes.sub, fontWeight: '600', marginBottom: 6 }}>
+            Quantization Preference
+          </Text>
+          <PillGroup
+            options={GPU_QUANT_OPTIONS}
+            value={gpuQuantPreference}
+            onChange={(v) => setGpuQuantPreference(v)}
+          />
+        </View>
+
+        <Text style={{ color: colors.textDark, fontSize: sizes.sub - 1, marginTop: 10, lineHeight: 14 }}>
+          Mock honesty: these preferences are stored and shown here, but no engine consumes them yet — on-device acceleration still depends on compatible native drivers, and nothing here changes how a model currently runs.
         </Text>
       </Card>
 
@@ -1323,7 +1110,7 @@ export default function LocalAiScreen() {
                   >
                     <Text style={{ color: preflightResult.valid ? '#34d399' : '#f87171', fontWeight: '600' }}>
                       {preflightResult.valid
-                        ? `Valid format: ${preflightResult.format?.toUpperCase()} (${preflightResult.contentLength ? (preflightResult.contentLength / (1024 * 1024)).toFixed(1) + ' MB' : 'Size unknown'})`
+                        ? `Valid format: ${preflightResult.format?.toUpperCase()}${preflightResult.variant ? ` · ${preflightResult.variant}` : ''} (${preflightResult.contentLength ? (preflightResult.contentLength / (1024 * 1024)).toFixed(1) + ' MB' : 'Size unknown'})`
                         : `Validation error: ${preflightResult.error || 'Invalid magic bytes'}`}
                     </Text>
                   </View>

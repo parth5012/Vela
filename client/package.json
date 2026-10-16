@@ -3,11 +3,20 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.70",
+    "@ai-sdk/google": "^4.0.87",
+    "@ai-sdk/groq": "^4.0.54",
+    "@ai-sdk/openai": "^4.0.83",
+    "@ai-sdk/openai-compatible": "^3.0.61",
+    "@openrouter/ai-sdk-provider": "^3.1.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-cookies/cookies": "^6.2.1",
     "@react-navigation/drawer": "^7.12.6",
+    "@stardazed/streams-text-encoding": "^1.0.2",
+    "ai": "^7.0.124",
     "device-agent": "file:./modules/device-agent",
     "drizzle-orm": "^0.45.2",
+    "effect": "^4.0.3",
     "expo": "~57.0.2",
     "expo-auth-session": "^57.0.5",
     "expo-background-task": "^57.0.9",
@@ -19,6 +28,7 @@
     "expo-file-system": "~57.0.0",
     "expo-linear-gradient": "~57.0.0",
     "expo-linking": "~57.0.1",
+    "expo-modules-core": "~57.0.8",
     "expo-notifications": "^57.0.10",
     "expo-router": "~57.0.3",
     "expo-secure-store": "~57.0.0",
@@ -29,6 +39,7 @@
     "expo-task-manager": "^57.0.9",
     "expo-web-browser": "~57.0.2",
     "llama.rn": "0.12.9",
+    "needle": "file:./modules/needle",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.86.0",
@@ -41,14 +52,15 @@
     "react-native-web": "~0.21.2",
     "react-native-webview": "13.16.1",
     "react-native-worklets": "0.10.3",
-    "needle": "file:./modules/needle",
     "stable-diffusion": "file:./modules/stable-diffusion",
+    "zod": "^4.6.7",
     "zustand": "^5.0.1"
   },
   "devDependencies": {
     "@expo/config-plugins": "~57.0.2",
     "@react-native/jest-preset": "^0.86.0",
     "@types/jest": "^29.5.12",
+    "@types/node": "^26.6.4",
     "@types/react": "~19.2.2",
     "@types/react-test-renderer": "^19.1.0",
     "@typescript-eslint/parser": "^8.67.0",
@@ -89,10 +101,10 @@
     ],
     "testPathIgnorePatterns": [
       "/node_modules/",
-      "<rootDir>/__tests__/helpers/"
+      "[\\/]__tests__[\\/]helpers[\\/]"
     ],
     "transformIgnorePatterns": [
-      "node_modules/(?!\\.pnpm/[^/]*(react-native|expo|unimodules)|((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg)"
+      "node_modules/(?!(\\.pnpm/.*node_modules/)?((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|ai|@ai-sdk/.*|@openrouter/.*|@workflow/.*|effect))"
     ]
   },
   "private": true,
@@ -104,7 +116,11 @@
     },
     "doctor": {
       "reactNativeDirectoryCheck": {
-        "exclude": ["@react-native-cookies/cookies", "device-agent", "stable-diffusion"],
+        "exclude": [
+          "@react-native-cookies/cookies",
+          "device-agent",
+          "stable-diffusion"
+        ],
         "listUnknownPackages": false
       }
     }

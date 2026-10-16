@@ -76,4 +76,71 @@ describe('toolProxy parser', () => {
     expect(result.hasInvocations).toBe(true);
     expect(result.updatedContent).toContain('<response name="send_email">\nError: Fatal connection issue\n</response>');
   });
+
+  describe('standalone mode tool execution & degradation in toolProxy', () => {
+    it('executes standalone tool directly without server fetch in local mode', async () => {
+      const content = '<call name="save_user_memory">{"fact": "User is a designer"}</call>';
+
+      const result = await parseAndExecuteTools(
+        content,
+        'thread_123',
+        undefined,
+        undefined,
+        'local'
+      );
+
+      expect(result.hasInvocations).toBe(true);
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+      expect(result.updatedContent).toContain('<response name="save_user_memory">');
+      expect(result.updatedContent).toContain("Successfully saved new memory: 'User is a designer'");
+    });
+
+    it('returns graceful degradation hint when calling server-only tool in local mode', async () => {
+      const content = '<call name="gmail_send_email">{"to": "alice@example.com"}</call>';
+
+      const result = await parseAndExecuteTools(
+        content,
+        'thread_123',
+        undefined,
+        undefined,
+        'local'
+      );
+
+      expect(result.hasInvocations).toBe(true);
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+      expect(result.updatedContent).toContain(
+        '<response name="gmail_send_email">\ngmail_send_email is unavailable in standalone mode — connect to server for full access.\n</response>'
+      );
+    });
+
+    it('returns unknown tool error when tool is not registered', async () => {
+      const content = '<call name="imaginary_tool">{}</call>';
+
+      const result = await parseAndExecuteTools(
+        content,
+        'thread_123',
+        undefined,
+        undefined,
+        'local'
+      );
+
+      expect(result.hasInvocations).toBe(true);
+      expect(result.updatedContent).toContain('Error: Unknown tool "imaginary_tool".');
+    });
+
+    it('executes device tool in standalone mode and returns tool output', async () => {
+      const content = '<call name="device_screen_read">{}</call>';
+
+      const result = await parseAndExecuteTools(
+        content,
+        'thread_123',
+        undefined,
+        undefined,
+        'local'
+      );
+
+      expect(result.hasInvocations).toBe(true);
+      expect(result.updatedContent).toContain('<response name="device_screen_read">');
+    });
+  });
 });

@@ -11,13 +11,39 @@ jest.mock('../db/client', () => ({
   default: null,
 }));
 
+jest.mock('../db/chatRepository', () => ({
+  saveThread: jest.fn(async () => {}),
+  saveThreads: jest.fn(async () => {}),
+  saveMessage: jest.fn(async () => {}),
+  saveMessages: jest.fn(async () => {}),
+  deleteThreadLocal: jest.fn(async () => {}),
+  deleteMessageLocal: jest.fn(async () => {}),
+  replaceThreadMessages: jest.fn(async () => {}),
+  hydrateChatFromLocalDb: jest.fn(async () => {}),
+  clearChatLocal: jest.fn(async () => {}),
+  isLocalDbAvailable: jest.fn(() => false),
+}));
+
 import { useChatStore } from '../store/useChatStore';
 import { useConfigStore } from '../store/useConfigStore';
+import * as chatRepo from '../db/chatRepository';
 
 describe('useChatStore', () => {
   beforeEach(() => {
     useChatStore.getState().clearStore();
     useConfigStore.getState().clearConfig();
+  });
+
+  it('new threads read the configured default agent, not the last thread agent (#357)', () => {
+    useConfigStore.getState().setDefaultAgent('analyst');
+
+    const store = useChatStore.getState();
+    store.createThread('Last Thread', 'last-thread', 'teacher');
+    store.createThread('New Conversation', 'new-thread');
+
+    expect(useChatStore.getState().threads.find((t) => t.id === 'last-thread')!.agent).toBe('teacher');
+    expect(useConfigStore.getState().defaultAgent).toBe('analyst');
+    expect(useChatStore.getState().threads.find((t) => t.id === 'new-thread')!.agent).toBe('analyst');
   });
 
   it('should handle creating, selecting, and deleting threads with correct fallback active selection', () => {
@@ -200,11 +226,13 @@ describe('useChatStore', () => {
       const state = useChatStore.getState();
       expect(state.activeThreadId).toBe('branched-id');
       
-      // The branched thread should be prepended
+      // The branched thread should be prepended (and inherit the parent's
+      // active_skill — null here since the test parent has none)
       expect(state.threads[0]).toEqual({
         id: 'branched-id',
         title: 'Branched Thread',
         updated_at: expect.any(String),
+        active_skill: null,
       });
 
       // The branched thread should have messages up to and including msg-2
@@ -312,6 +340,187 @@ describe('useChatStore', () => {
       expect(state.messages['thread-id']).toEqual([
         { id: 'msg-1', role: 'user', content: 'hello 1' },
       ]);
+    });
+  });
+
+  describe('reasoning stripping in persistence', () => {
+    it('strips <think> blocks when saving assistant messages', () => {
+      const store = useChatStore.getState();
+      store.createThread('Think Thread', 'thread-think');
+
+      store.addMessage('thread-think', {
+        id: 'msg-think',
+        role: 'assistant',
+        content: '<think>internal reason</think>Public text',
+      });
+
+      expect(chatRepo.saveMessage).toHaveBeenCalledWith(
+        'thread-think',
+        expect.objectContaining({
+          id: 'msg-think',
+          role: 'assistant',
+          content: 'Public text',
+        })
+      );
+    });
+
+    it('sanitizes in-memory zustand state so state.messages matches persisted content', () => {
+      const store = useChatStore.getState();
+      store.createThread('Thread X', 'thread-x');
+
+      store.addMessage('thread-x', {
+        id: 'msg-1',
+        role: 'assistant',
+        content: '<think>internal reason</think>Visible answer',
+      });
+
+      expect(useChatStore.getState().messages['thread-x'][0].content).toBe('Visible answer');
+    });
+
+    it('does not alter user message content', () => {
+      const store = useChatStore.getState();
+      store.createThread('User Thread', 'thread-user');
+
+      store.addMessage('thread-user', {
+        id: 'msg-user',
+        role: 'user',
+        content: '<think>keep as is</think>',
+      });
+
+      expect(chatRepo.saveMessage).toHaveBeenCalledWith(
+        'thread-user',
+        expect.objectContaining({
+          id: 'msg-user',
+          role: 'user',
+          content: '<think>keep as is</think>',
+        })
+      );
+    });
+  });
+
+  describe('streaming persist behavior (Finding 1)', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+      (chatRepo.isLocalDbAvailable as jest.Mock).mockReturnValue(true);
+    });
+
+    afterEach(() => {
+      jest.clearAllTimers();
+      jest.useRealTimers();
+      (chatRepo.isLocalDbAvailable as jest.Mock).mockReturnValue(false);
+    });
+
+    it('does NOT overwrite in-flight store message with sanitized content while streaming', () => {
+      const store = useChatStore.getState();
+      store.createThread('Stream Thread', 'thread-stream');
+      store.setStreamingThread('thread-stream', true);
+
+      // Assistant message starts
+      useChatStore.setState((s) => ({
+        messages: {
+          ...s.messages,
+          'thread-stream': [{ id: 'msg-1', role: 'assistant', content: '' }],
+        },
+      }));
+
+      // Incomplete think block arrives mid-stream
+      store.appendToken('thread-stream', '<think>partial thoughts');
+      expect(useChatStore.getState().messages['thread-stream'][0].content).toBe('<think>partial thoughts');
+
+      // 800ms debounce timer fires mid-stream
+      jest.advanceTimersByTime(800);
+
+      // Store should still have raw content, NOT sanitized empty string
+      expect(useChatStore.getState().messages['thread-stream'][0].content).toBe('<think>partial thoughts');
+
+      // Persistence to DB still received the sanitized copy
+      expect(chatRepo.saveMessage).toHaveBeenCalledWith(
+        'thread-stream',
+        expect.objectContaining({
+          id: 'msg-1',
+          role: 'assistant',
+          content: '',
+        })
+      );
+    });
+
+    it('sanitizes in-memory store on trailing persist after streaming ends', () => {
+      const store = useChatStore.getState();
+      store.createThread('Stream Thread', 'thread-stream-2');
+      store.setStreamingThread('thread-stream-2', true);
+
+      useChatStore.setState((s) => ({
+        messages: {
+          ...s.messages,
+          'thread-stream-2': [{ id: 'msg-2', role: 'assistant', content: '' }],
+        },
+      }));
+
+      store.appendToken('thread-stream-2', '<think>thought</think>Final answer');
+      expect(useChatStore.getState().messages['thread-stream-2'][0].content).toBe(
+        '<think>thought</think>Final answer'
+      );
+
+      // Stream finishes
+      store.setStreamingThread('thread-stream-2', false);
+
+      // Trailing persist fires
+      jest.advanceTimersByTime(800);
+
+      // Store in-memory state is now sanitized
+      expect(useChatStore.getState().messages['thread-stream-2'][0].content).toBe('Final answer');
+      expect(chatRepo.saveMessage).toHaveBeenCalledWith(
+        'thread-stream-2',
+        expect.objectContaining({
+          id: 'msg-2',
+          role: 'assistant',
+          content: 'Final answer',
+        })
+      );
+    });
+
+    it('preserves subsequent tokens after mid-stream timer and sanitizes on final flush', () => {
+      const store = useChatStore.getState();
+      store.createThread('Stream Thread', 'thread-stream-3');
+      store.setStreamingThread('thread-stream-3', true);
+
+      useChatStore.setState((s) => ({
+        messages: {
+          ...s.messages,
+          'thread-stream-3': [{ id: 'msg-3', role: 'assistant', content: '' }],
+        },
+      }));
+
+      // Mid-stream incomplete think block
+      store.appendToken('thread-stream-3', '<think>partial thoughts');
+
+      // 800ms debounce timer fires mid-stream
+      jest.advanceTimersByTime(800);
+
+      // Now generator yields remainder of thinking and final answer
+      store.appendToken('thread-stream-3', '</think>The final answer');
+
+      // Prior to stream ending, store has full raw text
+      expect(useChatStore.getState().messages['thread-stream-3'][0].content).toBe(
+        '<think>partial thoughts</think>The final answer'
+      );
+
+      // Stream completes
+      store.setStreamingThread('thread-stream-3', false);
+
+      // Final trailing persist settles
+      jest.advanceTimersByTime(800);
+
+      // In-memory store and DB both have clean final answer
+      expect(useChatStore.getState().messages['thread-stream-3'][0].content).toBe('The final answer');
+      expect(chatRepo.saveMessage).toHaveBeenCalledWith(
+        'thread-stream-3',
+        expect.objectContaining({
+          id: 'msg-3',
+          role: 'assistant',
+          content: 'The final answer',
+        })
+      );
     });
   });
 });

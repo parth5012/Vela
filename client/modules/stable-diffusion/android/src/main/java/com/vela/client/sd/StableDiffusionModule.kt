@@ -2,8 +2,11 @@ package com.vela.client.sd
 
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import android.app.ActivityManager
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.Build
 import java.io.File
 import java.io.FileOutputStream
 
@@ -31,6 +34,54 @@ class StableDiffusionModule : Module() {
             } catch (e: Exception) {
                 ctxHandle = 0L
                 false
+            }
+        }
+
+        AsyncFunction("getGpuInfo") {
+            try {
+                val hardware = Build.HARDWARE ?: ""
+                val board = Build.BOARD ?: ""
+                val socModel = if (Build.VERSION.SDK_INT >= 31) {
+                    try {
+                        Build.SOC_MODEL ?: ""
+                    } catch (_: Throwable) {
+                        ""
+                    }
+                } else {
+                    ""
+                }
+
+                var glEsVersion = ""
+                try {
+                    val context = appContext.reactContext
+                    val activityManager = context?.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+                    val configInfo = activityManager?.deviceConfigurationInfo
+                    if (configInfo != null) {
+                        glEsVersion = configInfo.glEsVersion ?: if (configInfo.reqGlEsVersion != 0) {
+                            Integer.toHexString(configInfo.reqGlEsVersion)
+                        } else {
+                            ""
+                        }
+                    }
+                } catch (_: Throwable) {
+                    // Safe fallback
+                }
+
+                mapOf(
+                    "vendor" to hardware,
+                    "hardware" to hardware,
+                    "socModel" to socModel,
+                    "board" to board,
+                    "glEsVersion" to glEsVersion
+                )
+            } catch (_: Throwable) {
+                mapOf(
+                    "vendor" to "",
+                    "hardware" to "",
+                    "socModel" to "",
+                    "board" to "",
+                    "glEsVersion" to ""
+                )
             }
         }
 

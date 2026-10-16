@@ -7,15 +7,24 @@ jest.mock('../utils/safetyManager', () => ({
 }));
 
 jest.mock('../utils/deviceActionExecutor', () => ({
-  executeDeviceAction: jest.fn(async () => 'Screen hierarchy: Settings > Wi-Fi: Connected'),
+  executeDeviceAction: jest.fn(async () => ({
+    outcome: 'executed',
+    observation: 'Screen hierarchy: Settings > Wi-Fi: Connected',
+  })),
 }));
 
 jest.mock('../db/client', () => ({
   db: null,
 }));
 
-import { parseToolCall, runLocalAgentLoop } from '../utils/localAgentLoop';
+import {
+  parseToolCall,
+  runLocalAgentLoop,
+  LOCAL_TOOL_CALL_CONFIDENCE_THRESHOLD,
+} from '../utils/localAgentLoop';
 import { streamLocalLlmResponse } from '../utils/localLlm';
+import * as safetyManager from '../utils/safetyManager';
+import * as deviceActionExecutor from '../utils/deviceActionExecutor';
 
 const mockStream = streamLocalLlmResponse as jest.Mock;
 
@@ -87,5 +96,478 @@ describe('localAgentLoop needle_json parsing', () => {
     expect(events).toEqual(
       expect.arrayContaining(['tool_start', 'tool_executing', 'tool_observation', 'done'])
     );
+  });
+});
+
+// #295 — real accelerated-engine output shape:
+// {type:'call', function_calls:[{name, arguments}], reasoning, confidence}
+// Empty function_calls [] means "the model refused to call a tool".
+const REAL_ENVELOPE =
+  '{"type":"call","function_calls":[{"name":"device_screen_read","arguments":{}}],' +
+  '"reasoning":"I need to see the screen first.","confidence":0.82}';
+
+const REAL_REFUSAL =
+  '{"type":"call","function_calls":[],"reasoning":"I will not open that app.",' +
+  '"confidence":0.11}';
+
+describe('localAgentLoop real engine envelope (function_calls)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('parses the type:call + function_calls[] envelope with reasoning and confidence', () => {
+    const parsed = parseToolCall(`Checking the screen.\n${REAL_ENVELOPE}`);
+    expect(parsed).not.toBeNull();
+    expect(parsed?.toolName).toBe('device_screen_read');
+    expect(parsed?.format).toBe('needle_json');
+    expect(parsed?.arguments).toEqual({});
+    expect(parsed?.reasoning).toBe('I need to see the screen first.');
+    expect(parsed?.confidence).toBe(0.82);
+    expect(parsed?.refusal).toBeUndefined();
+  });
+
+  it('flags an empty function_calls envelope as a refusal without a fabricated name', () => {
+    const parsed = parseToolCall(REAL_REFUSAL);
+    expect(parsed).not.toBeNull();
+    expect(parsed?.refusal).toBe('I will not open that app.');
+    expect(parsed?.toolName).toBe('');
+    expect(parsed?.confidence).toBe(0.11);
+  });
+
+  it('lets function_calls win over a flat name in the same object (#295 F3)', () => {
+    const adversarial =
+      '{"name":"device_click","arguments":{"x":10,"y":20},' +
+      '"function_calls":[],"reasoning":"model refused","confidence":0.3}';
+    const parsed = parseToolCall(adversarial);
+    expect(parsed?.refusal).toBe('model refused');
+    expect(parsed?.toolName).toBe('');
+    expect(parsed?.target).toBeUndefined();
+  });
+
+  it('does not treat {type:call} without a function_calls array as a refusal', () => {
+    expect(parseToolCall('{"type":"call","reasoning":"no payload"}')).toBeNull();
+    expect(parseToolCall('{"type":"call"}')).toBeNull();
+  });
+
+  it('exports a neutral placeholder confidence threshold in (0, 1)', () => {
+    // Placeholder pending the map's act/confirm/refuse UX decision (#289).
+    expect(LOCAL_TOOL_CALL_CONFIDENCE_THRESHOLD).toBe(0.5);
+  });
+
+  it('executes an envelope tool call and passes reasoning/confidence on tool_start', async () => {
+    async function* toolStep() {
+      yield REAL_ENVELOPE;
+    }
+    async function* replyStep() {
+      yield 'Wi-Fi is currently connected.';
+    }
+    mockStream
+      .mockReturnValueOnce(toolStep() as any)
+      .mockReturnValueOnce(replyStep() as any);
+
+    const events: any[] = [];
+    const result = await runLocalAgentLoop('Check my Wi-Fi state', {
+      onEvent: (ev) => events.push(ev),
+    });
+
+    expect(result.completed).toBe(true);
+    expect(result.totalSteps).toBe(2);
+    expect(result.steps[0].toolCall?.toolName).toBe('device_screen_read');
+    expect(deviceActionExecutor.executeDeviceAction).toHaveBeenCalled();
+
+    const start = events.find((e) => e.type === 'tool_start');
+    expect(start.reasoning).toBe('I need to see the screen first.');
+    expect(start.confidence).toBe(0.82);
+    expect(start.lowConfidence).toBe(false);
+  });
+
+  it('surfaces empty function_calls as an explicit refusal with no tool execution', async () => {
+    async function* refusalStep() {
+      yield REAL_REFUSAL;
+    }
+    mockStream.mockReturnValueOnce(refusalStep() as any);
+
+    const events: any[] = [];
+    const result = await runLocalAgentLoop('Open that app', {
+      onEvent: (ev) => events.push(ev),
+    });
+
+    expect(deviceActionExecutor.executeDeviceAction).not.toHaveBeenCalled();
+    expect(safetyManager.evaluateSafety).not.toHaveBeenCalled();
+    expect(result.completed).toBe(true);
+    expect(result.totalSteps).toBe(1);
+    expect(result.steps[0].observation).toBe('I will not open that app.');
+
+    const types = events.map((e) => e.type);
+    expect(types).toContain('refusal');
+    expect(types).toContain('done');
+    expect(types).not.toContain('tool_start');
+    expect(events.find((e) => e.type === 'refusal').observation).toBe(
+      'I will not open that app.'
+    );
+  });
+
+  it('refuses instead of executing when a flat name coexists with empty function_calls', async () => {
+    async function* adversarialStep() {
+      yield '{"name":"device_click","arguments":{"x":10,"y":20},' +
+        '"function_calls":[],"reasoning":"model refused","confidence":0.3}';
+    }
+    // A refusal ends the turn, so no second stream is consumed.
+    mockStream.mockReturnValueOnce(adversarialStep() as any);
+
+    const events: any[] = [];
+    const result = await runLocalAgentLoop('Tap somewhere', {
+      onEvent: (ev) => events.push(ev),
+    });
+
+    expect(deviceActionExecutor.executeDeviceAction).not.toHaveBeenCalled();
+    expect(safetyManager.evaluateSafety).not.toHaveBeenCalled();
+    expect(result.totalSteps).toBe(1);
+    expect(result.steps[0].observation).toBe('model refused');
+    const types = events.map((e) => e.type);
+    expect(types).toContain('refusal');
+    expect(types).not.toContain('tool_start');
+  });
+
+  it('treats {type:call} without function_calls as plain text, not a refusal', async () => {
+    const raw = '{"type":"call","reasoning":"no payload"}';
+    async function* plainStep() {
+      yield raw;
+    }
+    mockStream.mockReturnValueOnce(plainStep() as any);
+
+    const events: any[] = [];
+    const result = await runLocalAgentLoop('Anything?', {
+      onEvent: (ev) => events.push(ev),
+    });
+
+    expect(deviceActionExecutor.executeDeviceAction).not.toHaveBeenCalled();
+    expect(result.completed).toBe(true);
+    expect(result.totalSteps).toBe(1);
+    expect(result.steps[0].toolCall).toBeUndefined();
+    expect(events.map((e) => e.type)).not.toContain('refusal');
+    expect(result.finalResponse).toBe(raw);
+  });
+
+  it('flags below-threshold confidence on tool_start without blocking execution', async () => {
+    const lowConfidenceEnvelope =
+      '{"type":"call","function_calls":[{"name":"device_screen_read","arguments":{}}],' +
+      '"reasoning":"not sure","confidence":0.2}';
+    async function* toolStep() {
+      yield lowConfidenceEnvelope;
+    }
+    async function* replyStep() {
+      yield 'Done.';
+    }
+    mockStream
+      .mockReturnValueOnce(toolStep() as any)
+      .mockReturnValueOnce(replyStep() as any);
+
+    const events: any[] = [];
+    await runLocalAgentLoop('Read the screen', { onEvent: (ev) => events.push(ev) });
+
+    const start = events.find((e) => e.type === 'tool_start');
+    expect(start.confidence).toBe(0.2);
+    expect(start.lowConfidence).toBe(true);
+    // Threshold is plumbing only: execution is unchanged until the UX decision lands.
+    expect(deviceActionExecutor.executeDeviceAction).toHaveBeenCalled();
+  });
+
+  it('keeps the flat mock shape working as a fallback', async () => {
+    async function* toolStep() {
+      yield '{"name": "device_screen_read", "arguments": {}, "confidence": 0.95}';
+    }
+    async function* replyStep() {
+      yield 'Wi-Fi is currently connected.';
+    }
+    mockStream
+      .mockReturnValueOnce(toolStep() as any)
+      .mockReturnValueOnce(replyStep() as any);
+
+    const events: any[] = [];
+    const result = await runLocalAgentLoop('Check my Wi-Fi state', {
+      onEvent: (ev) => events.push(ev),
+    });
+
+    expect(result.completed).toBe(true);
+    expect(result.steps[0].toolCall?.format).toBe('needle_json');
+    const start = events.find((e) => e.type === 'tool_start');
+    expect(start.confidence).toBe(0.95);
+    expect(start.lowConfidence).toBe(false);
+    expect(start.reasoning).toBeUndefined();
+  });
+
+  it('strips <think> reasoning blocks from local agent final conversational responses', async () => {
+    async function* replyStep() {
+      yield '<think>Analyzing network topology...</think>Wi-Fi is currently connected.';
+    }
+    mockStream.mockReturnValueOnce(replyStep() as any);
+
+    const result = await runLocalAgentLoop('Check my Wi-Fi state');
+    expect(result.completed).toBe(true);
+    expect(result.finalResponse).toBe('Wi-Fi is currently connected.');
+    expect(result.steps[0].response).toBe('Wi-Fi is currently connected.');
+  });
+
+  it('surfaces empty response error when local agent response contains only <think> blocks', async () => {
+    async function* replyStep() {
+      yield '<think>Thinking and thinking with no final output</think>';
+    }
+    mockStream.mockReturnValueOnce(replyStep() as any);
+
+    const result = await runLocalAgentLoop('Check my Wi-Fi state');
+    expect(result.completed).toBe(true);
+    expect(result.finalResponse).toContain('Empty response — try raising maxTokens');
+    expect(result.steps[0].response).toContain('Empty response — try raising maxTokens');
+  });
+
+  it('surfaces empty response error when local agent response contains unclosed <think> block (exhausted maxTokens)', async () => {
+    async function* replyStep() {
+      yield '<think>Thinking and thinking but maxTokens exhausted mid-thought';
+    }
+    mockStream.mockReturnValueOnce(replyStep() as any);
+
+    const result = await runLocalAgentLoop('Check my Wi-Fi state');
+    expect(result.completed).toBe(true);
+    expect(result.finalResponse).toContain('Empty response — try raising maxTokens');
+    expect(result.steps[0].response).toContain('Empty response — try raising maxTokens');
+  });
+
+  describe('recovery engine heuristics and step cap', () => {
+    it('enforces step cap at default 15 with cap enabled', async () => {
+      async function* loopStep() {
+        yield '{"name": "device_screen_read", "arguments": {}}';
+      }
+      mockStream.mockImplementation(() => loopStep() as any);
+
+      const result = await runLocalAgentLoop('Check my Wi-Fi state');
+      expect(result.totalSteps).toBe(15);
+      expect(result.completed).toBe(false);
+    });
+
+    it('allows unbounded steps when cap is disabled (maxStepsEnabled: false)', async () => {
+      let turns = 0;
+      async function* multiStepGenerator() {
+        turns++;
+        if (turns <= 16) {
+          yield '{"name": "device_screen_read", "arguments": {}}';
+        } else {
+          yield 'Wi-Fi state verified after 16 iterations.';
+        }
+      }
+      mockStream.mockImplementation(() => multiStepGenerator() as any);
+
+      const result = await runLocalAgentLoop('Check my Wi-Fi state', {
+        maxStepsEnabled: false,
+      });
+      expect(result.completed).toBe(true);
+      expect(result.totalSteps).toBe(17);
+      expect(result.finalResponse).toBe('Wi-Fi state verified after 16 iterations.');
+    });
+
+    it('recovers from loading screen via wait without consuming step budget', async () => {
+      async function* step1() {
+        yield '{"name": "device_screen_read", "arguments": {}}';
+      }
+      async function* step2() {
+        yield 'Finished loading screen.';
+      }
+      mockStream
+        .mockReturnValueOnce(step1() as any)
+        .mockReturnValueOnce(step2() as any);
+
+      const events: any[] = [];
+      const result = await runLocalAgentLoop('Wait for screen', {
+        initialScreenContent: 'Screen contains ProgressBar: loading...',
+        waitMs: 0,
+        maxSteps: 1, // Cap is 1 step; wait should not count against it
+        onEvent: (ev) => events.push(ev),
+      });
+
+      expect(result.completed).toBe(true);
+      expect(events.some((e) => e.type === 'recovery' && e.recoveryType === 'wait')).toBe(true);
+    });
+
+    it('recovers from GBoard blocking target by pressing BACK', async () => {
+      async function* step1() {
+        yield '{"name": "device_click", "arguments": {"target": "@target_input"}}';
+      }
+      async function* step2() {
+        yield 'Tapped input after keyboard dismissed.';
+      }
+      mockStream
+        .mockReturnValueOnce(step1() as any)
+        .mockReturnValueOnce(step2() as any);
+
+      const events: any[] = [];
+      const prompt = 'Tap target';
+      const result = await runLocalAgentLoop(prompt, {
+        initialScreenContent: 'Screen tree: GBoard is blocking the target @target_input',
+        onEvent: (ev) => events.push(ev),
+      });
+
+      expect(deviceActionExecutor.executeDeviceAction).toHaveBeenCalledWith(
+        'device_press_key',
+        'BACK'
+      );
+      expect(events.some((e) => e.type === 'recovery' && e.recoveryType === 'back')).toBe(true);
+      expect(result.completed).toBe(true);
+    });
+
+    it('recovers from off-screen scrollable target by scrolling then retapping', async () => {
+      async function* step1() {
+        yield '{"name": "device_click", "arguments": {"target": "@submit_btn"}}';
+      }
+      async function* step2() {
+        yield 'Submitted successfully.';
+      }
+      mockStream
+        .mockReturnValueOnce(step1() as any)
+        .mockReturnValueOnce(step2() as any);
+
+      const events: any[] = [];
+      const prompt = 'Submit form';
+      const result = await runLocalAgentLoop(prompt, {
+        initialScreenContent: 'ScrollView: scrollable. [@submit_btn] off-screen',
+        onEvent: (ev) => events.push(ev),
+      });
+
+      expect(deviceActionExecutor.executeDeviceAction).toHaveBeenCalledWith(
+        'device_scroll',
+        '@submit_btn',
+        'down'
+      );
+      expect(events.some((e) => e.type === 'recovery' && e.recoveryType === 'scroll')).toBe(true);
+      expect(result.completed).toBe(true);
+    });
+
+    it('recovers from unchanged hierarchy: back at threshold N, then home reset if still unchanged', async () => {
+      async function* loopStep() {
+        yield '{"name": "device_screen_read", "arguments": {}}';
+      }
+      mockStream.mockImplementation(() => loopStep() as any);
+
+      const events: any[] = [];
+      const result = await runLocalAgentLoop('Start task', {
+        unchangedThreshold: 2,
+        maxSteps: 8,
+        onEvent: (ev) => events.push(ev),
+      });
+
+      expect(deviceActionExecutor.executeDeviceAction).toHaveBeenCalledWith(
+        'device_press_key',
+        'BACK'
+      );
+      expect(deviceActionExecutor.executeDeviceAction).toHaveBeenCalledWith(
+        'device_press_key',
+        'HOME'
+      );
+      expect(events.some((e) => e.type === 'recovery' && e.recoveryType === 'home_reset')).toBe(true);
+    });
+
+    it('executes web_search via searchFn and feeds observation back to next step', async () => {
+      async function* searchCallStep() {
+        yield '{"name": "web_search", "arguments": {"query": "Vela AI"}}';
+      }
+      async function* finalReplyStep() {
+        yield 'Here are the search results for Vela AI.';
+      }
+      mockStream
+        .mockReturnValueOnce(searchCallStep() as any)
+        .mockReturnValueOnce(finalReplyStep() as any);
+
+      const searchFn = jest.fn(async (q: string) => `Found articles about ${q}`);
+      const events: any[] = [];
+
+      const result = await runLocalAgentLoop('Search for Vela AI', {
+        searchFn,
+        onEvent: (ev) => events.push(ev),
+      });
+
+      expect(searchFn).toHaveBeenCalledWith('Vela AI');
+      expect(deviceActionExecutor.executeDeviceAction).not.toHaveBeenCalled();
+      expect(result.completed).toBe(true);
+      expect(result.totalSteps).toBe(2);
+      expect(result.steps[0].toolCall?.toolName).toBe('web_search');
+      expect(result.steps[0].observation).toBe('Found articles about Vela AI');
+      expect(result.finalResponse).toBe('Here are the search results for Vela AI.');
+      expect(events.some((e) => e.type === 'tool_executing' && e.toolName === 'web_search')).toBe(true);
+      expect(events.some((e) => e.type === 'tool_observation' && e.toolName === 'web_search')).toBe(true);
+    });
+
+    it('surfaces unavailable hint for server-only tools without failing loop', async () => {
+      async function* serverToolStep() {
+        yield '{"name": "gmail_send_email", "arguments": {"to": "test@example.com"}}';
+      }
+      async function* fallbackReplyStep() {
+        yield 'I cannot send email right now because server mode is required.';
+      }
+      mockStream
+        .mockReturnValueOnce(serverToolStep() as any)
+        .mockReturnValueOnce(fallbackReplyStep() as any);
+
+      const events: any[] = [];
+      const result = await runLocalAgentLoop('Send an email', {
+        onEvent: (ev) => events.push(ev),
+      });
+
+      expect(deviceActionExecutor.executeDeviceAction).not.toHaveBeenCalled();
+      expect(result.completed).toBe(true);
+      expect(result.steps[0].toolCall?.toolName).toBe('gmail_send_email');
+      expect(result.steps[0].observation).toContain('is unavailable in standalone mode — connect to server for full access.');
+      expect(result.finalResponse).toContain('I cannot send email right now');
+    });
+
+    it('executes save_user_memory via saveMemoryFn in localAgentLoop', async () => {
+      async function* saveStep() {
+        yield '{"name": "save_user_memory", "arguments": {"fact": "User is a software engineer"}}';
+      }
+      async function* doneStep() {
+        yield 'Saved that to memory.';
+      }
+      mockStream
+        .mockReturnValueOnce(saveStep() as any)
+        .mockReturnValueOnce(doneStep() as any);
+
+      const saveMemoryFn = jest.fn(async (_c: string, fact: string) => `Saved: ${fact}`);
+      const events: any[] = [];
+      const result = await runLocalAgentLoop('Remember I am a software engineer', {
+        conversationId: 'thread-42',
+        saveMemoryFn,
+        onEvent: (ev) => events.push(ev),
+      });
+
+      expect(saveMemoryFn).toHaveBeenCalledWith('thread-42', 'User is a software engineer');
+      expect(result.completed).toBe(true);
+      expect(result.steps[0].toolCall?.toolName).toBe('save_user_memory');
+      expect(result.steps[0].observation).toBe('Saved: User is a software engineer');
+      expect(events.some((e) => e.type === 'tool_executing' && e.toolName === 'save_user_memory')).toBe(true);
+      expect(events.some((e) => e.type === 'tool_observation' && e.toolName === 'save_user_memory')).toBe(true);
+    });
+
+    it('executes delete_user_memory via deleteMemoryFn in localAgentLoop', async () => {
+      async function* deleteStep() {
+        yield '{"name": "delete_user_memory", "arguments": {"fact": "software engineer"}}';
+      }
+      async function* doneStep() {
+        yield 'Removed that memory.';
+      }
+      mockStream
+        .mockReturnValueOnce(deleteStep() as any)
+        .mockReturnValueOnce(doneStep() as any);
+
+      const deleteMemoryFn = jest.fn(async (_c: string, fact: string) => `Deleted: ${fact}`);
+      const events: any[] = [];
+      const result = await runLocalAgentLoop('Forget that I am an engineer', {
+        conversationId: 'thread-42',
+        deleteMemoryFn,
+        onEvent: (ev) => events.push(ev),
+      });
+
+      expect(deleteMemoryFn).toHaveBeenCalledWith('thread-42', 'software engineer');
+      expect(result.completed).toBe(true);
+      expect(result.steps[0].toolCall?.toolName).toBe('delete_user_memory');
+      expect(result.steps[0].observation).toBe('Deleted: software engineer');
+    });
   });
 });

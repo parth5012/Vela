@@ -11,42 +11,51 @@ import {
   Platform,
   ActivityIndicator,
   Keyboard,
-  Share,
   Alert,
   ScrollView,
   Animated,
-  Image,
-  Linking,
   Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as Clipboard from 'expo-clipboard';
 import * as FileSystem from 'expo-file-system/legacy';
-import * as Sharing from 'expo-sharing';
 import MessageOptionsModal from '../components/ui/MessageOptionsModal';
 import MarkdownViewerOverlay from '../components/ui/MarkdownViewerOverlay';
 import { useConfigStore } from '../store/useConfigStore';
+import type { ConnectionMode } from '../store/useConfigStore';
 import { useChatStore, Message, Thread } from '../store/useChatStore';
 import { useAurora } from '../hooks/useAurora';
 import RichText from '../components/chat/RichText';
-import { streamAgentResponse } from '../utils/sse';
-import { queueMessageForSync } from '../db/chatRepository';
+import BubbleFooter from '../components/chat/BubbleFooter';
+import DateDividerPill from '../components/chat/DateDividerPill';
+import { buildChatFeedItems } from '../utils/chatFeed';
+import { ensureThrottleTimer, runServerStream } from '../utils/serverStream';
 import CollapsibleBlock from '../components/chat/CollapsibleBlock';
-import { parseMessage, hasRenderableContent } from '../utils/messageParser';
-import { parseSearchContent, SearchSource } from '../utils/sourceParser';
+import { getCachedParse } from '../utils/parseCache';
+import SourceCard from '../components/chat/SourceCard';
+import { styles } from '../styles/indexStyles';
 import { healXmlTags } from '../utils/xmlHealer';
 import { useRouter } from 'expo-router';
 import { useBrowserStore } from '../store/useBrowserStore';
 import { useGoogleAuthStore } from '../store/useGoogleAuthStore';
 
 // Importing local mode modules
-import { initializeLocalModel, isLocalModelLoaded, streamLocalLlmResponse, isLocalLlmDown, localModelStorageKey, LOCAL_MODELS } from '../utils/localLlm';
+import { initializeLocalModel, streamLocalLlmResponse, isLocalLlmDown, localModelStorageKey, LOCAL_MODELS } from '../utils/localLlm';
 import { compileLocalPrompt } from '../utils/promptCompiler';
 import { parseAndExecuteTools } from '../utils/toolProxy';
+import { streamCloudResponse } from '../utils/providers';
+import { buildContextMessages } from '../utils/providers/context';
+import { buildLocalPromptBlock } from '../utils/standalonePrompt';
+import { buildVercelCloudTools } from '../utils/cloudTools';
+import { saveMemory, deleteMemory } from '../db/memoryRepository';
+import { filterAvailable } from '../utils/toolRegistry';
+import { isSkillCommand, SKILL_PROMPTS, SKILL_METADATA } from '../utils/skillPrompts';
+import type { SkillId } from '../utils/skillPrompts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { evaluateSafety, classifyAction } from '../utils/safetyManager';
+import { evaluateSafety } from '../utils/safetyManager';
+import { deriveSafetyTier, type SafetyTierLabel } from '../utils/deriveSafetyTier';
 import { executeDeviceAction, sendDeviceResponse } from '../utils/deviceActionExecutor';
+import { isShizukuTool } from '../utils/shizuku';
 import {
   checkPermission,
   getRationale,
@@ -64,7 +73,10 @@ const generateUUID = () => {
   });
 };
 
-import { DEFAULT_PERSONAS, COMPACT_PERSONAS_INSTRUCTIONS } from '../utils/personas';
+import { resolveAgentPrompt, resolveNewThreadAgent } from '../utils/agents';
+import { overlayRemoteAgents } from '../db/agentRepository';
+import { useAgents } from '../hooks/useAgents';
+import { useMessageActions } from '../hooks/useMessageActions';
 import { generateUlid } from '../utils/syncIds';
 
 const QUOTES = [
@@ -89,137 +101,6 @@ const generateId = (_prefix: string) => {
   return generateUlid();
 };
 
-function SourceCard({ src, colors, sizes, accentHex }: { src: SearchSource; colors: any; sizes: any; accentHex: string }) {
-  const [imgError, setImgError] = React.useState(false);
-
-  const handlePress = async () => {
-    try {
-      await Linking.openURL(src.url);
-    } catch (error) {
-      Alert.alert('Error', 'Could not open link in browser.');
-    }
-  };
-
-  const getInitials = (siteName: string) => {
-    return siteName ? siteName.substring(0, 2).toUpperCase() : 'W';
-  };
-
-  return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.sourceCard,
-        { backgroundColor: 'rgba(0,0,0,0.25)', borderColor: colors.glassBorder },
-        pressed && { opacity: 0.8 }
-      ]}
-      onPress={handlePress}
-    >
-      <View style={styles.sourceHeader}>
-        {src.favicon && !imgError ? (
-          <Image
-            source={{ uri: src.favicon }}
-            style={styles.sourceFavicon}
-            onError={() => setImgError(true)}
-          />
-        ) : (
-          <View style={[styles.sourceIconFallback, { backgroundColor: accentHex + '20' }]}>
-            <Text style={[styles.sourceIconFallbackText, { color: accentHex }]}>
-              {getInitials(src.siteName || src.domain)}
-            </Text>
-          </View>
-        )}
-        <Text style={[styles.sourceSiteName, { color: colors.text, fontSize: sizes.sub }]} numberOfLines={1}>
-          {src.siteName || 'Web Page'}
-        </Text>
-      </View>
-      <Text style={[styles.sourceTitle, { color: colors.textMuted, fontSize: sizes.text }]} numberOfLines={2}>
-        {src.title}
-      </Text>
-    </Pressable>
-  );
-}
-
-// Module-level parse cache (wayfinder #143 follow-up fix).
-// The FlatList renderItem below is a plain callback, NOT a component, so React
-// hooks (useMemo) are illegal inside it (Rules of Hooks) and crashed the chat
-// on the first rendered message. This content-keyed cache preserves the
-// memoization intent of #143: unchanged messages are never re-parsed during
-// streaming re-renders (appendToken every 100ms), while the streaming row
-// naturally misses cache as its content grows.
-type ParsedSegments = ReturnType<typeof parseMessage>;
-type ParsedSources = ReturnType<typeof parseSearchContent>;
-interface ParsedMessageEntry {
-  segments: ParsedSegments;
-  headerSegments: ParsedSegments;
-  bubbleContent: ParsedSegments;
-  sources: ParsedSources;
-}
-const PARSE_CACHE_LIMIT = 256;
-const parseCache = new Map<string, ParsedMessageEntry>();
-
-function getCachedParse(content: string, isUser: boolean): ParsedMessageEntry {
-  const key = (isUser ? 'u:' : 'a:') + content;
-  let entry = parseCache.get(key);
-  if (!entry) {
-    const segments = isUser ? ([] as ParsedSegments) : parseMessage(content);
-    entry = {
-      segments,
-      // hasRenderableContent is defense-in-depth (#150): parseMessage already
-      // prunes empty closed tool_call/skill segments, but nothing empty may
-      // ever reach renderSegment/CollapsibleBlock ("Executed: Tool" phantom).
-      headerSegments: segments.filter(
-        s => (s.type === 'thought' || s.type === 'intent') && hasRenderableContent(s)
-      ),
-      bubbleContent: segments.filter(
-        s => s.type !== 'thought' && s.type !== 'intent' && hasRenderableContent(s)
-      ),
-      sources: isUser ? ([] as ParsedSources) : parseSearchContent(content),
-    };
-    if (parseCache.size >= PARSE_CACHE_LIMIT) {
-      // Map preserves insertion order; evict the oldest entry.
-      const oldest = parseCache.keys().next().value;
-      if (oldest !== undefined) parseCache.delete(oldest);
-    }
-    parseCache.set(key, entry);
-  }
-  return entry;
-}
-
-// #160: Derive the safety tier shown on a tool_call pill from the same policy
-// inputs evaluateSafety consumes (classifyAction + configured tier), without
-// triggering any approval flow. Mirrors evaluateSafety's sensitive-word
-// escalation so the pill reflects what execution will actually do.
-type SafetyTierLabel = 'auto' | 'ask' | 'blocked';
-
-function deriveSafetyTier(name?: string, input?: string): SafetyTierLabel {
-  let target: string | undefined;
-  let value: string | undefined;
-  if (input) {
-    try {
-      const parsed = JSON.parse(input);
-      if (typeof parsed?.target === 'string') target = parsed.target;
-      if (typeof parsed?.value === 'string') value = parsed.value;
-    } catch {
-      // Non-JSON input: fall back to raw text so keyword checks still apply.
-      target = input;
-    }
-  }
-
-  const permissions = useConfigStore.getState().deviceAgentPermissions;
-  const category = classifyAction(name || '', target, value);
-  const tier = permissions[category] || 'auto';
-  if (tier === 'deny') return 'blocked';
-  if (tier === 'confirm') return 'ask';
-
-  // Auto tiers escalate on sensitive words (same heuristic as evaluateSafety).
-  const targetLower = target ? target.toLowerCase() : '';
-  const valueLower = value ? value.toLowerCase() : '';
-  const sensitiveWords = ['delete', 'buy', 'pay', 'purchase', 'send', 'call', 'remove', 'clear'];
-  if (sensitiveWords.some((word) => valueLower.includes(word))) {
-    return 'ask';
-  }
-  return 'auto';
-}
-
 export default function ChatScreen() {
   const router = useRouter();
   const executedDeviceToolsRef = React.useRef(new Set());
@@ -229,17 +110,19 @@ export default function ChatScreen() {
   const apiUrl = useConfigStore((state) => state.apiUrl);
   const apiKey = useConfigStore((state) => state.apiKey);
   const modelName = useConfigStore((state) => state.modelName);
-  const defaultPersona = useConfigStore((state) => state.defaultPersona);
+  const defaultAgent = useConfigStore((state) => state.defaultAgent);
+  const setDefaultAgent = useConfigStore((state) => state.setDefaultAgent);
   const userName = useConfigStore((state) => state.userName);
   const suggestionStarters = useConfigStore((state) => state.suggestionStarters);
-  const userSystemPrompt = useConfigStore((state) => state.systemPrompt);
 
-  // Local mode states
-  const isLocalMode = useConfigStore((state) => state.isLocalMode);
+  // Local and cloud mode states
+  const connectionMode = useConfigStore((state) => state.connectionMode);
+  const setConnectionMode = useConfigStore((state) => state.setConnectionMode);
+  const activeCloudProvider = useConfigStore((state) => state.activeCloudProvider);
+  const isLocalMode = connectionMode === 'local';
   const localModelName = useConfigStore((state) => state.localModelName);
   const localModelDownloadProgress = useConfigStore((state) => state.localModelDownloadProgress);
   const wifiOnlyDownload = useConfigStore((state) => state.wifiOnlyDownload);
-  const setIsLocalMode = useConfigStore((state) => state.setIsLocalMode);
   const setLocalModelDownloadProgress = useConfigStore((state) => state.setLocalModelDownloadProgress);
 
   // Chat State
@@ -252,7 +135,8 @@ export default function ChatScreen() {
   const deleteThread = useChatStore((state) => state.deleteThread);
   const renameThread = useChatStore((state) => state.renameThread);
   const togglePinThread = useChatStore((state) => state.togglePinThread);
-  const setThreadPersona = useChatStore((state) => state.setThreadPersona);
+  const setThreadAgent = useChatStore((state) => state.setThreadAgent);
+  const setThreadSkill = useChatStore((state) => state.setThreadSkill);
   const createThread = useChatStore((state) => state.createThread);
   const addMessage = useChatStore((state) => state.addMessage);
   const appendToken = useChatStore((state) => state.appendToken);
@@ -263,8 +147,13 @@ export default function ChatScreen() {
 
   // Local/UI States
   const [input, setInput] = useState('');
-  const [personas, setPersonas] = useState(DEFAULT_PERSONAS);
-  const [selectedAgent, setSelectedAgent] = useState(defaultPersona);
+  // #357: agents come from the shared DB-backed selector (no local copy).
+  const agents = useAgents();
+  const currentThread = useMemo(
+    () => threads.find((t) => t.id === activeThreadId),
+    [threads, activeThreadId]
+  );
+  const currentAgentId = currentThread?.agent || defaultAgent;
   const [welcomeQuote, setWelcomeQuote] = useState(QUOTES[0]);
   const [welcomeGreeting, setWelcomeGreeting] = useState('Hello');
   const [showRawMap, setShowRawMap] = useState<Record<string, boolean>>({});
@@ -283,7 +172,7 @@ export default function ChatScreen() {
   // Refs
   const flatListRef = React.useRef<FlatList | null>(null);
   const lastOffsetY = React.useRef(0);
-  const isPersonaBarVisible = React.useRef(true);
+  const isAgentBarVisible = React.useRef(true);
 
   const triggerAutoScroll = useCallback(() => {
     if (lastOffsetY.current < 120) {
@@ -292,7 +181,7 @@ export default function ChatScreen() {
       }, 50);
     }
   }, []);
-  const personaBarHeight = React.useRef(new Animated.Value(58)).current;
+  const agentBarHeight = React.useRef(new Animated.Value(58)).current;
 
   const pendingTokensMapRef = React.useRef<Record<string, string>>({});
   const throttleTimersRef = React.useRef<Record<string, any>>({});
@@ -331,26 +220,26 @@ export default function ChatScreen() {
     const diff = currentOffset - lastOffsetY.current;
 
     if (currentOffset > 30) {
-      if (diff > 10 && isPersonaBarVisible.current) {
-        // Scrolling down: Hide persona bar
-        isPersonaBarVisible.current = false;
-        Animated.timing(personaBarHeight, {
+      if (diff > 10 && isAgentBarVisible.current) {
+        // Scrolling down: Hide agent bar
+        isAgentBarVisible.current = false;
+        Animated.timing(agentBarHeight, {
           toValue: 0,
           duration: 180,
           useNativeDriver: false,
         }).start();
-      } else if (diff < -10 && !isPersonaBarVisible.current) {
-        // Scrolling up: Show persona bar
-        isPersonaBarVisible.current = true;
-        Animated.timing(personaBarHeight, {
+      } else if (diff < -10 && !isAgentBarVisible.current) {
+        // Scrolling up: Show agent bar
+        isAgentBarVisible.current = true;
+        Animated.timing(agentBarHeight, {
           toValue: 58,
           duration: 180,
           useNativeDriver: false,
         }).start();
       }
-    } else if (currentOffset <= 5 && !isPersonaBarVisible.current) {
-      isPersonaBarVisible.current = true;
-      Animated.timing(personaBarHeight, {
+    } else if (currentOffset <= 5 && !isAgentBarVisible.current) {
+      isAgentBarVisible.current = true;
+      Animated.timing(agentBarHeight, {
         toValue: 58,
         duration: 180,
         useNativeDriver: false,
@@ -358,7 +247,7 @@ export default function ChatScreen() {
     }
 
     lastOffsetY.current = currentOffset;
-  }, [personaBarHeight]);
+  }, [agentBarHeight]);
 
   React.useEffect(() => {
     const randomIdx = Math.floor(Math.random() * QUOTES.length);
@@ -422,31 +311,30 @@ export default function ChatScreen() {
     return () => sub.remove();
   }, [cleanUpThrottleAndHeal, setStreamingThread]);
 
+  // #357: server mode overlays the remote agent list onto the local rows by
+  // id, so locally-created agents are never dropped. Standalone (local/cloud)
+  // never fetches.
   React.useEffect(() => {
-    if (apiUrl && apiKey) {
-      const fetchPersonas = async () => {
-        try {
-          const res = await fetch(`${apiUrl}/chat/personas`, {
-            headers: { 'Authorization': `Bearer ${apiKey}` }
-          });
-          if (res.ok) {
-            const data = await res.json();
-            const mapped = data.map((p: any) => {
-              let icon = '🤖';
-              if (p.id === 'teacher') icon = '👩🏫';
-              else if (p.id === 'analyst') icon = '📊';
-              else if (p.id === 'prompt builder') icon = '✍️';
-              return { ...p, icon };
-            });
-            setPersonas(mapped);
-          }
-        } catch (err) {
-          console.error('[fetchPersonas] Failed:', err);
-        }
-      };
-      fetchPersonas();
-    }
-  }, [apiUrl, apiKey]);
+    if (connectionMode !== 'server' || !apiUrl || !apiKey) return;
+    let cancelled = false;
+    const fetchAgents = async () => {
+      try {
+        const res = await fetch(`${apiUrl}/chat/personas`, {
+          headers: { 'Authorization': `Bearer ${apiKey}` }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled || !Array.isArray(data)) return;
+        await overlayRemoteAgents(data);
+      } catch (err) {
+        console.error('[fetchAgents] Failed:', err);
+      }
+    };
+    fetchAgents();
+    return () => {
+      cancelled = true;
+    };
+  }, [connectionMode, apiUrl, apiKey]);
 
   const activeMessages = useMemo(() => {
     return (activeThreadId && messages[activeThreadId]) || [];
@@ -454,6 +342,59 @@ export default function ChatScreen() {
   const lastMsg = activeMessages[activeMessages.length - 1];
 
   const isCurrentThreadStreaming = activeThreadId ? isThreadStreaming(activeThreadId) : false;
+
+  // Shared skill slash-command handling for handleSend, handleSendWelcome and
+  // the indicator's deactivate tap. Returns true when the input was consumed.
+  // Reads thread state fresh from the store to avoid stale closures.
+  const handleSkillCommand = useCallback((threadId: string, rawInput: string): boolean => {
+    const skillCmd = isSkillCommand(rawInput.trim());
+    if (!skillCmd) return false;
+
+    // Record the command as a user turn so roles alternate (strict APIs
+    // like Anthropic reject consecutive assistant turns).
+    addMessage(threadId, {
+      id: generateId('msg_user'),
+      role: 'user',
+      content: rawInput.trim(),
+      created_at: new Date().toISOString(),
+    });
+
+    if (skillCmd.type === 'activate') {
+      setThreadSkill(threadId, skillCmd.skillId);
+      const meta = SKILL_METADATA[skillCmd.skillId];
+      addMessage(threadId, {
+        id: generateId('msg_assistant'),
+        role: 'assistant',
+        content: `${meta.icon} **${meta.name}** activated. ${meta.description}.\n\nType \`/stop\` to deactivate.`,
+        created_at: new Date().toISOString(),
+      });
+    } else {
+      const currentThread = useChatStore.getState().threads.find((t) => t.id === threadId);
+      const wasActive = currentThread?.active_skill as SkillId | undefined;
+      const meta = wasActive ? SKILL_METADATA[wasActive] : undefined;
+      setThreadSkill(threadId, null);
+      addMessage(threadId, {
+        id: generateId('msg_assistant'),
+        role: 'assistant',
+        content: meta ? `${meta.icon} **${meta.name}** deactivated.` : '⏹️ No skill was active.',
+        created_at: new Date().toISOString(),
+      });
+    }
+    return true;
+  }, [addMessage, setThreadSkill]);
+
+  const activeThreadSkill = useMemo(() => {
+    if (!activeThreadId) return null;
+    const thread = threads.find((t) => t.id === activeThreadId);
+    return (thread?.active_skill as SkillId | undefined) || null;
+  }, [activeThreadId, threads]);
+
+  const handleDeactivateSkill = useCallback(() => {
+    if (!activeThreadId) return;
+    // Reuses the shared helper so the /stop user turn is recorded (roles
+    // alternate) and the confirmation matches the slash-command path.
+    handleSkillCommand(activeThreadId, '/stop');
+  }, [activeThreadId, handleSkillCommand]);
 
   React.useEffect(() => {
     if (!lastMsg || lastMsg.role !== 'assistant' || !activeThreadId) return;
@@ -520,18 +461,22 @@ export default function ChatScreen() {
             // it is missing, surface the in-app permission prompt (unless the
             // user denied it this session) instead of executing, and answer the
             // pending tool call so the agent loop is not left hanging.
-            const accessibilityStatus = await checkPermission('accessibility');
-            if (accessibilityStatus !== 'granted') {
-              if (shouldPrompt('accessibility', sessionDeniedPermissionsRef.current)) {
-                setPermissionPrompt('accessibility');
+            // Shizuku allowlisted ops don't touch accessibility at all — they
+            // gate on Shizuku readiness inside the executor.
+            if (!isShizukuTool(item.toolName)) {
+              const accessibilityStatus = await checkPermission('accessibility');
+              if (accessibilityStatus !== 'granted') {
+                if (shouldPrompt('accessibility', sessionDeniedPermissionsRef.current)) {
+                  setPermissionPrompt('accessibility');
+                }
+                await sendDeviceResponse(
+                  conversationId,
+                  taskToken,
+                  'error',
+                  'Blocked: the Accessibility permission is required for this action.'
+                );
+                return;
               }
-              await sendDeviceResponse(
-                conversationId,
-                taskToken,
-                'error',
-                'Blocked: the Accessibility permission is required for this action.'
-              );
-              return;
             }
 
             // Run safety check
@@ -549,7 +494,18 @@ export default function ChatScreen() {
 
             if (status === 'success') {
               try {
-                result = await executeDeviceAction(item.toolName, parsedInput.target, parsedInput.value);
+                // #308: the executor says what actually happened — an action
+                // the agent could not run is an error, not a success, and its
+                // observation says so instead of claiming execution.
+                const action = await executeDeviceAction(
+                  item.toolName,
+                  parsedInput.target,
+                  parsedInput.value
+                );
+                result = action.observation;
+                if (action.outcome !== 'executed' && action.outcome !== 'simulated') {
+                  status = 'error';
+                }
               } catch (e: any) {
                 status = 'error';
                 result = `Execution exception: ${e?.message || e}`;
@@ -565,61 +521,17 @@ export default function ChatScreen() {
     }
   }, [lastMsg?.content, activeThreadId]);
 
-  const reversedMessages = useMemo(() => {
-    return [...activeMessages].reverse();
+  const reversedChatItems = useMemo(() => {
+    return buildChatFeedItems(activeMessages);
   }, [activeMessages]);
 
-  const handleCopyText = useCallback(async (text: string) => {
-    await Clipboard.setStringAsync(text);
-    Alert.alert('Success', 'Copied to clipboard');
-  }, []);
-
-  const handleShareText = useCallback(async (text: string) => {
-    try {
-      await Share.share({ message: text });
-    } catch (err: any) {
-      console.error(err);
-    }
-  }, []);
-
-  const handleDownloadMd = useCallback(async (message: Message) => {
-    try {
-      const dateStr = new Date().toISOString().slice(0, 10);
-      const filename = `vela-response-${message.id}-${dateStr}.md`;
-      const fileUri = `${FileSystem.cacheDirectory}${filename}`;
-      const mdContent = `# Vela Agent Response\n*Date: ${new Date().toLocaleString()}*\n\n${message.content}`;
-
-      await FileSystem.writeAsStringAsync(fileUri, mdContent, { encoding: FileSystem.EncodingType.UTF8 });
-      await Sharing.shareAsync(fileUri, { mimeType: 'text/markdown', dialogTitle: 'Download Response' });
-    } catch (err: any) {
-      Alert.alert('Error', 'Failed to save markdown file.');
-    }
-  }, []);
-
-  const handleCopyCodeBlocks = useCallback(async (text: string) => {
-    const codeBlockRegex = /```[\s\S]*?```/g;
-    const matches = text.match(codeBlockRegex);
-    if (!matches || matches.length === 0) {
-      Alert.alert('Info', 'No code blocks found in message.');
-      return;
-    }
-
-    const cleanedCodes = matches.map((m) => {
-      return m.replace(/^```[a-zA-Z0-9+#-]*\n/, '').replace(/```$/, '');
-    }).join('\n\n---\n\n');
-
-    await Clipboard.setStringAsync(cleanedCodes);
-    Alert.alert('Success', 'Copied code blocks to clipboard.');
-  }, []);
-
-  const handleShowInfo = useCallback((message: Message) => {
-    const wordCount = message.content.trim().split(/\s+/).filter(Boolean).length;
-    const charCount = message.content.length;
-    Alert.alert(
-      'Response Metadata',
-      `Model: ${isLocalMode ? `Local (${localModelName})` : (modelName || 'gemini-1.5-flash')}\nWords: ${wordCount}\nCharacters: ${charCount}`
-    );
-  }, [modelName, isLocalMode, localModelName]);
+  const {
+    handleCopyText,
+    handleShareText,
+    handleDownloadMd,
+    handleCopyCodeBlocks,
+    handleShowInfo,
+  } = useMessageActions();
 
   const toggleRaw = useCallback((msgId: string) => {
     setShowRawMap(prev => ({
@@ -644,42 +556,32 @@ export default function ChatScreen() {
         hasMoreIterations = false;
 
         const activeThread = threads.find((t) => t.id === threadId);
-        const selectedAgentId = activeThread?.persona || 'personal assistant';
-        const activePersona = personas.find((p) => p.id === selectedAgentId);
+        const selectedAgentId = activeThread?.agent || 'personal assistant';
+        const agentPrompt = resolveAgentPrompt(selectedAgentId, agents);
 
-        let personaPrompt = activePersona?.compact_prompt_instructions || activePersona?.compactPromptInstructions;
-        if (!personaPrompt) {
-          personaPrompt = COMPACT_PERSONAS_INSTRUCTIONS[selectedAgentId] || '';
+        // Inject active skill prompt if set (standalone mode)
+        const threadSkill = activeThread?.active_skill as SkillId | undefined;
+        let skillAugmented = threadSkill && SKILL_PROMPTS[threadSkill]
+          ? `${agentPrompt}\n\n# Active Skill Instructions\n${SKILL_PROMPTS[threadSkill]}`
+          : agentPrompt;
+
+        const localToolsBlock = buildLocalPromptBlock();
+        if (localToolsBlock) {
+          skillAugmented = `${skillAugmented}\n\n# Available Tools\n${localToolsBlock}`;
         }
-
-        const systemPromptCombined = userSystemPrompt && userSystemPrompt !== 'You autonomous research agent.'
-          ? `${userSystemPrompt}\n\n${personaPrompt}`
-          : (personaPrompt || userSystemPrompt);
 
         // 2. Compile prompt using LLM native chat template
         const compiledPrompt = compileLocalPrompt({
-          systemPrompt: systemPromptCombined,
+          systemPrompt: skillAugmented,
           history: currentHistory,
           query: userQuery,
           compactInstructions: "Format calls as <call name=\"tool\">PARAMS</call>.",
-          toolDeclarations: ["webview_browser", "consolidate", "oauth_token"],
+          toolDeclarations: filterAvailable('local').map((t) => t.name),
           modelName: localModelName,
         });
 
         // 3. Setup throttle timer
-        if (!throttleTimersRef.current[threadId]) {
-          throttleTimersRef.current[threadId] = setInterval(() => {
-            // FIX-3 self-heal: stream ended without cleanup -> flush + stop ticking.
-            if (!useChatStore.getState().isThreadStreaming(threadId)) {
-              cleanUpThrottleAndHeal(threadId);
-              return;
-            }
-            if (pendingTokensMapRef.current[threadId]) {
-              appendToken(threadId, pendingTokensMapRef.current[threadId]);
-              pendingTokensMapRef.current[threadId] = '';
-            }
-          }, 100);
-        }
+        ensureThrottleTimer(threadId, throttleTimersRef, pendingTokensMapRef, appendToken, cleanUpThrottleAndHeal);
 
         // 4. Stream response from local inference engine
         // Add a safety timeout so streaming always stops even if the generator hangs
@@ -721,7 +623,8 @@ export default function ChatScreen() {
             lastMessageSnapshot.content,
             threadId,
             apiUrl,
-            apiKey
+            apiKey,
+            connectionMode
           );
 
           if (hasInvocations) {
@@ -761,6 +664,128 @@ export default function ChatScreen() {
     }
   };
 
+  const streamCloudChatResponse = async (
+    threadId: string,
+    historyList: Message[]
+  ) => {
+    const config = useConfigStore.getState();
+    const provider = config.activeCloudProvider || 'gemini';
+    const providerConfig = config.cloudProviders?.[provider];
+    const apiKey = config.cloudApiKeys?.[provider] || '';
+
+    const activeThread = threads.find((t) => t.id === threadId);
+    const selectedAgentId = activeThread?.agent || 'personal assistant';
+    const activeAgent = agents.find((candidate) => candidate.id === selectedAgentId);
+    const agentPrompt = resolveAgentPrompt(selectedAgentId, agents);
+
+    // Inject active skill prompt if set (standalone mode)
+    const cloudThreadSkill = activeThread?.active_skill as SkillId | undefined;
+    const cloudSkillAugmented = cloudThreadSkill && SKILL_PROMPTS[cloudThreadSkill]
+      ? `${agentPrompt}\n\n# Active Skill Instructions\n${SKILL_PROMPTS[cloudThreadSkill]}`
+      : agentPrompt;
+
+    const controller = new AbortController();
+    abortControllersRef.current[threadId] = controller;
+
+    const systemPromptToUse = config.systemPromptEnabled === false ? undefined : cloudSkillAugmented;
+
+    const contextMessages = buildContextMessages(historyList, {
+      maxMessages: config.contextCompression ? 30 : 100,
+    });
+
+    const cloudTools = buildVercelCloudTools(
+      {},
+      {
+        evaluateSafety,
+        memoryStore: {
+          saveMemory: (_convId, fact) => saveMemory(threadId, fact),
+          deleteMemory: (_convId, fact) => deleteMemory(threadId, fact),
+        },
+      },
+      {
+        onToolCall: (call) => {
+          if (pendingTokensMapRef.current[threadId]) {
+            appendToken(threadId, pendingTokensMapRef.current[threadId]);
+            pendingTokensMapRef.current[threadId] = '';
+          }
+          appendToken(threadId, `\n\n🔧 *Executing ${call.toolName}...*\n`);
+        },
+        onToolResult: (res) => {
+          if (!res.result?.success) {
+            if (pendingTokensMapRef.current[threadId]) {
+              appendToken(threadId, pendingTokensMapRef.current[threadId]);
+              pendingTokensMapRef.current[threadId] = '';
+            }
+            appendToken(threadId, `\n⚠️ *Tool output: ${res.result?.output}*\n`);
+          }
+        },
+      }
+    );
+
+    try {
+      await streamCloudResponse({
+        provider,
+        apiKey,
+        model: activeAgent?.model?.trim() || providerConfig?.model || 'gemini-1.5-flash',
+        baseUrl: providerConfig?.baseUrl,
+        systemPrompt: systemPromptToUse,
+        temperature: config.temperature,
+        maxTokens: config.maxTokens,
+        messages: contextMessages,
+        tools: cloudTools,
+        signal: controller.signal,
+        onToken: (chunk) => {
+          pendingTokensMapRef.current[threadId] = (pendingTokensMapRef.current[threadId] || '') + chunk;
+          ensureThrottleTimer(threadId, throttleTimersRef, pendingTokensMapRef, appendToken, cleanUpThrottleAndHeal);
+        },
+        onDone: () => {
+          setStreamingThread(threadId, false);
+          delete abortControllersRef.current[threadId];
+          cleanUpThrottleAndHeal(threadId);
+          useChatStore.getState().removeLastEmptyAssistant(threadId);
+        },
+        onError: (error: any) => {
+          setStreamingThread(threadId, false);
+          delete abortControllersRef.current[threadId];
+          cleanUpThrottleAndHeal(threadId);
+          useChatStore.getState().removeLastEmptyAssistant(threadId);
+          const errText = `⚠️ **[${provider.toUpperCase()} Error]** ${error?.message || 'Cloud inference failed.'}`;
+          const cur = useChatStore.getState().messages[threadId] || [];
+          const last = cur[cur.length - 1];
+          if (last?.role === 'assistant') {
+            appendToken(threadId, `\n\n${errText}`);
+          } else {
+            addMessage(threadId, {
+              id: generateId('msg_assistant'),
+              role: 'assistant',
+              content: errText,
+              created_at: new Date().toISOString(),
+            });
+          }
+        },
+      });
+    } catch (e: any) {
+      console.error('[Cloud Stream Error]:', e);
+      setStreamingThread(threadId, false);
+      delete abortControllersRef.current[threadId];
+      cleanUpThrottleAndHeal(threadId);
+      useChatStore.getState().removeLastEmptyAssistant(threadId);
+      const errText = `⚠️ **[${provider.toUpperCase()} Error]** ${e?.message || 'Cloud inference failed.'}`;
+      const cur = useChatStore.getState().messages[threadId] || [];
+      const last = cur[cur.length - 1];
+      if (last?.role === 'assistant') {
+        appendToken(threadId, `\n\n${errText}`);
+      } else {
+        addMessage(threadId, {
+          id: generateId('msg_assistant'),
+          role: 'assistant',
+          content: errText,
+          created_at: new Date().toISOString(),
+        });
+      }
+    }
+  };
+
   const handleSend = useCallback(async () => {
     if (!activeThreadId) return;
 
@@ -792,9 +817,25 @@ export default function ChatScreen() {
     }
 
     if (!input.trim()) return;
-    if (!isLocalMode && (!apiUrl || !apiKey)) {
+
+    // Skill slash command handling (standalone modes only)
+    if (connectionMode !== 'server' && activeThreadId && handleSkillCommand(activeThreadId, input)) {
+      Keyboard.dismiss();
+      setInput('');
+      return;
+    }
+
+    if (connectionMode === 'server' && (!apiUrl || !apiKey)) {
       Alert.alert('Configuration Required', 'Please configure API URL and Key in Settings.');
       return;
+    }
+    if (connectionMode === 'cloud') {
+      const activeProvider = useConfigStore.getState().activeCloudProvider || 'gemini';
+      const key = useConfigStore.getState().cloudApiKeys?.[activeProvider];
+      if (!key) {
+        Alert.alert('Configuration Required', `Please configure API key for ${activeProvider} in Settings.`);
+        return;
+      }
     }
 
     Keyboard.dismiss();
@@ -830,84 +871,31 @@ export default function ChatScreen() {
       return;
     }
 
-    const activeThread = threads.find((t) => t.id === activeThreadId);
-    const selectedAgent = activeThread?.persona || 'personal assistant';
-
-    const controller = new AbortController();
-    abortControllersRef.current[activeThreadId] = controller;
-
-    try {
-      await streamAgentResponse(
-        apiUrl,
-        apiKey,
-        activeThreadId,
-        userText,
-        (chunk) => {
-          pendingTokensMapRef.current[activeThreadId] = (pendingTokensMapRef.current[activeThreadId] || '') + chunk;
-          if (!throttleTimersRef.current[activeThreadId]) {
-            throttleTimersRef.current[activeThreadId] = setInterval(() => {
-              // FIX-3 self-heal: stream ended without cleanup -> flush + stop ticking.
-              if (!useChatStore.getState().isThreadStreaming(activeThreadId)) {
-                cleanUpThrottleAndHeal(activeThreadId);
-                return;
-              }
-              if (pendingTokensMapRef.current[activeThreadId]) {
-                appendToken(activeThreadId, pendingTokensMapRef.current[activeThreadId]);
-                pendingTokensMapRef.current[activeThreadId] = '';
-              }
-            }, 100);
-          }
-        },
-        (newTitle) => {
-          setStreamingThread(activeThreadId, false);
-          delete abortControllersRef.current[activeThreadId];
-          cleanUpThrottleAndHeal(activeThreadId);
-    useChatStore.getState().removeLastEmptyAssistant(activeThreadId);
-          if (newTitle) {
-            const updatedThreads = threads.map((t) => {
-              if (t.id === activeThreadId) {
-                return { ...t, title: newTitle };
-              }
-              return t;
-            });
-            setThreads(updatedThreads);
-            useChatStore.getState().renameThread(activeThreadId, newTitle);
-          }
-        },
-        (error) => {
-          setStreamingThread(activeThreadId, false);
-          delete abortControllersRef.current[activeThreadId];
-          cleanUpThrottleAndHeal(activeThreadId);
-    useChatStore.getState().removeLastEmptyAssistant(activeThreadId);
-          const errMsg = error?.message || (typeof error === 'string' ? error : '') || 'Failed to stream response.';
-          appendToken(activeThreadId, `\n\n⚠️ **Error:** ${errMsg}`);
-          queueMessageForSync(activeThreadId, {
-            id: userMsgId,
-            role: 'user',
-            content: userText,
-            created_at: nowIso,
-          }).catch(() => {});
-        },
-        controller.signal,
-        selectedAgent,
-        (provider) => {
-          if (provider === 'google' && activeThreadId) {
-            setAuthRequired((prev) => ({ ...prev, [activeThreadId]: true }));
-          }
-        }
-      );
-    } catch (err: any) {
-      setStreamingThread(activeThreadId, false);
-      cleanUpThrottleAndHeal(activeThreadId);
-    useChatStore.getState().removeLastEmptyAssistant(activeThreadId);
-      appendToken(activeThreadId, `\n\n⚠️ **Network Error:** ${err.message || 'Verification aborted.'}`);
-      queueMessageForSync(activeThreadId, {
-        id: userMsgId,
-        role: 'user',
-        content: userText,
-        created_at: nowIso,
-      }).catch(() => {});
+    if (connectionMode === 'cloud') {
+      await streamCloudChatResponse(activeThreadId, [...originalHistory, { id: userMsgId, role: 'user', content: userText }]);
+      return;
     }
+
+    const activeThread = threads.find((t) => t.id === activeThreadId);
+    const selectedAgent = activeThread?.agent || 'personal assistant';
+
+    await runServerStream({
+      apiUrl,
+      apiKey,
+      threadId: activeThreadId,
+      prompt: userText,
+      agent: selectedAgent,
+      syncUserEntry: { id: userMsgId, role: 'user', content: userText, created_at: nowIso },
+      threads,
+      abortControllers: abortControllersRef,
+      throttleTimers: throttleTimersRef,
+      pendingTokens: pendingTokensMapRef,
+      appendToken,
+      setStreamingThread,
+      setThreads,
+      setAuthRequired,
+      cleanUpThrottleAndHeal,
+    });
   }, [
     input,
     isCurrentThreadStreaming,
@@ -922,7 +910,9 @@ export default function ChatScreen() {
     setThreads,
     cleanUpThrottleAndHeal,
     isLocalMode,
+    connectionMode,
     triggerAutoScroll,
+    handleSkillCommand,
   ]);
 
   const handleRegenerate = useCallback(async (message: Message) => {
@@ -959,6 +949,7 @@ export default function ChatScreen() {
       id: assistantMsgId,
       role: 'assistant',
       content: '',
+      created_at: new Date().toISOString(),
     });
 
     setStreamingThread(activeThreadId, true);
@@ -968,84 +959,36 @@ export default function ChatScreen() {
       return;
     }
 
-    const controller = new AbortController();
-    abortControllersRef.current[activeThreadId] = controller;
+    if (connectionMode === 'cloud') {
+      await streamCloudChatResponse(activeThreadId, [...originalHistoryForRegen, { id: generateId('msg_user'), role: 'user', content: userPrompt }]);
+      return;
+    }
 
-    // Get agent/persona for the thread
-    const regenerateAgent = threads.find((t) => t.id === activeThreadId)?.persona || 'personal assistant';
+    // Get the active thread agent
+    const regenerateAgent = threads.find((t) => t.id === activeThreadId)?.agent || 'personal assistant';
 
-    try {
-      await streamAgentResponse(
-        apiUrl,
-        apiKey,
-        activeThreadId,
-        userPrompt,
-        (chunk) => {
-          pendingTokensMapRef.current[activeThreadId] = (pendingTokensMapRef.current[activeThreadId] || '') + chunk;
-          if (!throttleTimersRef.current[activeThreadId]) {
-            throttleTimersRef.current[activeThreadId] = setInterval(() => {
-              // FIX-3 self-heal: stream ended without cleanup -> flush + stop ticking.
-              if (!useChatStore.getState().isThreadStreaming(activeThreadId)) {
-                cleanUpThrottleAndHeal(activeThreadId);
-                return;
-              }
-              if (pendingTokensMapRef.current[activeThreadId]) {
-                appendToken(activeThreadId, pendingTokensMapRef.current[activeThreadId]);
-                pendingTokensMapRef.current[activeThreadId] = '';
-              }
-            }, 100);
-          }
-        },
-        (newTitle) => {
-          setStreamingThread(activeThreadId, false);
-          delete abortControllersRef.current[activeThreadId];
-          cleanUpThrottleAndHeal(activeThreadId);
-    useChatStore.getState().removeLastEmptyAssistant(activeThreadId);
-          if (newTitle) {
-            const updatedThreads = threads.map((t) => {
-              if (t.id === activeThreadId) {
-                return { ...t, title: newTitle };
-              }
-              return t;
-            });
-            setThreads(updatedThreads);
-            useChatStore.getState().renameThread(activeThreadId, newTitle);
-          }
-        },
-        (error) => {
-          setStreamingThread(activeThreadId, false);
-          delete abortControllersRef.current[activeThreadId];
-          cleanUpThrottleAndHeal(activeThreadId);
-    useChatStore.getState().removeLastEmptyAssistant(activeThreadId);
-          const errMsg = error?.message || (typeof error === 'string' ? error : '') || 'Failed to stream response.';
-          appendToken(activeThreadId, `\n\n⚠️ **Error:** ${errMsg}`);
-          queueMessageForSync(activeThreadId, {
-            id: threadMsgs[userIndex]?.id || generateId('msg_user'),
-            role: 'user',
-            content: userPrompt,
-            created_at: threadMsgs[userIndex]?.created_at,
-          }).catch(() => {});
-        },
-        controller.signal,
-        regenerateAgent,
-        (provider) => {
-          if (provider === 'google' && activeThreadId) {
-            setAuthRequired((prev) => ({ ...prev, [activeThreadId]: true }));
-          }
-        }
-      );
-    } catch (err: any) {
-      setStreamingThread(activeThreadId, false);
-      cleanUpThrottleAndHeal(activeThreadId);
-    useChatStore.getState().removeLastEmptyAssistant(activeThreadId);
-      appendToken(activeThreadId, `\n\n⚠️ **Network Error:** ${err.message || 'Verification aborted.'}`);
-      queueMessageForSync(activeThreadId, {
+    await runServerStream({
+      apiUrl,
+      apiKey,
+      threadId: activeThreadId,
+      prompt: userPrompt,
+      agent: regenerateAgent,
+      syncUserEntry: {
         id: threadMsgs[userIndex]?.id || generateId('msg_user'),
         role: 'user',
         content: userPrompt,
         created_at: threadMsgs[userIndex]?.created_at,
-      }).catch(() => {});
-    }
+      },
+      threads,
+      abortControllers: abortControllersRef,
+      throttleTimers: throttleTimersRef,
+      pendingTokens: pendingTokensMapRef,
+      appendToken,
+      setStreamingThread,
+      setThreads,
+      setAuthRequired,
+      cleanUpThrottleAndHeal,
+    });
   }, [
     isCurrentThreadStreaming,
     activeThreadId,
@@ -1060,6 +1003,7 @@ export default function ChatScreen() {
     setThreads,
     cleanUpThrottleAndHeal,
     isLocalMode,
+    connectionMode,
   ]);
 
   const handleBranch = useCallback(async (message: Message) => {
@@ -1081,17 +1025,39 @@ export default function ChatScreen() {
     threads
   ]);
 
-  const handleSendWelcome = useCallback(async (textToSend: string, personaId?: string) => {
+  const handleSendWelcome = useCallback(async (textToSend: string, agentId?: string) => {
     if (!textToSend.trim()) return;
-    if (!isLocalMode && (!apiUrl || !apiKey)) {
+
+    // Skill slash commands are intercepted BEFORE the credential checks:
+    // activation is local-only and must work without API URL/key configured
+    // (standalone modes only — server mode still requires credentials).
+    if (connectionMode !== 'server' && isSkillCommand(textToSend.trim())) {
+      Keyboard.dismiss();
+      const newThreadId = generateUUID();
+      const agent = resolveNewThreadAgent(agentId);
+      createThread('New Conversation', newThreadId, agent);
+      setInput('');
+      handleSkillCommand(newThreadId, textToSend);
+      return;
+    }
+
+    if (connectionMode === 'server' && (!apiUrl || !apiKey)) {
       Alert.alert('Configuration Required', 'Please configure API URL and Key in Settings.');
       return;
+    }
+    if (connectionMode === 'cloud') {
+      const activeProvider = useConfigStore.getState().activeCloudProvider || 'gemini';
+      const key = useConfigStore.getState().cloudApiKeys?.[activeProvider];
+      if (!key) {
+        Alert.alert('Configuration Required', `Please configure API key for ${activeProvider} in Settings.`);
+        return;
+      }
     }
 
     Keyboard.dismiss();
 
     const newThreadId = generateUUID();
-    const agent = personaId || selectedAgent;
+    const agent = resolveNewThreadAgent(agentId);
 
     createThread('New Conversation', newThreadId, agent);
     setInput('');
@@ -1122,85 +1088,39 @@ export default function ChatScreen() {
       return;
     }
 
-    const controller = new AbortController();
-    abortControllersRef.current[newThreadId] = controller;
-
-    try {
-      await streamAgentResponse(
-        apiUrl,
-        apiKey,
-        newThreadId,
-        textToSend.trim(),
-        (chunk) => {
-          pendingTokensMapRef.current[newThreadId] = (pendingTokensMapRef.current[newThreadId] || '') + chunk;
-          if (!throttleTimersRef.current[newThreadId]) {
-            throttleTimersRef.current[newThreadId] = setInterval(() => {
-              // FIX-3 self-heal: stream ended without cleanup -> flush + stop ticking.
-              if (!useChatStore.getState().isThreadStreaming(newThreadId)) {
-                cleanUpThrottleAndHeal(newThreadId);
-                return;
-              }
-              if (pendingTokensMapRef.current[newThreadId]) {
-                appendToken(newThreadId, pendingTokensMapRef.current[newThreadId]);
-                pendingTokensMapRef.current[newThreadId] = '';
-              }
-            }, 100);
-          }
-        },
-        (newTitle) => {
-          setStreamingThread(newThreadId, false);
-          delete abortControllersRef.current[newThreadId];
-          cleanUpThrottleAndHeal(newThreadId);
-    useChatStore.getState().removeLastEmptyAssistant(newThreadId);
-          if (newTitle) {
-            useChatStore.getState().renameThread(newThreadId, newTitle);
-          }
-        },
-        (error) => {
-          setStreamingThread(newThreadId, false);
-          delete abortControllersRef.current[newThreadId];
-          cleanUpThrottleAndHeal(newThreadId);
-    useChatStore.getState().removeLastEmptyAssistant(newThreadId);
-          const errMsg = error?.message || (typeof error === 'string' ? error : '') || 'Failed to stream response.';
-          appendToken(newThreadId, `\n\n⚠️ **Error:** ${errMsg}`);
-          queueMessageForSync(newThreadId, {
-            id: userMsgId,
-            role: 'user',
-            content: textToSend.trim(),
-            created_at: nowIso,
-          }).catch(() => {});
-        },
-        controller.signal,
-        agent,
-        (provider) => {
-          if (provider === 'google') {
-            setAuthRequired((prev) => ({ ...prev, [newThreadId]: true }));
-          }
-        }
-      );
-    } catch (err: any) {
-      setStreamingThread(newThreadId, false);
-      cleanUpThrottleAndHeal(newThreadId);
-    useChatStore.getState().removeLastEmptyAssistant(newThreadId);
-      appendToken(newThreadId, `\n\n⚠️ **Network Error:** ${err.message || 'Verification aborted.'}`);
-      queueMessageForSync(newThreadId, {
-        id: userMsgId,
-        role: 'user',
-        content: textToSend.trim(),
-        created_at: nowIso,
-      }).catch(() => {});
+    if (connectionMode === 'cloud') {
+      await streamCloudChatResponse(newThreadId, [{ id: userMsgId, role: 'user', content: textToSend.trim() }]);
+      return;
     }
+
+    await runServerStream({
+      apiUrl,
+      apiKey,
+      threadId: newThreadId,
+      prompt: textToSend.trim(),
+      agent,
+      syncUserEntry: { id: userMsgId, role: 'user', content: textToSend.trim(), created_at: nowIso },
+      abortControllers: abortControllersRef,
+      throttleTimers: throttleTimersRef,
+      pendingTokens: pendingTokensMapRef,
+      appendToken,
+      setStreamingThread,
+      setThreads,
+      setAuthRequired,
+      cleanUpThrottleAndHeal,
+    });
   }, [
     apiUrl,
     apiKey,
-    selectedAgent,
     createThread,
     addMessage,
     appendToken,
     setStreamingThread,
     cleanUpThrottleAndHeal,
     isLocalMode,
+    connectionMode,
     triggerAutoScroll,
+    handleSkillCommand,
   ]);
 
   const handleSendPress = () => {
@@ -1224,7 +1144,7 @@ export default function ChatScreen() {
       // Check if model already downloaded
       const isDownloaded = await AsyncStorage.getItem(localModelStorageKey(localModelName));
       if (isDownloaded === 'true') {
-        setIsLocalMode(true);
+        setConnectionMode('local');
         return;
       }
 
@@ -1253,7 +1173,7 @@ export default function ChatScreen() {
 
       // Warn/Prompt about cellular if wifiOnlyDownload is active
       const downloadModel = async () => {
-        setIsLocalMode(true);
+        setConnectionMode('local');
         try {
           const modelDir = `${FileSystem.documentDirectory}models/`;
           const modelUri = `${modelDir}${selectedModel.filename}`;
@@ -1300,7 +1220,10 @@ export default function ChatScreen() {
         } catch (downloadError: any) {
           console.error('[handleToggleLocalMode] Download failed:', downloadError);
           setLocalModelDownloadProgress(null);
-          setIsLocalMode(false);
+          const fallbackMode: ConnectionMode = useConfigStore.getState().cloudApiKeys?.[useConfigStore.getState().activeCloudProvider || 'gemini']
+            ? 'cloud'
+            : 'server';
+          setConnectionMode(fallbackMode);
           Alert.alert('Download Failed', `Failed to download ${localModelName}: ${downloadError.message || 'Network error'}.`);
         }
       };
@@ -1318,7 +1241,10 @@ export default function ChatScreen() {
         await downloadModel();
       }
     } else {
-      setIsLocalMode(false);
+      const fallbackMode: ConnectionMode = useConfigStore.getState().cloudApiKeys?.[useConfigStore.getState().activeCloudProvider || 'gemini']
+        ? 'cloud'
+        : 'server';
+      setConnectionMode(fallbackMode);
     }
   };
 
@@ -1382,26 +1308,25 @@ export default function ChatScreen() {
     >
       {activeThreadId ? (
         <View style={styles.chatArea}>
-          {/* Horizontal Persona Selector Bar */}
-          <Animated.View style={{ height: personaBarHeight, overflow: 'hidden' }}>
-            <View style={[styles.personaBar, { borderBottomColor: colors.glassBorder, backgroundColor: colors.glass }]}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.personaBarScroll}>
-                {personas.map((p) => {
-                  const isSelected = selectedAgent === p.id;
+          {/* Horizontal Agent Selector Bar */}
+          <Animated.View style={{ height: agentBarHeight, overflow: 'hidden' }}>
+            <View style={[styles.agentBar, { borderBottomColor: colors.glassBorder, backgroundColor: colors.glass }]}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.agentBarScroll}>
+                {agents.map((p) => {
+                  const isSelected = currentAgentId === p.id;
                   return (
                     <Pressable
                       key={p.id}
                       style={[
-                        styles.personaBarCell,
+                        styles.agentBarCell,
                         { borderColor: colors.glassBorder, backgroundColor: 'rgba(0,0,0,0.25)' },
                         isSelected && { borderColor: aurora.acc1, backgroundColor: aurora.acc1 + '1f' }
                       ]}
                       onPress={() => {
-                        setSelectedAgent(p.id);
-                        setThreadPersona(activeThreadId, p.id);
+                        setThreadAgent(activeThreadId, p.id);
                       }}
                     >
-                      <Text style={[styles.personaBarText, { color: isSelected ? aurora.acc1 : colors.textMuted, fontSize: sizes.sub }]}>
+                      <Text style={[styles.agentBarText, { color: isSelected ? aurora.acc1 : colors.textMuted, fontSize: sizes.sub }]}>
                         {p.icon} {p.name}
                       </Text>
                     </Pressable>
@@ -1414,18 +1339,18 @@ export default function ChatScreen() {
           {activeMessages.length === 0 ? (
             <View style={styles.emptyMessagesContainer}>
               <Text style={[styles.emptyMessagesText, { color: colors.textDark }]}>
-                Send a message to start conversation with {personas.find(p => p.id === selectedAgent)?.name || 'Vela'}.
+                Send a message to start conversation with {agents.find(p => p.id === currentAgentId)?.name || 'Vela'}.
               </Text>
             </View>
           ) : (
             <FlatList
               ref={flatListRef}
-              data={reversedMessages}
+              data={reversedChatItems}
               inverted
               onScroll={handleScroll}
               scrollEventThrottle={16}
               contentContainerStyle={styles.messagesList}
-              keyExtractor={(item) => item.id}
+              keyExtractor={(item) => item.type === 'date_divider' ? item.id : item.message.id}
               removeClippedSubviews={false}
               maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
               getItemLayout={undefined}
@@ -1434,12 +1359,16 @@ export default function ChatScreen() {
               updateCellsBatchingPeriod={50}
               initialNumToRender={6}
               renderItem={({ item }) => {
-                const isUser = item.role === 'user';
-                const showActionBar = activeMenuMessage?.id === item.id;
+                if (item.type === 'date_divider') {
+                  return <DateDividerPill label={item.label} colors={colors} />;
+                }
+                const message = item.message;
+                const isUser = message.role === 'user';
+                const showActionBar = activeMenuMessage?.id === message.id;
 
                 // Hooks are illegal inside this callback (plain function, not a
                 // component) — use the module-level cache instead of useMemo.
-                const { segments, headerSegments, bubbleContent, sources } = getCachedParse(item.content, isUser);
+                const { segments, headerSegments, bubbleContent, sources } = getCachedParse(message.content, isUser);
 
                 return (
                   <View style={[styles.messageRow, isUser ? styles.userRow : styles.assistantRow]}>
@@ -1451,7 +1380,7 @@ export default function ChatScreen() {
                       )}
 
                       <Pressable
-                        onLongPress={() => !isCurrentThreadStreaming && setActiveMenuMessage(item)}
+                        onLongPress={() => !isCurrentThreadStreaming && setActiveMenuMessage(message)}
                         style={({ pressed }) => [
                           styles.bubble,
                           isUser ? styles.userBubble : styles.assistantBubble,
@@ -1462,21 +1391,21 @@ export default function ChatScreen() {
                       >
                         {!isUser && (
                           <Text style={[styles.senderLabel, { color: aurora.acc1 }]}>
-                            {isLocalMode ? 'Gemma (Local)' : (personas.find(p => p.id === selectedAgent)?.name || 'Vela')}
+                            {isLocalMode ? 'Gemma (Local)' : (agents.find(p => p.id === currentAgentId)?.name || 'Vela')}
                           </Text>
                         )}
 
                         {isUser ? (
                           <Text style={[styles.messageText, { color: aurora.onAccent, fontSize: sizes.text }]}>
-                            {item.content}
+                            {message.content}
                           </Text>
-                        ) : showRawMap[item.id] ? (
+                        ) : showRawMap[message.id] ? (
                           <Text style={[styles.rawText, { color: colors.text, fontSize: sizes.text }]}>
-                            {item.content}
+                            {message.content}
                           </Text>
                         ) : bubbleContent.length === 0 ? (
                           <RichText
-                            content={item.content || '…'}
+                            content={message.content || '…'}
                             colors={colors}
                             sizes={sizes}
                             accentHex={accentHex}
@@ -1501,6 +1430,13 @@ export default function ChatScreen() {
                             })}
                           </View>
                         )}
+                        <BubbleFooter
+                          createdAt={message.created_at}
+                          isUser={isUser}
+                          isStreaming={!isUser && isCurrentThreadStreaming && activeMessages[activeMessages.length - 1]?.id === message.id}
+                          aurora={aurora}
+                          colors={colors}
+                        />
                       </Pressable>
 
                       {!isUser && (
@@ -1529,7 +1465,7 @@ export default function ChatScreen() {
                       )}
                     </View>
 
-                    {!isUser && isCurrentThreadStreaming && activeMessages[activeMessages.length - 1]?.id === item.id && (
+                    {!isUser && isCurrentThreadStreaming && activeMessages[activeMessages.length - 1]?.id === message.id && (
                       <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12, gap: 4 }}>
                         <ActivityIndicator size="small" color={aurora.acc1} />
                         <Text style={{ color: aurora.acc2, fontSize: sizes.sub - 1, fontWeight: 'bold' }}>
@@ -1540,32 +1476,32 @@ export default function ChatScreen() {
 
                     {showActionBar && (
                       <View style={styles.actionBar}>
-                        <Pressable style={styles.actionBtn} onPress={() => handleCopyText(item.content)}>
+                        <Pressable style={styles.actionBtn} onPress={() => handleCopyText(message.content)}>
                           <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Copy</Text>
                         </Pressable>
                 {!isUser && (
                   <>
-                    <Pressable style={styles.actionBtn} onPress={() => setViewerContent(item.content)}>
+                      <Pressable style={styles.actionBtn} onPress={() => setViewerContent(message.content)}>
                       <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>View</Text>
                     </Pressable>
-                    <Pressable style={styles.actionBtn} onPress={() => handleCopyCodeBlocks(item.content)}>
+                      <Pressable style={styles.actionBtn} onPress={() => handleCopyCodeBlocks(message.content)}>
                               <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Code</Text>
                             </Pressable>
-                            <Pressable style={styles.actionBtn} onPress={() => handleRegenerate(item)}>
+                            <Pressable style={styles.actionBtn} onPress={() => handleRegenerate(message)}>
                               <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Retry</Text>
                             </Pressable>
-                            <Pressable style={styles.actionBtn} onPress={() => toggleRaw(item.id)}>
+                            <Pressable style={styles.actionBtn} onPress={() => toggleRaw(message.id)}>
                               <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Raw</Text>
                             </Pressable>
                           </>
                         )}
-                        <Pressable style={styles.actionBtn} onPress={() => handleBranch(item)}>
+                        <Pressable style={styles.actionBtn} onPress={() => handleBranch(message)}>
                           <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Branch</Text>
                         </Pressable>
-                        <Pressable style={styles.actionBtn} onPress={() => handleDownloadMd(item)}>
+                        <Pressable style={styles.actionBtn} onPress={() => handleDownloadMd(message)}>
                           <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Download</Text>
                         </Pressable>
-                        <Pressable style={styles.actionBtn} onPress={() => handleShowInfo(item)}>
+                        <Pressable style={styles.actionBtn} onPress={() => handleShowInfo(message)}>
                           <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Info</Text>
                         </Pressable>
                       </View>
@@ -1605,7 +1541,7 @@ export default function ChatScreen() {
                     { backgroundColor: colors.glass, borderColor: colors.glassBorder },
                     pressed && { borderColor: aurora.acc1, opacity: 0.85 }
                   ]}
-                  onPress={() => handleSendWelcome(item.text, item.persona)}
+                  onPress={() => handleSendWelcome(item.text, item.agent)}
                 >
                   <Text style={[styles.suggestionText, { color: colors.text, fontSize: sizes.text - 1 }]}>
                     <Text style={{ color: aurora.acc1, fontWeight: '700' }}>{item.label}</Text>
@@ -1615,25 +1551,25 @@ export default function ChatScreen() {
               ))}
             </View>
 
-            {/* Persona Quick Selector */}
+            {/* Agent Quick Selector */}
             <Text style={[styles.sectionTitleLabel, { color: colors.text, fontSize: sizes.text, marginTop: 12 }]}>
-              Choose Persona
+              Choose Agent
             </Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.personaScrollContainer}>
-              {personas.map((p) => {
-                const isSelected = selectedAgent === p.id;
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.agentScrollContainer}>
+              {agents.map((p) => {
+                const isSelected = currentAgentId === p.id;
                 return (
                   <Pressable
                     key={p.id}
                     style={({ pressed }) => [
-                      styles.personaPill,
+                      styles.agentPill,
                       { backgroundColor: 'rgba(0,0,0,0.25)', borderColor: colors.glassBorder },
                       isSelected && { backgroundColor: aurora.acc1, borderColor: aurora.acc1 },
                       pressed && { opacity: 0.8 }
                     ]}
-                    onPress={() => setSelectedAgent(p.id)}
+                    onPress={() => setDefaultAgent(p.id)}
                   >
-                    <Text style={[styles.personaPillText, { color: isSelected ? aurora.onAccent : colors.textMuted, fontSize: sizes.sub }]}>
+                    <Text style={[styles.agentPillText, { color: isSelected ? aurora.onAccent : colors.textMuted, fontSize: sizes.sub }]}>
                       {p.icon} {p.name}
                     </Text>
                   </Pressable>
@@ -1651,7 +1587,7 @@ export default function ChatScreen() {
           onPress={handleToggleLocalMode}
         >
           <Text style={[styles.switcherLabel, { color: colors.text }]}>
-            Engine: {isLocalMode ? `🤖 Local (${localModelName})` : `☁️ Cloud (${modelName || 'Gemini'})`}
+            Engine: {connectionMode === 'local' ? `🤖 Local (${localModelName})` : connectionMode === 'cloud' ? `☁️ Cloud (${activeCloudProvider || 'gemini'})` : `🖥️ Server (${modelName || 'Gemini'})`}
           </Text>
         </Pressable>
         {localModelDownloadProgress !== null && (
@@ -1660,6 +1596,27 @@ export default function ChatScreen() {
           </Text>
         )}
       </View>
+
+      {/* Active skill indicator */}
+      {activeThreadId && activeThreadSkill && SKILL_METADATA[activeThreadSkill] && connectionMode !== 'server' && (
+        <Pressable
+          style={({ pressed }) => [
+            styles.skillIndicator,
+            { backgroundColor: aurora.acc1 + '1A', borderColor: aurora.acc1 },
+            pressed && { opacity: 0.7 }
+          ]}
+          onPress={handleDeactivateSkill}
+          // Deactivating mid-stream would mutate thread skill state while
+          // the in-flight prompt still carries the old skill instructions.
+          disabled={isCurrentThreadStreaming}
+          accessibilityRole="button"
+          accessibilityLabel="Deactivate skill"
+        >
+          <Text style={[styles.skillIndicatorText, { color: aurora.acc1, fontSize: sizes.sub }]}>
+            {SKILL_METADATA[activeThreadSkill].icon} {SKILL_METADATA[activeThreadSkill].name} · tap to stop
+          </Text>
+        </Pressable>
+      )}
 
       {/* Unifying Input container at bottom */}
       <View
@@ -1746,293 +1703,3 @@ export default function ChatScreen() {
     </LinearGradient>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  screen: {
-    flex: 1,
-  },
-  auroraGlow: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 0,
-  },
-  chatArea: {
-    flex: 1,
-  },
-  personaBar: {
-    borderBottomWidth: 1,
-    paddingVertical: 8,
-  },
-  personaBarScroll: {
-    paddingHorizontal: 16,
-    gap: 8,
-  },
-  personaBarCell: {
-    borderWidth: 1,
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  personaBarText: {
-    fontWeight: '500',
-  },
-  emptyMessagesContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-  },
-  emptyMessagesText: {
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  messagesList: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  messageRow: {
-    marginVertical: 6,
-    width: '100%',
-  },
-  userRow: {
-    alignItems: 'flex-end',
-  },
-  assistantRow: {
-    alignItems: 'flex-start',
-  },
-  bubble: {
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderWidth: 1,
-    maxWidth: '85%',
-  },
-  userBubble: {
-    borderTopRightRadius: 4,
-  },
-  assistantBubble: {
-    borderTopLeftRadius: 4,
-  },
-  senderLabel: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 4,
-  },
-  messageText: {
-    lineHeight: 20,
-  },
-  rawText: {
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    lineHeight: 18,
-  },
-  thoughtNestingContainer: {
-    width: '100%',
-    marginBottom: 6,
-  },
-  sourcesTitleLabel: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    marginBottom: 6,
-    paddingHorizontal: 4,
-  },
-  sourcesContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    paddingHorizontal: 4,
-  },
-  sourceCard: {
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 8,
-    width: 140,
-  },
-  sourceHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-    gap: 6,
-  },
-  sourceFavicon: {
-    width: 14,
-    height: 14,
-    borderRadius: 2,
-  },
-  sourceIconFallback: {
-    width: 14,
-    height: 14,
-    borderRadius: 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sourceIconFallbackText: {
-    fontSize: 8,
-    fontWeight: 'bold',
-  },
-  sourceSiteName: {
-    flex: 1,
-    fontWeight: '600',
-  },
-  sourceTitle: {
-    fontWeight: '500',
-  },
-  actionBar: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 8,
-    paddingHorizontal: 4,
-  },
-  actionBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.13)',
-    backgroundColor: 'rgba(0, 0, 0, 0.25)',
-  },
-  actionBtnText: {
-    fontSize: 11,
-  },
-  welcomeScroll: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingVertical: 32,
-  },
-  welcomeContainer: {
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  welcomeLogo: {
-    fontSize: 36,
-    fontWeight: '900',
-    letterSpacing: 8,
-    marginBottom: 16,
-  },
-  welcomeTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  welcomeSubtitle: {
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  quoteContainer: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 16,
-    width: '100%',
-    marginBottom: 24,
-  },
-  quoteText: {
-    fontStyle: 'italic',
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  quoteAuthor: {
-    fontSize: 12,
-    textAlign: 'right',
-    fontWeight: '500',
-  },
-  sectionTitleLabel: {
-    alignSelf: 'flex-start',
-    fontWeight: 'bold',
-    marginBottom: 12,
-  },
-  suggestionsContainer: {
-    width: '100%',
-    gap: 8,
-    marginBottom: 16,
-  },
-  suggestionCard: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-  },
-  suggestionText: {
-    lineHeight: 18,
-  },
-  personaScrollContainer: {
-    gap: 8,
-    paddingVertical: 4,
-  },
-  personaPill: {
-    borderWidth: 1,
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  personaPillText: {
-    fontWeight: '600',
-  },
-  modelSwitcherContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    borderTopWidth: 1,
-  },
-  switcherButton: {
-    borderWidth: 1,
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  switcherLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  downloadProgressText: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderTopWidth: 1,
-    gap: 12,
-  },
-  input: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    maxHeight: 100,
-  },
-  sendButton: {
-    borderRadius: 20,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowOpacity: 0.45,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
-  },
-  sendButtonText: {
-    color: '#ffffff',
-    fontWeight: 'bold',
-  },
-  permissionPromptOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    justifyContent: 'flex-end',
-    padding: 16,
-  },
-});

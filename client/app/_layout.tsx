@@ -1,9 +1,10 @@
+import '@stardazed/streams-text-encoding';
 import { useEffect } from 'react';
 import { useRouter, useSegments, useRootNavigationState, Slot } from 'expo-router';
 import { Drawer } from 'expo-router/drawer';
 import { ActivityIndicator, View, StyleSheet, Pressable, Text, AppState } from 'react-native';
 import { useConfigStore } from '../store/useConfigStore';
-import { checkPermission } from '../utils/permissionManager';
+import { checkPermission, type OSPermission } from '../utils/permissionManager';
 import { useChatStore } from '../store/useChatStore';
 import DrawerContent from '../components/ui/DrawerContent';
 import HealthIndicator from '../components/ui/HealthIndicator';
@@ -14,7 +15,6 @@ import {
   handleWebViewLoadEnd,
   handleWebViewMessage,
 } from '../store/useBrowserStore';
-import { hydrateGoogleTokens } from '../store/useGoogleAuthStore';
 import { registerVelaBackgroundTask } from '../utils/backgroundTasks';
 import * as Notifications from 'expo-notifications';
 import { SafetyDialog } from '../components/ui/SafetyDialog';
@@ -35,6 +35,7 @@ Notifications.setNotificationHandler({
 
 import { initializeDatabase } from '../db/client';
 import { wireOfflineSync, flushPendingMessages } from '../utils/offlineSync';
+import { runAgentDataBootstrap } from '../utils/seedAgents';
 
 function HeaderRightActions() {
   const router = useRouter();
@@ -97,6 +98,7 @@ export default function RootLayout() {
       if (!useChatStore.getState().activeThreadId) {
         useChatStore.getState().selectThread(null);
       }
+      runAgentDataBootstrap();
       // Local-first offline sync: flush any pending offline messages once the
       // store is hydrated, and listen for app foreground to flush again.
       wireOfflineSync();
@@ -104,13 +106,11 @@ export default function RootLayout() {
     }
   }, [hasHydrated, chatHasHydrated]);
 
-useEffect(() => {
-if (hasHydrated) {
-// Hydrate Google OAuth tokens SecureStore
-hydrateGoogleTokens();
-registerVelaBackgroundTask();
-}
-}, [hasHydrated]);
+  useEffect(() => {
+    if (hasHydrated) {
+      registerVelaBackgroundTask();
+    }
+  }, [hasHydrated]);
 
   // FCM push registration — triggers on setup completion (hasHydrated && isConfigured)
   // per #132. Extracted to utils/pushRegistration.ts; reads apiUrl/apiKey via
@@ -203,13 +203,15 @@ registerVelaBackgroundTask();
   useEffect(() => {
     if (!hasHydrated) return;
     const checkPermissionsAndUpdateStore = async () => {
-      const perms: Array<'notifications' | 'camera' | 'microphone' | 'storage' | 'accessibility' | 'background'> = [
+      const perms: OSPermission[] = [
         'notifications',
         'camera',
         'microphone',
         'storage',
         'accessibility',
         'background',
+        'phone',
+        'contacts',
       ];
       for (const perm of perms) {
         try {
@@ -386,11 +388,5 @@ const styles = StyleSheet.create({
     backgroundColor: '#09090b',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  persistentWebview: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
   },
 });

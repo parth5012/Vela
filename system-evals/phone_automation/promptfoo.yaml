@@ -1,0 +1,35 @@
+# Promptfoo test suite for Phone Automation action mappings
+description: "Vela Phone Automation Intent-to-Action Mapping"
+
+prompts:
+  - "Device Agent User Request: {{prompt}}"
+
+providers:
+  - id: "python:phone_automation.providers.device_provider:call_device_agent"
+    label: "Vela Device Agent"
+
+tests:
+  - description: "Open YouTube app on phone"
+    vars:
+      prompt: "Open YouTube on my phone"
+    assert:
+      - type: icontains
+        value: "device_open_app"
+      - type: icontains
+        value: "YouTube"
+
+  - description: "Tap the search icon"
+    vars:
+      prompt: "Tap on the search icon at the top right"
+    assert:
+      - type: icontains
+        value: "device_tap"
+
+  - description: "Type query into search input"
+    vars:
+      prompt: "Type 'Lofi Hip Hop' into the search bar"
+    assert:
+      - type: icontains
+        value: "device_type"
+      - type: icontains
+        value: "Lofi Hip Hop"

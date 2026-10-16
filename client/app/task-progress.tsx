@@ -188,13 +188,9 @@ export default function TaskProgressScreen() {
         setSteps([]);
       }
 
-      // Determine state: if cancelled/failed/interrupted with no store running -> could be error/timeout
-      if (execData.status === 'failed' || execData.status === 'cancelled') {
-        // Still show active with status badge but also allow retry; map to active for progress view
-        setLoadState('active');
-      } else {
-        setLoadState('active');
-      }
+      // Even when cancelled/failed, show the active progress view with a status
+      // badge so the user can retry; the catch path below handles real errors.
+      setLoadState('active');
     } catch (err: any) {
       setErrorMessage(err?.message || 'Failed to load task');
       setLoadState('error');

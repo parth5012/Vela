@@ -7,6 +7,22 @@ import {
   NEEDLE_DEVICE_TOOLS_JSON,
   buildNeedleAutomationPrompt,
 } from './needleDeviceTools';
+import type { NeedleStreamEvent } from '../modules/needle';
+import {
+  beginGpuInitSession,
+  completeGpuInitSession,
+  detectCrashedGpuInit,
+  isGpuCrashFlagSet,
+  getGpuCrashFlagDetails,
+  clearGpuCrashFlag,
+  markGpuCrashFlagConsumed,
+  isGpuBackend,
+} from './liteRtCrashFlag';
+import {
+  detectGpuVendor,
+  getGpuBackendPreference,
+  type GpuVendor,
+} from './ramDetection';
 
 /** Event name emitted by GemmaReactNativeModule for streamed generation. */
 const GEMMA_STREAM_EVENT = 'GemmaLlmStream';
@@ -133,6 +149,12 @@ export interface LocalModelSpec {
   filename: string;
   /** 'task' = MediaPipe LiteRT `.task` bundle, 'gguf' = llama.cpp GGUF via llama.rn */
   format: 'task' | 'gguf' | 'cact';
+  /**
+   * Model's maximum context window in tokens (upstream config.json).
+   * Metadata for the picker; runtime ctx still comes from
+   * `useConfigStore.localContextSize`.
+   */
+  contextSize?: number;
 }
 
 /**
@@ -151,13 +173,22 @@ export interface LocalModelSpec {
  */
 export const LOCAL_MODELS: LocalModelSpec[] = [
   {
-    name: 'Cactus Needle 45M',
-    size: '0.04GB',
-    description: 'Ultra-fast on-device action & tool routing model (Needle Engine)',
-    downloadUrl:
-      'https://huggingface.co/cactus-ai/needle-45m/resolve/main/needle-45m.cact',
-    filename: 'needle-45m.cact',
+    name: 'Needle-2 45M',
+    size: '~0.014 GB',
+    description: 'Ultra-fast on-device action & tool routing model (Needle Engine, 2048 context)',
+    downloadUrl: 'https://huggingface.co/Cactus-Compute/needle2/resolve/main/needle2.cact',
+    filename: 'needle2.cact',
     format: 'cact',
+    contextSize: 2048,
+  },
+  {
+    name: 'Needle-3 (20-layer)',
+    size: '~0.035 GB',
+    description: 'Needle-3 full 20-layer model (Needle Engine, 8192 context)',
+    downloadUrl: 'https://huggingface.co/Cactus-Compute/needle3/resolve/main/needle3.cact',
+    filename: 'needle3.cact',
+    format: 'cact',
+    contextSize: 8192,
   },
   {
     name: 'Qwen2.5 0.5B',
@@ -260,6 +291,48 @@ function mockResponseTemplate(prompt: string): string {
   return `This is a simulated local LLM response. The ${localModelName} model is running in fallback mock mode. MediaPipe LLM Inference API is functioning offline.`;
 }
 
+interface LiteRtBackendResolution {
+  targetBackend: string;
+  forceCpuFromCrash: boolean;
+}
+
+/**
+ * Resolves LiteRT GPU/CPU backend according to the crash flag lifecycle:
+ * 1. Stale GPU marker -> crash flag persisted (consumed: false).
+ * 2. Active crash flag (consumed: false) -> one-shot CPU downgrade for this launch only (no store write).
+ * 3. Consumed crash flag (consumed: true) -> clear flag and retry GPU.
+ * 4. Explicit user GPU preference ('opencl' | 'vulkan') -> clears flag and wins over crash flag.
+ */
+async function resolveLiteRtBackend(
+  vendor: GpuVendor,
+  userOverride: 'auto' | 'opencl' | 'vulkan' | 'cpu' | undefined,
+  localModelName: string
+): Promise<LiteRtBackendResolution> {
+  await detectCrashedGpuInit();
+  let crashDetails = await getGpuCrashFlagDetails();
+  let forceCpuFromCrash = false;
+
+  if (isGpuBackend(userOverride)) {
+    if (crashDetails) {
+      await clearGpuCrashFlag();
+      crashDetails = null;
+    }
+  } else if (crashDetails) {
+    if (crashDetails.consumed) {
+      await clearGpuCrashFlag();
+      crashDetails = null;
+    } else {
+      forceCpuFromCrash = true;
+    }
+  }
+
+  const targetBackend = forceCpuFromCrash
+    ? 'cpu'
+    : getGpuBackendPreference(vendor, userOverride, localModelName);
+
+  return { targetBackend, forceCpuFromCrash };
+}
+
 /**
  * Initializes the local inference engine for the configured model.
  *  - `.task` models use MediaPipe `tasks-genai` (GemmaReactNativeModule).
@@ -299,7 +372,7 @@ export async function initializeLocalModel(throwOnFallback: boolean = false): Pr
     try {
       const cleanPath = modelPath.startsWith('file://') ? modelPath.slice(7) : modelPath;
       const ctxSize = useConfigStore.getState().localContextSize || 256;
-      const success = await NeedleModule.init(cleanPath, ctxSize, NEEDLE_DEVICE_TOOLS_JSON);
+      const success = await NeedleModule.init(cleanPath, ctxSize, '', '', NEEDLE_DEVICE_TOOLS_JSON);
       if (!success) {
         throw new Error('NeedleModule initialization returned false');
       }
@@ -372,6 +445,20 @@ export async function initializeLocalModel(throwOnFallback: boolean = false): Pr
     }
   } else if (GemmaNative && typeof GemmaNative.initializeLocalModel === 'function') {
     // ---- MediaPipe engine (.task) ----
+    // MediaPipe floor constraint: tasks-genai >= 0.10.24 must be preserved (see CONTEXT.md).
+    const vendor = await detectGpuVendor();
+    const userOverride = useConfigStore.getState().gpuBackendPreference;
+    const { targetBackend, forceCpuFromCrash } = await resolveLiteRtBackend(
+      vendor,
+      userOverride,
+      localModelName
+    );
+
+    if (forceCpuFromCrash) {
+      localLlmFallbackReason =
+        'LiteRT GPU crash detected on previous run; booted in CPU-safe mode. The local model is NOT running on GPU.';
+    }
+
     try {
       // MediaPipe only accepts LiteRT `.task` bundles. A GGUF file here means
       // the model list is stale — fail loudly instead of pretending to work.
@@ -383,28 +470,53 @@ export async function initializeLocalModel(throwOnFallback: boolean = false): Pr
         );
       }
 
-      const cleanPath = modelPath.startsWith('file://') ? modelPath.slice(7) : modelPath;
-      await GemmaNative.initializeLocalModel(cleanPath);
+      if (isGpuBackend(targetBackend)) {
+        await beginGpuInitSession(targetBackend, localModelName);
+      }
+
+      try {
+        const cleanPath = modelPath.startsWith('file://') ? modelPath.slice(7) : modelPath;
+        await GemmaNative.initializeLocalModel(cleanPath);
+      } finally {
+        if (isGpuBackend(targetBackend)) {
+          await completeGpuInitSession();
+        }
+      }
+
+      if (forceCpuFromCrash) {
+        await markGpuCrashFlagConsumed();
+      }
+
       loadedModelName = localModelName;
       loadedModelFormat = 'task';
       notifyLoadedStateChanged();
     } catch (error: any) {
+      if (isGpuBackend(targetBackend)) {
+        await completeGpuInitSession();
+      }
       const reason = error?.message || String(error);
       console.warn('Native local LLM initialization failed, using mock fallback:', reason);
       loadedModelName = null;
       loadedModelFormat = null;
       notifyLoadedStateChanged();
       useFallback = true;
-      localLlmFallbackReason = reason;
+      localLlmFallbackReason = forceCpuFromCrash
+        ? `LiteRT GPU crash detected on previous run; booted in CPU-safe mode. Native init failed: ${reason}`
+        : reason;
       await new Promise((resolve) => setTimeout(resolve, 50));
       if (throwOnFallback) {
         throw new Error(reason);
       }
     }
   } else {
+    await detectCrashedGpuInit();
+    const crashDetails = await getGpuCrashFlagDetails();
+    const hasCrashFlag = Boolean(crashDetails && !crashDetails.consumed);
+
     useFallback = true;
-    localLlmFallbackReason =
-      'Native local-inference module unavailable in this build (Expo Go or web). Use a development build.';
+    localLlmFallbackReason = hasCrashFlag
+      ? 'LiteRT GPU crash detected on previous run; booted in CPU-safe mode (mock fallback). The local model is NOT running on GPU.'
+      : 'Native local-inference module unavailable in this build (Expo Go or web). Use a development build.';
     await new Promise((resolve) => setTimeout(resolve, 50));
     if (throwOnFallback) {
       throw new Error(localLlmFallbackReason);
@@ -490,14 +602,44 @@ export async function* streamLocalLlmResponse(
         }
       };
 
-      sub = NeedleModule.addListener((event: any) => {
+      // #295 F2: the native side now emits exactly one payload event per
+      // completion, but a stale/legacy build may still send `token` and then
+      // `tool_call`/`refusal` carrying the same JSON. Never queue the same
+      // payload twice, so the agent loop sees the envelope exactly once.
+      // (Tokens are only compared against payloads, never against each other,
+      // so legitimately repeated plain tokens still stream through.)
+      let lastToken = '';
+      let lastPayload = '';
+      const sameText = (a: string, b: string) => b.trim() !== '' && a.trim() === b.trim();
+
+      sub = NeedleModule.addListener((event: NeedleStreamEvent) => {
         if (event.type === 'token' && event.token) {
           hasReceivedStreamTokens = true;
-          queue.push(event.token);
+          if (!sameText(event.token, lastPayload)) {
+            lastToken = event.token;
+            queue.push(event.token);
+          }
           notify();
         } else if (event.type === 'tool_call' && event.data) {
+          // #295: `data` is either the flat mock call or the real engine envelope
+          // ({type:'call', function_calls, reasoning, confidence}). Forward it
+          // verbatim so reasoning + confidence survive into parseToolCall.
           hasReceivedStreamTokens = true;
-          queue.push(event.data);
+          if (!sameText(event.data, lastToken) && !sameText(event.data, lastPayload)) {
+            lastPayload = event.data;
+            queue.push(event.data);
+          }
+          notify();
+        } else if (event.type === 'refusal') {
+          // #295: the engine answered with an empty function_calls [] — a refusal
+          // to call a tool. Forward the envelope/reason as text so the agent loop
+          // can flag it; no tool_call event is ever raised for this case.
+          hasReceivedStreamTokens = true;
+          const payload = event.data || event.reasoning;
+          if (payload && !sameText(payload, lastToken) && !sameText(payload, lastPayload)) {
+            lastPayload = payload;
+            queue.push(payload);
+          }
           notify();
         } else if (event.type === 'done') {
           state.finished = true;

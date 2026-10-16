@@ -15,6 +15,12 @@ jest.mock('expo-secure-store', () => ({
 }));
 
 import { useConfigStore } from '../store/useConfigStore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  LITERT_GPU_CRASH_FLAG_KEY,
+  LITERT_GPU_INIT_SESSION_KEY,
+  isGpuCrashFlagSet,
+} from '../utils/liteRtCrashFlag';
 
 describe('useConfigStore', () => {
   beforeEach(() => {
@@ -50,7 +56,73 @@ describe('useConfigStore', () => {
     expect(state.accentColor).toBe('indigo');
     expect(state.systemPrompt).toBe('You are an autonomous research agent.');
     expect(state.temperature).toBe(0.7);
+    expect(state.maxTokens).toBe(4096);
+    expect(state.contextCompression).toBe(true);
+    expect(state.systemPromptEnabled).toBe(true);
     expect(state.modelName).toBe('gemini-1.5-pro');
+    expect(state.maxSteps).toBe(15);
+    expect(state.maxStepsEnabled).toBe(true);
+    expect(state.gpuBackendPreference).toBe('auto');
+    expect(state.gpuQuantPreference).toBe('auto');
+  });
+
+  it('should initialize, update, and reset persisted toggles (temperature, maxTokens, contextCompression, systemPromptEnabled)', () => {
+    const state = useConfigStore.getState();
+    expect(state.temperature).toBe(0.7);
+    expect(state.maxTokens).toBe(4096);
+    expect(state.contextCompression).toBe(true);
+    expect(state.systemPromptEnabled).toBe(true);
+
+    state.setTemperature(0.2);
+    state.setMaxTokens(8192);
+    state.setContextCompression(false);
+    state.setSystemPromptEnabled(false);
+
+    let updated = useConfigStore.getState();
+    expect(updated.temperature).toBe(0.2);
+    expect(updated.maxTokens).toBe(8192);
+    expect(updated.contextCompression).toBe(false);
+    expect(updated.systemPromptEnabled).toBe(false);
+
+    updated.clearConfig();
+    let cleared = useConfigStore.getState();
+    expect(cleared.temperature).toBe(0.7);
+    expect(cleared.maxTokens).toBe(4096);
+    expect(cleared.contextCompression).toBe(true);
+    expect(cleared.systemPromptEnabled).toBe(true);
+  });
+
+  it('should allow updating maxSteps and maxStepsEnabled via setters', () => {
+    const state = useConfigStore.getState();
+    state.setMaxSteps(25);
+    state.setMaxStepsEnabled(false);
+
+    const updatedState = useConfigStore.getState();
+    expect(updatedState.maxSteps).toBe(25);
+    expect(updatedState.maxStepsEnabled).toBe(false);
+
+    updatedState.clearConfig();
+    const clearedState = useConfigStore.getState();
+    expect(clearedState.maxSteps).toBe(15);
+    expect(clearedState.maxStepsEnabled).toBe(true);
+  });
+
+  it('should allow updating gpuBackendPreference and gpuQuantPreference via setters and reset via clearConfig', () => {
+    const state = useConfigStore.getState();
+    expect(state.gpuBackendPreference).toBe('auto');
+    expect(state.gpuQuantPreference).toBe('auto');
+
+    state.setGpuBackendPreference('vulkan');
+    state.setGpuQuantPreference('q4_0');
+
+    let updated = useConfigStore.getState();
+    expect(updated.gpuBackendPreference).toBe('vulkan');
+    expect(updated.gpuQuantPreference).toBe('q4_0');
+
+    updated.clearConfig();
+    let cleared = useConfigStore.getState();
+    expect(cleared.gpuBackendPreference).toBe('auto');
+    expect(cleared.gpuQuantPreference).toBe('auto');
   });
 
   it('should allow updating UI customizations and agent parameters via setters', () => {
@@ -72,10 +144,115 @@ describe('useConfigStore', () => {
     expect(updatedState.modelName).toBe('gemini-1.5-flash');
   });
 
+  it('should initialize default values for connection mode and cloud providers', () => {
+    const state = useConfigStore.getState();
+    expect(state.connectionMode).toBe('server');
+    expect(state.activeCloudProvider).toBe('gemini');
+    expect(state.cloudProviders.gemini).toBeDefined();
+    expect(state.cloudProviders.gemini.model).toBe('gemini-1.5-flash');
+    expect(state.cloudProviders.openai.model).toBe('gpt-4o-mini');
+  });
+
+  it('should allow updating connection mode and cloud provider settings', async () => {
+    const state = useConfigStore.getState();
+    state.setConnectionMode('cloud');
+    state.setActiveCloudProvider('anthropic');
+    state.setCloudProviderConfig('anthropic', { model: 'claude-3-7-sonnet' });
+    await state.setCloudApiKey('anthropic', 'sk-ant-test');
+
+    const updatedState = useConfigStore.getState();
+    expect(updatedState.connectionMode).toBe('cloud');
+    expect(updatedState.activeCloudProvider).toBe('anthropic');
+    expect(updatedState.cloudProviders.anthropic.model).toBe('claude-3-7-sonnet');
+    expect(updatedState.cloudApiKeys.anthropic).toBe('sk-ant-test');
+    expect(mockSecureStore['vela-key-anthropic']).toBe('sk-ant-test');
+
+    await state.deleteCloudApiKey('anthropic');
+    expect(useConfigStore.getState().cloudApiKeys.anthropic).toBeUndefined();
+    expect(mockSecureStore['vela-key-anthropic']).toBeUndefined();
+  });
+
+  it('migrates legacy isLocalMode === true to connectionMode local in v3 migrate', async () => {
+    const AsyncStorage = require('@react-native-async-storage/async-storage');
+    const { connectionMode, ...legacyState } = useConfigStore.getState();
+
+    await AsyncStorage.setItem(
+      'vela-config-storage',
+      JSON.stringify({
+        state: {
+          ...legacyState,
+          isLocalMode: true,
+        },
+        version: 2,
+      })
+    );
+
+    await useConfigStore.persist.rehydrate();
+    expect(useConfigStore.getState().connectionMode).toBe('local');
+
+    await AsyncStorage.removeItem('vela-config-storage');
+    useConfigStore.getState().clearConfig();
+  });
+
+  it('migrates legacy isLocalMode === false to connectionMode server in v3 migrate', async () => {
+    const AsyncStorage = require('@react-native-async-storage/async-storage');
+    const { connectionMode, ...legacyState } = useConfigStore.getState();
+
+    await AsyncStorage.setItem(
+      'vela-config-storage',
+      JSON.stringify({
+        state: {
+          ...legacyState,
+          isLocalMode: false,
+        },
+        version: 2,
+      })
+    );
+
+    await useConfigStore.persist.rehydrate();
+    expect(useConfigStore.getState().connectionMode).toBe('server');
+
+    await AsyncStorage.removeItem('vela-config-storage');
+    useConfigStore.getState().clearConfig();
+  });
+
+  it('evaluates isConfigured correctly for each connection mode', async () => {
+    const state = useConfigStore.getState();
+
+    // server mode: requires apiUrl and apiKey
+    state.setConnectionMode('server');
+    expect(useConfigStore.getState().isConfigured).toBe(false);
+    state.setConfig('https://example.com', 'server-key');
+    expect(useConfigStore.getState().isConfigured).toBe(true);
+
+    // local mode: requires localModelName
+    state.setConnectionMode('local');
+    expect(useConfigStore.getState().isConfigured).toBe(true);
+    state.setLocalModelName('');
+    expect(useConfigStore.getState().isConfigured).toBe(false);
+    state.setLocalModelName('DeepSeek-R1 1.5B (GGUF)');
+    expect(useConfigStore.getState().isConfigured).toBe(true);
+
+    // cloud mode: requires active provider model and apiKey
+    state.setConnectionMode('cloud');
+    state.setActiveCloudProvider('gemini');
+    expect(useConfigStore.getState().isConfigured).toBe(false);
+    await state.setCloudApiKey('gemini', 'gemini-key');
+    expect(useConfigStore.getState().isConfigured).toBe(true);
+
+    // custom provider: requires baseUrl in addition to model and apiKey
+    state.setActiveCloudProvider('custom');
+    state.setCloudProviderConfig('custom', { model: 'llama-3' });
+    await state.setCloudApiKey('custom', 'custom-key');
+    expect(useConfigStore.getState().isConfigured).toBe(false); // missing baseUrl
+    state.setCloudProviderConfig('custom', { baseUrl: 'https://custom.llm/v1' });
+    expect(useConfigStore.getState().isConfigured).toBe(true);
+  });
+
   it('should initialize default values for local mode config', () => {
     const state = useConfigStore.getState();
     expect(state.localModelName).toBe('DeepSeek-R1 1.5B (GGUF)');
-    expect(state.isLocalMode).toBe(false);
+    expect(state.connectionMode).toBe('server');
     expect(state.localModelDownloadProgress).toBeNull();
     expect(state.wifiOnlyDownload).toBe(true);
     expect(state.localContextSize).toBe(2048);
@@ -87,7 +264,7 @@ describe('useConfigStore', () => {
   it('should allow updating local mode config via setters', () => {
     const state = useConfigStore.getState();
     state.setLocalModelName('Phi-3 Mini');
-    state.setIsLocalMode(true);
+    state.setConnectionMode('local');
     state.setLocalModelDownloadProgress(50);
     state.setWifiOnlyDownload(false);
     state.setLocalContextSize(1024);
@@ -97,13 +274,44 @@ describe('useConfigStore', () => {
 
     const updatedState = useConfigStore.getState();
     expect(updatedState.localModelName).toBe('Phi-3 Mini');
-    expect(updatedState.isLocalMode).toBe(true);
+    expect(updatedState.connectionMode).toBe('local');
     expect(updatedState.localModelDownloadProgress).toBe(50);
     expect(updatedState.wifiOnlyDownload).toBe(false);
     expect(updatedState.localContextSize).toBe(1024);
     expect(updatedState.localMaxTokens).toBe(256);
     expect(updatedState.localConfigAutoApplied).toBe(true);
     expect(updatedState.detectedRamBytes).toBe(4000000000);
+  });
+
+  // #294 — 'Cactus Needle 45M' was hard-migrated to the live Cactus-Compute
+  // needle2/needle3 entries (its old HF URL is dead, HTTP 401). A
+  // persisted v1 selection of the removed name must fall back to the default,
+  // never crash or leave local mode pointing at a model that no longer exists.
+  it('resets a persisted stale "Cactus Needle 45M" selection on rehydrate (v1 → v2 migrate)', async () => {
+    const AsyncStorage = require('@react-native-async-storage/async-storage');
+    await AsyncStorage.setItem(
+      'vela-config-storage',
+      JSON.stringify({
+        state: {
+          ...useConfigStore.getState(),
+          localModelName: 'Cactus Needle 45M',
+          isLocalMode: true,
+        },
+        version: 1,
+      })
+    );
+
+    await useConfigStore.persist.rehydrate();
+
+    expect(useConfigStore.getState().localModelName).toBe('DeepSeek-R1 1.5B (GGUF)');
+    expect(useConfigStore.getState().connectionMode).toBe('server');
+
+    // Cleanup: drop the seeded payload and restore defaults for later tests.
+    await AsyncStorage.removeItem('vela-config-storage');
+    useConfigStore.setState({
+      localModelName: 'DeepSeek-R1 1.5B (GGUF)',
+      connectionMode: 'server',
+    });
   });
 
   it('should default tap/type/swipe device permissions to confirm (audit fix regression guard)', () => {
@@ -122,7 +330,21 @@ describe('useConfigStore', () => {
     const perms = useConfigStore.getState().deviceAgentPermissions;
     expect(perms.tap).toBe('deny');
     expect(perms.type).toBe('confirm'); // untouched
-    expect(Object.keys(perms).length).toBe(20); // no categories lost
+    expect(perms.contacts).toBe('auto'); // contacts initialized with auto
+    expect(Object.keys(perms).length).toBe(21); // no categories lost (21 categories including contacts)
+  });
+
+  it('should reset deviceAgentPermissions to defaults on clearConfig', () => {
+    useConfigStore.getState().setDeviceAgentPermission('contacts', 'deny');
+    useConfigStore.getState().setDeviceAgentPermission('tap', 'auto');
+    expect(useConfigStore.getState().deviceAgentPermissions.contacts).toBe('deny');
+    expect(useConfigStore.getState().deviceAgentPermissions.tap).toBe('auto');
+
+    useConfigStore.getState().clearConfig();
+    const perms = useConfigStore.getState().deviceAgentPermissions;
+    expect(perms.contacts).toBe('auto');
+    expect(perms.tap).toBe('confirm');
+    expect(Object.keys(perms).length).toBe(21);
   });
 
   it('should have default suggestion starters', () => {
@@ -133,7 +355,7 @@ describe('useConfigStore', () => {
 
   it('should update suggestion starters correctly', () => {
     useConfigStore.getState().setSuggestionStarters([
-      { label: 'Test Label', text: 'Test text', persona: 'teacher' }
+      { label: 'Test Label', text: 'Test text', agent: 'teacher' }
     ]);
     expect(useConfigStore.getState().suggestionStarters.length).toBe(1);
     expect(useConfigStore.getState().suggestionStarters[0].label).toBe('Test Label');
@@ -156,5 +378,49 @@ describe('useConfigStore', () => {
     const parsed = JSON.parse(asyncStorageVal);
     expect(parsed.state.apiKey).toBe('');
     expect(parsed.state.apiUrl).toBe('https://api.vela.local');
+  });
+
+  it('hydrates persisted toggles correctly on rehydrate', async () => {
+    const AsyncStorage = require('@react-native-async-storage/async-storage');
+    await AsyncStorage.setItem(
+      'vela-config-storage',
+      JSON.stringify({
+        state: {
+          ...useConfigStore.getState(),
+          temperature: 0.3,
+          maxTokens: 2048,
+          contextCompression: false,
+          systemPromptEnabled: false,
+        },
+        version: 5,
+      })
+    );
+
+    await useConfigStore.persist.rehydrate();
+
+    const hydrated = useConfigStore.getState();
+    expect(hydrated.temperature).toBe(0.3);
+    expect(hydrated.maxTokens).toBe(2048);
+    expect(hydrated.contextCompression).toBe(false);
+    expect(hydrated.systemPromptEnabled).toBe(false);
+
+    await AsyncStorage.removeItem('vela-config-storage');
+    useConfigStore.getState().clearConfig();
+  });
+
+  it('clears the LiteRT crash keys on clearConfig', async () => {
+    await AsyncStorage.setItem(
+      LITERT_GPU_CRASH_FLAG_KEY,
+      JSON.stringify({ backend: 'opencl', modelName: 'm', timestamp: 1, consumed: false })
+    );
+    await AsyncStorage.setItem(
+      LITERT_GPU_INIT_SESSION_KEY,
+      JSON.stringify({ backend: 'opencl', modelName: 'm', timestamp: 1 })
+    );
+
+    useConfigStore.getState().clearConfig();
+
+    expect(await isGpuCrashFlagSet()).toBe(false);
+    expect(await AsyncStorage.getItem(LITERT_GPU_INIT_SESSION_KEY)).toBeNull();
   });
 });

@@ -16,7 +16,15 @@ from tools.device_agent import (
     device_open_app,
     device_set_volume,
     device_screenshot,
-    device_info
+    device_info,
+    device_app_permission_grant,
+    device_app_permission_revoke,
+    device_setting_put,
+    device_app_force_stop,
+    device_app_set_state,
+    device_app_clear_data,
+    device_app_install,
+    device_app_uninstall,
 )
 
 tools_list = [
@@ -41,6 +49,14 @@ tools_list = [
     device_set_volume,
     device_screenshot,
     device_info,
+    device_app_permission_grant,
+    device_app_permission_revoke,
+    device_setting_put,
+    device_app_force_stop,
+    device_app_set_state,
+    device_app_clear_data,
+    device_app_install,
+    device_app_uninstall,
 ]
 
 __all__ = ["tools_list"]

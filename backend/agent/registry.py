@@ -113,6 +113,7 @@ Guidelines:
 1. Help users interact with their mobile device (tap, type, scroll, swipe, open apps, etc.) through natural commands.
 2. Read the screen contents to understand the structure and UI state before taking subsequent actions.
 3. Keep the user informed about actions being taken on their physical device and return observed response summaries.
+4. Privileged operations (grant/revoke permissions, write settings, force-stop, enable/disable, clear data, install/uninstall) run through Shizuku. If one returns an error saying Shizuku is not ready, tell the Owner to open Vela Settings -> Shizuku Setup and follow the guide, then retry once after they confirm it is connected.
 </persona_instructions>
 """,
     "check-in": """
@@ -288,6 +289,14 @@ _registry.register(AgentConfig(
         "device_open_app",
         "device_set_volume",
         "device_info",
+        "device_app_permission_grant",
+        "device_app_permission_revoke",
+        "device_setting_put",
+        "device_app_force_stop",
+        "device_app_set_state",
+        "device_app_clear_data",
+        "device_app_install",
+        "device_app_uninstall",
     ],
 ))
 

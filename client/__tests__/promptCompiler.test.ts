@@ -31,7 +31,7 @@ describe('promptCompiler utility', () => {
   });
 
   it('should enforce limits system content tools', () => {
-    const superLongSystem = 'A'.repeat(2000);
+    const superLongSystem = 'A'.repeat(3000);
     const superLongTools = ['B'.repeat(1000)];
 
     const params = {
@@ -42,9 +42,10 @@ describe('promptCompiler utility', () => {
 
     const result = compileLocalPrompt(params);
 
-    //Verify system content truncated 1200
+    //Verify system content truncated at CHAR_LIMIT_SYSTEM (2500 — raised from
+    //1200 so skill prompts up to ~1891 chars survive truncation)
     const systemBlock = /<system>\n([\s\S]*?)\n<\/system>/.exec(result)?.[1] || '';
-    expect(systemBlock.length).toBe(1200);
+    expect(systemBlock.length).toBe(2500);
 
     //Verify tools block truncated 800
     const toolsBlock = /<tools>\n([\s\S]*?)\n<\/tools>/.exec(result)?.[1] || '';

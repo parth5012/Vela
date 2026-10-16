@@ -1,4 +1,3 @@
-import os
 from utils.logger import StructuredLogger
 from db.session import get_db_session
 from db.client import DBClient

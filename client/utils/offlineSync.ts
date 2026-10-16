@@ -13,7 +13,7 @@ let wired = false;
  */
 export async function flushPendingMessages(): Promise<void> {
   const config = useConfigStore.getState();
-  if (config.isLocalMode || !config.apiUrl || !config.apiKey) {
+  if (config.connectionMode !== 'server' || !config.apiUrl || !config.apiKey) {
     return;
   }
   try {

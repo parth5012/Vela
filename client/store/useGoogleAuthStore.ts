@@ -56,15 +56,11 @@ interface GoogleAuthState {
   setSigningIn: (val: boolean) => void;
   setError: (err: string | null) => void;
   setBackendConnected: (val: boolean | null) => void;
-  setScopes: (scopes: GoogleWorkspaceScope[]) => void;
   clearAuth: () => void;
-  getAccessToken: () => string;
-  getRefreshToken: () => string;
-  getIdToken: () => string;
 }
 
 // Workspace scopes for agent access
-export const WORKSPACE_SCOPES: GoogleWorkspaceScope[] = [
+const WORKSPACE_SCOPES: GoogleWorkspaceScope[] = [
   'openid',
   'profile',
   'email',
@@ -77,7 +73,7 @@ export const WORKSPACE_SCOPES: GoogleWorkspaceScope[] = [
 
 export const useGoogleAuthStore = create<GoogleAuthState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       isConnected: false,
       isSigningIn: false,
       user: null,
@@ -108,8 +104,6 @@ export const useGoogleAuthStore = create<GoogleAuthState>()(
 
       setBackendConnected: (val) => set({ backendConnected: val }),
 
-      setScopes: (scopes) => set({ scopes }),
-
       clearAuth: () => {
         set({
           isConnected: false,
@@ -123,10 +117,6 @@ export const useGoogleAuthStore = create<GoogleAuthState>()(
           isSigningIn: false,
         });
       },
-
-      getAccessToken: () => get()._accessToken,
-      getRefreshToken: () => get()._refreshToken,
-      getIdToken: () => get()._idToken,
     }),
     {
       name: 'vela-google-auth-storage',
@@ -140,11 +130,3 @@ export const useGoogleAuthStore = create<GoogleAuthState>()(
     }
   )
 );
-
-// --- Async init: clear any stale state on app launch ---
-// In the new backend-managed OAuth flow, tokens live on the backend,
-// so we just mark as disconnected on cold start until verified.
-
-export async function hydrateGoogleTokens(): Promise<void> {
-  // No-op: tokens are managed by the backend now
-}

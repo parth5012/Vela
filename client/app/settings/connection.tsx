@@ -1,18 +1,88 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Text, Keyboard, View, Switch, Pressable, ActivityIndicator } from 'react-native';
+import { Text, Keyboard, View, Switch, Pressable, ActivityIndicator, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useConfigStore } from '../../store/useConfigStore';
+import { useRouter } from 'expo-router';
+import { useConfigStore, ConnectionMode } from '../../store/useConfigStore';
 import { useBrowserStore } from '../../store/useBrowserStore';
 import { syncHistoryWithBackend } from '../../utils/history';
 import { getAllCookies, clearAll } from '../../utils/cookieSync';
+import {
+  getUnsyncedLocalCount,
+  syncStandaloneDataToBackend,
+  subscribeToStandaloneSync,
+  StandaloneSyncStatus,
+} from '../../utils/syncManager';
 import GoogleWorkspaceCard from '../../components/ui/GoogleWorkspaceCard';
-import { AuroraScreen, Card, Field, PrimaryButton, Label, useAurora } from '../../components/ui/settingsKit';
+import {
+  AuroraScreen,
+  Card,
+  Field,
+  PrimaryButton,
+  SecondaryButton,
+  Label,
+  PillGroup,
+  useAurora,
+} from '../../components/ui/settingsKit';
+
+const MODE_OPTIONS = [
+  { value: 'server' as const, label: '🖥️ Server' },
+  { value: 'local' as const, label: '🤖 Local AI' },
+  { value: 'cloud' as const, label: '☁️ Cloud APIs' },
+];
 
 export default function ConnectionScreen() {
+  const router = useRouter();
+  const connectionMode = useConfigStore((s) => s.connectionMode);
+  const setConnectionMode = useConfigStore((s) => s.setConnectionMode);
+  const activeCloudProvider = useConfigStore((s) => s.activeCloudProvider);
+  const localModelName = useConfigStore((s) => s.localModelName);
   const apiUrl = useConfigStore((s) => s.apiUrl);
   const apiKey = useConfigStore((s) => s.apiKey);
   const setConfig = useConfigStore((s) => s.setConfig);
   const { colors, sizes, aurora } = useAurora();
+
+  const [syncStatus, setSyncStatus] = useState<StandaloneSyncStatus>({
+    isSyncing: false,
+    message: null,
+    pushedCount: 0,
+  });
+
+  useEffect(() => {
+    const unsub = subscribeToStandaloneSync(setSyncStatus);
+    return unsub;
+  }, []);
+
+  const handleModeChange = async (newMode: ConnectionMode) => {
+    if (newMode === 'server' && connectionMode !== 'server') {
+      try {
+        const unsyncedCount = await getUnsyncedLocalCount();
+        if (unsyncedCount > 0 && apiUrl && apiKey) {
+          Alert.alert(
+            'Sync Local Data to Server?',
+            `You have ${unsyncedCount} standalone message${unsyncedCount === 1 ? '' : 's'}. Would you like to sync them to your server now?`,
+            [
+              {
+                text: 'Not Now',
+                style: 'cancel',
+                onPress: () => setConnectionMode('server'),
+              },
+              {
+                text: 'Sync to Server',
+                onPress: () => {
+                  setConnectionMode('server');
+                  void syncStandaloneDataToBackend(apiUrl, apiKey);
+                },
+              },
+            ]
+          );
+          return;
+        }
+      } catch {
+        // fallback to direct switch
+      }
+    }
+    setConnectionMode(newMode);
+  };
 
   const [url, setUrl] = useState(apiUrl);
   const [key, setKey] = useState(apiKey);
@@ -122,10 +192,72 @@ export default function ConnectionScreen() {
 
   return (
     <AuroraScreen
-      title="Server & API Key"
-      subtitle="The remote endpoint and auth token used to reach your Vela FastAPI node."
+      title="Connection & Mode"
+      subtitle="Configure how Vela connects: self-hosted backend server, on-device local AI, or direct cloud APIs."
     >
+      {(syncStatus.isSyncing || Boolean(syncStatus.message)) && (
+        <Card style={{ borderColor: aurora.acc1, borderWidth: 1, backgroundColor: 'rgba(255, 255, 255, 0.05)' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            {syncStatus.isSyncing ? (
+              <ActivityIndicator size="small" color={aurora.acc1} />
+            ) : null}
+            <Text style={{ color: colors.text, fontSize: sizes.sub, flex: 1 }}>
+              {syncStatus.message || 'Syncing conversations with server...'}
+            </Text>
+          </View>
+        </Card>
+      )}
+
       <Card>
+        <Label>Connection Mode</Label>
+        <PillGroup
+          options={MODE_OPTIONS}
+          value={connectionMode}
+          onChange={(m) => handleModeChange(m as ConnectionMode)}
+        />
+        <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, marginTop: 8 }}>
+          {connectionMode === 'server'
+            ? 'Backend Server: Connects to your self-hosted Vela backend for synchronization and agent tools.'
+            : connectionMode === 'local'
+            ? 'Local AI: Runs GGUF / LiteRT on-device inference entirely offline with zero data leaving your phone.'
+            : 'Cloud APIs: Calls Google Gemini, OpenAI, Anthropic, OpenRouter, or Groq directly via Vercel AI SDK.'}
+        </Text>
+      </Card>
+
+      {connectionMode === 'cloud' && (
+        <Card style={{ borderColor: aurora.acc1, borderWidth: 1 }}>
+          <Label>Direct Cloud Providers</Label>
+          <Text style={{ color: colors.text, fontSize: sizes.text, fontWeight: '700', marginBottom: 4 }}>
+            Active Provider: {(activeCloudProvider || 'gemini').toUpperCase()}
+          </Text>
+          <Text style={{ color: colors.textMuted, fontSize: sizes.sub, marginBottom: 16 }}>
+            Direct device-to-cloud streaming via Vercel AI SDK. All thread and message data remains securely stored in local SQLite.
+          </Text>
+          <PrimaryButton
+            label="Configure Cloud Providers"
+            onPress={() => router.push('/settings/cloud-providers' as any)}
+          />
+        </Card>
+      )}
+
+      {connectionMode === 'local' && (
+        <Card style={{ borderColor: aurora.acc1, borderWidth: 1 }}>
+          <Label>On-Device Inference</Label>
+          <Text style={{ color: colors.text, fontSize: sizes.text, fontWeight: '700', marginBottom: 4 }}>
+            Active Model: {localModelName || 'None selected'}
+          </Text>
+          <Text style={{ color: colors.textMuted, fontSize: sizes.sub, marginBottom: 16 }}>
+            On-device inference with RAM detection, GGUF/LiteRT model downloads, and zero network calls.
+          </Text>
+          <PrimaryButton
+            label="Configure Local Models"
+            onPress={() => router.push('/settings/local-ai' as any)}
+          />
+        </Card>
+      )}
+
+      <Card>
+        <Label>{connectionMode === 'server' ? 'Server Credentials' : 'Server Settings (Optional in Standalone)'}</Label>
         <Field
           label="Server URL"
           placeholder="https://api.vela.local"
@@ -166,6 +298,16 @@ export default function ConnectionScreen() {
           loading={isTesting}
           disabled={isTesting}
         />
+
+        {apiUrl && apiKey ? (
+          <View style={{ marginTop: 12 }}>
+            <SecondaryButton
+              label={syncStatus.isSyncing ? 'Syncing...' : 'Sync Standalone Data to Server'}
+              onPress={() => syncStandaloneDataToBackend(apiUrl, apiKey)}
+              disabled={syncStatus.isSyncing}
+            />
+          </View>
+        ) : null}
       </Card>
 
       <Card>

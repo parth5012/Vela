@@ -16,6 +16,9 @@ import {
   clearChatLocal,
   isLocalDbAvailable,
 } from '../db/chatRepository';
+import type { SkillId } from '../utils/skillPrompts';
+import { DEFAULT_AGENT_ID } from '../utils/agents';
+import { stripReasoning } from '../utils/reasoning';
 
 // Trailing debounce (ms) for persisting streaming assistant content: tokens
 // arrive frequently during a stream, so we only write the final content once
@@ -35,7 +38,29 @@ function scheduleMessagePersist(threadId: string) {
     const list = state.messages[threadId] || [];
     const last = list[list.length - 1];
     if (last) {
-      saveMessage(threadId, last).catch(() => {});
+      const sanitized =
+        last.role === 'assistant'
+          ? { ...last, content: stripReasoning(last.content, false) }
+          : last;
+      if (
+        !state.isThreadStreaming(threadId) &&
+        last.role === 'assistant' &&
+        sanitized.content !== last.content
+      ) {
+        useChatStore.setState((s) => {
+          const currentList = s.messages[threadId] || [];
+          if (currentList.length === 0) return {};
+          const currentLast = currentList[currentList.length - 1];
+          if (currentLast.id !== last.id) return {};
+          return {
+            messages: {
+              ...s.messages,
+              [threadId]: [...currentList.slice(0, -1), sanitized],
+            },
+          };
+        });
+      }
+      saveMessage(threadId, sanitized).catch(() => {});
     }
   }, PERSIST_DEBOUNCE_MS);
 }
@@ -86,7 +111,8 @@ export interface Thread {
   title: string;
   updated_at: string;
   is_pinned?: boolean;
-  persona?: string;
+  agent?: string;
+  active_skill?: string | null;
 }
 
 interface ChatState {
@@ -95,12 +121,13 @@ interface ChatState {
   messages: Record<string, Message[]>;
   streamingThreadIds: Set<string>;
   hasHydrated: boolean;
-  createThread: (title: string, id: string, persona?: string) => void;
+  createThread: (title: string, id: string, agent?: string) => void;
   selectThread: (id: string | null) => void;
   deleteThread: (id: string) => void;
   renameThread: (id: string, newTitle: string) => void;
   togglePinThread: (id: string) => void;
-  setThreadPersona: (threadId: string, persona: string) => void;
+  setThreadAgent: (threadId: string, agent: string) => void;
+  setThreadSkill: (threadId: string, skillId: SkillId | null) => void;
   addMessage: (threadId: string, message: Message) => void;
   appendToken: (threadId: string, token: string) => void;
   removeLastEmptyAssistant: (threadId: string) => void;
@@ -122,9 +149,13 @@ export const useChatStore = create<ChatState>()(
       messages: {},
       streamingThreadIds: new Set(),
       hasHydrated: false,
-      createThread: (title, id, persona = 'personal assistant') => {
+      createThread: (title, id, agent) => {
+        // #357: a new conversation reads the configured default agent
+        // explicitly, so it never inherits whatever agent the previous
+        // thread happened to be on.
+        const resolvedAgent = agent || useConfigStore.getState().defaultAgent || DEFAULT_AGENT_ID;
         const now = new Date().toISOString();
-        const newThread: Thread = { id, title, persona, updated_at: now, is_pinned: false };
+        const newThread: Thread = { id, title, agent: resolvedAgent, updated_at: now, is_pinned: false };
         set((state) => ({
           threads: [newThread, ...state.threads],
           activeThreadId: id,
@@ -153,7 +184,7 @@ export const useChatStore = create<ChatState>()(
           deleteThreadLocal(id).catch(() => {});
         };
 
-        if (!config.isLocalMode && config.apiUrl && config.apiKey) {
+        if (config.connectionMode === 'server' && config.apiUrl && config.apiKey) {
           const formattedUrl = normalizeUrl(config.apiUrl);
           fetch(`${formattedUrl}/chat/threads/${id}`, {
             method: 'DELETE',
@@ -175,6 +206,10 @@ export const useChatStore = create<ChatState>()(
         doLocalDelete();
       },
   addMessage: (threadId, message) => {
+    const sanitizedMessage =
+      message.role === 'assistant'
+        ? { ...message, content: stripReasoning(message.content, false) }
+        : message;
     const now = new Date().toISOString();
     set((state) => {
       const current = state.messages[threadId] || [];
@@ -189,7 +224,7 @@ export const useChatStore = create<ChatState>()(
         updatedThreads = [updatedThread, ...updatedThreads];
       }
       return {
-        messages: { ...state.messages, [threadId]: [...current, message] },
+        messages: { ...state.messages, [threadId]: [...current, sanitizedMessage] },
         threads: updatedThreads
       };
     });
@@ -200,7 +235,7 @@ export const useChatStore = create<ChatState>()(
     if (updatedThread) {
       saveThread(updatedThread).catch(() => {});
     }
-    saveMessage(threadId, message).catch(() => {});
+    saveMessage(threadId, sanitizedMessage).catch(() => {});
   },
       appendToken: (threadId, token) => {
         set((state) => {
@@ -230,7 +265,7 @@ export const useChatStore = create<ChatState>()(
     }),
     renameThread: async (id, newTitle) => {
       const config = useConfigStore.getState();
-      if (!config.isLocalMode && config.apiUrl && config.apiKey) {
+      if (config.connectionMode === 'server' && config.apiUrl && config.apiKey) {
         const formattedUrl = normalizeUrl(config.apiUrl);
         try {
           let res = await fetch(`${formattedUrl}/chat/threads/${id}`, {
@@ -290,7 +325,7 @@ export const useChatStore = create<ChatState>()(
       },
       togglePinThread: async (id) => {
         const config = useConfigStore.getState();
-        if (!config.isLocalMode && config.apiUrl && config.apiKey) {
+        if (config.connectionMode === 'server' && config.apiUrl && config.apiKey) {
           const formattedUrl = normalizeUrl(config.apiUrl);
           const thread = useChatStore.getState().threads.find((t) => t.id === id);
           if (thread) {
@@ -318,9 +353,18 @@ export const useChatStore = create<ChatState>()(
         const pinned = useChatStore.getState().threads.find((t) => t.id === id);
         if (pinned) saveThread(pinned).catch(() => {});
       },
-      setThreadPersona: (threadId, persona) => {
+      setThreadAgent: (threadId, agent) => {
         set((state) => ({
-          threads: state.threads.map((t) => t.id === threadId ? { ...t, persona } : t)
+          threads: state.threads.map((t) => t.id === threadId ? { ...t, agent } : t)
+        }));
+        const updated = useChatStore.getState().threads.find((t) => t.id === threadId);
+        if (updated) saveThread(updated).catch(() => {});
+      },
+      setThreadSkill: (threadId, skillId) => {
+        set((state) => ({
+          threads: state.threads.map((t) =>
+            t.id === threadId ? { ...t, active_skill: skillId } : t
+          ),
         }));
         const updated = useChatStore.getState().threads.find((t) => t.id === threadId);
         if (updated) saveThread(updated).catch(() => {});
@@ -336,15 +380,20 @@ export const useChatStore = create<ChatState>()(
         }));
         saveMessages(threadId, history).catch(() => {});
       },
-      setStreamingThread: (threadId, isStreaming) => set((state) => {
-        const next = new Set(state.streamingThreadIds);
-        if (isStreaming) {
-          next.add(threadId);
-        } else {
-          next.delete(threadId);
+      setStreamingThread: (threadId, isStreaming) => {
+        set((state) => {
+          const next = new Set(state.streamingThreadIds);
+          if (isStreaming) {
+            next.add(threadId);
+          } else {
+            next.delete(threadId);
+          }
+          return { streamingThreadIds: next };
+        });
+        if (!isStreaming) {
+          scheduleMessagePersist(threadId);
         }
-        return { streamingThreadIds: next };
-      }),
+      },
       isThreadStreaming: (threadId) => get().streamingThreadIds.has(threadId),
       clearStore: () => {
         set({ threads: [], activeThreadId: null, messages: {}, streamingThreadIds: new Set() });
@@ -353,7 +402,7 @@ export const useChatStore = create<ChatState>()(
       setHasHydrated: (hasHydrated) => set({ hasHydrated }),
       branchThread: async (parentThreadId, uptoMessageId, newThreadId, title) => {
         const config = useConfigStore.getState();
-        if (!config.isLocalMode && config.apiUrl && config.apiKey) {
+        if (config.connectionMode === 'server' && config.apiUrl && config.apiKey) {
           const formattedUrl = normalizeUrl(config.apiUrl);
           try {
             const res = await fetch(`${formattedUrl}/chat/threads/branch`, {
@@ -382,10 +431,12 @@ export const useChatStore = create<ChatState>()(
           const index = parentMessages.findIndex((m) => m.id === uptoMessageId);
           const branchedMessages = index !== -1 ? parentMessages.slice(0, index + 1) : [...parentMessages];
           
+          const parentThread = state.threads.find((t) => t.id === parentThreadId);
           const newThread = {
             id: newThreadId,
             title,
             updated_at: new Date().toISOString(),
+            active_skill: parentThread?.active_skill ?? null,
           };
 
           return {
@@ -399,13 +450,14 @@ export const useChatStore = create<ChatState>()(
         });
 
         const branched = useChatStore.getState().messages[newThreadId] || [];
-        saveThread({ id: newThreadId, title, updated_at: new Date().toISOString(), is_pinned: false }).catch(() => {});
+        const branchedThread = useChatStore.getState().threads.find((t) => t.id === newThreadId);
+        saveThread(branchedThread || { id: newThreadId, title, updated_at: new Date().toISOString(), is_pinned: false }).catch(() => {});
         saveMessages(newThreadId, branched).catch(() => {});
       },
 
       truncateThreadHistory: async (threadId, uptoMessageId) => {
         const config = useConfigStore.getState();
-        if (!config.isLocalMode && config.apiUrl && config.apiKey) {
+        if (config.connectionMode === 'server' && config.apiUrl && config.apiKey) {
           const formattedUrl = normalizeUrl(config.apiUrl);
           try {
             const res = await fetch(`${formattedUrl}/chat/threads/${threadId}/truncate`, {
@@ -446,6 +498,19 @@ export const useChatStore = create<ChatState>()(
     {
       name: 'vela-chat-storage',
       storage: createJSONStorage(() => guardedAsyncStorage),
+      version: 1,
+      migrate: (persistedState: any) => {
+        if (persistedState && Array.isArray(persistedState.threads)) {
+          persistedState.threads = persistedState.threads.map((thread: any) => {
+            if (thread && thread.persona !== undefined && thread.agent === undefined) {
+              const { persona, ...rest } = thread;
+              return { ...rest, agent: persona };
+            }
+            return thread;
+          });
+        }
+        return persistedState;
+      },
       partialize: (state) => ({
         threads: state.threads,
         activeThreadId: state.activeThreadId,

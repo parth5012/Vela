@@ -1,3 +1,12 @@
+/**
+ * Module: client/utils/cookieSync
+ * Intent: Cookie import/sync helpers - pure parsers plus optional native CookieManager bridge.
+ * Responsibilities: Owns CookieEntry type, Netscape/Chrome parsers, domain grouping, import/clear/getAll bridge.
+ * Public API: CookieEntry, parseNetscapeCookies, parseChromeJson, importCookies, clearAll, filterBySelectedDomains, getAllCookies, groupEntriesByDomain.
+ * Invariants: Parsers are pure; bridge dynamically requires @react-native-cookies/cookies and no-ops (no throw) when unavailable (web/jest).
+ * Side Effects: importCookies/clearAll write to native cookie store when available; dynamic require of native module.
+ * Maintenance: Update this block when exports, invariants, side effects, or ownership change.
+ */
 /** #155 Cookie Sync utility — pure parsers + CookieManager bridge */
 
 export interface CookieEntry {
