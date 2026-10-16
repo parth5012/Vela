@@ -414,6 +414,38 @@ export async function executeDeviceAction(
         }
         return { outcome: 'executed', observation: uri };
       }
+      case 'device_click':
+      case 'device_tap': {
+        const targetRef = target || '';
+        const success = await DeviceAgentNative.performAction('click', targetRef, '', '');
+        return success
+          ? { outcome: 'executed', observation: 'Success' }
+          : { outcome: 'failed', observation: 'Action failed' };
+      }
+      case 'device_type': {
+        const targetRef = target || '';
+        const val = value || '';
+        const success = await DeviceAgentNative.performAction('type', targetRef, val, '');
+        return success
+          ? { outcome: 'executed', observation: 'Success' }
+          : { outcome: 'failed', observation: 'Action failed' };
+      }
+      case 'device_scroll':
+      case 'device_swipe': {
+        const targetRef = target || '@e0';
+        const val = value || '';
+        const success = await DeviceAgentNative.performAction('scroll', targetRef, val, '');
+        return success
+          ? { outcome: 'executed', observation: 'Success' }
+          : { outcome: 'failed', observation: 'Action failed' };
+      }
+      case 'device_press_key': {
+        const key = value || target || 'back';
+        const success = await DeviceAgentNative.performAction('press_key', '', key, '');
+        return success
+          ? { outcome: 'executed', observation: 'Success' }
+          : { outcome: 'failed', observation: 'Action failed' };
+      }
       case 'device_call': {
         const phoneNumber = target || value || '';
         if (!phoneNumber) {
@@ -503,19 +535,10 @@ export async function executeDeviceAction(
       case 'device_open_app':
         return await handleOpenApp(target, value);
       default: {
-        let action = 'click';
-        if (toolName === 'device_type') action = 'type';
-        else if (toolName === 'device_scroll') action = 'scrollforward';
-        else if (toolName === 'device_swipe') action = 'scrollforward';
-        else if (toolName === 'device_press_key') action = 'click';
-
-        const targetRef = target || '';
-        const val = value || '';
-
-        const success = await DeviceAgentNative.performAction(action, targetRef, val, '');
-        return success
-          ? { outcome: 'executed', observation: 'Success' }
-          : { outcome: 'failed', observation: 'Action failed' };
+        return {
+          outcome: 'failed',
+          observation: `Action failed: Unknown device tool "${toolName}".`,
+        };
       }
     }
   } catch (e: any) {
