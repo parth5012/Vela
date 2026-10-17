@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PerformanceBaseline",
+  "description": "Standard schema for deep performance engineering baseline and benchmark run metrics.",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "default": "1.0.0"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "platform": {
+      "type": "string",
+      "enum": ["web", "mobile-android", "mobile-ios", "backend", "ai-agent"]
+    },
+    "environment": {
+      "type": "object",
+      "properties": {
+        "os": { "type": "string" },
+        "device": { "type": "string" },
+        "build_type": { "type": "string", "enum": ["release", "profile", "production"] },
+        "runtime": { "type": "string" }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["value"],
+        "properties": {
+          "value": { "type": "number" },
+          "unit": { "type": "string", "enum": ["ms", "s", "fps", "pct", "bytes", "mb", "commits", "tps", "ratio"] },
+          "lower_is_better": { "type": "boolean", "default": true },
+          "description": { "type": "string" },
+          "target": { "type": "number" },
+          "tier": { "type": "integer", "enum": [1, 2, 3] }
+        }
+      }
+    }
+  },
+  "required": ["metrics"]
+}
