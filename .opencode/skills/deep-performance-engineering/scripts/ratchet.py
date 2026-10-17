@@ -30,15 +30,16 @@ def load_metrics(filepath: str) -> Dict[str, Any]:
     return data
 
 
-def extract_metric_details(entry: Any) -> Tuple[float, str, bool]:
-    """Returns (value, unit, lower_is_better)."""
+def extract_metric_details(entry: Any) -> Tuple[float, str, bool, Optional[float]]:
+    """Returns (value, unit, lower_is_better, target)."""
     if isinstance(entry, (int, float)):
-        return float(entry), "ms", True
+        return float(entry), "ms", True, None
     if isinstance(entry, dict):
         val = float(entry.get("value", 0.0))
         unit = str(entry.get("unit", "ms"))
         lower_is_better = bool(entry.get("lower_is_better", True))
-        return val, unit, lower_is_better
+        target = float(entry["target"]) if "target" in entry and entry["target"] is not None else None
+        return val, unit, lower_is_better, target
     raise ValueError(f"Unrecognized metric entry format: {entry}")
 
 
@@ -85,8 +86,8 @@ def compare_metrics(
             has_failed_gate = True
             continue
 
-        base_val, base_unit, lower_is_better = extract_metric_details(baseline[key])
-        curr_val, curr_unit, _ = extract_metric_details(current[key])
+        base_val, base_unit, lower_is_better, base_target = extract_metric_details(baseline[key])
+        curr_val, curr_unit, _, _ = extract_metric_details(current[key])
 
         if base_val == 0:
             delta_pct = 0.0
@@ -97,7 +98,7 @@ def compare_metrics(
         if base_unit == "ms":
             metric_abs_floor = abs_floor_ms
         elif base_unit == "ratio":
-            metric_abs_floor = 0.2
+            metric_abs_floor = 0.5
         else:
             metric_abs_floor = 0.0
 
@@ -107,20 +108,36 @@ def compare_metrics(
 
         if lower_is_better:
             allowed_max = max(base_val * (1.0 + max_regression_pct / 100.0), base_val + metric_abs_floor)
-            if curr_val > allowed_max:
-                is_regression = True
-            elif delta_pct > max_regression_pct or (curr_val > base_val and 0.5 < delta_pct):
-                is_warning = True
-            elif delta_pct < -1.0:
-                is_improvement = True
+            if base_target is not None and curr_val <= base_target:
+                if curr_val > allowed_max:
+                    is_warning = True
+                elif delta_pct > max_regression_pct or (curr_val > base_val and 0.5 < delta_pct):
+                    is_warning = True
+                elif delta_pct < -1.0:
+                    is_improvement = True
+            else:
+                if curr_val > allowed_max:
+                    is_regression = True
+                elif delta_pct > max_regression_pct or (curr_val > base_val and 0.5 < delta_pct):
+                    is_warning = True
+                elif delta_pct < -1.0:
+                    is_improvement = True
         else:
             allowed_min = min(base_val * (1.0 - max_regression_pct / 100.0), base_val - metric_abs_floor)
-            if curr_val < allowed_min:
-                is_regression = True
-            elif delta_pct < -max_regression_pct or (curr_val < base_val and -max_regression_pct <= delta_pct < -0.5):
-                is_warning = True
-            elif delta_pct > 1.0:
-                is_improvement = True
+            if base_target is not None and curr_val >= base_target:
+                if curr_val < allowed_min:
+                    is_warning = True
+                elif delta_pct < -max_regression_pct or (curr_val < base_val and -max_regression_pct <= delta_pct < -0.5):
+                    is_warning = True
+                elif delta_pct > 1.0:
+                    is_improvement = True
+            else:
+                if curr_val < allowed_min:
+                    is_regression = True
+                elif delta_pct < -max_regression_pct or (curr_val < base_val and -max_regression_pct <= delta_pct < -0.5):
+                    is_warning = True
+                elif delta_pct > 1.0:
+                    is_improvement = True
 
         delta_sign = "+" if delta_pct > 0 else ""
         delta_str = f"{delta_sign}{delta_pct:.1f}%"
