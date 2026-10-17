@@ -1,0 +1,51 @@
+{
+  "version": "1.0.0",
+  "timestamp": "2026-10-17T15:37:59.836757+00:00",
+  "platform": "mobile-android",
+  "environment": {
+    "os": "Android 14 (API 34)",
+    "device": "emulator-5554",
+    "build_type": "release",
+    "runtime": "Hermes / React Native 0.86"
+  },
+  "metrics": {
+    "cold_launch_to_content_ms": {
+      "value": 348.0,
+      "unit": "ms",
+      "lower_is_better": true,
+      "target": 500.0,
+      "tier": 1,
+      "description": "Cold application launch time (TotalTime)"
+    },
+    "android_jank_frame_pct": {
+      "value": 50.0,
+      "unit": "pct",
+      "lower_is_better": true,
+      "target": 5.0,
+      "tier": 1,
+      "description": "Percentage of display frames exceeding 16.6ms deadline"
+    },
+    "p95_frame_duration_ms": {
+      "value": 21.000002,
+      "unit": "ms",
+      "lower_is_better": true,
+      "target": 16.6,
+      "tier": 1,
+      "description": "95th percentile display frame duration"
+    },
+    "dalvik_pss_delta_mb": {
+      "value": 3.12,
+      "unit": "mb",
+      "lower_is_better": true,
+      "tier": 2,
+      "description": "Dalvik PSS memory heap growth"
+    },
+    "native_pss_delta_mb": {
+      "value": 2.34,
+      "unit": "mb",
+      "lower_is_better": true,
+      "tier": 2,
+      "description": "Native PSS memory heap growth"
+    }
+  }
+}

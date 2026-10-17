@@ -91,6 +91,7 @@
     "web": "expo start --web",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "benchmark:ci": "jest __tests__/perf.benchmark.test.ts --runInBand",
     "test": "npm run lint && jest",
     "postinstall": "patch-package || echo \"patch-package: some patches failed but continuing\""
   },

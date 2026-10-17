@@ -9,8 +9,17 @@ const DATABASE_NAME = 'vela.db';
 let expoDbInstance: any = null;
 let dbInstance: any = null;
 
+export function configurePragmas(sqliteDb: any): void {
+  if (sqliteDb && typeof sqliteDb.execSync === 'function') {
+    sqliteDb.execSync('PRAGMA journal_mode = WAL;');
+    sqliteDb.execSync('PRAGMA busy_timeout = 5000;');
+    sqliteDb.execSync('PRAGMA synchronous = NORMAL;');
+  }
+}
+
 try {
   expoDbInstance = openDatabaseSync(DATABASE_NAME);
+  configurePragmas(expoDbInstance);
   dbInstance = drizzle(expoDbInstance, { schema });
 } catch (error) {
   console.warn('[Database] Failed to open expo-sqlite database (likely in test or non-native environment).');

@@ -3,6 +3,7 @@ import { View, StyleSheet, Platform, Text, Pressable, ScrollView } from 'react-n
 import * as Clipboard from 'expo-clipboard';
 import Markdown from 'react-native-markdown-display';
 import { parseContent } from '../../utils/latexExtractor';
+import { perfTracker } from '../../utils/perfTracker';
 import LatexRenderer from './LatexRenderer';
 import { THEME_COLORS, FONT_SIZES, ACCENT_COLORS } from '../../utils/theme';
 import MermaidRenderer from './MermaidRenderer';
@@ -28,7 +29,9 @@ export default function RichText({
   accentHex: accentHexOverride,
   onCopyText,
 }: RichTextProps) {
-  const segments = parseContent(content);
+  const segments = useMemo(() => {
+    return perfTracker.measureMarkdownParse(content, () => parseContent(content));
+  }, [content]);
   const colors = colorsOverride || THEME_COLORS[theme] || THEME_COLORS.deep;
   const sizes = sizesOverride || FONT_SIZES[fontSize] || FONT_SIZES.medium;
   const accentHex = accentHexOverride || ACCENT_COLORS[accentColor] || ACCENT_COLORS.indigo;
