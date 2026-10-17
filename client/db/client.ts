@@ -8,6 +8,7 @@ const DATABASE_NAME = 'vela.db';
 
 let expoDbInstance: any = null;
 let dbInstance: any = null;
+let migrationPromise: Promise<void> | null = null;
 
 try {
   expoDbInstance = openDatabaseSync(DATABASE_NAME);
@@ -20,16 +21,41 @@ export const expoDb = expoDbInstance;
 export const db = dbInstance;
 export default dbInstance;
 
-export async function initializeDatabase() {
+function sanitizeMigrationSql(sql: string): string {
+  return sql
+    .split('--> statement-breakpoint')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .join('\n--> statement-breakpoint\n');
+}
+
+const sanitizedMigrations = {
+  journal: migrations.journal,
+  migrations: Object.fromEntries(
+    Object.entries(migrations.migrations).map(([key, sql]) => [
+      key,
+      typeof sql === 'string' ? sanitizeMigrationSql(sql) : sql,
+    ])
+  ),
+};
+
+export async function initializeDatabase(): Promise<void> {
   if (!dbInstance) {
     console.warn('[Database] Database client not initialized, skipping migrations.');
     return;
   }
-  try {
-    await migrate(dbInstance, migrations);
-    console.log('[Database] Migrations applied successfully.');
-  } catch (error) {
-    console.error('[Database] Migration error:', error);
-    throw error;
+  if (migrationPromise) {
+    return migrationPromise;
   }
+  migrationPromise = (async () => {
+    try {
+      await migrate(dbInstance, sanitizedMigrations);
+      console.log('[Database] Migrations applied successfully.');
+    } catch (error) {
+      migrationPromise = null;
+      console.error('[Database] Migration error:', error);
+      throw error;
+    }
+  })();
+  return migrationPromise;
 }
