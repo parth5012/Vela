@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from typing import Any, Callable
 
@@ -98,7 +99,7 @@ registry.register("memory", _run_memory)
 
 def run_family(family: str, mode: str = "smoke", live: bool = False) -> FamilyResult:
     """Programmatic entry point for running an evaluation family."""
-    is_active = config.enabled or live
+    is_active = config.enabled or live or os.getenv("VELA_SYSTEM_EVALS_ENABLED") == "1"
     if not is_active:
         return FamilyResult(
             family=family,
@@ -110,7 +111,7 @@ def run_family(family: str, mode: str = "smoke", live: bool = False) -> FamilyRe
 
 def run_all(mode: str = "smoke", live: bool = False) -> dict[str, FamilyResult]:
     """Programmatic entry point for running all evaluation families."""
-    is_active = config.enabled or live
+    is_active = config.enabled or live or os.getenv("VELA_SYSTEM_EVALS_ENABLED") == "1"
     if not is_active:
         print("\n[INFO] Vela System Evals are currently DISABLED by default.")
         print("       Set VELA_SYSTEM_EVALS_ENABLED=1 or pass --live to execute.\n")

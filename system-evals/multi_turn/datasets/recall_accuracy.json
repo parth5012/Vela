@@ -1,0 +1,245 @@
+[
+  {
+    "id": "mt_recall_001",
+    "category": "recall",
+    "description": "Seeded project codename recall with distractor turn",
+    "turns": [
+      {"user": "Let's codename the secret launch Project Chronos."},
+      {"user": "What's the weather like in Tokyo right now?"},
+      {"user": "What was the project codename we agreed on earlier?"}
+    ],
+    "expected_keywords": ["Chronos"],
+    "forbidden_keywords": ["I don't remember", "No codename", "haven't discussed"]
+  },
+  {
+    "id": "mt_recall_002",
+    "category": "recall",
+    "description": "Wi-Fi network credentials recall",
+    "turns": [
+      {"user": "Our guest office Wi-Fi network password is Orion-9921-Key."},
+      {"user": "Can you give me a quick recipe for guacamole?"},
+      {"user": "Someone is asking for the guest Wi-Fi password, what is it?"}
+    ],
+    "expected_keywords": ["Orion-9921-Key"],
+    "forbidden_keywords": ["don't know", "not set"]
+  },
+  {
+    "id": "mt_recall_003",
+    "category": "recall",
+    "description": "Pet name and breed recall",
+    "turns": [
+      {"user": "I just adopted a dog named Barnaby, he's a Golden Retriever."},
+      {"user": "What are some fun park games to play with dogs?"},
+      {"user": "What kind of dog do I have and what's his name?"}
+    ],
+    "expected_keywords": ["Barnaby", "Golden Retriever"],
+    "forbidden_keywords": ["don't recall", "poodle", "cat"]
+  },
+  {
+    "id": "mt_recall_004",
+    "category": "recall",
+    "description": "Flight booking reference recall",
+    "turns": [
+      {"user": "My booking confirmation for the Paris flight is FLIGHT-AF-9842."},
+      {"user": "Can you summarize the top 3 museums in Paris?"},
+      {"user": "What is my flight booking confirmation code?"}
+    ],
+    "expected_keywords": ["FLIGHT-AF-9842"],
+    "forbidden_keywords": ["no booking", "not provided"]
+  },
+  {
+    "id": "mt_recall_005",
+    "category": "recall",
+    "description": "Passport expiration year recall",
+    "turns": [
+      {"user": "I just renewed my passport today; it expires in 2036."},
+      {"user": "Do I need a visa for traveling to Japan with a German passport?"},
+      {"user": "When does my passport expire?"}
+    ],
+    "expected_keywords": ["2036"],
+    "forbidden_keywords": ["2026", "don't know"]
+  },
+  {
+    "id": "mt_recall_006",
+    "category": "recall",
+    "description": "Internal server IP address recall",
+    "turns": [
+      {"user": "The internal staging database is hosted at IP 192.168.10.45."},
+      {"user": "What is the command to test TCP connectivity to a port in Linux?"},
+      {"user": "Which IP address should I connect to for the staging database?"}
+    ],
+    "expected_keywords": ["192.168.10.45"],
+    "forbidden_keywords": ["127.0.0.1", "no IP"]
+  },
+  {
+    "id": "mt_recall_007",
+    "category": "recall",
+    "description": "Favorite coffee order recall",
+    "turns": [
+      {"user": "My daily coffee order is an oat milk flat white with cinnamon on top."},
+      {"user": "Are coffee grounds good compost for acid-loving plants?"},
+      {"user": "My coworker is picking up drinks, what coffee order should they get for me?"}
+    ],
+    "expected_keywords": ["oat milk", "flat white", "cinnamon"],
+    "forbidden_keywords": ["black coffee", "latte with whole milk"]
+  },
+  {
+    "id": "mt_recall_008",
+    "category": "recall",
+    "description": "Conference room reservation recall",
+    "turns": [
+      {"user": "I booked Room 402 Boreal Hall for our investor presentation."},
+      {"user": "What makes a compelling pitch deck appendix?"},
+      {"user": "Where is our investor meeting taking place?"}
+    ],
+    "expected_keywords": ["Room 402", "Boreal Hall"],
+    "forbidden_keywords": ["Room 101", "haven't booked"]
+  },
+  {
+    "id": "mt_recall_009",
+    "category": "recall",
+    "description": "Childhood hometown recall",
+    "turns": [
+      {"user": "I grew up in Innsbruck surrounded by the Alps."},
+      {"user": "What are the primary differences between downhill and cross-country skiing?"},
+      {"user": "Where did I mention I grew up?"}
+    ],
+    "expected_keywords": ["Innsbruck"],
+    "forbidden_keywords": ["Vienna", "Zurich", "never mentioned"]
+  },
+  {
+    "id": "mt_recall_010",
+    "category": "recall",
+    "description": "Doctor appointment schedule recall",
+    "turns": [
+      {"user": "I scheduled an appointment with Dr. Patel for next Tuesday at 3:30 PM."},
+      {"user": "How much water should an adult drink daily?"},
+      {"user": "When is my upcoming doctor appointment and who is it with?"}
+    ],
+    "expected_keywords": ["Dr. Patel", "Tuesday", "3:30 PM"],
+    "forbidden_keywords": ["Dr. Smith", "Wednesday", "no appointment"]
+  },
+  {
+    "id": "mt_recall_011",
+    "category": "recall",
+    "description": "Git branch name recall",
+    "turns": [
+      {"user": "I pushed my working changes to the git branch feat/stream-ratchet-v2."},
+      {"user": "How do you do an interactive rebase in git?"},
+      {"user": "What branch did I push my changes to?"}
+    ],
+    "expected_keywords": ["feat/stream-ratchet-v2"],
+    "forbidden_keywords": ["main", "master", "feat/perf"]
+  },
+  {
+    "id": "mt_recall_012",
+    "category": "recall",
+    "description": "Book recommendation recall across 4 turns",
+    "turns": [
+      {"user": "My all-time favorite novel is The Master and Margarita by Bulgakov."},
+      {"user": "Who was Mikhail Bulgakov and when did he write?"},
+      {"user": "What other Russian authors wrote satirical magical realism?"},
+      {"user": "Remind me what novel I said was my all-time favorite?"}
+    ],
+    "expected_keywords": ["Master and Margarita"],
+    "forbidden_keywords": ["War and Peace", "Crime and Punishment"]
+  },
+  {
+    "id": "mt_recall_013",
+    "category": "recall",
+    "description": "Emergency contact recall",
+    "turns": [
+      {"user": "Please record Aunt Elena as my primary emergency contact."},
+      {"user": "What should go into a home first aid kit?"},
+      {"user": "Who is listed as my emergency contact?"}
+    ],
+    "expected_keywords": ["Aunt Elena"],
+    "forbidden_keywords": ["Uncle Bob", "no contact"]
+  },
+  {
+    "id": "mt_recall_014",
+    "category": "recall",
+    "description": "Dietary allergen recall across 4 turns",
+    "turns": [
+      {"user": "Please remember that I have a severe allergy to peanuts and sesame."},
+      {"user": "Can you suggest three popular dishes in Thai cuisine?"},
+      {"user": "Which of those dishes typically contain nuts or seed oils?"},
+      {"user": "What are the two specific allergens I told you to remember?"}
+    ],
+    "expected_keywords": ["peanuts", "sesame"],
+    "forbidden_keywords": ["shellfish", "dairy", "gluten"]
+  },
+  {
+    "id": "mt_recall_015",
+    "category": "recall",
+    "description": "Car rental confirmation recall",
+    "turns": [
+      {"user": "My Hertz reservation confirmation number is RENTAL-HZ-7719."},
+      {"user": "Is premium fuel required for all modern turbocharged engines?"},
+      {"user": "What is my car rental reservation code?"}
+    ],
+    "expected_keywords": ["RENTAL-HZ-7719"],
+    "forbidden_keywords": ["no reservation", "AVIS"]
+  },
+  {
+    "id": "mt_recall_016",
+    "category": "recall",
+    "description": "Quarterly budget ceiling recall",
+    "turns": [
+      {"user": "Our team has a strict Q3 cloud budget ceiling of $45,000."},
+      {"user": "What are effective methods to optimize AWS NAT gateway costs?"},
+      {"user": "What is our approved cloud spend limit for Q3?"}
+    ],
+    "expected_keywords": ["45,000"],
+    "forbidden_keywords": ["10,000", "50,000", "unlimited"]
+  },
+  {
+    "id": "mt_recall_017",
+    "category": "recall",
+    "description": "API ingestion endpoint recall across 4 turns",
+    "turns": [
+      {"user": "We are routing client metrics to endpoint /api/v2/telemetry/ingest."},
+      {"user": "What HTTP status code represents unprocessable entity?"},
+      {"user": "Is 422 standard in RFC 9110?"},
+      {"user": "Where are client metrics routed according to what I told you?"}
+    ],
+    "expected_keywords": ["/api/v2/telemetry/ingest"],
+    "forbidden_keywords": ["/api/v1", "/events"]
+  },
+  {
+    "id": "mt_recall_018",
+    "category": "recall",
+    "description": "Anniversary date recall",
+    "turns": [
+      {"user": "My wedding anniversary is coming up on September 14th."},
+      {"user": "Can you give me 5 thoughtful traditional anniversary gift ideas?"},
+      {"user": "What date is my anniversary?"}
+    ],
+    "expected_keywords": ["September 14"],
+    "forbidden_keywords": ["October", "August", "don't know"]
+  },
+  {
+    "id": "mt_recall_019",
+    "category": "recall",
+    "description": "Marathon target finish time recall",
+    "turns": [
+      {"user": "My goal for the Chicago Marathon is to finish in sub 3 hours 45 minutes."},
+      {"user": "How should a runner pace the first 10k of a marathon?"},
+      {"user": "What target marathon finish time did I tell you I'm training for?"}
+    ],
+    "expected_keywords": ["3 hours 45 minutes"],
+    "forbidden_keywords": ["4 hours", "sub 3 hours", "no target"]
+  },
+  {
+    "id": "mt_recall_020",
+    "category": "recall",
+    "description": "Enterprise software license key recall",
+    "turns": [
+      {"user": "Here is our enterprise staging activation key: LIC-ENT-2026-X89."},
+      {"user": "What is the difference between permissive and copyleft open-source licenses?"},
+      {"user": "What is the staging activation license key I shared?"}
+    ],
+    "expected_keywords": ["LIC-ENT-2026-X89"],
+    "forbidden_keywords": ["expired", "not provided", "KEY-123"]
+  }
+]
