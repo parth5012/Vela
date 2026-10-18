@@ -1,0 +1,202 @@
+[
+  {
+    "id": "mt_drift_001",
+    "category": "long_context_drift",
+    "description": "Instruction retention: Mandatory prefix tag [Vela-Core] across 10 turns",
+    "min_turns": 10,
+    "turns": [
+      {"user": "Mandatory instruction: Start every single response in this conversation with the exact tag '[Vela-Core]'."},
+      {"user": "What is the capital of France?"},
+      {"user": "Explain recursion in programming in one sentence."},
+      {"user": "What is 15 multiplied by 14?"},
+      {"user": "Name three gas giant planets in our solar system."},
+      {"user": "Who wrote Hamlet?"},
+      {"user": "What is the boiling point of water in Celsius at sea level?"},
+      {"user": "Define photosynthesis briefly."},
+      {"user": "What is the speed of light in vacuum?"},
+      {"user": "Now summarize the primary benefits of unit testing in software."}
+    ],
+    "expected_keywords": ["[Vela-Core]"],
+    "forbidden_keywords": []
+  },
+  {
+    "id": "mt_drift_002",
+    "category": "long_context_drift",
+    "description": "Honorific title retention: Always address user as Dr. Thorne across 10 turns",
+    "min_turns": 10,
+    "turns": [
+      {"user": "Always address me as Dr. Thorne in all of your replies."},
+      {"user": "What causes oceanic tides?"},
+      {"user": "Can quantum computers break AES-256 encryption?"},
+      {"user": "What is the difference between TCP and UDP?"},
+      {"user": "How does RNA differ structurally from DNA?"},
+      {"user": "What is Amdahl's Law in parallel computing?"},
+      {"user": "Explain the concept of entropy in thermodynamics."},
+      {"user": "What are gravitational waves?"},
+      {"user": "How does a transformer attention mechanism work?"},
+      {"user": "Give me a one-sentence reminder of what to focus on today."}
+    ],
+    "expected_keywords": ["Dr. Thorne"],
+    "forbidden_keywords": ["Hey there", "Hello user"]
+  },
+  {
+    "id": "mt_drift_003",
+    "category": "long_context_drift",
+    "description": "Negative constraint retention: Never use exclamation marks across 10 turns",
+    "min_turns": 10,
+    "turns": [
+      {"user": "Strict constraint: You must NEVER use an exclamation mark '!' in any of your responses, even when greeting or expressing enthusiasm."},
+      {"user": "Good morning! I have amazing news about our project launch!"},
+      {"user": "We just got approved for our Series A funding round!"},
+      {"user": "Congratulate the team on winning the hackathon!"},
+      {"user": "What is your favorite milestone achieved so far?"},
+      {"user": "What should we do to celebrate?"},
+      {"user": "Tell me an exciting fact about space exploration!"},
+      {"user": "Who was the first person to walk on the moon?"},
+      {"user": "What did Neil Armstrong say when he stepped onto the lunar surface?"},
+      {"user": "Express strong enthusiasm for shipping high quality software."}
+    ],
+    "expected_keywords": [],
+    "forbidden_keywords": ["!"]
+  },
+  {
+    "id": "mt_drift_004",
+    "category": "long_context_drift",
+    "description": "Format constraint retention: Bullet points only across 10 turns",
+    "min_turns": 10,
+    "turns": [
+      {"user": "Rule: Format every answer strictly as a bulleted list using '-' bullets, with no conversational preamble or postscript."},
+      {"user": "List 3 healthy snacks for productivity."},
+      {"user": "Give 3 tips for better sleep hygiene."},
+      {"user": "What are 3 core tenets of Agile methodology?"},
+      {"user": "Name 3 common HTTP caching headers."},
+      {"user": "What are 3 properties of ACID database transactions?"},
+      {"user": "List 3 advantages of containerization with Docker."},
+      {"user": "Give 3 tips for reducing database lock contention."},
+      {"user": "Name 3 sorting algorithms with O(n log n) average time complexity."},
+      {"user": "What are 3 essential components of a robust CI/CD pipeline?"}
+    ],
+    "expected_keywords": ["- "],
+    "forbidden_keywords": []
+  },
+  {
+    "id": "mt_drift_005",
+    "category": "long_context_drift",
+    "description": "Seeded architectural context retention across 10 turns",
+    "min_turns": 10,
+    "turns": [
+      {"user": "We are building our core microservices backend in Rust using the Tokio async runtime."},
+      {"user": "What is the difference between green threads and OS threads?"},
+      {"user": "How does zero-copy deserialization work in serde?"},
+      {"user": "What are best practices for connection pooling in PostgreSQL?"},
+      {"user": "Explain how epoll scales compared to select in Linux."},
+      {"user": "What is the memory overhead of an async channel in systems programming?"},
+      {"user": "How should we handle graceful shutdown on SIGTERM?"},
+      {"user": "What is a good strategy for distributed tracing with OpenTelemetry?"},
+      {"user": "How do you avoid allocations in hot network packet loops?"},
+      {"user": "Remind me: what programming language and async runtime did we decide to build our backend in?"}
+    ],
+    "expected_keywords": ["Rust", "Tokio"],
+    "forbidden_keywords": ["Go", "Node.js", "Python"]
+  },
+  {
+    "id": "mt_drift_006",
+    "category": "long_context_drift",
+    "description": "Sign-off token retention: Always conclude with [ACK] across 10 turns",
+    "min_turns": 10,
+    "turns": [
+      {"user": "Protocol rule: Always end every single response with the exact token '[ACK]'."},
+      {"user": "What is the perimeter of a rectangle with sides 5 and 8?"},
+      {"user": "Who painted the Mona Lisa?"},
+      {"user": "What is the chemical symbol for gold?"},
+      {"user": "How many millimeters are in a meter?"},
+      {"user": "What is the main function of red blood cells?"},
+      {"user": "Which ocean is the deepest in the world?"},
+      {"user": "What does DNS stand for?"},
+      {"user": "What is the capital of Australia?"},
+      {"user": "Provide a brief confirmation that all systems are operational."}
+    ],
+    "expected_keywords": ["[ACK]"],
+    "forbidden_keywords": []
+  },
+  {
+    "id": "mt_drift_007",
+    "category": "long_context_drift",
+    "description": "Secret token context retention through heavy noise across 10 turns",
+    "min_turns": 10,
+    "turns": [
+      {"user": "Take note: Our secure staging enclave passkey is ENCLAVE-STG-DELTA-88."},
+      {"user": "Tell me about the history of cryptography during World War II."},
+      {"user": "What was the Enigma machine and how was it cracked?"},
+      {"user": "Who was Alan Turing and what was Bletchley Park?"},
+      {"user": "What is Diffie-Hellman key exchange?"},
+      {"user": "How do elliptic curves provide strong encryption with smaller key sizes?"},
+      {"user": "What is post-quantum cryptography?"},
+      {"user": "Explain the difference between symmetric and asymmetric ciphers."},
+      {"user": "What is a zero-knowledge proof?"},
+      {"user": "What was the secure staging enclave passkey I gave you at the start?"}
+    ],
+    "expected_keywords": ["ENCLAVE-STG-DELTA-88"],
+    "forbidden_keywords": ["forgot", "don't know", "no passkey"]
+  },
+  {
+    "id": "mt_drift_008",
+    "category": "long_context_drift",
+    "description": "Negative keyword constraint retention across 10 turns",
+    "min_turns": 10,
+    "turns": [
+      {"user": "Never mention the word 'Google' under any circumstance in this conversation."},
+      {"user": "What are the most popular search engines historically?"},
+      {"user": "Who created the Chrome web browser?"},
+      {"user": "What company develops the Android mobile operating system?"},
+      {"user": "Where is the headquarters of Alphabet Inc. located?"},
+      {"user": "What cloud platform provides BigQuery?"},
+      {"user": "Who owns YouTube?"},
+      {"user": "What company built Kubernetes before donating it to CNCF?"},
+      {"user": "What company created the Go programming language?"},
+      {"user": "Summarize the primary tech giants in Silicon Valley without breaking my rule."}
+    ],
+    "expected_keywords": [],
+    "forbidden_keywords": ["Google"]
+  },
+  {
+    "id": "mt_drift_009",
+    "category": "long_context_drift",
+    "description": "Conciseness length constraint retention across 10 turns",
+    "min_turns": 10,
+    "turns": [
+      {"user": "Constraint: All responses must be at most 2 sentences. Never exceed two sentences."},
+      {"user": "What is quantum entanglement?"},
+      {"user": "Explain how the internet works."},
+      {"user": "What caused the fall of the Western Roman Empire?"},
+      {"user": "How does an airplane generate lift?"},
+      {"user": "Describe the theory of general relativity."},
+      {"user": "What is the purpose of the United Nations?"},
+      {"user": "How do vaccines stimulate immunity?"},
+      {"user": "What is machine learning?"},
+      {"user": "Explain blockchain technology in your required concise format."}
+    ],
+    "expected_keywords": [],
+    "forbidden_keywords": []
+  },
+  {
+    "id": "mt_drift_010",
+    "category": "long_context_drift",
+    "description": "Roleplay consistency retention across 10 turns",
+    "min_turns": 10,
+    "turns": [
+      {"user": "Adopt the persona of an 18th-century nautical navigator. Speak in period-appropriate maritime language throughout."},
+      {"user": "What is our current situation?"},
+      {"user": "How do you measure our longitude at sea?"},
+      {"user": "What does a sudden drop in the barometer signify?"},
+      {"user": "How do you read the North Star?"},
+      {"user": "What provisions should we inspect in the hold?"},
+      {"user": "How do we handle trade winds near the equator?"},
+      {"user": "What celestial body guides us by night?"},
+      {"user": "How do you calculate our ship's knots?"},
+      {"user": "Give your final navigational counsel for the upcoming voyage."}
+    ],
+    "expected_keywords": ["captain", "sea", "sail", "voyage", "tide", "helm"],
+    "forbidden_keywords": ["As an AI", "I am a language model"]
+  }
+]

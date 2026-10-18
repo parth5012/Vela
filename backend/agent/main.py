@@ -621,22 +621,28 @@ async def chat_message(payload: MessagePayload):
             # T6 (issue #254): create the Experience row at turn start so the
             # turn owns its row by ID. T3 transaction rule: flush-only here,
             # get_db_session owns the commit.
-            try:
-                with get_db_session() as session:
-                    exp_client = DBClient(session)
-                    exp_row = exp_client.save_experience(
-                        conversation_id=thread_uuid,
-                        user_query=initial_message,
-                        agent_response="",
-                    )
-                    experience_id = exp_row.id
-            except Exception as e:
-                logger.error("Failed to create experience row at turn start", error=str(e))
+            # Bypass persistent Experience creation for eval turns or VELA_EVAL_MODE=1
+            # to prevent memory DB pollution (hardening rule for system evals).
+            is_eval = os.getenv("VELA_EVAL_MODE") == "1" or str(payload.thread_id).startswith("eval-")
+            if not is_eval:
+                try:
+                    with get_db_session() as session:
+                        exp_client = DBClient(session)
+                        exp_row = exp_client.save_experience(
+                            conversation_id=thread_uuid,
+                            user_query=initial_message,
+                            agent_response="",
+                        )
+                        experience_id = exp_row.id
+                except Exception as e:
+                    logger.error("Failed to create experience row at turn start", error=str(e))
+                    experience_id = None
+            else:
                 experience_id = None
 
             initial_state = {
                 "messages": [HumanMessage(content=payload.message)],
-                "db_conv_id": thread_uuid,
+                "db_conv_id": None if is_eval else thread_uuid,
                 "next_node": "supervisor",
                 "agent": thread_agent
             }

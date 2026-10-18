@@ -3,10 +3,9 @@ name = "vela-system-evals"
 version = "0.1.0"
 description = "Vela System-Level Evaluation Pipelines"
 readme = "ARCHITECTURE.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11, <3.13"
 dependencies = [
     "deepeval>=2.1.0",
-    "ragas>=0.2.0",
     "langsmith>=0.2.0",
     "pydantic>=2.7.0",
     "pydantic-settings>=2.2.1",
@@ -16,9 +15,17 @@ dependencies = [
     "rich>=13.7.0",
 ]
 
+[project.optional-dependencies]
+workspace = [
+    "ragas>=0.2.0",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.uv]
+package = false
 
 [tool.pytest.ini_options]
 pythonpath = ["..", "."]

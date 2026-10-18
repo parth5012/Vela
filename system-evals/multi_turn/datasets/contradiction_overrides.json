@@ -1,0 +1,197 @@
+[
+  {
+    "id": "mt_override_001",
+    "category": "contradiction_override",
+    "description": "Meeting schedule preference: morning to afternoon override",
+    "turns": [
+      {"user": "I prefer all internal syncs in the morning, around 9:00 AM."},
+      {"user": "Can you prepare an agenda template for the team?"},
+      {"user": "Actually, change of plans: I hate mornings now. Only schedule meetings in the afternoon after 2:00 PM."},
+      {"user": "When should we book our weekly sync?"}
+    ],
+    "expected_keywords": ["afternoon", "2:00 PM"],
+    "forbidden_keywords": ["9:00 AM", "morning meeting", "morning sync"]
+  },
+  {
+    "id": "mt_override_002",
+    "category": "contradiction_override",
+    "description": "Programming language stack override: Python to TypeScript",
+    "turns": [
+      {"user": "For our data pipelines, let's write all worker scripts in Python."},
+      {"user": "What library handles dataframes well?"},
+      {"user": "Correction: the team decided on TypeScript and Node.js instead of Python for all workers."},
+      {"user": "Which programming language are we using for our worker scripts?"}
+    ],
+    "expected_keywords": ["TypeScript", "Node.js"],
+    "forbidden_keywords": ["Python", "Pandas"]
+  },
+  {
+    "id": "mt_override_003",
+    "category": "contradiction_override",
+    "description": "UI theme preference override: Dark mode to Light mode",
+    "turns": [
+      {"user": "Set my interface preference to dark mode by default."},
+      {"user": "Does dark mode save battery on OLED screens?"},
+      {"user": "Actually, my eyes are straining in dark rooms. Switch my preference to clean light mode."},
+      {"user": "What UI theme mode am I using right now?"}
+    ],
+    "expected_keywords": ["light mode"],
+    "forbidden_keywords": ["dark mode", "high contrast black"]
+  },
+  {
+    "id": "mt_override_004",
+    "category": "contradiction_override",
+    "description": "Dietary lifestyle override: Vegetarian to strict Vegan",
+    "turns": [
+      {"user": "I follow a lacto-ovo vegetarian diet."},
+      {"user": "What are good vegetarian sources of protein?"},
+      {"user": "As of today, I have eliminated all dairy and eggs and am completely vegan."},
+      {"user": "Can I eat a pizza with regular mozzarella cheese under my current diet?"}
+    ],
+    "expected_keywords": ["vegan", "cannot", "no"],
+    "forbidden_keywords": ["yes you can", "lacto-ovo"]
+  },
+  {
+    "id": "mt_override_005",
+    "category": "contradiction_override",
+    "description": "Measurement system override: Metric to Imperial units",
+    "turns": [
+      {"user": "Always give me distances in kilometers and weights in kilograms."},
+      {"user": "How high is Mount Everest in meters?"},
+      {"user": "Never mind, my client is in the US. Please switch all measurements to imperial units like miles and pounds."},
+      {"user": "How far is London to Paris according to my preferred units?"}
+    ],
+    "expected_keywords": ["miles"],
+    "forbidden_keywords": ["kilometers", "km"]
+  },
+  {
+    "id": "mt_override_006",
+    "category": "contradiction_override",
+    "description": "Hardware budget override: $500 to $1,200 limit",
+    "turns": [
+      {"user": "My budget cap for a new secondary monitor is strictly $500."},
+      {"user": "What features distinguish IPS from OLED monitors?"},
+      {"user": "Good news, my company approved an expense boost. My new budget cap is $1,200."},
+      {"user": "Can we consider a $900 ultra-wide monitor within my budget?"}
+    ],
+    "expected_keywords": ["yes", "within", "1,200"],
+    "forbidden_keywords": ["exceeds your $500 budget", "over budget"]
+  },
+  {
+    "id": "mt_override_007",
+    "category": "contradiction_override",
+    "description": "Tone and style override: Formal academic to concise conversational",
+    "turns": [
+      {"user": "Please draft all replies in a highly formal, academic, and verbose style."},
+      {"user": "Define what a distributed consensus protocol is."},
+      {"user": "Stop that formal academic tone, it's too dry. From now on, use an informal, concise, conversational tone."},
+      {"user": "Explain Paxos in your current style."}
+    ],
+    "expected_keywords": ["concise", "consensus"],
+    "forbidden_keywords": ["hitherto", "furthermore, one must postulate"]
+  },
+  {
+    "id": "mt_override_008",
+    "category": "contradiction_override",
+    "description": "Notification cadence override: Instant real-time to daily digest at 6 PM",
+    "turns": [
+      {"user": "Send me instant real-time alert notifications for every event."},
+      {"user": "How do webhook retries prevent lost notifications?"},
+      {"user": "The real-time pings are too distracting. Switch my notification setting to a single daily digest at 6:00 PM."},
+      {"user": "How and when will I receive notifications from now on?"}
+    ],
+    "expected_keywords": ["daily digest", "6:00 PM"],
+    "forbidden_keywords": ["instant", "real-time alert"]
+  },
+  {
+    "id": "mt_override_009",
+    "category": "contradiction_override",
+    "description": "Airplane seating preference override: Window seat to Aisle seat",
+    "turns": [
+      {"user": "Always select a window seat when looking up flight options."},
+      {"user": "Why are wing seats generally less turbulent?"},
+      {"user": "I felt claustrophobic on my last flight. Please change my preference to an aisle seat from now on."},
+      {"user": "Which seat location should you look for when booking my next ticket?"}
+    ],
+    "expected_keywords": ["aisle"],
+    "forbidden_keywords": ["window seat"]
+  },
+  {
+    "id": "mt_override_010",
+    "category": "contradiction_override",
+    "description": "Code formatting override: 4 spaces to 2 spaces indentation",
+    "turns": [
+      {"user": "Format all code snippets with 4-space indentation."},
+      {"user": "Show me a simple JavaScript filter example."},
+      {"user": "We are adopting Google style guide: change indentation preference to 2 spaces."},
+      {"user": "Show me a JavaScript map example formatted with my updated indent preference."}
+    ],
+    "expected_keywords": ["  ", "2 spaces"],
+    "forbidden_keywords": ["4 spaces", "    return"]
+  },
+  {
+    "id": "mt_override_011",
+    "category": "contradiction_override",
+    "description": "Work arrangement override: 100% remote to hybrid in-office",
+    "turns": [
+      {"user": "I work 100% fully remote from home all days of the week."},
+      {"user": "What ergonomic chairs are best for remote home offices?"},
+      {"user": "My company announced a hybrid policy: I will now be in the office on Tuesdays and Thursdays."},
+      {"user": "Am I working from home or in the office on Thursday?"}
+    ],
+    "expected_keywords": ["office", "hybrid"],
+    "forbidden_keywords": ["100% remote", "at home all week"]
+  },
+  {
+    "id": "mt_override_012",
+    "category": "contradiction_override",
+    "description": "Cloud hosting provider override: AWS to Google Cloud Platform",
+    "turns": [
+      {"user": "Our default cloud infrastructure is Amazon Web Services (AWS)."},
+      {"user": "What is the equivalent of ECS in Kubernetes?"},
+      {"user": "We received cloud credits: migrate our default cloud target to Google Cloud Platform (GCP)."},
+      {"user": "Which cloud provider should we target for our new microservices deployment?"}
+    ],
+    "expected_keywords": ["Google Cloud", "GCP"],
+    "forbidden_keywords": ["AWS", "Amazon Web Services"]
+  },
+  {
+    "id": "mt_override_013",
+    "category": "contradiction_override",
+    "description": "Ecommerce shipping speed override: Standard to Overnight express",
+    "turns": [
+      {"user": "Use standard economy ground shipping (5-7 business days) for orders."},
+      {"user": "How does package tracking work across postal handoffs?"},
+      {"user": "This is an urgent delivery: upgrade my shipping method to overnight priority express."},
+      {"user": "What delivery shipping method is selected for this order?"}
+    ],
+    "expected_keywords": ["overnight", "express"],
+    "forbidden_keywords": ["economy ground", "5-7 business days"]
+  },
+  {
+    "id": "mt_override_014",
+    "category": "contradiction_override",
+    "description": "Primary mobile OS override: iOS iPhone to Android Pixel",
+    "turns": [
+      {"user": "My daily driver phone is an Apple iPhone 15 Pro running iOS."},
+      {"user": "How does iOS sandbox background tasks?"},
+      {"user": "I just switched phones: my new daily driver is a Google Pixel 9 Pro running Android."},
+      {"user": "Which mobile operating system and device model am I using now?"}
+    ],
+    "expected_keywords": ["Android", "Pixel 9 Pro"],
+    "forbidden_keywords": ["iPhone 15 Pro", "iOS"]
+  },
+  {
+    "id": "mt_override_015",
+    "category": "contradiction_override",
+    "description": "Vacation destination override: Kyoto to Reykjavik",
+    "turns": [
+      {"user": "I am planning my summer vacation trip to Kyoto, Japan."},
+      {"user": "What are the most scenic historic temples in Kyoto?"},
+      {"user": "Japan flights are sold out. I changed my vacation destination to Reykjavik, Iceland."},
+      {"user": "Where am I currently planning to travel for my summer vacation?"}
+    ],
+    "expected_keywords": ["Reykjavik", "Iceland"],
+    "forbidden_keywords": ["Kyoto", "Japan"]
+  }
+]
