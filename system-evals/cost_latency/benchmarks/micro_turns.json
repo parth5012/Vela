@@ -1,0 +1,137 @@
+[
+  {
+    "id": "cl_micro_001",
+    "category": "micro_turns",
+    "dataset": "micro_turns",
+    "prompt": "Hello, what is 1+2?",
+    "persona": "personal assistant",
+    "max_latency_ms": 1500,
+    "max_cost_usd": 0.005
+  },
+  {
+    "id": "cl_micro_002",
+    "category": "micro_turns",
+    "dataset": "micro_turns",
+    "prompt": "Hello, what is 2+3?",
+    "persona": "personal assistant",
+    "max_latency_ms": 1500,
+    "max_cost_usd": 0.005
+  },
+  {
+    "id": "cl_micro_003",
+    "category": "micro_turns",
+    "dataset": "micro_turns",
+    "prompt": "Hello, what is 3+4?",
+    "persona": "personal assistant",
+    "max_latency_ms": 1500,
+    "max_cost_usd": 0.005
+  },
+  {
+    "id": "cl_micro_004",
+    "category": "micro_turns",
+    "dataset": "micro_turns",
+    "prompt": "Hello, what is 4+5?",
+    "persona": "personal assistant",
+    "max_latency_ms": 1500,
+    "max_cost_usd": 0.005
+  },
+  {
+    "id": "cl_micro_005",
+    "category": "micro_turns",
+    "dataset": "micro_turns",
+    "prompt": "Hello, what is 5+6?",
+    "persona": "personal assistant",
+    "max_latency_ms": 1500,
+    "max_cost_usd": 0.005
+  },
+  {
+    "id": "cl_micro_006",
+    "category": "micro_turns",
+    "dataset": "micro_turns",
+    "prompt": "Hello, what is 6+7?",
+    "persona": "personal assistant",
+    "max_latency_ms": 1500,
+    "max_cost_usd": 0.005
+  },
+  {
+    "id": "cl_micro_007",
+    "category": "micro_turns",
+    "dataset": "micro_turns",
+    "prompt": "Hello, what is 7+8?",
+    "persona": "personal assistant",
+    "max_latency_ms": 1500,
+    "max_cost_usd": 0.005
+  },
+  {
+    "id": "cl_micro_008",
+    "category": "micro_turns",
+    "dataset": "micro_turns",
+    "prompt": "Hello, what is 8+9?",
+    "persona": "personal assistant",
+    "max_latency_ms": 1500,
+    "max_cost_usd": 0.005
+  },
+  {
+    "id": "cl_micro_009",
+    "category": "micro_turns",
+    "dataset": "micro_turns",
+    "prompt": "Hello, what is 9+10?",
+    "persona": "personal assistant",
+    "max_latency_ms": 1500,
+    "max_cost_usd": 0.005
+  },
+  {
+    "id": "cl_micro_010",
+    "category": "micro_turns",
+    "dataset": "micro_turns",
+    "prompt": "Hello, what is 10+11?",
+    "persona": "personal assistant",
+    "max_latency_ms": 1500,
+    "max_cost_usd": 0.005
+  },
+  {
+    "id": "cl_micro_011",
+    "category": "micro_turns",
+    "dataset": "micro_turns",
+    "prompt": "Hello, what is 11+12?",
+    "persona": "personal assistant",
+    "max_latency_ms": 1500,
+    "max_cost_usd": 0.005
+  },
+  {
+    "id": "cl_micro_012",
+    "category": "micro_turns",
+    "dataset": "micro_turns",
+    "prompt": "Hello, what is 12+13?",
+    "persona": "personal assistant",
+    "max_latency_ms": 1500,
+    "max_cost_usd": 0.005
+  },
+  {
+    "id": "cl_micro_013",
+    "category": "micro_turns",
+    "dataset": "micro_turns",
+    "prompt": "Hello, what is 13+14?",
+    "persona": "personal assistant",
+    "max_latency_ms": 1500,
+    "max_cost_usd": 0.005
+  },
+  {
+    "id": "cl_micro_014",
+    "category": "micro_turns",
+    "dataset": "micro_turns",
+    "prompt": "Hello, what is 14+15?",
+    "persona": "personal assistant",
+    "max_latency_ms": 1500,
+    "max_cost_usd": 0.005
+  },
+  {
+    "id": "cl_micro_015",
+    "category": "micro_turns",
+    "dataset": "micro_turns",
+    "prompt": "Hello, what is 15+16?",
+    "persona": "personal assistant",
+    "max_latency_ms": 1500,
+    "max_cost_usd": 0.005
+  }
+]
