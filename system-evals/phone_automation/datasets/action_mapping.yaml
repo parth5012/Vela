@@ -1,0 +1,244 @@
+- id: "phone_action_001"
+  prompt: "Open YouTube on my phone"
+  persona: "device_agent"
+  expected_action: "device_open_app"
+  expected_params:
+    app_name: "YouTube"
+
+- id: "phone_action_002"
+  prompt: "Launch Spotify so I can listen to music"
+  persona: "device_agent"
+  expected_action: "device_open_app"
+  expected_params:
+    app_name: "Spotify"
+
+- id: "phone_action_003"
+  prompt: "Open Google Chrome browser"
+  persona: "device_agent"
+  expected_action: "device_open_app"
+  expected_params:
+    app_name: "Chrome"
+
+- id: "phone_action_004"
+  prompt: "Go into device Settings"
+  persona: "device_agent"
+  expected_action: "device_open_app"
+  expected_params:
+    app_name: "Settings"
+
+- id: "phone_action_005"
+  prompt: "Open Google Maps"
+  persona: "device_agent"
+  expected_action: "device_open_app"
+  expected_params:
+    app_name: "Google Maps"
+
+- id: "phone_action_006"
+  prompt: "Tap the play button on screen"
+  persona: "device_agent"
+  expected_action: "device_tap"
+  expected_params:
+    target: "play button"
+
+- id: "phone_action_007"
+  prompt: "Click on the Search icon"
+  persona: "device_agent"
+  expected_action: "device_tap"
+  expected_params:
+    target: "search icon"
+
+- id: "phone_action_008"
+  prompt: "Tap the profile picture in the top right"
+  persona: "device_agent"
+  expected_action: "device_tap"
+  expected_params:
+    target: "profile picture"
+
+- id: "phone_action_009"
+  prompt: "Tap the coordinate 540,1120"
+  persona: "device_agent"
+  expected_action: "device_tap"
+  expected_params:
+    target: "540,1120"
+
+- id: "phone_action_010"
+  prompt: "Press on Submit button"
+  persona: "device_agent"
+  expected_action: "device_tap"
+  expected_params:
+    target: "submit button"
+
+- id: "phone_action_011"
+  prompt: "Type 'Lofi Hip Hop beats' into the search box"
+  persona: "device_agent"
+  expected_action: "device_type"
+  expected_params:
+    target: "search box"
+    value: "Lofi Hip Hop beats"
+
+- id: "phone_action_012"
+  prompt: "Enter 'hello@example.com' into the email input"
+  persona: "device_agent"
+  expected_action: "device_type"
+  expected_params:
+    target: "email input"
+    value: "hello@example.com"
+
+- id: "phone_action_013"
+  prompt: "Type 'Meeting in 10 minutes' into the message bar"
+  persona: "device_agent"
+  expected_action: "device_type"
+  expected_params:
+    target: "message bar"
+    value: "Meeting in 10 minutes"
+
+- id: "phone_action_014"
+  prompt: "Input 'password123' in the password field"
+  persona: "device_agent"
+  expected_action: "device_type"
+  expected_params:
+    target: "password field"
+    value: "password123"
+
+- id: "phone_action_015"
+  prompt: "Fill in 'San Francisco, CA' in the location field"
+  persona: "device_agent"
+  expected_action: "device_type"
+  expected_params:
+    target: "location field"
+    value: "San Francisco, CA"
+
+- id: "phone_action_016"
+  prompt: "Scroll down to see more comments"
+  persona: "device_agent"
+  expected_action: "device_scroll"
+  expected_params:
+    direction: "down"
+
+- id: "phone_action_017"
+  prompt: "Scroll up to the top of the feed"
+  persona: "device_agent"
+  expected_action: "device_scroll"
+  expected_params:
+    direction: "up"
+
+- id: "phone_action_018"
+  prompt: "Scroll left across the horizontal carousel"
+  persona: "device_agent"
+  expected_action: "device_scroll"
+  expected_params:
+    direction: "left"
+
+- id: "phone_action_019"
+  prompt: "Scroll right on the story tiles"
+  persona: "device_agent"
+  expected_action: "device_scroll"
+  expected_params:
+    direction: "right"
+
+- id: "phone_action_020"
+  prompt: "Swipe left to open the navigation drawer"
+  persona: "device_agent"
+  expected_action: "device_swipe"
+  expected_params:
+    direction: "left"
+
+- id: "phone_action_021"
+  prompt: "Swipe right to dismiss the card notification"
+  persona: "device_agent"
+  expected_action: "device_swipe"
+  expected_params:
+    direction: "right"
+
+- id: "phone_action_022"
+  prompt: "Swipe up to access the app drawer"
+  persona: "device_agent"
+  expected_action: "device_swipe"
+  expected_params:
+    direction: "up"
+
+- id: "phone_action_023"
+  prompt: "Swipe down to pull down notifications"
+  persona: "device_agent"
+  expected_action: "device_swipe"
+  expected_params:
+    direction: "down"
+
+- id: "phone_action_024"
+  prompt: "Press the Back button"
+  persona: "device_agent"
+  expected_action: "device_press_key"
+  expected_params:
+    key_name: "BACK"
+
+- id: "phone_action_025"
+  prompt: "Go to the Home screen"
+  persona: "device_agent"
+  expected_action: "device_press_key"
+  expected_params:
+    key_name: "HOME"
+
+- id: "phone_action_026"
+  prompt: "Open recent apps view"
+  persona: "device_agent"
+  expected_action: "device_press_key"
+  expected_params:
+    key_name: "RECENTS"
+
+- id: "phone_action_027"
+  prompt: "Hit the Enter key"
+  persona: "device_agent"
+  expected_action: "device_press_key"
+  expected_params:
+    key_name: "ENTER"
+
+- id: "phone_action_028"
+  prompt: "Set the phone volume to 75%"
+  persona: "device_agent"
+  expected_action: "device_set_volume"
+  expected_params:
+    level: 75
+
+- id: "phone_action_029"
+  prompt: "Mute the phone volume to 0"
+  persona: "device_agent"
+  expected_action: "device_set_volume"
+  expected_params:
+    level: 0
+
+- id: "phone_action_030"
+  prompt: "Turn media volume up to 100"
+  persona: "device_agent"
+  expected_action: "device_set_volume"
+  expected_params:
+    level: 100
+
+- id: "phone_action_031"
+  prompt: "Take a screenshot of the current screen"
+  persona: "device_agent"
+  expected_action: "device_screenshot"
+  expected_params: {}
+
+- id: "phone_action_032"
+  prompt: "Capture the screen display"
+  persona: "device_agent"
+  expected_action: "device_screenshot"
+  expected_params: {}
+
+- id: "phone_action_033"
+  prompt: "Read what is currently displayed on screen"
+  persona: "device_agent"
+  expected_action: "device_screen_read"
+  expected_params: {}
+
+- id: "phone_action_034"
+  prompt: "Check battery level and device system info"
+  persona: "device_agent"
+  expected_action: "device_info"
+  expected_params: {}
+
+- id: "phone_action_035"
+  prompt: "Get current device specifications and battery status"
+  persona: "device_agent"
+  expected_action: "device_info"
+  expected_params: {}

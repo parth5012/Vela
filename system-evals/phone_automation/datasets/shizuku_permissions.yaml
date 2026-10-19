@@ -1,0 +1,75 @@
+- id: "shizuku_perm_001"
+  prompt: "Grant camera permission to com.example.cameraapp via Shizuku"
+  persona: "device_agent"
+  expected_action: "device_app_permission_grant"
+  expected_params:
+    package: "com.example.cameraapp"
+    permission: "android.permission.CAMERA"
+
+- id: "shizuku_perm_002"
+  prompt: "Grant ACCESS_FINE_LOCATION permission to com.example.maps via Shizuku"
+  persona: "device_agent"
+  expected_action: "device_app_permission_grant"
+  expected_params:
+    package: "com.example.maps"
+    permission: "android.permission.ACCESS_FINE_LOCATION"
+
+- id: "shizuku_perm_003"
+  prompt: "Revoke RECORD_AUDIO permission from com.example.chat via Shizuku"
+  persona: "device_agent"
+  expected_action: "device_app_permission_revoke"
+  expected_params:
+    package: "com.example.chat"
+    permission: "android.permission.RECORD_AUDIO"
+
+- id: "shizuku_perm_004"
+  prompt: "Revoke READ_CONTACTS permission from com.example.contactsapp via Shizuku"
+  persona: "device_agent"
+  expected_action: "device_app_permission_revoke"
+  expected_params:
+    package: "com.example.contactsapp"
+    permission: "android.permission.READ_CONTACTS"
+
+- id: "shizuku_perm_005"
+  prompt: "Force stop background app com.example.bloatware using Shizuku"
+  persona: "device_agent"
+  expected_action: "device_app_force_stop"
+  expected_params:
+    package: "com.example.bloatware"
+
+- id: "shizuku_perm_006"
+  prompt: "Disable package com.example.telemetry using Shizuku"
+  persona: "device_agent"
+  expected_action: "device_app_set_state"
+  expected_params:
+    package: "com.example.telemetry"
+    state: "disabled"
+
+- id: "shizuku_perm_007"
+  prompt: "Enable package com.example.service via Shizuku"
+  persona: "device_agent"
+  expected_action: "device_app_set_state"
+  expected_params:
+    package: "com.example.service"
+    state: "enabled"
+
+- id: "shizuku_perm_008"
+  prompt: "Clear all application data for com.example.cacheapp via Shizuku"
+  persona: "device_agent"
+  expected_action: "device_app_clear_data"
+  expected_params:
+    package: "com.example.cacheapp"
+
+- id: "shizuku_perm_009"
+  prompt: "Install APK file from /sdcard/Download/test_build.apk using Shizuku"
+  persona: "device_agent"
+  expected_action: "device_app_install"
+  expected_params:
+    apk_path: "/sdcard/Download/test_build.apk"
+
+- id: "shizuku_perm_010"
+  prompt: "Uninstall package com.example.junkapp using Shizuku"
+  persona: "device_agent"
+  expected_action: "device_app_uninstall"
+  expected_params:
+    package: "com.example.junkapp"

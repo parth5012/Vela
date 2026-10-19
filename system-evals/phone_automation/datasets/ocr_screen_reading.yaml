@@ -1,0 +1,192 @@
+- id: "ocr_reading_001"
+  prompt: "What is the battery percentage shown on screen?"
+  persona: "device_agent"
+  expected_action: "device_screen_read"
+  expected_params: {}
+  mock_screen_nodes:
+    - id: "status_bar_battery"
+      text: "Battery: 88%"
+    - id: "clock"
+      text: "10:30 AM"
+  expected_texts:
+    - "Battery: 88%"
+
+- id: "ocr_reading_002"
+  prompt: "Read the verification code from the 2FA SMS on screen"
+  persona: "device_agent"
+  expected_action: "device_screen_read"
+  expected_params: {}
+  mock_screen_nodes:
+    - id: "sms_sender"
+      text: "AuthService"
+    - id: "sms_body"
+      text: "Your security verification code is 482910."
+  expected_texts:
+    - "482910"
+
+- id: "ocr_reading_003"
+  prompt: "Read the current order total from the checkout screen"
+  persona: "device_agent"
+  expected_action: "device_screen_read"
+  expected_params: {}
+  mock_screen_nodes:
+    - id: "item_subtotal"
+      text: "Subtotal: $42.50"
+    - id: "tax"
+      text: "Tax: $3.83"
+    - id: "order_total"
+      text: "Total: $46.33"
+  expected_texts:
+    - "Total: $46.33"
+
+- id: "ocr_reading_004"
+  prompt: "What is the headline news title on screen?"
+  persona: "device_agent"
+  expected_action: "device_screen_read"
+  expected_params: {}
+  mock_screen_nodes:
+    - id: "headline"
+      text: "NASA Rover Discovers New Organic Compounds"
+    - id: "byline"
+      text: "Published 2 hours ago"
+  expected_texts:
+    - "NASA Rover Discovers New Organic Compounds"
+
+- id: "ocr_reading_005"
+  prompt: "Read the Wi-Fi network name connected on screen"
+  persona: "device_agent"
+  expected_action: "device_screen_read"
+  expected_params: {}
+  mock_screen_nodes:
+    - id: "wifi_label"
+      text: "Connected to Home-5G-Network"
+  expected_texts:
+    - "Home-5G-Network"
+
+- id: "ocr_reading_006"
+  prompt: "What song is currently playing on Spotify?"
+  persona: "device_agent"
+  expected_action: "device_screen_read"
+  expected_params: {}
+  mock_screen_nodes:
+    - id: "track_title"
+      text: "Midnight City"
+    - id: "artist_name"
+      text: "M83"
+  expected_texts:
+    - "Midnight City"
+    - "M83"
+
+- id: "ocr_reading_007"
+  prompt: "Read the sender and subject of the top email"
+  persona: "device_agent"
+  expected_action: "device_screen_read"
+  expected_params: {}
+  mock_screen_nodes:
+    - id: "sender"
+      text: "Alex River"
+    - id: "subject"
+      text: "Project Roadmap Q4 Update"
+  expected_texts:
+    - "Alex River"
+    - "Project Roadmap Q4 Update"
+
+- id: "ocr_reading_008"
+  prompt: "Read the meeting time and room location"
+  persona: "device_agent"
+  expected_action: "device_screen_read"
+  expected_params: {}
+  mock_screen_nodes:
+    - id: "meeting_time"
+      text: "3:00 PM - 4:00 PM"
+    - id: "room"
+      text: "Conference Room Kepler"
+  expected_texts:
+    - "3:00 PM - 4:00 PM"
+    - "Conference Room Kepler"
+
+- id: "ocr_reading_009"
+  prompt: "Extract the tracking number from the delivery status"
+  persona: "device_agent"
+  expected_action: "device_screen_read"
+  expected_params: {}
+  mock_screen_nodes:
+    - id: "tracking_id"
+      text: "Tracking Number: 1Z9999999999999999"
+    - id: "eta"
+      text: "Estimated Delivery: Tomorrow by 7PM"
+  expected_texts:
+    - "1Z9999999999999999"
+
+- id: "ocr_reading_010"
+  prompt: "What is the temperature and weather condition shown?"
+  persona: "device_agent"
+  expected_action: "device_screen_read"
+  expected_params: {}
+  mock_screen_nodes:
+    - id: "weather_temp"
+      text: "68°F Partly Cloudy"
+    - id: "weather_loc"
+      text: "San Francisco"
+  expected_texts:
+    - "68°F Partly Cloudy"
+
+- id: "ocr_reading_011"
+  prompt: "What is the discount promo code shown in the banner?"
+  persona: "device_agent"
+  expected_action: "device_screen_read"
+  expected_params: {}
+  mock_screen_nodes:
+    - id: "promo_banner"
+      text: "Use code AUTUMN25 for 25% off"
+  expected_texts:
+    - "AUTUMN25"
+
+- id: "ocr_reading_012"
+  prompt: "Read the flight number and gate information"
+  persona: "device_agent"
+  expected_action: "device_screen_read"
+  expected_params: {}
+  mock_screen_nodes:
+    - id: "flight_info"
+      text: "Flight UA 412 Gate B14"
+  expected_texts:
+    - "UA 412"
+    - "Gate B14"
+
+- id: "ocr_reading_013"
+  prompt: "Read the error message displayed in the dialog"
+  persona: "device_agent"
+  expected_action: "device_screen_read"
+  expected_params: {}
+  mock_screen_nodes:
+    - id: "dialog_title"
+      text: "Connection Lost"
+    - id: "dialog_desc"
+      text: "Unable to reach server. Error 503."
+  expected_texts:
+    - "Unable to reach server. Error 503."
+
+- id: "ocr_reading_014"
+  prompt: "What is the alarm time set on the clock screen?"
+  persona: "device_agent"
+  expected_action: "device_screen_read"
+  expected_params: {}
+  mock_screen_nodes:
+    - id: "alarm_time"
+      text: "Alarm set for 06:45 AM"
+  expected_texts:
+    - "06:45 AM"
+
+- id: "ocr_reading_015"
+  prompt: "Read the unread notification badge count for Messages"
+  persona: "device_agent"
+  expected_action: "device_screen_read"
+  expected_params: {}
+  mock_screen_nodes:
+    - id: "app_icon"
+      text: "Messages"
+    - id: "badge"
+      text: "3 Unread"
+  expected_texts:
+    - "3 Unread"
