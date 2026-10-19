@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 # USD per 1M tokens
 PRICING = {
     "gemini-2.5-flash": {"input": 0.075, "output": 0.30},

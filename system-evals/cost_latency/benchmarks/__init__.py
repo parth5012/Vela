@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
 
 DATASETS_DIR = Path(__file__).resolve().parent
 
@@ -52,7 +51,7 @@ def load_cost_latency_cases(dataset=None, mode="nightly", *args, **kwargs):
         fp = DATASETS_DIR / filename
         if not fp.exists():
             raise FileNotFoundError(f"Dataset file '{filename}' not found")
-        with open(fp) as f:
+        with open(fp, encoding="utf-8") as f:
             loaded = json.load(f)
             for c in loaded:
                 c.setdefault("dataset", cat)
