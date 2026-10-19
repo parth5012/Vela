@@ -36,13 +36,19 @@ try:
 except ImportError:
     # Minimal fallback representation if deepeval is not installed
     class ConversationalTestCase:  # type: ignore[no-redef]
+        """Fallback conversational test case representation for offline environments."""
+
         def __init__(self, turns: Any, **kwargs: Any):
+            """Initialize conversational test case with conversation turns."""
             self.turns = turns
             for k, v in kwargs.items():
                 setattr(self, k, v)
 
     class Turn:  # type: ignore[no-redef]
+        """Fallback turn representation for offline environments."""
+
         def __init__(self, role: str, content: str, latency_ms: float = 0.0, **kwargs: Any):
+            """Initialize turn with role, content, and latency."""
             self.role = role
             self.content = content
             self.latency_ms = latency_ms
@@ -85,6 +91,7 @@ def run_multi_turn_eval(mode: str = "smoke", live: bool = False) -> FamilyResult
     mock_cases_count = 0
     coherence_scores: List[float] = []
     relevancy_scores: List[float] = []
+    recall_scores: List[float] = []
 
     coherence_evaluator = CoherenceMetric()
     relevancy_evaluator = ConversationRelevancyMetric()
@@ -213,20 +220,34 @@ def run_multi_turn_eval(mode: str = "smoke", live: bool = False) -> FamilyResult
             found_forbidden = [kw for kw in forbidden_kws if kw.lower() in last_turn_text.lower()]
             case_violations.append(f"Final turn contains forbidden keywords: {found_forbidden}")
 
-        # DeepEval Metric Evaluation
-        test_case = ConversationalTestCase(
-            turns=turn_objects,
-            scenario=case_id,
-            name=case.get("description", case_id),
-        )
+        # DeepEval Metric Evaluation (skip if execution failed early)
+        c_score = 0.0
+        r_score = 0.0
+        rec_score = 0.0
+        if not backend_error and not case_violations:
+            test_case = ConversationalTestCase(
+                turns=turn_objects,
+                scenario=case_id,
+                name=case.get("description", case_id),
+                category=category,
+            )
 
-        c_score = coherence_evaluator.measure(test_case)
-        r_score = relevancy_evaluator.measure(test_case)
-        coherence_scores.append(c_score)
-        relevancy_scores.append(r_score)
+            c_score = coherence_evaluator.measure(test_case)
+            r_score = relevancy_evaluator.measure(test_case)
+            rec_score = recall_evaluator.measure(
+                test_case,
+                expected_facts=expected_kws,
+                forbidden_facts=forbidden_kws,
+                category=category,
+            )
+            coherence_scores.append(c_score)
+            relevancy_scores.append(r_score)
+            recall_scores.append(rec_score)
 
-        if not coherence_evaluator.is_successful():
-            case_violations.append(f"Coherence failure: {coherence_evaluator.reason}")
+            if not coherence_evaluator.is_successful():
+                case_violations.append(f"Coherence failure: {coherence_evaluator.reason}")
+            if not recall_evaluator.is_successful():
+                case_violations.append(f"Recall failure: {recall_evaluator.reason}")
 
         case_passed = (backend_error is None) and (len(case_violations) == 0) and has_expected and not has_forbidden
 
@@ -243,6 +264,7 @@ def run_multi_turn_eval(mode: str = "smoke", live: bool = False) -> FamilyResult
             "passed": case_passed,
             "coherence_score": c_score,
             "relevancy_score": r_score,
+            "recall_score": rec_score,
             "turns_count": len(turn_objects) // 2,
             "turn_latencies_ms": turn_latencies,
             "violations": case_violations,
@@ -255,6 +277,9 @@ def run_multi_turn_eval(mode: str = "smoke", live: bool = False) -> FamilyResult
     )
     avg_relevancy = (
         round(sum(relevancy_scores) / len(relevancy_scores), 2) if relevancy_scores else 0.0
+    )
+    avg_recall = (
+        round(sum(recall_scores) / len(recall_scores), 2) if recall_scores else 0.0
     )
     avg_latency = (
         round(total_latency_ms / total_turns_count, 2) if total_turns_count > 0 else 0.0
@@ -272,6 +297,7 @@ def run_multi_turn_eval(mode: str = "smoke", live: bool = False) -> FamilyResult
             "coherence_rate": round(passed / total_cases, 2) if total_cases > 0 else 0.0,
             "avg_coherence_score": avg_coherence,
             "avg_relevancy_score": avg_relevancy,
+            "avg_recall_score": avg_recall,
             "avg_latency_ms": avg_latency,
             "total_turns": total_turns_count,
             "live_cases": live_cases_count,

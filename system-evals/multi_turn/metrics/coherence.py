@@ -53,6 +53,7 @@ class CoherenceMetric(BaseConversationalMetric):
     """Measures conversational coherence, constraint preservation, and consistency across turns."""
 
     def __init__(self, threshold: float = 0.7):
+        """Initialize CoherenceMetric with an evaluation passing threshold."""
         super().__init__()
         self.threshold = threshold
         self.score: float = 0.0
@@ -62,6 +63,7 @@ class CoherenceMetric(BaseConversationalMetric):
 
     @property
     def __name__(self) -> str:
+        """Return metric name for DeepEval logging and test reporting."""
         return "CoherenceMetric"
 
     def measure(self, test_case: ConversationalTestCase) -> float:
@@ -199,16 +201,26 @@ class CoherenceMetric(BaseConversationalMetric):
                     if "mozzarella is fine" in c_lower or "cheese is vegetarian" in c_lower:
                         turn_violations.append(f"Turn {assistant_turn_idx}: allowed non-vegan food under vegan preference")
                         t_score = max(0.0, t_score - 0.6)
+                if active_preferences.get("units") == "imperial":
+                    if "kilometer" in c_lower or " km" in c_lower:
+                        turn_violations.append(f"Turn {assistant_turn_idx}: regressed to superseded metric units preference")
+                        t_score = max(0.0, t_score - 0.6)
+                if active_preferences.get("budget") == "1200":
+                    if "500" in c_lower and "1,200" not in c_lower and "1200" not in c_lower:
+                        turn_violations.append(f"Turn {assistant_turn_idx}: regressed to superseded $500 budget preference")
+                        t_score = max(0.0, t_score - 0.6)
 
                 violations.extend(turn_violations)
                 turn_scores.append(t_score)
 
         if turn_scores:
             self.score = round(sum(turn_scores) / len(turn_scores), 2)
+            self.success = self.score >= self.threshold and len(violations) == 0
         else:
-            self.score = 1.0
+            self.score = 0.0
+            self.success = False
+            violations.append("No assistant turns found to evaluate.")
 
-        self.success = self.score >= self.threshold and len(violations) == 0
         if violations:
             self.reason = f"Coherence violations detected ({len(violations)}): " + "; ".join(violations[:3])
         else:
@@ -223,9 +235,11 @@ class CoherenceMetric(BaseConversationalMetric):
         return self.score
 
     async def a_measure(self, test_case: ConversationalTestCase) -> float:
+        """Asynchronously evaluate conversational coherence across all turns in sequence."""
         return self.measure(test_case)
 
     def is_successful(self) -> bool:
+        """Return whether the coherence evaluation score meets or exceeds the threshold."""
         return self.success
 
 
@@ -233,6 +247,7 @@ class ConversationRelevancyMetric(BaseConversationalMetric):
     """Measures relevancy of assistant responses to user queries and cumulative dialogue context."""
 
     def __init__(self, threshold: float = 0.7):
+        """Initialize ConversationRelevancyMetric with an evaluation passing threshold."""
         super().__init__()
         self.threshold = threshold
         self.score: float = 0.0
@@ -242,6 +257,7 @@ class ConversationRelevancyMetric(BaseConversationalMetric):
 
     @property
     def __name__(self) -> str:
+        """Return metric name for DeepEval logging and test reporting."""
         return "ConversationRelevancyMetric"
 
     def measure(self, test_case: ConversationalTestCase) -> float:
@@ -289,11 +305,13 @@ class ConversationRelevancyMetric(BaseConversationalMetric):
 
         if turn_scores:
             self.score = round(sum(turn_scores) / len(turn_scores), 2)
+            self.success = self.score >= self.threshold
+            self.reason = f"Average turn relevancy: {self.score:.2f} across {len(turn_scores)} assistant turns."
         else:
-            self.score = 1.0
+            self.score = 0.0
+            self.success = False
+            self.reason = "No assistant turns found to evaluate relevancy."
 
-        self.success = self.score >= self.threshold
-        self.reason = f"Average turn relevancy: {self.score:.2f} across {len(turn_scores)} assistant turns."
         self.score_breakdown = {
             "turn_scores": turn_scores,
             "turns_count": len(turn_scores),
@@ -301,9 +319,11 @@ class ConversationRelevancyMetric(BaseConversationalMetric):
         return self.score
 
     async def a_measure(self, test_case: ConversationalTestCase) -> float:
+        """Asynchronously evaluate relevancy of assistant turns against preceding user context."""
         return self.measure(test_case)
 
     def is_successful(self) -> bool:
+        """Return whether the conversation relevancy score meets or exceeds the threshold."""
         return self.success
 
 
@@ -311,6 +331,7 @@ class ConversationalRecallMetric(BaseConversationalMetric):
     """Measures retrieval and recall of facts introduced across conversation turns."""
 
     def __init__(self, threshold: float = 0.7):
+        """Initialize ConversationalRecallMetric with an evaluation passing threshold."""
         super().__init__()
         self.threshold = threshold
         self.score: float = 0.0
@@ -320,6 +341,7 @@ class ConversationalRecallMetric(BaseConversationalMetric):
 
     @property
     def __name__(self) -> str:
+        """Return metric name for DeepEval logging and test reporting."""
         return "ConversationalRecallMetric"
 
     def measure(
@@ -327,6 +349,8 @@ class ConversationalRecallMetric(BaseConversationalMetric):
         test_case: ConversationalTestCase,
         expected_facts: Optional[List[str]] = None,
         forbidden_facts: Optional[List[str]] = None,
+        *args: Any,
+        **kwargs: Any,
     ) -> float:
         """Evaluate whether expected factual anchors are recalled and forbidden terms avoided."""
         turns = getattr(test_case, "turns", [])
@@ -344,8 +368,20 @@ class ConversationalRecallMetric(BaseConversationalMetric):
                 break
 
         final_lower = final_assistant_content.lower()
-        expected = expected_facts or []
-        forbidden = forbidden_facts or []
+        expected = (
+            expected_facts
+            if expected_facts is not None
+            else getattr(test_case, "expected_facts", None)
+            or getattr(test_case, "expected_keywords", None)
+            or []
+        )
+        forbidden = (
+            forbidden_facts
+            if forbidden_facts is not None
+            else getattr(test_case, "forbidden_facts", None)
+            or getattr(test_case, "forbidden_keywords", None)
+            or []
+        )
 
         recalled_count = 0
         missed: List[str] = []
@@ -360,24 +396,44 @@ class ConversationalRecallMetric(BaseConversationalMetric):
             if f.lower() in final_lower:
                 leaked.append(f)
 
-        if expected:
-            recall_rate = recalled_count / len(expected)
+        category = getattr(test_case, "category", "") or kwargs.get("category", "")
+        is_isolation = category in ("isolation", "thread_isolation") or kwargs.get("match_mode") == "any"
+        if is_isolation:
+            # For isolation cases, expected facts are alternative refusal indicators (any 1 satisfies)
+            if expected:
+                recall_rate = 1.0 if recalled_count > 0 else 0.0
+            else:
+                recall_rate = 1.0
         else:
-            recall_rate = 1.0
+            if expected:
+                recall_rate = recalled_count / len(expected)
+            else:
+                recall_rate = 1.0
 
         if leaked:
             recall_rate = 0.0
 
         self.score = round(recall_rate, 2)
-        self.success = self.score >= self.threshold and len(leaked) == 0
+        if is_isolation:
+            self.success = (recalled_count > 0 or not expected) and len(leaked) == 0
+        else:
+            self.success = self.score >= self.threshold and len(leaked) == 0
 
         reasons = []
-        if missed:
-            reasons.append(f"Missed expected facts: {missed}")
-        if leaked:
-            reasons.append(f"Found forbidden terms: {leaked}")
-        if not missed and not leaked:
-            reasons.append(f"Successfully recalled {recalled_count}/{len(expected)} expected facts.")
+        if is_isolation:
+            if expected and recalled_count == 0:
+                reasons.append(f"Missing refusal indicator (expected one of: {expected})")
+            if leaked:
+                reasons.append(f"Found leaked forbidden terms: {leaked}")
+            if not leaked and (recalled_count > 0 or not expected):
+                reasons.append("Thread boundary maintained with zero secret leakage.")
+        else:
+            if missed:
+                reasons.append(f"Missed expected facts: {missed}")
+            if leaked:
+                reasons.append(f"Found forbidden terms: {leaked}")
+            if not missed and not leaked:
+                reasons.append(f"Successfully recalled {recalled_count}/{len(expected)} expected facts.")
 
         self.reason = "; ".join(reasons)
         self.score_breakdown = {
@@ -388,8 +444,32 @@ class ConversationalRecallMetric(BaseConversationalMetric):
         }
         return self.score
 
-    async def a_measure(self, test_case: ConversationalTestCase) -> float:
-        return self.measure(test_case)
+    async def a_measure(
+        self,
+        test_case: ConversationalTestCase,
+        expected_facts: Optional[List[str]] = None,
+        forbidden_facts: Optional[List[str]] = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> float:
+        """Asynchronous entry point for conversational recall measurement."""
+        return self.measure(
+            test_case,
+            expected_facts=expected_facts,
+            forbidden_facts=forbidden_facts,
+            *args,
+            **kwargs,
+        )
 
     def is_successful(self) -> bool:
+        """Return whether recall measurement passed threshold without forbidden terms."""
         return self.success
+
+
+class ContextualRecallMetric(ConversationalRecallMetric):
+    """DeepEval ContextualRecallMetric for multi-turn conversational evaluation."""
+
+    @property
+    def __name__(self) -> str:
+        """Return metric name for DeepEval logging and test reporting."""
+        return "ContextualRecallMetric"

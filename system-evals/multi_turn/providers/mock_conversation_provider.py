@@ -6,7 +6,6 @@ enforces strict thread boundary isolation, and adheres to conversation constrain
 
 from __future__ import annotations
 
-import re
 from typing import Any
 from adapters.client import TurnResult
 
@@ -15,6 +14,7 @@ class MockConversationEngine:
     """In-memory conversational engine simulating Vela's multi-turn dialogue state."""
 
     def __init__(self):
+        """Initialize in-memory thread storage for simulated conversations."""
         self._threads: dict[str, dict[str, Any]] = {}
 
     def reset(self) -> None:
@@ -22,6 +22,7 @@ class MockConversationEngine:
         self._threads.clear()
 
     def _get_thread(self, thread_id: str) -> dict[str, Any]:
+        """Retrieve or initialize the conversation thread state dictionary."""
         if thread_id not in self._threads:
             self._threads[thread_id] = {
                 "history": [],
@@ -70,7 +71,7 @@ class MockConversationEngine:
             thread["facts"]["pet"] = "Barnaby the Golden Retriever"
         if "flight-af-9842" in m_lower:
             thread["facts"]["flight"] = "FLIGHT-AF-9842"
-        if "expires in 2036" in m_lower or "passport" in m_lower and "2036" in m_lower:
+        if "expires in 2036" in m_lower or ("passport" in m_lower and "2036" in m_lower):
             thread["facts"]["passport"] = "2036"
         if "192.168.10.45" in m_lower:
             thread["facts"]["ip"] = "192.168.10.45"
@@ -123,7 +124,7 @@ class MockConversationEngine:
         # 3. Detect and apply preference overrides
         if "hate mornings now" in m_lower or ("afternoon" in m_lower and "2:00 pm" in m_lower):
             thread["preferences"]["meeting_time"] = "afternoon after 2:00 PM"
-        elif "9:00 am" in m_lower or "morning" in m_lower and "sync" in m_lower:
+        elif "9:00 am" in m_lower or ("morning" in m_lower and "sync" in m_lower):
             thread["preferences"]["meeting_time"] = "morning at 9:00 AM"
 
         if "typescript and node.js instead of python" in m_lower:
@@ -263,46 +264,116 @@ class MockConversationEngine:
 
         # Responses for preference override queries
         elif "when should we book our weekly sync" in m_lower:
-            mt = thread["preferences"].get("meeting_time", "afternoon after 2:00 PM")
-            resp = f"Per your updated preference, we should schedule internal syncs in the {mt}."
+            mt = thread["preferences"].get("meeting_time")
+            resp = (
+                f"Per your updated preference, we should schedule internal syncs in the {mt}."
+                if mt
+                else "No meeting time preference recorded in this conversation."
+            )
         elif "which programming language are we using for our worker scripts" in m_lower:
-            lang = thread["preferences"].get("language", "TypeScript and Node.js")
-            resp = f"We are using {lang} for our data pipeline worker scripts per your updated direction."
+            lang = thread["preferences"].get("language")
+            resp = (
+                f"We are using {lang} for our data pipeline worker scripts per your updated direction."
+                if lang
+                else "No programming language preference recorded in this conversation."
+            )
         elif "what ui theme mode am i using right now" in m_lower:
-            th = thread["preferences"].get("theme", "light mode")
-            resp = f"You are currently using clean {th}."
+            th = thread["preferences"].get("theme")
+            resp = (
+                f"You are currently using clean {th}."
+                if th
+                else "No UI theme preference recorded in this conversation."
+            )
         elif "can i eat a pizza with regular mozzarella cheese" in m_lower:
-            dt = thread["preferences"].get("diet", "strict vegan")
-            resp = f"No, under your {dt} diet, regular mozzarella contains dairy and cannot be consumed."
+            dt = thread["preferences"].get("diet")
+            if dt == "strict vegan (no dairy or eggs)":
+                resp = "No, under your strict vegan diet, regular mozzarella contains dairy and cannot be consumed."
+            elif dt:
+                resp = f"Under your {dt} diet, mozzarella cheese is fine."
+            else:
+                resp = "No dietary preference recorded in this conversation."
         elif "how far is london to paris according to my preferred units" in m_lower:
-            resp = "The distance from London to Paris is approximately 213 miles."
+            units = thread["preferences"].get("units")
+            if units == "imperial units (miles, pounds)":
+                resp = "The distance from London to Paris is approximately 213 miles."
+            elif units == "metric units (kilometers, kilograms)":
+                resp = "The distance from London to Paris is approximately 343 kilometers."
+            else:
+                resp = "No unit preferences recorded in this conversation."
         elif "can we consider a $900 ultra-wide monitor within my budget" in m_lower:
-            cap = thread["preferences"].get("budget_cap", 1200)
-            resp = f"Yes, $900 is well within your updated $1,200 budget ceiling."
+            cap = thread["preferences"].get("budget_cap")
+            if cap == 1200:
+                resp = "Yes, $900 is well within your updated $1,200 budget ceiling."
+            elif cap == 500:
+                resp = "No, $900 exceeds your $500 budget cap."
+            else:
+                resp = "No budget cap preference recorded in this conversation."
         elif "explain paxos in your current style" in m_lower:
-            resp = "In concise terms, Paxos is a consensus protocol where distributed nodes agree on a single value through proposed rounds, ensuring consistency even if some nodes fail."
+            tone = thread["preferences"].get("tone")
+            if tone == "concise conversational":
+                resp = "In concise terms, Paxos is a consensus protocol where distributed nodes agree on a single value through proposed rounds, ensuring consistency even if some nodes fail."
+            elif tone == "formal academic":
+                resp = "Paxos constitutes a distributed fault-tolerant algorithmic consensus framework predicated upon multi-phase ballot voting mechanisms."
+            else:
+                resp = "No tone preference recorded in this conversation."
         elif "how and when will i receive notifications" in m_lower:
-            notif = thread["preferences"].get("notification", "daily digest at 6:00 PM")
-            resp = f"You will receive notifications as a single {notif}."
+            notif = thread["preferences"].get("notification")
+            resp = (
+                f"You will receive notifications as a single {notif}."
+                if notif
+                else "No notification preference recorded in this conversation."
+            )
         elif "which seat location should you look for" in m_lower:
-            st = thread["preferences"].get("seat", "aisle seat")
-            resp = f"I will look for an {st} per your updated seating preference."
+            st = thread["preferences"].get("seat")
+            resp = (
+                f"I will look for an {st} per your updated seating preference."
+                if st
+                else "No seating preference recorded in this conversation."
+            )
         elif "javascript map example formatted with my updated indent" in m_lower:
-            resp = "// Formatted with 2 spaces indentation:\nconst nums = [1, 2, 3];\nconst doubled = nums.map(n => {\n  return n * 2;\n});"
+            indent = thread["preferences"].get("indent")
+            if indent == "2 spaces":
+                resp = "// Formatted with 2 spaces indentation:\nconst nums = [1, 2, 3];\nconst doubled = nums.map(n => {\n  return n * 2;\n});"
+            elif indent == "4 spaces":
+                resp = "// Formatted with 4 spaces indentation:\nconst nums = [1, 2, 3];\nconst doubled = nums.map(n => {\n    return n * 2;\n});"
+            else:
+                resp = "No indentation preference recorded in this conversation."
         elif "working from home or in the office on thursday" in m_lower:
-            resp = "Under your hybrid policy, you are scheduled to work in the office on Thursday."
+            loc = thread["preferences"].get("work_location")
+            if loc == "hybrid (in the office on Tuesdays and Thursdays)":
+                resp = "Under your hybrid policy, you are scheduled to work in the office on Thursday."
+            elif loc == "100% fully remote from home":
+                resp = "Under your remote policy, you are working from home on Thursday."
+            else:
+                resp = "No work location preference recorded in this conversation."
         elif "target for our new microservices deployment" in m_lower:
-            cl = thread["preferences"].get("cloud", "Google Cloud Platform (GCP)")
-            resp = f"We should target {cl} for the microservices deployment."
+            cl = thread["preferences"].get("cloud")
+            resp = (
+                f"We should target {cl} for the microservices deployment."
+                if cl
+                else "No cloud target preference recorded in this conversation."
+            )
         elif "what delivery shipping method is selected" in m_lower:
-            sh = thread["preferences"].get("shipping", "overnight express")
-            resp = f"The delivery method selected is {sh} priority delivery."
+            sh = thread["preferences"].get("shipping")
+            resp = (
+                f"The delivery method selected is {sh} priority delivery."
+                if sh
+                else "No shipping method preference recorded in this conversation."
+            )
         elif "which mobile operating system and device model" in m_lower:
-            ph = thread["preferences"].get("phone", "Google Pixel 9 Pro running Android")
-            resp = f"Your daily driver device is a {ph}."
+            ph = thread["preferences"].get("phone")
+            resp = (
+                f"Your daily driver device is a {ph}."
+                if ph
+                else "No mobile device preference recorded in this conversation."
+            )
         elif "where am i currently planning to travel" in m_lower:
-            vc = thread["preferences"].get("vacation", "Reykjavik, Iceland")
-            resp = f"You are currently planning your vacation trip to {vc}."
+            vc = thread["preferences"].get("vacation")
+            resp = (
+                f"You are currently planning your vacation trip to {vc}."
+                if vc
+                else "No vacation destination preference recorded in this conversation."
+            )
 
         # Thread isolation queries: verify cross-thread isolation
         elif any(k in m_lower for k in [
