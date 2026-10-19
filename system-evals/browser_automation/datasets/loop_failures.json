@@ -865,8 +865,8 @@
             }
           ]
         },
-        "action": "click",
-        "target": "#btn-older",
+        "action": "navigate",
+        "target": "https://media.press.org/news/page/2",
         "value": "",
         "status": "success",
         "observation": "Navigated to https://media.press.org/news/page/2"
@@ -884,8 +884,8 @@
             }
           ]
         },
-        "action": "click",
-        "target": "#btn-older",
+        "action": "navigate",
+        "target": "https://media.press.org/news",
         "value": "",
         "status": "success",
         "observation": "Malformed pagination redirected to https://media.press.org/news"
@@ -903,8 +903,8 @@
             }
           ]
         },
-        "action": "click",
-        "target": "#btn-older",
+        "action": "navigate",
+        "target": "https://media.press.org/news/page/2",
         "value": "",
         "status": "success",
         "observation": "Navigated to https://media.press.org/news/page/2 again"
@@ -922,8 +922,8 @@
             }
           ]
         },
-        "action": "click",
-        "target": "#btn-older",
+        "action": "navigate",
+        "target": "https://media.press.org/news",
         "value": "",
         "status": "success",
         "observation": "Redirected back to https://media.press.org/news again"

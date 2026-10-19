@@ -102,8 +102,10 @@ def _check_pagination_drift(steps: list[dict[str, Any]]) -> LoopDetectionResult 
 
     url_records: list[tuple[str, int]] = []
     for s in steps:
+        if s.get("action") != "navigate":
+            continue
         url = s.get("page_url") or ""
-        if s.get("action") == "navigate" and s.get("target"):
+        if s.get("target"):
             url = s.get("target")
         if url:
             step_num = s.get("step_number")
