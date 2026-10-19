@@ -1,0 +1,452 @@
+[
+  {
+    "id": "ts_sel_001",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Gmail read selection",
+    "persona": "personal assistant",
+    "prompt": "Check my unread emails from Priya",
+    "expected_tool": "gmail_read_emails",
+    "expected_tools": [
+      "gmail_read_emails"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  },
+  {
+    "id": "ts_sel_002",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Gmail read selection",
+    "persona": "personal assistant",
+    "prompt": "Show me the latest messages in my inbox",
+    "expected_tool": "gmail_read_emails",
+    "expected_tools": [
+      "gmail_read_emails"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  },
+  {
+    "id": "ts_sel_003",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Gmail read selection",
+    "persona": "personal assistant",
+    "prompt": "Find emails about the Q3 review",
+    "expected_tool": "gmail_read_emails",
+    "expected_tools": [
+      "gmail_read_emails"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  },
+  {
+    "id": "ts_sel_004",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Gmail read selection",
+    "persona": "personal assistant",
+    "prompt": "Read my recent Gmail messages",
+    "expected_tool": "gmail_read_emails",
+    "expected_tools": [
+      "gmail_read_emails"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  },
+  {
+    "id": "ts_sel_005",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Gmail read selection",
+    "persona": "personal assistant",
+    "prompt": "Any new mail from the design team?",
+    "expected_tool": "gmail_read_emails",
+    "expected_tools": [
+      "gmail_read_emails"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  },
+  {
+    "id": "ts_sel_006",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Calendar list selection",
+    "persona": "personal assistant",
+    "prompt": "What meetings do I have scheduled for tomorrow?",
+    "expected_tool": "calendar_list_events",
+    "expected_tools": [
+      "calendar_list_events"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  },
+  {
+    "id": "ts_sel_007",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Calendar list selection",
+    "persona": "personal assistant",
+    "prompt": "List my calendar events for next week",
+    "expected_tool": "calendar_list_events",
+    "expected_tools": [
+      "calendar_list_events"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  },
+  {
+    "id": "ts_sel_008",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Calendar list selection",
+    "persona": "personal assistant",
+    "prompt": "Am I free on Friday afternoon?",
+    "expected_tool": "calendar_list_events",
+    "expected_tools": [
+      "calendar_list_events"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  },
+  {
+    "id": "ts_sel_009",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Calendar list selection",
+    "persona": "personal assistant",
+    "prompt": "Show my upcoming appointments",
+    "expected_tool": "calendar_list_events",
+    "expected_tools": [
+      "calendar_list_events"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  },
+  {
+    "id": "ts_sel_010",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Calendar list selection",
+    "persona": "personal assistant",
+    "prompt": "What's on my agenda today?",
+    "expected_tool": "calendar_list_events",
+    "expected_tools": [
+      "calendar_list_events"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  },
+  {
+    "id": "ts_sel_011",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Web search selection",
+    "persona": "researcher",
+    "prompt": "Search the web for latest Rust 1.85 release notes",
+    "expected_tool": "web_search",
+    "expected_tools": [
+      "web_search"
+    ],
+    "should_call_tool": true,
+    "arg_keys": [
+      "query"
+    ]
+  },
+  {
+    "id": "ts_sel_012",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Web search selection",
+    "persona": "researcher",
+    "prompt": "Look up current weather in Tokyo",
+    "expected_tool": "web_search",
+    "expected_tools": [
+      "web_search"
+    ],
+    "should_call_tool": true,
+    "arg_keys": [
+      "query"
+    ]
+  },
+  {
+    "id": "ts_sel_013",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Web search selection",
+    "persona": "researcher",
+    "prompt": "Find recent news about AI agents",
+    "expected_tool": "web_search",
+    "expected_tools": [
+      "web_search"
+    ],
+    "should_call_tool": true,
+    "arg_keys": [
+      "query"
+    ]
+  },
+  {
+    "id": "ts_sel_014",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Web search selection",
+    "persona": "researcher",
+    "prompt": "Google the capital of France",
+    "expected_tool": "web_search",
+    "expected_tools": [
+      "web_search"
+    ],
+    "should_call_tool": true,
+    "arg_keys": [
+      "query"
+    ]
+  },
+  {
+    "id": "ts_sel_015",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Web search selection",
+    "persona": "researcher",
+    "prompt": "Search online for Python 3.13 features",
+    "expected_tool": "web_search",
+    "expected_tools": [
+      "web_search"
+    ],
+    "should_call_tool": true,
+    "arg_keys": [
+      "query"
+    ]
+  },
+  {
+    "id": "ts_sel_016",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Python execution selection",
+    "persona": "coder",
+    "prompt": "Execute this Python snippet to sort a list",
+    "expected_tool": "run_python_code",
+    "expected_tools": [
+      "run_python_code"
+    ],
+    "should_call_tool": true,
+    "arg_keys": [
+      "code"
+    ]
+  },
+  {
+    "id": "ts_sel_017",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Python execution selection",
+    "persona": "coder",
+    "prompt": "Run code to compute fibonacci",
+    "expected_tool": "run_python_code",
+    "expected_tools": [
+      "run_python_code"
+    ],
+    "should_call_tool": true,
+    "arg_keys": [
+      "code"
+    ]
+  },
+  {
+    "id": "ts_sel_018",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Python execution selection",
+    "persona": "coder",
+    "prompt": "Evaluate a Python expression for me",
+    "expected_tool": "run_python_code",
+    "expected_tools": [
+      "run_python_code"
+    ],
+    "should_call_tool": true,
+    "arg_keys": [
+      "code"
+    ]
+  },
+  {
+    "id": "ts_sel_019",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Python execution selection",
+    "persona": "coder",
+    "prompt": "Execute Python to parse JSON",
+    "expected_tool": "run_python_code",
+    "expected_tools": [
+      "run_python_code"
+    ],
+    "should_call_tool": true,
+    "arg_keys": [
+      "code"
+    ]
+  },
+  {
+    "id": "ts_sel_020",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Python execution selection",
+    "persona": "coder",
+    "prompt": "Run this script in Python",
+    "expected_tool": "run_python_code",
+    "expected_tools": [
+      "run_python_code"
+    ],
+    "should_call_tool": true,
+    "arg_keys": [
+      "code"
+    ]
+  },
+  {
+    "id": "ts_sel_021",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Memory save selection",
+    "persona": "personal assistant",
+    "prompt": "Remember that my favorite color is blue",
+    "expected_tool": "save_user_memory",
+    "expected_tools": [
+      "save_user_memory"
+    ],
+    "should_call_tool": true,
+    "arg_keys": [
+      "content"
+    ]
+  },
+  {
+    "id": "ts_sel_022",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Memory save selection",
+    "persona": "personal assistant",
+    "prompt": "Save my wifi password for later",
+    "expected_tool": "save_user_memory",
+    "expected_tools": [
+      "save_user_memory"
+    ],
+    "should_call_tool": true,
+    "arg_keys": [
+      "content"
+    ]
+  },
+  {
+    "id": "ts_sel_023",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Memory save selection",
+    "persona": "personal assistant",
+    "prompt": "Store this note in memory",
+    "expected_tool": "save_user_memory",
+    "expected_tools": [
+      "save_user_memory"
+    ],
+    "should_call_tool": true,
+    "arg_keys": [
+      "content"
+    ]
+  },
+  {
+    "id": "ts_sel_024",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Memory save selection",
+    "persona": "personal assistant",
+    "prompt": "Memorize my project codename",
+    "expected_tool": "save_user_memory",
+    "expected_tools": [
+      "save_user_memory"
+    ],
+    "should_call_tool": true,
+    "arg_keys": [
+      "content"
+    ]
+  },
+  {
+    "id": "ts_sel_025",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Memory save selection",
+    "persona": "personal assistant",
+    "prompt": "Keep this information for future reference",
+    "expected_tool": "save_user_memory",
+    "expected_tools": [
+      "save_user_memory"
+    ],
+    "should_call_tool": true,
+    "arg_keys": [
+      "content"
+    ]
+  },
+  {
+    "id": "ts_sel_026",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Tool selection overlap",
+    "persona": "personal assistant",
+    "prompt": "Send an email to Priya about the meeting",
+    "expected_tool": "gmail_send_email",
+    "expected_tools": [
+      "gmail_send_email"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  },
+  {
+    "id": "ts_sel_027",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Tool selection overlap",
+    "persona": "personal assistant",
+    "prompt": "Create a calendar event for standup",
+    "expected_tool": "calendar_create_event",
+    "expected_tools": [
+      "calendar_create_event"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  },
+  {
+    "id": "ts_sel_028",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Tool selection overlap",
+    "persona": "personal assistant",
+    "prompt": "Delete the memory about my old address",
+    "expected_tool": "delete_user_memory",
+    "expected_tools": [
+      "delete_user_memory"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  },
+  {
+    "id": "ts_sel_029",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Tool selection overlap",
+    "persona": "personal assistant",
+    "prompt": "Send a status update to the user",
+    "expected_tool": "send_status_message",
+    "expected_tools": [
+      "send_status_message"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  },
+  {
+    "id": "ts_sel_030",
+    "category": "tool_selection",
+    "dataset": "tool_selection",
+    "description": "Tool selection overlap",
+    "persona": "personal assistant",
+    "prompt": "Check device battery info",
+    "expected_tool": "device_info",
+    "expected_tools": [
+      "device_info"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  }
+]
