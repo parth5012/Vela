@@ -77,7 +77,6 @@ def run_tool_calling_eval(mode: str = "smoke", live: bool = False) -> FamilyResu
         expected_args = _expected_args(case)
         is_sequencing = case.get("category") == "tool_sequencing" or case.get("sequence", False)
         is_negative = (not should_call) or case.get("category") == "tool_negative"
-        is_arguments = case.get("category") == "tool_arguments" or bool(expected_args)
 
         provider = "live"
         backend_error = None
@@ -87,11 +86,9 @@ def run_tool_calling_eval(mode: str = "smoke", live: bool = False) -> FamilyResu
             live_cases += 1
             try:
                 turn = client.send_turn(message=prompt, persona=persona)
-                if not turn.is_success or not turn.text and not turn.tool_calls:
-                    # allow empty text if tool calls present
-                    if not turn.tool_calls:
-                        backend_error = f"backend_error:{turn.error_message or 'empty_or_failed_turn'}"
-                        turn = None
+                if not turn.is_success or (not turn.text and not turn.tool_calls):
+                    backend_error = f"backend_error:{turn.error_message or 'empty_or_failed_turn'}"
+                    turn = None
             except Exception as e:
                 backend_error = f"backend_unreachable:{type(e).__name__}: {str(e)}"
                 turn = None
@@ -100,10 +97,13 @@ def run_tool_calling_eval(mode: str = "smoke", live: bool = False) -> FamilyResu
             mock_cases += 1
             turn = mock_engine.send_turn(message=prompt, persona=persona, case=case)
 
-        observed = [c.get("tool") if isinstance(c, dict) else getattr(c, "tool", None) for c in (turn.tool_calls if turn else [])]
-        observed = [t for t in observed if t]
+        observed = []
         observed_args_list = []
         for c in (turn.tool_calls if turn else []):
+            name = c.get("tool") if isinstance(c, dict) else getattr(c, "tool", None)
+            if not name:
+                continue
+            observed.append(name)
             if isinstance(c, dict):
                 observed_args_list.append(c.get("input", c.get("arguments", {})) or {})
             else:

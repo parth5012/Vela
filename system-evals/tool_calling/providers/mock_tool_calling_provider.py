@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 from adapters.client import TurnResult
 
@@ -34,6 +35,7 @@ class MockToolCallingEngine:
         should_call = case.get("should_call_tool", len(expected_tools) > 0)
 
         tool_calls: list[dict[str, Any]] = []
+        self._calls.append({"message": message, "persona": persona, "thread_id": thread_id})
         if should_call:
             for tool_name in expected_tools:
                 args = dict(expected_args) if expected_args else {}
@@ -44,8 +46,7 @@ class MockToolCallingEngine:
         # Build a textual representation with <call:...> tags
         parts = []
         for tc in tool_calls:
-            import json as _j
-            inp = _j.dumps(tc["input"])
+            inp = json.dumps(tc["input"])
             parts.append(f'<call:{tc["tool"]} input="{inp}">dry_run_intercepted</call:{tc["tool"]}>')
         text = " ".join(parts) if parts else "No tool needed; answering directly."
 
