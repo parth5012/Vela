@@ -24,6 +24,7 @@ from multi_turn.datasets import DATASET_FILES, load_multi_turn_cases
 from multi_turn.providers.mock_conversation_provider import MockConversationEngine
 from multi_turn.metrics.coherence import (
     CoherenceMetric,
+    ContextualRecallMetric,
     ConversationRelevancyMetric,
     ConversationalRecallMetric,
 )
@@ -169,7 +170,7 @@ def test_mock_conversation_engine_coherence():
 
 
 def test_deepeval_conversational_metrics():
-    """Verify DeepEval ConversationalTestCase and custom metrics produce valid evaluations."""
+    """Verify DeepEval ConversationalTestCase, ContextualRecallMetric, and custom metrics."""
     tc = ConversationalTestCase(
         turns=[
             Turn(role="user", content="Remember my code is ALPHA-42."),
@@ -183,17 +184,47 @@ def test_deepeval_conversational_metrics():
     coherence = CoherenceMetric(threshold=0.8)
     relevancy = ConversationRelevancyMetric(threshold=0.8)
     recall = ConversationalRecallMetric(threshold=0.8)
+    ctx_recall = ContextualRecallMetric(threshold=0.8)
 
     c_score = coherence.measure(tc)
     r_score = relevancy.measure(tc)
     rc_score = recall.measure(tc, expected_facts=["ALPHA-42"])
+    ctx_score = ctx_recall.measure(tc, expected_facts=["ALPHA-42"])
 
     assert c_score >= 0.8
     assert r_score >= 0.8
     assert rc_score == 1.0
+    assert ctx_score == 1.0
     assert coherence.is_successful()
     assert relevancy.is_successful()
     assert recall.is_successful()
+    assert ctx_recall.is_successful()
+
+    # Zero assistant turns must fail and return score 0.0
+    empty_tc = ConversationalTestCase(
+        turns=[Turn(role="user", content="Hello without response")],
+        scenario="empty_assistant_test",
+    )
+    assert coherence.measure(empty_tc) == 0.0
+    assert not coherence.is_successful()
+    assert relevancy.measure(empty_tc) == 0.0
+    assert not relevancy.is_successful()
+
+
+def test_load_multi_turn_cases_aliases_and_errors():
+    """Verify load_multi_turn_cases handles category aliases and rejects invalid names."""
+    # Test valid aliases
+    alias_cases = load_multi_turn_cases(dataset="contradiction_override", mode="smoke")
+    assert len(alias_cases) == 1
+    assert alias_cases[0]["dataset"] == "contradiction_overrides"
+
+    iso_cases = load_multi_turn_cases(dataset="isolation", mode="smoke")
+    assert len(iso_cases) == 1
+    assert iso_cases[0]["dataset"] == "thread_isolation"
+
+    # Test unknown dataset raises ValueError
+    with pytest.raises(ValueError, match="Unknown dataset"):
+        load_multi_turn_cases(dataset="nonexistent_dataset")
 
 
 def test_live_fail_closed_honesty():
@@ -219,7 +250,6 @@ def test_live_fail_closed_honesty():
 
 def test_no_memory_poisoning_eval_namespace():
     """Verify that eval thread namespaces (eval-*) bypass persistent Experience creation."""
-    # 1. Test logic matching backend/agent/graph.py:229
     def should_bypass_db(thread_id: str, vela_eval_mode: str = "0") -> bool:
         return vela_eval_mode == "1" or str(thread_id).startswith("eval-")
 
@@ -228,9 +258,9 @@ def test_no_memory_poisoning_eval_namespace():
     assert should_bypass_db("conv-live-android-client-123") is False
     assert should_bypass_db("conv-live-android-client-123", vela_eval_mode="1") is True
 
-    # 2. Test logic matching backend/agent/main.py:626
     def is_eval_turn(thread_id: str, vela_eval_mode: str = "0") -> bool:
         return vela_eval_mode == "1" or str(thread_id).startswith("eval-")
 
     assert is_eval_turn("eval-thread-mt_recall_001") is True
+    assert is_eval_turn("normal-thread-456") is False
     assert is_eval_turn("normal-thread-456") is False
