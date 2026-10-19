@@ -1,0 +1,146 @@
+- id: "param_int_001"
+  prompt: "Set phone volume to 15"
+  persona: "device_agent"
+  expected_action: "device_set_volume"
+  expected_params:
+    level: 15
+
+- id: "param_int_002"
+  prompt: "Adjust volume level to 82"
+  persona: "device_agent"
+  expected_action: "device_set_volume"
+  expected_params:
+    level: 82
+
+- id: "param_int_003"
+  prompt: "Tap precisely at coordinates 720,1440"
+  persona: "device_agent"
+  expected_action: "device_tap"
+  expected_params:
+    target: "720,1440"
+
+- id: "param_int_004"
+  prompt: "Tap exactly at screen coordinate 120,350"
+  persona: "device_agent"
+  expected_action: "device_tap"
+  expected_params:
+    target: "120,350"
+
+- id: "param_int_005"
+  prompt: "Tap the button with ID com.android.settings:id/switch_widget"
+  persona: "device_agent"
+  expected_action: "device_tap"
+  expected_params:
+    target: "com.android.settings:id/switch_widget"
+
+- id: "param_int_006"
+  prompt: "Open package com.spotify.music"
+  persona: "device_agent"
+  expected_action: "device_open_app"
+  expected_params:
+    app_name: "com.spotify.music"
+
+- id: "param_int_007"
+  prompt: "Launch package com.google.android.youtube"
+  persona: "device_agent"
+  expected_action: "device_open_app"
+  expected_params:
+    app_name: "com.google.android.youtube"
+
+- id: "param_int_008"
+  prompt: "Open application package com.android.chrome"
+  persona: "device_agent"
+  expected_action: "device_open_app"
+  expected_params:
+    app_name: "com.android.chrome"
+
+- id: "param_int_009"
+  prompt: "Launch app package com.google.android.apps.messaging"
+  persona: "device_agent"
+  expected_action: "device_open_app"
+  expected_params:
+    app_name: "com.google.android.apps.messaging"
+
+- id: "param_int_010"
+  prompt: "Type exact string 'Vela AI Agent v2.5' into input field"
+  persona: "device_agent"
+  expected_action: "device_type"
+  expected_params:
+    target: "input field"
+    value: "Vela AI Agent v2.5"
+
+- id: "param_int_011"
+  prompt: "Type string 'UTF-8 characters: 🚀🔥' into message edit text"
+  persona: "device_agent"
+  expected_action: "device_type"
+  expected_params:
+    target: "message edit text"
+    value: "UTF-8 characters: 🚀🔥"
+
+- id: "param_int_012"
+  prompt: "Type 'SELECT * FROM users;' into terminal input"
+  persona: "device_agent"
+  expected_action: "device_type"
+  expected_params:
+    target: "terminal input"
+    value: "SELECT * FROM users;"
+
+- id: "param_int_013"
+  prompt: "Scroll screen upwards"
+  persona: "device_agent"
+  expected_action: "device_scroll"
+  expected_params:
+    direction: "up"
+
+- id: "param_int_014"
+  prompt: "Scroll screen downwards"
+  persona: "device_agent"
+  expected_action: "device_scroll"
+  expected_params:
+    direction: "down"
+
+- id: "param_int_015"
+  prompt: "Swipe towards the left"
+  persona: "device_agent"
+  expected_action: "device_swipe"
+  expected_params:
+    direction: "left"
+
+- id: "param_int_016"
+  prompt: "Swipe towards the right"
+  persona: "device_agent"
+  expected_action: "device_swipe"
+  expected_params:
+    direction: "right"
+
+- id: "param_int_017"
+  prompt: "Send hardware key HOME"
+  persona: "device_agent"
+  expected_action: "device_press_key"
+  expected_params:
+    key_name: "HOME"
+
+- id: "param_int_018"
+  prompt: "Send hardware key BACK"
+  persona: "device_agent"
+  expected_action: "device_press_key"
+  expected_params:
+    key_name: "BACK"
+
+- id: "param_int_019"
+  prompt: "Put secure setting font_scale to 1.15 via Shizuku"
+  persona: "device_agent"
+  expected_action: "device_setting_put"
+  expected_params:
+    namespace: "secure"
+    key: "font_scale"
+    value: "1.15"
+
+- id: "param_int_020"
+  prompt: "Put system setting screen_off_timeout to 60000 via Shizuku"
+  persona: "device_agent"
+  expected_action: "device_setting_put"
+  expected_params:
+    namespace: "system"
+    key: "screen_off_timeout"
+    value: "60000"
