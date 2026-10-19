@@ -18,7 +18,7 @@ from browser_automation.runner import run_browser_eval
 def test_browser_automation_smoke():
     """Verify smoke evaluation executes and passes across all 3 categories."""
     with patch.dict(os.environ, {"VELA_SYSTEM_EVALS_ENABLED": "1"}):
-        result = run_family("browser-automation", mode="smoke", live=True)
+        result = run_family("browser-automation", mode="smoke", live=False)
         assert result.status == "passed", f"Browser smoke eval failed: {result.error}"
         assert result.total_cases == 3
         assert result.passed_cases == 3
@@ -32,11 +32,19 @@ def test_browser_automation_smoke():
 def test_browser_automation_nightly():
     """Verify full nightly evaluation executes and passes all 40 cases."""
     with patch.dict(os.environ, {"VELA_SYSTEM_EVALS_ENABLED": "1"}):
-        result = run_family("browser-automation", mode="nightly", live=True)
+        result = run_family("browser-automation", mode="nightly", live=False)
         assert result.status == "passed", f"Browser nightly eval failed: {result.error}"
         assert result.total_cases == 40
         assert result.passed_cases == 40
         assert result.failed_cases == 0
+
+
+def test_browser_automation_live_fail_closed():
+    """Verify live mode fails closed with error when live browser trajectory source is absent."""
+    with patch.dict(os.environ, {"VELA_SYSTEM_EVALS_ENABLED": "1"}):
+        result = run_family("browser-automation", mode="smoke", live=True)
+        assert result.status == "error"
+        assert "live browser trajectories not available" in result.summary_metrics.get("error", "")
 
 
 def test_datasets_integrity():

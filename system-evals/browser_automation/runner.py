@@ -29,6 +29,19 @@ from browser_automation.metrics.geval_evaluator import evaluate_browser_trajecto
 
 def run_browser_eval(mode: str = "smoke", live: bool = False) -> FamilyResult:
     """Evaluate browser agent trajectories against efficiency, loop detection, and task success."""
+    if live:
+        return FamilyResult(
+            family="browser-automation",
+            status="error",
+            total_cases=0,
+            passed_cases=0,
+            failed_cases=0,
+            summary_metrics={
+                "error": "live browser trajectories not available; only static fixtures exist"
+            },
+            details=[],
+        )
+
     try:
         cases = load_browser_cases(mode=mode)
     except Exception as e:
@@ -58,11 +71,13 @@ def run_browser_eval(mode: str = "smoke", live: bool = False) -> FamilyResult:
     details: list[dict[str, Any]] = []
     efficiencies: list[float] = []
     geval_scores: list[float] = []
+    heuristic_scores: list[float] = []
     loop_agreements: int = 0
 
     category_counts: dict[str, int] = {}
-    live_cases = len(cases) if live else 0
-    mock_cases = 0 if live else len(cases)
+    live_cases = 0
+    mock_cases = 0
+    fixture_cases = len(cases)
 
     for case in cases:
         category = case.get("category", "unknown")
@@ -78,7 +93,11 @@ def run_browser_eval(mode: str = "smoke", live: bool = False) -> FamilyResult:
 
         # 1. Loop detection metric (identical repeats, alternating cycles, pagination drift)
         loop_res: LoopDetectionResult = detect_navigation_loops(steps)
-        loop_agrees = (loop_res.has_loop == expected_loop)
+        expected_loop_type = case.get("loop_type")
+        loop_agrees = loop_res.has_loop == expected_loop and (
+            expected_loop_type is None
+            or loop_res.loop_type == expected_loop_type
+        )
         if loop_agrees:
             loop_agreements += 1
 
@@ -95,6 +114,7 @@ def run_browser_eval(mode: str = "smoke", live: bool = False) -> FamilyResult:
             threshold=0.7,
         )
         geval_scores.append(geval_res.score)
+        heuristic_scores.append(geval_res.heuristic_score)
 
         # 4. Terminal DOM state and outcome verification (No Tautological Assertions)
         terminal_status_ok = False
@@ -142,14 +162,17 @@ def run_browser_eval(mode: str = "smoke", live: bool = False) -> FamilyResult:
             "loop_type": loop_res.loop_type,
             "expected_loop": expected_loop,
             "geval_score": geval_res.score,
+            "heuristic_score": geval_res.heuristic_score,
+            "evaluation_mode": geval_res.evaluation_mode,
             "passed": case_passed,
             "reason": geval_res.reason,
-            "provider": "live" if live else "mock",
+            "provider": "fixture",
         })
 
     total_count = len(cases)
     avg_eff = sum(efficiencies) / total_count if total_count > 0 else 0.0
     avg_geval = sum(geval_scores) / total_count if total_count > 0 else 0.0
+    avg_heuristic = sum(heuristic_scores) / total_count if total_count > 0 else 0.0
     loop_accuracy = loop_agreements / total_count if total_count > 0 else 0.0
 
     status = "passed" if (failed == 0 and total_count > 0) else "failed"
@@ -163,10 +186,12 @@ def run_browser_eval(mode: str = "smoke", live: bool = False) -> FamilyResult:
         summary_metrics={
             "avg_step_efficiency": round(avg_eff, 2),
             "geval_avg_score": round(avg_geval, 2),
+            "heuristic_avg_score": round(avg_heuristic, 2),
             "loop_detection_accuracy": round(loop_accuracy, 2),
             "categories": category_counts,
             "live_cases": live_cases,
             "mock_cases": mock_cases,
+            "fixture_cases": fixture_cases,
         },
         details=details,
     )
