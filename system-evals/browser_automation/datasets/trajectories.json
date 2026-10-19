@@ -1,41 +1,3218 @@
 [
   {
-    "id": "browser_traj_001",
-    "task": "Navigate to Hacker News and find the top post title",
+    "id": "browser_success_001",
+    "category": "success_flows",
+    "task": "Navigate to Hacker News and extract top post title",
     "optimal_steps": 2,
     "steps": [
-      {"step": 1, "action": "navigate", "target": "https://news.ycombinator.com", "status": "success"},
-      {"step": 2, "action": "extract_text", "target": ".titleline > a", "status": "success", "observation": "Show HN: My new project"}
+      {
+        "step_number": 1,
+        "page_url": "https://news.ycombinator.com",
+        "dom_snapshot": {
+          "title": "Hacker News",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "a",
+              "text": "Hacker News",
+              "role": "link"
+            },
+            {
+              "id": "@e1",
+              "tag": "a",
+              "text": "Show HN: My new AI project",
+              "role": "link",
+              "selector": ".titleline > a"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to Hacker News front page to find top posts.",
+        "action": "navigate",
+        "target": "https://news.ycombinator.com",
+        "value": "",
+        "status": "success",
+        "observation": "Page loaded. Top stories visible."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://news.ycombinator.com",
+        "dom_snapshot": {
+          "title": "Hacker News",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "a",
+              "text": "Show HN: My new AI project",
+              "role": "link",
+              "selector": ".titleline > a"
+            }
+          ]
+        },
+        "agent_thoughts": "Extract title text from the primary headline link @e1.",
+        "action": "extract_text",
+        "target": "@e1",
+        "value": "",
+        "status": "success",
+        "observation": "Show HN: My new AI project"
+      }
     ],
-    "outcome": "Show HN: My new project",
+    "outcome": "Show HN: My new AI project",
     "has_loop": false,
-    "is_success": true
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://news.ycombinator.com",
+      "extracted_text": "Show HN: My new AI project",
+      "element_present": "@e1"
+    }
   },
   {
-    "id": "browser_traj_002",
+    "id": "browser_success_002",
+    "category": "success_flows",
     "task": "Search for Python documentation on Google and open PEP 8",
     "optimal_steps": 3,
     "steps": [
-      {"step": 1, "action": "navigate", "target": "https://google.com", "status": "success"},
-      {"step": 2, "action": "type", "target": "textarea[name='q']", "value": "PEP 8", "status": "success"},
-      {"step": 3, "action": "click", "target": "input[name='btnK']", "status": "success"},
-      {"step": 4, "action": "click", "target": "a[href*='peps.python.org/pep-0008/']", "status": "success"}
+      {
+        "step_number": 1,
+        "page_url": "https://google.com",
+        "dom_snapshot": {
+          "title": "Google",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "textarea",
+              "name": "q",
+              "role": "combobox",
+              "text": ""
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to Google homepage to initiate search.",
+        "action": "navigate",
+        "target": "https://google.com",
+        "value": "",
+        "status": "success",
+        "observation": "Google homepage loaded."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://google.com",
+        "dom_snapshot": {
+          "title": "Google",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "textarea",
+              "name": "q",
+              "role": "combobox",
+              "text": ""
+            },
+            {
+              "id": "@e1",
+              "tag": "input",
+              "name": "btnK",
+              "role": "button",
+              "text": "Google Search"
+            }
+          ]
+        },
+        "agent_thoughts": "Type 'PEP 8' into the search input @e0 and submit.",
+        "action": "type",
+        "target": "@e0",
+        "value": "PEP 8",
+        "status": "success",
+        "observation": "Typed 'PEP 8' into search box."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://peps.python.org/pep-0008/",
+        "dom_snapshot": {
+          "title": "PEP 8 \u2013 Style Guide for Python Code",
+          "elements": [
+            {
+              "id": "@e5",
+              "tag": "h1",
+              "text": "PEP 8 \u2013 Style Guide for Python Code"
+            }
+          ]
+        },
+        "agent_thoughts": "Click official PEP 8 link and verify opened documentation.",
+        "action": "click",
+        "target": "@e5",
+        "value": "",
+        "status": "success",
+        "observation": "Navigated to https://peps.python.org/pep-0008/ - PEP 8 \u2013 Style Guide for Python Code"
+      }
     ],
-    "outcome": "PEP 8 Style Guide for Python Code",
+    "outcome": "PEP 8 \u2013 Style Guide for Python Code",
     "has_loop": false,
-    "is_success": true
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://peps.python.org/pep-0008/",
+      "extracted_text": "PEP 8 \u2013 Style Guide for Python Code",
+      "element_present": "@e5"
+    }
   },
   {
-    "id": "browser_traj_loop_003",
-    "task": "Log in to portal",
+    "id": "browser_success_003",
+    "category": "success_flows",
+    "task": "GitHub repo issue lookup: search 'memory leak' and extract top issue",
+    "optimal_steps": 3,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://github.com/org/repo/issues",
+        "dom_snapshot": {
+          "title": "Issues \u00b7 org/repo",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "input",
+              "id_attr": "js-issues-search",
+              "placeholder": "Search all issues"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to issues list page.",
+        "action": "navigate",
+        "target": "https://github.com/org/repo/issues",
+        "value": "",
+        "status": "success",
+        "observation": "Issues list loaded."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://github.com/org/repo/issues",
+        "dom_snapshot": {
+          "title": "Issues \u00b7 org/repo",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "input",
+              "id_attr": "js-issues-search",
+              "placeholder": "Search all issues"
+            }
+          ]
+        },
+        "agent_thoughts": "Filter issues by typing 'memory leak'.",
+        "action": "type",
+        "target": "@e0",
+        "value": "is:issue is:open memory leak",
+        "status": "success",
+        "observation": "Search filtered to 3 matching issues."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://github.com/org/repo/issues?q=is%3Aissue+memory+leak",
+        "dom_snapshot": {
+          "title": "Issues search results",
+          "elements": [
+            {
+              "id": "@e3",
+              "tag": "a",
+              "role": "link",
+              "text": "#1042 Memory leak in WebSocket reconnect"
+            }
+          ]
+        },
+        "agent_thoughts": "Extract the top matching issue header text from @e3.",
+        "action": "extract_text",
+        "target": "@e3",
+        "value": "",
+        "status": "success",
+        "observation": "#1042 Memory leak in WebSocket reconnect"
+      }
+    ],
+    "outcome": "#1042 Memory leak in WebSocket reconnect",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://github.com/org/repo/issues?q=is%3Aissue+memory+leak",
+      "extracted_text": "#1042 Memory leak in WebSocket reconnect",
+      "element_present": "@e3"
+    }
+  },
+  {
+    "id": "browser_success_004",
+    "category": "success_flows",
+    "task": "Weather forecast lookup: check temperature for Seattle",
+    "optimal_steps": 3,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://weather.service.com",
+        "dom_snapshot": {
+          "title": "National Weather Service",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "input",
+              "name": "inputstring",
+              "placeholder": "City, ST"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to weather lookup homepage.",
+        "action": "navigate",
+        "target": "https://weather.service.com",
+        "value": "",
+        "status": "success",
+        "observation": "Weather page loaded."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://weather.service.com",
+        "dom_snapshot": {
+          "title": "National Weather Service",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "input",
+              "name": "inputstring",
+              "placeholder": "City, ST"
+            },
+            {
+              "id": "@e1",
+              "tag": "button",
+              "text": "Go"
+            }
+          ]
+        },
+        "agent_thoughts": "Input 'Seattle, WA' and click Go.",
+        "action": "type",
+        "target": "@e0",
+        "value": "Seattle, WA",
+        "status": "success",
+        "observation": "Form submitted for Seattle."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://weather.service.com/point/Seattle",
+        "dom_snapshot": {
+          "title": "Seattle Forecast",
+          "elements": [
+            {
+              "id": "@e4",
+              "tag": "p",
+              "class": "myforecast-current-lrg",
+              "text": "58\u00b0F"
+            }
+          ]
+        },
+        "agent_thoughts": "Extract current temperature from @e4.",
+        "action": "extract_text",
+        "target": "@e4",
+        "value": "",
+        "status": "success",
+        "observation": "58\u00b0F"
+      }
+    ],
+    "outcome": "58\u00b0F",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://weather.service.com/point/Seattle",
+      "extracted_text": "58\u00b0F",
+      "element_present": "@e4"
+    }
+  },
+  {
+    "id": "browser_success_005",
+    "category": "success_flows",
+    "task": "Wikipedia summary search: extract Alan Turing lead text",
     "optimal_steps": 2,
     "steps": [
-      {"step": 1, "action": "click", "target": "#submit", "status": "error", "observation": "Element not found"},
-      {"step": 2, "action": "click", "target": "#submit", "status": "error", "observation": "Element not found"},
-      {"step": 3, "action": "click", "target": "#submit", "status": "error", "observation": "Element not found"}
+      {
+        "step_number": 1,
+        "page_url": "https://en.wikipedia.org/wiki/Alan_Turing",
+        "dom_snapshot": {
+          "title": "Alan Turing - Wikipedia",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "h1",
+              "text": "Alan Turing"
+            },
+            {
+              "id": "@e1",
+              "tag": "p",
+              "text": "Alan Mathison Turing was an English mathematician, computer scientist, logician, cryptanalyst, philosopher, and theoretical biologist."
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate directly to Alan Turing Wikipedia entry.",
+        "action": "navigate",
+        "target": "https://en.wikipedia.org/wiki/Alan_Turing",
+        "value": "",
+        "status": "success",
+        "observation": "Article loaded."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://en.wikipedia.org/wiki/Alan_Turing",
+        "dom_snapshot": {
+          "title": "Alan Turing - Wikipedia",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "p",
+              "text": "Alan Mathison Turing was an English mathematician, computer scientist, logician, cryptanalyst, philosopher, and theoretical biologist."
+            }
+          ]
+        },
+        "agent_thoughts": "Extract lead sentence from element @e1.",
+        "action": "extract_text",
+        "target": "@e1",
+        "value": "",
+        "status": "success",
+        "observation": "Alan Mathison Turing was an English mathematician, computer scientist, logician, cryptanalyst, philosopher, and theoretical biologist."
+      }
     ],
-    "outcome": "Failed to login",
+    "outcome": "Alan Mathison Turing was an English mathematician, computer scientist, logician, cryptanalyst, philosopher, and theoretical biologist.",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://en.wikipedia.org/wiki/Alan_Turing",
+      "extracted_text": "Alan Mathison Turing was an English mathematician, computer scientist, logician, cryptanalyst, philosopher, and theoretical biologist.",
+      "element_present": "@e1"
+    }
+  },
+  {
+    "id": "browser_success_006",
+    "category": "success_flows",
+    "task": "Flight search SFO to JFK: extract lowest one-way fare",
+    "optimal_steps": 4,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://flights.travel.com",
+        "dom_snapshot": {
+          "title": "Flight Search",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "input",
+              "name": "origin",
+              "placeholder": "From"
+            },
+            {
+              "id": "@e1",
+              "tag": "input",
+              "name": "destination",
+              "placeholder": "To"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to travel booking engine.",
+        "action": "navigate",
+        "target": "https://flights.travel.com",
+        "value": "",
+        "status": "success",
+        "observation": "Search form visible."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://flights.travel.com",
+        "dom_snapshot": {
+          "title": "Flight Search",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "input",
+              "name": "origin"
+            },
+            {
+              "id": "@e1",
+              "tag": "input",
+              "name": "destination"
+            }
+          ]
+        },
+        "agent_thoughts": "Input origin SFO and destination JFK.",
+        "action": "type",
+        "target": "@e0",
+        "value": "SFO",
+        "status": "success",
+        "observation": "Entered SFO."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://flights.travel.com",
+        "dom_snapshot": {
+          "title": "Flight Search",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "input",
+              "name": "destination"
+            },
+            {
+              "id": "@e2",
+              "tag": "button",
+              "text": "Search Flights"
+            }
+          ]
+        },
+        "agent_thoughts": "Input destination JFK and click search.",
+        "action": "type",
+        "target": "@e1",
+        "value": "JFK",
+        "status": "success",
+        "observation": "Submitted search."
+      },
+      {
+        "step_number": 4,
+        "page_url": "https://flights.travel.com/results?from=SFO&to=JFK",
+        "dom_snapshot": {
+          "title": "Results SFO - JFK",
+          "elements": [
+            {
+              "id": "@e8",
+              "tag": "span",
+              "class": "price-tag",
+              "text": "$189"
+            }
+          ]
+        },
+        "agent_thoughts": "Extract lowest fare price from element @e8.",
+        "action": "extract_text",
+        "target": "@e8",
+        "value": "",
+        "status": "success",
+        "observation": "$189"
+      }
+    ],
+    "outcome": "$189",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://flights.travel.com/results?from=SFO&to=JFK",
+      "extracted_text": "$189",
+      "element_present": "@e8"
+    }
+  },
+  {
+    "id": "browser_success_007",
+    "category": "success_flows",
+    "task": "E-commerce product search: find mechanical keyboard price",
+    "optimal_steps": 3,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://store.hardware.com",
+        "dom_snapshot": {
+          "title": "Hardware Store",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "input",
+              "name": "search",
+              "placeholder": "Search catalog"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to hardware catalog.",
+        "action": "navigate",
+        "target": "https://store.hardware.com",
+        "value": "",
+        "status": "success",
+        "observation": "Catalog loaded."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://store.hardware.com",
+        "dom_snapshot": {
+          "title": "Hardware Store",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "input",
+              "name": "search"
+            },
+            {
+              "id": "@e1",
+              "tag": "button",
+              "text": "Search"
+            }
+          ]
+        },
+        "agent_thoughts": "Type 'wireless mechanical keyboard' and search.",
+        "action": "type",
+        "target": "@e0",
+        "value": "wireless mechanical keyboard",
+        "status": "success",
+        "observation": "Search submitted."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://store.hardware.com/search?q=wireless+mechanical+keyboard",
+        "dom_snapshot": {
+          "title": "Search Results",
+          "elements": [
+            {
+              "id": "@e4",
+              "tag": "span",
+              "class": "product-price",
+              "text": "$129.99"
+            }
+          ]
+        },
+        "agent_thoughts": "Extract price tag from first product result @e4.",
+        "action": "extract_text",
+        "target": "@e4",
+        "value": "",
+        "status": "success",
+        "observation": "$129.99"
+      }
+    ],
+    "outcome": "$129.99",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://store.hardware.com/search?q=wireless+mechanical+keyboard",
+      "extracted_text": "$129.99",
+      "element_present": "@e4"
+    }
+  },
+  {
+    "id": "browser_success_008",
+    "category": "success_flows",
+    "task": "Contact form submission: verify confirmation message",
+    "optimal_steps": 4,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://company.io/contact",
+        "dom_snapshot": {
+          "title": "Contact Us",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "input",
+              "name": "email",
+              "placeholder": "Email"
+            },
+            {
+              "id": "@e1",
+              "tag": "textarea",
+              "name": "message",
+              "placeholder": "Message"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to contact form page.",
+        "action": "navigate",
+        "target": "https://company.io/contact",
+        "value": "",
+        "status": "success",
+        "observation": "Form loaded."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://company.io/contact",
+        "dom_snapshot": {
+          "title": "Contact Us",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "input",
+              "name": "email"
+            }
+          ]
+        },
+        "agent_thoughts": "Enter email into @e0.",
+        "action": "type",
+        "target": "@e0",
+        "value": "user@example.com",
+        "status": "success",
+        "observation": "Email entered."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://company.io/contact",
+        "dom_snapshot": {
+          "title": "Contact Us",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "textarea",
+              "name": "message"
+            },
+            {
+              "id": "@e2",
+              "tag": "button",
+              "text": "Submit Inquiry"
+            }
+          ]
+        },
+        "agent_thoughts": "Enter message text and click submit button @e2.",
+        "action": "type",
+        "target": "@e1",
+        "value": "Hello, interested in enterprise tier.",
+        "status": "success",
+        "observation": "Form submitted."
+      },
+      {
+        "step_number": 4,
+        "page_url": "https://company.io/contact/success",
+        "dom_snapshot": {
+          "title": "Inquiry Sent",
+          "elements": [
+            {
+              "id": "@e5",
+              "tag": "div",
+              "class": "alert-success",
+              "text": "Thank you for contacting us"
+            }
+          ]
+        },
+        "agent_thoughts": "Extract confirmation banner text from @e5.",
+        "action": "extract_text",
+        "target": "@e5",
+        "value": "",
+        "status": "success",
+        "observation": "Thank you for contacting us"
+      }
+    ],
+    "outcome": "Thank you for contacting us",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://company.io/contact/success",
+      "extracted_text": "Thank you for contacting us",
+      "element_present": "@e5"
+    }
+  },
+  {
+    "id": "browser_success_009",
+    "category": "success_flows",
+    "task": "Currency converter: convert 100 USD to EUR",
+    "optimal_steps": 3,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://finance.exchange.com",
+        "dom_snapshot": {
+          "title": "FX Converter",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "input",
+              "name": "amount",
+              "value": ""
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to FX conversion tool.",
+        "action": "navigate",
+        "target": "https://finance.exchange.com",
+        "value": "",
+        "status": "success",
+        "observation": "Exchange page loaded."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://finance.exchange.com",
+        "dom_snapshot": {
+          "title": "FX Converter",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "input",
+              "name": "amount"
+            },
+            {
+              "id": "@e1",
+              "tag": "button",
+              "text": "Convert"
+            }
+          ]
+        },
+        "agent_thoughts": "Input amount 100 and click Convert.",
+        "action": "type",
+        "target": "@e0",
+        "value": "100",
+        "status": "success",
+        "observation": "Converted 100 USD to EUR."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://finance.exchange.com/calc?from=USD&to=EUR&amount=100",
+        "dom_snapshot": {
+          "title": "FX Results",
+          "elements": [
+            {
+              "id": "@e3",
+              "tag": "span",
+              "class": "rate-output",
+              "text": "92.50 EUR"
+            }
+          ]
+        },
+        "agent_thoughts": "Extract conversion rate output from @e3.",
+        "action": "extract_text",
+        "target": "@e3",
+        "value": "",
+        "status": "success",
+        "observation": "92.50 EUR"
+      }
+    ],
+    "outcome": "92.50 EUR",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://finance.exchange.com/calc?from=USD&to=EUR&amount=100",
+      "extracted_text": "92.50 EUR",
+      "element_present": "@e3"
+    }
+  },
+  {
+    "id": "browser_success_010",
+    "category": "success_flows",
+    "task": "Job board table extraction: extract company name on page 2",
+    "optimal_steps": 3,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://jobs.techboard.org?page=1",
+        "dom_snapshot": {
+          "title": "Tech Jobs",
+          "elements": [
+            {
+              "id": "@e9",
+              "tag": "a",
+              "class": "pagination-next",
+              "text": "Page 2"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to job board listings.",
+        "action": "navigate",
+        "target": "https://jobs.techboard.org?page=1",
+        "value": "",
+        "status": "success",
+        "observation": "Listings page 1 loaded."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://jobs.techboard.org?page=1",
+        "dom_snapshot": {
+          "title": "Tech Jobs",
+          "elements": [
+            {
+              "id": "@e9",
+              "tag": "a",
+              "class": "pagination-next",
+              "text": "Page 2"
+            }
+          ]
+        },
+        "agent_thoughts": "Click next page button @e9 to advance to page 2.",
+        "action": "click",
+        "target": "@e9",
+        "value": "",
+        "status": "success",
+        "observation": "Navigated to page 2."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://jobs.techboard.org?page=2",
+        "dom_snapshot": {
+          "title": "Tech Jobs - Page 2",
+          "elements": [
+            {
+              "id": "@e2",
+              "tag": "td",
+              "class": "company-col",
+              "text": "Anthropic AI"
+            }
+          ]
+        },
+        "agent_thoughts": "Extract company column text from element @e2.",
+        "action": "extract_text",
+        "target": "@e2",
+        "value": "",
+        "status": "success",
+        "observation": "Anthropic AI"
+      }
+    ],
+    "outcome": "Anthropic AI",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://jobs.techboard.org?page=2",
+      "extracted_text": "Anthropic AI",
+      "element_present": "@e2"
+    }
+  },
+  {
+    "id": "browser_success_011",
+    "category": "success_flows",
+    "task": "Restaurant reservation check: check available time slot",
+    "optimal_steps": 3,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://reservations.dining.com/bistro",
+        "dom_snapshot": {
+          "title": "Bistro Reservations",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "select",
+              "name": "party_size"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to restaurant reservation booking.",
+        "action": "navigate",
+        "target": "https://reservations.dining.com/bistro",
+        "value": "",
+        "status": "success",
+        "observation": "Page loaded."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://reservations.dining.com/bistro",
+        "dom_snapshot": {
+          "title": "Bistro Reservations",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "select",
+              "name": "party_size"
+            },
+            {
+              "id": "@e1",
+              "tag": "button",
+              "text": "Find Tables"
+            }
+          ]
+        },
+        "agent_thoughts": "Select party of 2 and search for available tables.",
+        "action": "click",
+        "target": "@e1",
+        "value": "",
+        "status": "success",
+        "observation": "Slots retrieved."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://reservations.dining.com/bistro/slots",
+        "dom_snapshot": {
+          "title": "Available Slots",
+          "elements": [
+            {
+              "id": "@e4",
+              "tag": "button",
+              "class": "slot-time",
+              "text": "7:30 PM Available"
+            }
+          ]
+        },
+        "agent_thoughts": "Extract available reservation slot time from @e4.",
+        "action": "extract_text",
+        "target": "@e4",
+        "value": "",
+        "status": "success",
+        "observation": "7:30 PM Available"
+      }
+    ],
+    "outcome": "7:30 PM Available",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://reservations.dining.com/bistro/slots",
+      "extracted_text": "7:30 PM Available",
+      "element_present": "@e4"
+    }
+  },
+  {
+    "id": "browser_success_012",
+    "category": "success_flows",
+    "task": "React docs search: extract useEffect hook signature",
+    "optimal_steps": 2,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://react.dev/reference/react/useEffect",
+        "dom_snapshot": {
+          "title": "useEffect \u2013 React",
+          "elements": [
+            {
+              "id": "@e2",
+              "tag": "code",
+              "class": "signature",
+              "text": "useEffect(setup, dependencies?)"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate directly to useEffect hook API reference page.",
+        "action": "navigate",
+        "target": "https://react.dev/reference/react/useEffect",
+        "value": "",
+        "status": "success",
+        "observation": "Documentation loaded."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://react.dev/reference/react/useEffect",
+        "dom_snapshot": {
+          "title": "useEffect \u2013 React",
+          "elements": [
+            {
+              "id": "@e2",
+              "tag": "code",
+              "class": "signature",
+              "text": "useEffect(setup, dependencies?)"
+            }
+          ]
+        },
+        "agent_thoughts": "Extract code signature from @e2.",
+        "action": "extract_text",
+        "target": "@e2",
+        "value": "",
+        "status": "success",
+        "observation": "useEffect(setup, dependencies?)"
+      }
+    ],
+    "outcome": "useEffect(setup, dependencies?)",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://react.dev/reference/react/useEffect",
+      "extracted_text": "useEffect(setup, dependencies?)",
+      "element_present": "@e2"
+    }
+  },
+  {
+    "id": "browser_success_013",
+    "category": "success_flows",
+    "task": "Blog pagination: navigate to page 2 and extract headline",
+    "optimal_steps": 3,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://techchronicle.com/blog",
+        "dom_snapshot": {
+          "title": "Tech Chronicle Blog",
+          "elements": [
+            {
+              "id": "@e8",
+              "tag": "a",
+              "class": "next-page",
+              "text": "Next \u2192"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to main blog archive.",
+        "action": "navigate",
+        "target": "https://techchronicle.com/blog",
+        "value": "",
+        "status": "success",
+        "observation": "Archive loaded."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://techchronicle.com/blog",
+        "dom_snapshot": {
+          "title": "Tech Chronicle Blog",
+          "elements": [
+            {
+              "id": "@e8",
+              "tag": "a",
+              "class": "next-page",
+              "text": "Next \u2192"
+            }
+          ]
+        },
+        "agent_thoughts": "Click next page button @e8.",
+        "action": "click",
+        "target": "@e8",
+        "value": "",
+        "status": "success",
+        "observation": "Loaded page 2."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://techchronicle.com/blog?page=2",
+        "dom_snapshot": {
+          "title": "Blog - Page 2",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "h2",
+              "class": "post-title",
+              "text": "Architecture of Deep Agents"
+            }
+          ]
+        },
+        "agent_thoughts": "Extract post title from @e1.",
+        "action": "extract_text",
+        "target": "@e1",
+        "value": "",
+        "status": "success",
+        "observation": "Architecture of Deep Agents"
+      }
+    ],
+    "outcome": "Architecture of Deep Agents",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://techchronicle.com/blog?page=2",
+      "extracted_text": "Architecture of Deep Agents",
+      "element_present": "@e1"
+    }
+  },
+  {
+    "id": "browser_success_014",
+    "category": "success_flows",
+    "task": "Settings preference update: toggle dark mode and save",
+    "optimal_steps": 3,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://app.workspace.net/settings",
+        "dom_snapshot": {
+          "title": "Account Settings",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "input",
+              "type": "checkbox",
+              "name": "dark_mode"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to account settings page.",
+        "action": "navigate",
+        "target": "https://app.workspace.net/settings",
+        "value": "",
+        "status": "success",
+        "observation": "Settings loaded."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://app.workspace.net/settings",
+        "dom_snapshot": {
+          "title": "Account Settings",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "input",
+              "type": "checkbox",
+              "name": "dark_mode"
+            },
+            {
+              "id": "@e1",
+              "tag": "button",
+              "text": "Save Preferences"
+            }
+          ]
+        },
+        "agent_thoughts": "Click dark mode toggle @e0 and click Save @e1.",
+        "action": "click",
+        "target": "@e1",
+        "value": "",
+        "status": "success",
+        "observation": "Settings saved."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://app.workspace.net/settings",
+        "dom_snapshot": {
+          "title": "Account Settings",
+          "elements": [
+            {
+              "id": "@e5",
+              "tag": "div",
+              "class": "toast-notification",
+              "text": "Preferences saved successfully"
+            }
+          ]
+        },
+        "agent_thoughts": "Extract toast confirmation text from @e5.",
+        "action": "extract_text",
+        "target": "@e5",
+        "value": "",
+        "status": "success",
+        "observation": "Preferences saved successfully"
+      }
+    ],
+    "outcome": "Preferences saved successfully",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://app.workspace.net/settings",
+      "extracted_text": "Preferences saved successfully",
+      "element_present": "@e5"
+    }
+  },
+  {
+    "id": "browser_success_015",
+    "category": "success_flows",
+    "task": "Cart checkout review: verify grand total price",
+    "optimal_steps": 3,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://shop.goods.com/cart",
+        "dom_snapshot": {
+          "title": "Shopping Cart",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "a",
+              "class": "btn-checkout",
+              "text": "Proceed to Checkout"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to shopping cart.",
+        "action": "navigate",
+        "target": "https://shop.goods.com/cart",
+        "value": "",
+        "status": "success",
+        "observation": "Cart loaded."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://shop.goods.com/cart",
+        "dom_snapshot": {
+          "title": "Shopping Cart",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "a",
+              "class": "btn-checkout",
+              "text": "Proceed to Checkout"
+            }
+          ]
+        },
+        "agent_thoughts": "Click proceed to checkout button @e0.",
+        "action": "click",
+        "target": "@e0",
+        "value": "",
+        "status": "success",
+        "observation": "Order review page loaded."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://shop.goods.com/checkout/review",
+        "dom_snapshot": {
+          "title": "Review Order",
+          "elements": [
+            {
+              "id": "@e7",
+              "tag": "span",
+              "class": "grand-total",
+              "text": "$249.50"
+            }
+          ]
+        },
+        "agent_thoughts": "Extract final order grand total from @e7.",
+        "action": "extract_text",
+        "target": "@e7",
+        "value": "",
+        "status": "success",
+        "observation": "$249.50"
+      }
+    ],
+    "outcome": "$249.50",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://shop.goods.com/checkout/review",
+      "extracted_text": "$249.50",
+      "element_present": "@e7"
+    }
+  },
+  {
+    "id": "browser_success_016",
+    "category": "success_flows",
+    "task": "Transit schedule query: extract next train departure time",
+    "optimal_steps": 3,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://transit.metro.org",
+        "dom_snapshot": {
+          "title": "Metro Transit",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "input",
+              "name": "dest_station",
+              "placeholder": "Destination"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to transit scheduler.",
+        "action": "navigate",
+        "target": "https://transit.metro.org",
+        "value": "",
+        "status": "success",
+        "observation": "Transit portal loaded."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://transit.metro.org",
+        "dom_snapshot": {
+          "title": "Metro Transit",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "input",
+              "name": "dest_station"
+            },
+            {
+              "id": "@e1",
+              "tag": "button",
+              "text": "Find Next Train"
+            }
+          ]
+        },
+        "agent_thoughts": "Input destination 'Airport Terminal 2' and click search.",
+        "action": "type",
+        "target": "@e0",
+        "value": "Airport Terminal 2",
+        "status": "success",
+        "observation": "Timetable displayed."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://transit.metro.org/schedule?to=Airport",
+        "dom_snapshot": {
+          "title": "Upcoming Departures",
+          "elements": [
+            {
+              "id": "@e3",
+              "tag": "span",
+              "class": "depart-time",
+              "text": "14:15 Express"
+            }
+          ]
+        },
+        "agent_thoughts": "Extract departure time from @e3.",
+        "action": "extract_text",
+        "target": "@e3",
+        "value": "",
+        "status": "success",
+        "observation": "14:15 Express"
+      }
+    ],
+    "outcome": "14:15 Express",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://transit.metro.org/schedule?to=Airport",
+      "extracted_text": "14:15 Express",
+      "element_present": "@e3"
+    }
+  },
+  {
+    "id": "browser_success_017",
+    "category": "success_flows",
+    "task": "Stock quote query: extract NVDA market price",
+    "optimal_steps": 2,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://finance.market.com/quote/NVDA",
+        "dom_snapshot": {
+          "title": "NVIDIA Corp (NVDA) Stock Quote",
+          "elements": [
+            {
+              "id": "@e2",
+              "tag": "span",
+              "class": "current-price",
+              "text": "135.20 USD"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate directly to NVDA quote summary page.",
+        "action": "navigate",
+        "target": "https://finance.market.com/quote/NVDA",
+        "value": "",
+        "status": "success",
+        "observation": "Quote loaded."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://finance.market.com/quote/NVDA",
+        "dom_snapshot": {
+          "title": "NVIDIA Corp (NVDA) Stock Quote",
+          "elements": [
+            {
+              "id": "@e2",
+              "tag": "span",
+              "class": "current-price",
+              "text": "135.20 USD"
+            }
+          ]
+        },
+        "agent_thoughts": "Extract stock price text from element @e2.",
+        "action": "extract_text",
+        "target": "@e2",
+        "value": "",
+        "status": "success",
+        "observation": "135.20 USD"
+      }
+    ],
+    "outcome": "135.20 USD",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://finance.market.com/quote/NVDA",
+      "extracted_text": "135.20 USD",
+      "element_present": "@e2"
+    }
+  },
+  {
+    "id": "browser_success_018",
+    "category": "success_flows",
+    "task": "University catalog: extract CS graduate course title",
+    "optimal_steps": 3,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://catalog.university.edu/courses",
+        "dom_snapshot": {
+          "title": "Course Catalog",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "select",
+              "name": "department"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to university course listings.",
+        "action": "navigate",
+        "target": "https://catalog.university.edu/courses",
+        "value": "",
+        "status": "success",
+        "observation": "Catalog filters available."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://catalog.university.edu/courses",
+        "dom_snapshot": {
+          "title": "Course Catalog",
+          "elements": [
+            {
+              "id": "@e2",
+              "tag": "button",
+              "text": "Filter Computer Science"
+            }
+          ]
+        },
+        "agent_thoughts": "Apply department filter for Computer Science.",
+        "action": "click",
+        "target": "@e2",
+        "value": "",
+        "status": "success",
+        "observation": "Filtered courses displayed."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://catalog.university.edu/courses?dept=CS",
+        "dom_snapshot": {
+          "title": "Computer Science Courses",
+          "elements": [
+            {
+              "id": "@e6",
+              "tag": "h3",
+              "class": "course-title",
+              "text": "CS 229: Machine Learning"
+            }
+          ]
+        },
+        "agent_thoughts": "Extract course title from @e6.",
+        "action": "extract_text",
+        "target": "@e6",
+        "value": "",
+        "status": "success",
+        "observation": "CS 229: Machine Learning"
+      }
+    ],
+    "outcome": "CS 229: Machine Learning",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://catalog.university.edu/courses?dept=CS",
+      "extracted_text": "CS 229: Machine Learning",
+      "element_present": "@e6"
+    }
+  },
+  {
+    "id": "browser_success_019",
+    "category": "success_flows",
+    "task": "Event calendar search: extract November AI conference venue",
+    "optimal_steps": 3,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://events.ai-calendar.com",
+        "dom_snapshot": {
+          "title": "AI Events & Conferences",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "a",
+              "href": "/month/nov",
+              "text": "November 2026"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to conference directory.",
+        "action": "navigate",
+        "target": "https://events.ai-calendar.com",
+        "value": "",
+        "status": "success",
+        "observation": "Events directory loaded."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://events.ai-calendar.com",
+        "dom_snapshot": {
+          "title": "AI Events & Conferences",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "a",
+              "href": "/month/nov",
+              "text": "November 2026"
+            }
+          ]
+        },
+        "agent_thoughts": "Click November 2026 month filter @e0.",
+        "action": "click",
+        "target": "@e0",
+        "value": "",
+        "status": "success",
+        "observation": "November schedule loaded."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://events.ai-calendar.com/month/nov",
+        "dom_snapshot": {
+          "title": "November AI Events",
+          "elements": [
+            {
+              "id": "@e4",
+              "tag": "span",
+              "class": "event-venue",
+              "text": "Moscone Center, SF"
+            }
+          ]
+        },
+        "agent_thoughts": "Extract venue location from @e4.",
+        "action": "extract_text",
+        "target": "@e4",
+        "value": "",
+        "status": "success",
+        "observation": "Moscone Center, SF"
+      }
+    ],
+    "outcome": "Moscone Center, SF",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://events.ai-calendar.com/month/nov",
+      "extracted_text": "Moscone Center, SF",
+      "element_present": "@e4"
+    }
+  },
+  {
+    "id": "browser_success_020",
+    "category": "success_flows",
+    "task": "Recipe ingredients extraction: find lasagna ricotta amount",
+    "optimal_steps": 3,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://kitchen.recipes.com",
+        "dom_snapshot": {
+          "title": "Recipe Central",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "input",
+              "name": "q",
+              "placeholder": "Search recipes"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to recipe central.",
+        "action": "navigate",
+        "target": "https://kitchen.recipes.com",
+        "value": "",
+        "status": "success",
+        "observation": "Recipes site loaded."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://kitchen.recipes.com",
+        "dom_snapshot": {
+          "title": "Recipe Central",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "input",
+              "name": "q"
+            }
+          ]
+        },
+        "agent_thoughts": "Type 'classic lasagna' and search.",
+        "action": "type",
+        "target": "@e0",
+        "value": "classic lasagna",
+        "status": "success",
+        "observation": "Navigated to recipe."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://kitchen.recipes.com/recipes/classic-lasagna",
+        "dom_snapshot": {
+          "title": "Classic Lasagna Recipe",
+          "elements": [
+            {
+              "id": "@e5",
+              "tag": "li",
+              "class": "ingredient-item",
+              "text": "16 oz whole milk ricotta cheese"
+            }
+          ]
+        },
+        "agent_thoughts": "Extract ingredient text from @e5.",
+        "action": "extract_text",
+        "target": "@e5",
+        "value": "",
+        "status": "success",
+        "observation": "16 oz whole milk ricotta cheese"
+      }
+    ],
+    "outcome": "16 oz whole milk ricotta cheese",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://kitchen.recipes.com/recipes/classic-lasagna",
+      "extracted_text": "16 oz whole milk ricotta cheese",
+      "element_present": "@e5"
+    }
+  },
+  {
+    "id": "browser_loop_001",
+    "category": "loop_failures",
+    "task": "Submit payment on checkout form",
+    "optimal_steps": 2,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://pay.gateway.com/checkout",
+        "dom_snapshot": {
+          "title": "Checkout",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "id_attr": "pay-button"
+            }
+          ]
+        },
+        "agent_thoughts": "Click pay button to complete order.",
+        "action": "click",
+        "target": "#pay-button",
+        "value": "",
+        "status": "error",
+        "observation": "Server error 500: gateway unreachable"
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://pay.gateway.com/checkout",
+        "dom_snapshot": {
+          "title": "Checkout",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "id_attr": "pay-button"
+            }
+          ]
+        },
+        "agent_thoughts": "Retry clicking pay button.",
+        "action": "click",
+        "target": "#pay-button",
+        "value": "",
+        "status": "error",
+        "observation": "Server error 500: gateway unreachable"
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://pay.gateway.com/checkout",
+        "dom_snapshot": {
+          "title": "Checkout",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "id_attr": "pay-button"
+            }
+          ]
+        },
+        "agent_thoughts": "Retry clicking pay button third time.",
+        "action": "click",
+        "target": "#pay-button",
+        "value": "",
+        "status": "error",
+        "observation": "Server error 500: gateway unreachable"
+      }
+    ],
+    "outcome": "Failed to submit payment due to persistent 500 error",
     "has_loop": true,
-    "is_success": false
+    "loop_type": "identical_repeat",
+    "is_success": false,
+    "expected_terminal_state": {
+      "url": "https://pay.gateway.com/checkout",
+      "error_detected": true,
+      "loop_detected": true
+    }
+  },
+  {
+    "id": "browser_loop_002",
+    "category": "loop_failures",
+    "task": "Dismiss unclickable overlay cookie dialog",
+    "optimal_steps": 2,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://portal.news.com",
+        "dom_snapshot": {
+          "title": "Portal",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "div",
+              "id_attr": "cookie-banner"
+            }
+          ]
+        },
+        "agent_thoughts": "Click accept cookies button.",
+        "action": "click",
+        "target": "#cookie-accept",
+        "value": "",
+        "status": "error",
+        "observation": "ElementClickInterceptedException: element obscured"
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://portal.news.com",
+        "dom_snapshot": {
+          "title": "Portal",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "div",
+              "id_attr": "cookie-banner"
+            }
+          ]
+        },
+        "agent_thoughts": "Reattempt clicking accept button.",
+        "action": "click",
+        "target": "#cookie-accept",
+        "value": "",
+        "status": "error",
+        "observation": "ElementClickInterceptedException: element obscured"
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://portal.news.com",
+        "dom_snapshot": {
+          "title": "Portal",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "div",
+              "id_attr": "cookie-banner"
+            }
+          ]
+        },
+        "agent_thoughts": "Reattempt clicking accept button again.",
+        "action": "click",
+        "target": "#cookie-accept",
+        "value": "",
+        "status": "error",
+        "observation": "ElementClickInterceptedException: element obscured"
+      }
+    ],
+    "outcome": "Failed to dismiss obscured cookie banner",
+    "has_loop": true,
+    "loop_type": "identical_repeat",
+    "is_success": false,
+    "expected_terminal_state": {
+      "url": "https://portal.news.com",
+      "error_detected": true,
+      "loop_detected": true
+    }
+  },
+  {
+    "id": "browser_loop_003",
+    "category": "loop_failures",
+    "task": "Download PDF invoice from disabled button",
+    "optimal_steps": 1,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://billing.service.com/invoice/99",
+        "dom_snapshot": {
+          "title": "Invoices",
+          "elements": [
+            {
+              "id": "@e2",
+              "tag": "button",
+              "id_attr": "btn-pdf-download",
+              "disabled": true
+            }
+          ]
+        },
+        "agent_thoughts": "Click PDF invoice download button.",
+        "action": "click",
+        "target": "#btn-pdf-download",
+        "value": "",
+        "status": "error",
+        "observation": "InvalidElementStateException: button is disabled"
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://billing.service.com/invoice/99",
+        "dom_snapshot": {
+          "title": "Invoices",
+          "elements": [
+            {
+              "id": "@e2",
+              "tag": "button",
+              "id_attr": "btn-pdf-download",
+              "disabled": true
+            }
+          ]
+        },
+        "agent_thoughts": "Click PDF invoice download button again.",
+        "action": "click",
+        "target": "#btn-pdf-download",
+        "value": "",
+        "status": "error",
+        "observation": "InvalidElementStateException: button is disabled"
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://billing.service.com/invoice/99",
+        "dom_snapshot": {
+          "title": "Invoices",
+          "elements": [
+            {
+              "id": "@e2",
+              "tag": "button",
+              "id_attr": "btn-pdf-download",
+              "disabled": true
+            }
+          ]
+        },
+        "agent_thoughts": "Click PDF invoice download button third time.",
+        "action": "click",
+        "target": "#btn-pdf-download",
+        "value": "",
+        "status": "error",
+        "observation": "InvalidElementStateException: button is disabled"
+      }
+    ],
+    "outcome": "Failed to trigger download on disabled button",
+    "has_loop": true,
+    "loop_type": "identical_repeat",
+    "is_success": false,
+    "expected_terminal_state": {
+      "url": "https://billing.service.com/invoice/99",
+      "error_detected": true,
+      "loop_detected": true
+    }
+  },
+  {
+    "id": "browser_loop_004",
+    "category": "loop_failures",
+    "task": "Locate specific item by oscillating sort order (A-B-A-B loop)",
+    "optimal_steps": 3,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://store.catalog.com/products",
+        "dom_snapshot": {
+          "title": "Catalog",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "selector": "#sort-asc"
+            },
+            {
+              "id": "@e2",
+              "tag": "button",
+              "selector": "#sort-desc"
+            }
+          ]
+        },
+        "agent_thoughts": "Sort by ascending price.",
+        "action": "click",
+        "target": "#sort-asc",
+        "value": "",
+        "status": "success",
+        "observation": "Sorted ascending. Target item not found."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://store.catalog.com/products?sort=asc",
+        "dom_snapshot": {
+          "title": "Catalog Asc",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "selector": "#sort-asc"
+            },
+            {
+              "id": "@e2",
+              "tag": "button",
+              "selector": "#sort-desc"
+            }
+          ]
+        },
+        "agent_thoughts": "Toggle sort to descending price.",
+        "action": "click",
+        "target": "#sort-desc",
+        "value": "",
+        "status": "success",
+        "observation": "Sorted descending. Target item not found."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://store.catalog.com/products?sort=desc",
+        "dom_snapshot": {
+          "title": "Catalog Desc",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "selector": "#sort-asc"
+            },
+            {
+              "id": "@e2",
+              "tag": "button",
+              "selector": "#sort-desc"
+            }
+          ]
+        },
+        "agent_thoughts": "Switch back to ascending price.",
+        "action": "click",
+        "target": "#sort-asc",
+        "value": "",
+        "status": "success",
+        "observation": "Sorted ascending again. Still not found."
+      },
+      {
+        "step_number": 4,
+        "page_url": "https://store.catalog.com/products?sort=asc",
+        "dom_snapshot": {
+          "title": "Catalog Asc",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "selector": "#sort-asc"
+            },
+            {
+              "id": "@e2",
+              "tag": "button",
+              "selector": "#sort-desc"
+            }
+          ]
+        },
+        "agent_thoughts": "Switch back to descending price again.",
+        "action": "click",
+        "target": "#sort-desc",
+        "value": "",
+        "status": "success",
+        "observation": "Sorted descending again. Trapped in cycle."
+      }
+    ],
+    "outcome": "Stuck in alternating sort toggle trap",
+    "has_loop": true,
+    "loop_type": "alternating_cycle",
+    "is_success": false,
+    "expected_terminal_state": {
+      "url": "https://store.catalog.com/products?sort=desc",
+      "loop_detected": true
+    }
+  },
+  {
+    "id": "browser_loop_005",
+    "category": "loop_failures",
+    "task": "Find specifications across oscillating tabs (A-B-A-B loop)",
+    "optimal_steps": 2,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://device.spec.com/phone",
+        "dom_snapshot": {
+          "title": "Specs",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "id_attr": "tab-overview"
+            },
+            {
+              "id": "@e2",
+              "tag": "button",
+              "id_attr": "tab-details"
+            }
+          ]
+        },
+        "agent_thoughts": "Inspect overview tab.",
+        "action": "click",
+        "target": "#tab-overview",
+        "value": "",
+        "status": "success",
+        "observation": "Overview displayed. Specs missing."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://device.spec.com/phone",
+        "dom_snapshot": {
+          "title": "Specs",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "id_attr": "tab-overview"
+            },
+            {
+              "id": "@e2",
+              "tag": "button",
+              "id_attr": "tab-details"
+            }
+          ]
+        },
+        "agent_thoughts": "Switch to details tab.",
+        "action": "click",
+        "target": "#tab-details",
+        "value": "",
+        "status": "success",
+        "observation": "Details displayed. Not in this panel."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://device.spec.com/phone",
+        "dom_snapshot": {
+          "title": "Specs",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "id_attr": "tab-overview"
+            },
+            {
+              "id": "@e2",
+              "tag": "button",
+              "id_attr": "tab-details"
+            }
+          ]
+        },
+        "agent_thoughts": "Switch back to overview tab.",
+        "action": "click",
+        "target": "#tab-overview",
+        "value": "",
+        "status": "success",
+        "observation": "Overview panel shown again."
+      },
+      {
+        "step_number": 4,
+        "page_url": "https://device.spec.com/phone",
+        "dom_snapshot": {
+          "title": "Specs",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "id_attr": "tab-overview"
+            },
+            {
+              "id": "@e2",
+              "tag": "button",
+              "id_attr": "tab-details"
+            }
+          ]
+        },
+        "agent_thoughts": "Switch back to details tab again.",
+        "action": "click",
+        "target": "#tab-details",
+        "value": "",
+        "status": "success",
+        "observation": "Details panel shown again. Oscillating loop."
+      }
+    ],
+    "outcome": "Stuck in alternating tab cycle",
+    "has_loop": true,
+    "loop_type": "alternating_cycle",
+    "is_success": false,
+    "expected_terminal_state": {
+      "url": "https://device.spec.com/phone",
+      "loop_detected": true
+    }
+  },
+  {
+    "id": "browser_loop_006",
+    "category": "loop_failures",
+    "task": "Pagination back-and-forth oscillation trap (A-B-A-B loop)",
+    "optimal_steps": 2,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://archive.articles.com?page=2",
+        "dom_snapshot": {
+          "title": "Archive Page 2",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "id_attr": "btn-next"
+            },
+            {
+              "id": "@e2",
+              "tag": "button",
+              "id_attr": "btn-prev"
+            }
+          ]
+        },
+        "agent_thoughts": "Click next page button.",
+        "action": "click",
+        "target": "#btn-next",
+        "value": "",
+        "status": "success",
+        "observation": "Moved to page 3."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://archive.articles.com?page=3",
+        "dom_snapshot": {
+          "title": "Archive Page 3",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "id_attr": "btn-next"
+            },
+            {
+              "id": "@e2",
+              "tag": "button",
+              "id_attr": "btn-prev"
+            }
+          ]
+        },
+        "agent_thoughts": "Click prev button.",
+        "action": "click",
+        "target": "#btn-prev",
+        "value": "",
+        "status": "success",
+        "observation": "Moved back to page 2."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://archive.articles.com?page=2",
+        "dom_snapshot": {
+          "title": "Archive Page 2",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "id_attr": "btn-next"
+            },
+            {
+              "id": "@e2",
+              "tag": "button",
+              "id_attr": "btn-prev"
+            }
+          ]
+        },
+        "agent_thoughts": "Click next page button again.",
+        "action": "click",
+        "target": "#btn-next",
+        "value": "",
+        "status": "success",
+        "observation": "Moved to page 3 again."
+      },
+      {
+        "step_number": 4,
+        "page_url": "https://archive.articles.com?page=3",
+        "dom_snapshot": {
+          "title": "Archive Page 3",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "id_attr": "btn-next"
+            },
+            {
+              "id": "@e2",
+              "tag": "button",
+              "id_attr": "btn-prev"
+            }
+          ]
+        },
+        "agent_thoughts": "Click prev button again.",
+        "action": "click",
+        "target": "#btn-prev",
+        "value": "",
+        "status": "success",
+        "observation": "Moved to page 2 again. Trapped in forward-backward loop."
+      }
+    ],
+    "outcome": "Stuck in forward-backward pagination loop",
+    "has_loop": true,
+    "loop_type": "alternating_cycle",
+    "is_success": false,
+    "expected_terminal_state": {
+      "url": "https://archive.articles.com?page=2",
+      "loop_detected": true
+    }
+  },
+  {
+    "id": "browser_loop_007",
+    "category": "loop_failures",
+    "task": "Inventory search filter oscillation (A-B-A-B loop)",
+    "optimal_steps": 2,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://parts.auto.com/inventory",
+        "dom_snapshot": {
+          "title": "Inventory",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "a",
+              "id_attr": "filter-instock"
+            },
+            {
+              "id": "@e2",
+              "tag": "a",
+              "id_attr": "filter-all"
+            }
+          ]
+        },
+        "agent_thoughts": "Click in-stock filter.",
+        "action": "click",
+        "target": "#filter-instock",
+        "value": "",
+        "status": "success",
+        "observation": "Filtered to in-stock only. Part not listed."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://parts.auto.com/inventory?instock=1",
+        "dom_snapshot": {
+          "title": "Inventory In-Stock",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "a",
+              "id_attr": "filter-instock"
+            },
+            {
+              "id": "@e2",
+              "tag": "a",
+              "id_attr": "filter-all"
+            }
+          ]
+        },
+        "agent_thoughts": "Click all filter.",
+        "action": "click",
+        "target": "#filter-all",
+        "value": "",
+        "status": "success",
+        "observation": "Reset filter to all. Searching list."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://parts.auto.com/inventory",
+        "dom_snapshot": {
+          "title": "Inventory",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "a",
+              "id_attr": "filter-instock"
+            },
+            {
+              "id": "@e2",
+              "tag": "a",
+              "id_attr": "filter-all"
+            }
+          ]
+        },
+        "agent_thoughts": "Click in-stock filter again.",
+        "action": "click",
+        "target": "#filter-instock",
+        "value": "",
+        "status": "success",
+        "observation": "Filtered in-stock again."
+      },
+      {
+        "step_number": 4,
+        "page_url": "https://parts.auto.com/inventory?instock=1",
+        "dom_snapshot": {
+          "title": "Inventory In-Stock",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "a",
+              "id_attr": "filter-instock"
+            },
+            {
+              "id": "@e2",
+              "tag": "a",
+              "id_attr": "filter-all"
+            }
+          ]
+        },
+        "agent_thoughts": "Click all filter again.",
+        "action": "click",
+        "target": "#filter-all",
+        "value": "",
+        "status": "success",
+        "observation": "Filter toggled repeatedly without finding target."
+      }
+    ],
+    "outcome": "Stuck in filter toggle loop",
+    "has_loop": true,
+    "loop_type": "alternating_cycle",
+    "is_success": false,
+    "expected_terminal_state": {
+      "url": "https://parts.auto.com/inventory",
+      "loop_detected": true
+    }
+  },
+  {
+    "id": "browser_loop_008",
+    "category": "loop_failures",
+    "task": "Slow pagination drift through repeating 3-page cycle",
+    "optimal_steps": 3,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://forum.community.org?page=1",
+        "dom_snapshot": {
+          "title": "Page 1",
+          "elements": []
+        },
+        "action": "navigate",
+        "target": "https://forum.community.org?page=2",
+        "value": "",
+        "status": "success",
+        "observation": "Loaded page 2"
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://forum.community.org?page=2",
+        "dom_snapshot": {
+          "title": "Page 2",
+          "elements": []
+        },
+        "action": "navigate",
+        "target": "https://forum.community.org?page=3",
+        "value": "",
+        "status": "success",
+        "observation": "Loaded page 3"
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://forum.community.org?page=3",
+        "dom_snapshot": {
+          "title": "Page 3",
+          "elements": []
+        },
+        "action": "navigate",
+        "target": "https://forum.community.org?page=1",
+        "value": "",
+        "status": "success",
+        "observation": "Redirected or navigated back to page 1"
+      },
+      {
+        "step_number": 4,
+        "page_url": "https://forum.community.org?page=1",
+        "dom_snapshot": {
+          "title": "Page 1",
+          "elements": []
+        },
+        "action": "navigate",
+        "target": "https://forum.community.org?page=2",
+        "value": "",
+        "status": "success",
+        "observation": "Loaded page 2 again in cyclic drift"
+      },
+      {
+        "step_number": 5,
+        "page_url": "https://forum.community.org?page=2",
+        "dom_snapshot": {
+          "title": "Page 2",
+          "elements": []
+        },
+        "action": "navigate",
+        "target": "https://forum.community.org?page=3",
+        "value": "",
+        "status": "success",
+        "observation": "Loaded page 3 again in cyclic drift"
+      }
+    ],
+    "outcome": "Stuck in 3-page cyclic pagination drift",
+    "has_loop": true,
+    "loop_type": "pagination_drift",
+    "is_success": false,
+    "expected_terminal_state": {
+      "url": "https://forum.community.org?page=3",
+      "loop_detected": true
+    }
+  },
+  {
+    "id": "browser_loop_009",
+    "category": "loop_failures",
+    "task": "Slow pagination drift across API offset boundaries",
+    "optimal_steps": 2,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://data.registry.gov/records?offset=0",
+        "dom_snapshot": {
+          "title": "Records",
+          "elements": []
+        },
+        "action": "navigate",
+        "target": "https://data.registry.gov/records?offset=20",
+        "value": "",
+        "status": "success",
+        "observation": "Offset 20"
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://data.registry.gov/records?offset=20",
+        "dom_snapshot": {
+          "title": "Records",
+          "elements": []
+        },
+        "action": "navigate",
+        "target": "https://data.registry.gov/records?offset=40",
+        "value": "",
+        "status": "success",
+        "observation": "Offset 40"
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://data.registry.gov/records?offset=40",
+        "dom_snapshot": {
+          "title": "Records",
+          "elements": []
+        },
+        "action": "navigate",
+        "target": "https://data.registry.gov/records?offset=20",
+        "value": "",
+        "status": "success",
+        "observation": "Offset drifted back to 20"
+      },
+      {
+        "step_number": 4,
+        "page_url": "https://data.registry.gov/records?offset=20",
+        "dom_snapshot": {
+          "title": "Records",
+          "elements": []
+        },
+        "action": "navigate",
+        "target": "https://data.registry.gov/records?offset=40",
+        "value": "",
+        "status": "success",
+        "observation": "Offset drifted back to 40"
+      }
+    ],
+    "outcome": "Stuck in offset query oscillation",
+    "has_loop": true,
+    "loop_type": "pagination_drift",
+    "is_success": false,
+    "expected_terminal_state": {
+      "url": "https://data.registry.gov/records?offset=40",
+      "loop_detected": true
+    }
+  },
+  {
+    "id": "browser_loop_010",
+    "category": "loop_failures",
+    "task": "Next button looping back to root archive index",
+    "optimal_steps": 2,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://media.press.org/news",
+        "dom_snapshot": {
+          "title": "News",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "a",
+              "id_attr": "btn-older"
+            }
+          ]
+        },
+        "action": "click",
+        "target": "#btn-older",
+        "value": "",
+        "status": "success",
+        "observation": "Navigated to https://media.press.org/news/page/2"
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://media.press.org/news/page/2",
+        "dom_snapshot": {
+          "title": "News P2",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "a",
+              "id_attr": "btn-older"
+            }
+          ]
+        },
+        "action": "click",
+        "target": "#btn-older",
+        "value": "",
+        "status": "success",
+        "observation": "Malformed pagination redirected to https://media.press.org/news"
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://media.press.org/news",
+        "dom_snapshot": {
+          "title": "News",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "a",
+              "id_attr": "btn-older"
+            }
+          ]
+        },
+        "action": "click",
+        "target": "#btn-older",
+        "value": "",
+        "status": "success",
+        "observation": "Navigated to https://media.press.org/news/page/2 again"
+      },
+      {
+        "step_number": 4,
+        "page_url": "https://media.press.org/news/page/2",
+        "dom_snapshot": {
+          "title": "News P2",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "a",
+              "id_attr": "btn-older"
+            }
+          ]
+        },
+        "action": "click",
+        "target": "#btn-older",
+        "value": "",
+        "status": "success",
+        "observation": "Redirected back to https://media.press.org/news again"
+      }
+    ],
+    "outcome": "Stuck in cyclic pagination redirect loop",
+    "has_loop": true,
+    "loop_type": "pagination_drift",
+    "is_success": false,
+    "expected_terminal_state": {
+      "url": "https://media.press.org/news",
+      "loop_detected": true
+    }
+  },
+  {
+    "id": "browser_adv_001",
+    "category": "adversarial_dom",
+    "task": "Extract dynamic SPA data with delayed hydration",
+    "optimal_steps": 3,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://spa.react-portal.com/dashboard",
+        "dom_snapshot": {
+          "title": "Dashboard",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "div",
+              "id_attr": "root",
+              "data_hydrated": "false"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to SPA dashboard. Detect incomplete hydration.",
+        "action": "navigate",
+        "target": "https://spa.react-portal.com/dashboard",
+        "value": "",
+        "status": "success",
+        "observation": "Initial HTML skeleton loaded."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://spa.react-portal.com/dashboard",
+        "dom_snapshot": {
+          "title": "Dashboard",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "div",
+              "id_attr": "root",
+              "data_hydrated": "true"
+            }
+          ]
+        },
+        "agent_thoughts": "Wait for hydration event to complete before DOM query.",
+        "action": "wait",
+        "target": "#root[data-hydrated='true']",
+        "value": "1500",
+        "status": "success",
+        "observation": "Hydration complete. Interactive elements rendered."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://spa.react-portal.com/dashboard",
+        "dom_snapshot": {
+          "title": "Dashboard",
+          "elements": [
+            {
+              "id": "@e4",
+              "tag": "span",
+              "class": "metric-val",
+              "text": "4,821 Active Users"
+            }
+          ]
+        },
+        "agent_thoughts": "Extract hydrated metric text from @e4.",
+        "action": "extract_text",
+        "target": "@e4",
+        "value": "",
+        "status": "success",
+        "observation": "4,821 Active Users"
+      }
+    ],
+    "outcome": "4,821 Active Users",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://spa.react-portal.com/dashboard",
+      "extracted_text": "4,821 Active Users",
+      "element_present": "@e4"
+    }
+  },
+  {
+    "id": "browser_adv_002",
+    "category": "adversarial_dom",
+    "task": "Extract price from obfuscated styled-components CSS classes",
+    "optimal_steps": 2,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://obfuscated.store.io/item/42",
+        "dom_snapshot": {
+          "title": "Item 42",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "div",
+              "class": "css-1f9a8b2-Root"
+            },
+            {
+              "id": "@e1",
+              "tag": "span",
+              "class": "css-x92zk0-Price",
+              "role": "status",
+              "aria_label": "Price",
+              "text": "$79.00"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to product page with obfuscated classes.",
+        "action": "navigate",
+        "target": "https://obfuscated.store.io/item/42",
+        "value": "",
+        "status": "success",
+        "observation": "Page loaded with hash classnames."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://obfuscated.store.io/item/42",
+        "dom_snapshot": {
+          "title": "Item 42",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "span",
+              "role": "status",
+              "text": "$79.00"
+            }
+          ]
+        },
+        "agent_thoughts": "Ground extraction in semantic role and aria-label rather than volatile classname hash.",
+        "action": "extract_text",
+        "target": "@e1",
+        "value": "",
+        "status": "success",
+        "observation": "$79.00"
+      }
+    ],
+    "outcome": "$79.00",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://obfuscated.store.io/item/42",
+      "extracted_text": "$79.00",
+      "element_present": "@e1"
+    }
+  },
+  {
+    "id": "browser_adv_003",
+    "category": "adversarial_dom",
+    "task": "Input search into closed shadow DOM root",
+    "optimal_steps": 2,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://custom-components.dev/shadow",
+        "dom_snapshot": {
+          "title": "Shadow DOM Demo",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "custom-search-box",
+              "shadow_root": "closed"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to page with closed shadow component.",
+        "action": "navigate",
+        "target": "https://custom-components.dev/shadow",
+        "value": "",
+        "status": "success",
+        "observation": "Web component loaded."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://custom-components.dev/shadow",
+        "dom_snapshot": {
+          "title": "Shadow DOM Demo",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "custom-search-box",
+              "shadow_root": "closed"
+            }
+          ]
+        },
+        "agent_thoughts": "Attempt selector targeting input inside closed shadow root.",
+        "action": "type",
+        "target": "custom-search-box input.search",
+        "value": "Vela AI",
+        "status": "error",
+        "observation": "NoSuchElementException: element custom-search-box input.search is inaccessible inside closed shadow root"
+      }
+    ],
+    "outcome": "Failed to access element inside closed shadow root",
+    "has_loop": false,
+    "is_success": false,
+    "expected_terminal_state": {
+      "url": "https://custom-components.dev/shadow",
+      "error_detected": true
+    }
+  },
+  {
+    "id": "browser_adv_004",
+    "category": "adversarial_dom",
+    "task": "Submit payment inside cross-origin iframe sandbox",
+    "optimal_steps": 2,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://merchant.com/pay",
+        "dom_snapshot": {
+          "title": "Merchant Checkout",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "iframe",
+              "src": "https://secure-vault.provider.com/embed"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to checkout page.",
+        "action": "navigate",
+        "target": "https://merchant.com/pay",
+        "value": "",
+        "status": "success",
+        "observation": "Checkout with embedded iframe loaded."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://merchant.com/pay",
+        "dom_snapshot": {
+          "title": "Merchant Checkout",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "iframe",
+              "src": "https://secure-vault.provider.com/embed"
+            }
+          ]
+        },
+        "agent_thoughts": "Click credit card field directly without iframe switch context.",
+        "action": "click",
+        "target": "#card-number",
+        "value": "",
+        "status": "error",
+        "observation": "TimeoutException: #card-number not found in top-level frame context"
+      }
+    ],
+    "outcome": "Failed to locate target within cross-origin iframe",
+    "has_loop": false,
+    "is_success": false,
+    "expected_terminal_state": {
+      "url": "https://merchant.com/pay",
+      "error_detected": true
+    }
+  },
+  {
+    "id": "browser_adv_005",
+    "category": "adversarial_dom",
+    "task": "Dismiss unexpected newsletter modal overlay and complete task",
+    "optimal_steps": 3,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://tech-times.com/articles/deep-learning",
+        "dom_snapshot": {
+          "title": "Deep Learning Article",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "div",
+              "class": "modal-overlay"
+            },
+            {
+              "id": "@e1",
+              "tag": "button",
+              "class": "modal-close-btn",
+              "aria_label": "Close Modal"
+            }
+          ]
+        },
+        "agent_thoughts": "Article view blocked by newsletter popup. Dismiss modal first.",
+        "action": "click",
+        "target": "@e1",
+        "value": "",
+        "status": "success",
+        "observation": "Modal closed. Main article container accessible."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://tech-times.com/articles/deep-learning",
+        "dom_snapshot": {
+          "title": "Deep Learning Article",
+          "elements": [
+            {
+              "id": "@e5",
+              "tag": "h1",
+              "class": "article-headline",
+              "text": "Self-Improving Reasoning Models"
+            }
+          ]
+        },
+        "agent_thoughts": "Extract article headline from element @e5.",
+        "action": "extract_text",
+        "target": "@e5",
+        "value": "",
+        "status": "success",
+        "observation": "Self-Improving Reasoning Models"
+      }
+    ],
+    "outcome": "Self-Improving Reasoning Models",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://tech-times.com/articles/deep-learning",
+      "extracted_text": "Self-Improving Reasoning Models",
+      "element_present": "@e5"
+    }
+  },
+  {
+    "id": "browser_adv_006",
+    "category": "adversarial_dom",
+    "task": "Extract item from virtualized infinite scroll list",
+    "optimal_steps": 3,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://feed.social.app/timeline",
+        "dom_snapshot": {
+          "title": "Timeline",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "div",
+              "class": "virtual-list-viewport"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to virtualized feed.",
+        "action": "navigate",
+        "target": "https://feed.social.app/timeline",
+        "value": "",
+        "status": "success",
+        "observation": "Initial 5 items rendered."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://feed.social.app/timeline",
+        "dom_snapshot": {
+          "title": "Timeline",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "div",
+              "class": "virtual-list-viewport"
+            }
+          ]
+        },
+        "agent_thoughts": "Scroll viewport to trigger virtualization window sliding.",
+        "action": "scroll",
+        "target": ".virtual-list-viewport",
+        "value": "1200",
+        "status": "success",
+        "observation": "Scrolled down. Items 15-20 mounted."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://feed.social.app/timeline",
+        "dom_snapshot": {
+          "title": "Timeline",
+          "elements": [
+            {
+              "id": "@e18",
+              "tag": "p",
+              "class": "post-content",
+              "text": "Milestone achieved: v2.0 launched"
+            }
+          ]
+        },
+        "agent_thoughts": "Extract target post text from newly mounted item @e18.",
+        "action": "extract_text",
+        "target": "@e18",
+        "value": "",
+        "status": "success",
+        "observation": "Milestone achieved: v2.0 launched"
+      }
+    ],
+    "outcome": "Milestone achieved: v2.0 launched",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://feed.social.app/timeline",
+      "extracted_text": "Milestone achieved: v2.0 launched",
+      "element_present": "@e18"
+    }
+  },
+  {
+    "id": "browser_adv_007",
+    "category": "adversarial_dom",
+    "task": "Extract text series from HTML5 Canvas element",
+    "optimal_steps": 2,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://analytics.dashboard.io/charts",
+        "dom_snapshot": {
+          "title": "Analytics",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "canvas",
+              "id_attr": "revenue-chart"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to analytics dashboard with canvas chart.",
+        "action": "navigate",
+        "target": "https://analytics.dashboard.io/charts",
+        "value": "",
+        "status": "success",
+        "observation": "Chart rendered on 2D canvas."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://analytics.dashboard.io/charts",
+        "dom_snapshot": {
+          "title": "Analytics",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "canvas",
+              "id_attr": "revenue-chart"
+            }
+          ]
+        },
+        "agent_thoughts": "Attempt DOM text extraction on canvas element.",
+        "action": "extract_text",
+        "target": "#revenue-chart",
+        "value": "",
+        "status": "error",
+        "observation": "ExtractionError: Canvas element has no text nodes"
+      }
+    ],
+    "outcome": "Failed to extract text from raw bitmap canvas",
+    "has_loop": false,
+    "is_success": false,
+    "expected_terminal_state": {
+      "url": "https://analytics.dashboard.io/charts",
+      "error_detected": true
+    }
+  },
+  {
+    "id": "browser_adv_008",
+    "category": "adversarial_dom",
+    "task": "Click interactive SVG map element and extract tooltip",
+    "optimal_steps": 3,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://geo.maps.org/interactive",
+        "dom_snapshot": {
+          "title": "Interactive Map",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "svg",
+              "class": "us-map"
+            },
+            {
+              "id": "@e1",
+              "tag": "path",
+              "aria_label": "California",
+              "selector": "path[data-state='CA']"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to interactive SVG map.",
+        "action": "navigate",
+        "target": "https://geo.maps.org/interactive",
+        "value": "",
+        "status": "success",
+        "observation": "Vector map rendered."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://geo.maps.org/interactive",
+        "dom_snapshot": {
+          "title": "Interactive Map",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "path",
+              "aria_label": "California",
+              "selector": "path[data-state='CA']"
+            }
+          ]
+        },
+        "agent_thoughts": "Click SVG vector path for California @e1.",
+        "action": "click",
+        "target": "@e1",
+        "value": "",
+        "status": "success",
+        "observation": "State tooltip activated."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://geo.maps.org/interactive",
+        "dom_snapshot": {
+          "title": "Interactive Map",
+          "elements": [
+            {
+              "id": "@e9",
+              "tag": "div",
+              "class": "svg-tooltip",
+              "text": "California: 39.0M Population"
+            }
+          ]
+        },
+        "agent_thoughts": "Extract population statistic from tooltip @e9.",
+        "action": "extract_text",
+        "target": "@e9",
+        "value": "",
+        "status": "success",
+        "observation": "California: 39.0M Population"
+      }
+    ],
+    "outcome": "California: 39.0M Population",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://geo.maps.org/interactive",
+      "extracted_text": "California: 39.0M Population",
+      "element_present": "@e9"
+    }
+  },
+  {
+    "id": "browser_adv_009",
+    "category": "adversarial_dom",
+    "task": "Avoid hidden honeypot input field during form completion",
+    "optimal_steps": 2,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://secure.signup.com/register",
+        "dom_snapshot": {
+          "title": "Sign Up",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "input",
+              "name": "username",
+              "style": "display:none; visibility:hidden;"
+            },
+            {
+              "id": "@e1",
+              "tag": "input",
+              "name": "real_username",
+              "placeholder": "Your Username"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to registration form.",
+        "action": "navigate",
+        "target": "https://secure.signup.com/register",
+        "value": "",
+        "status": "success",
+        "observation": "Form displayed."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://secure.signup.com/register",
+        "dom_snapshot": {
+          "title": "Sign Up",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "input",
+              "name": "username",
+              "style": "display:none; visibility:hidden;"
+            }
+          ]
+        },
+        "agent_thoughts": "Fill hidden honeypot input field mistakenly.",
+        "action": "type",
+        "target": "@e0",
+        "value": "bot_user",
+        "status": "error",
+        "observation": "AntiBotTriggeredException: Hidden honeypot field filled"
+      }
+    ],
+    "outcome": "Bot trigger tripped by honeypot input",
+    "has_loop": false,
+    "is_success": false,
+    "expected_terminal_state": {
+      "url": "https://secure.signup.com/register",
+      "error_detected": true
+    }
+  },
+  {
+    "id": "browser_adv_010",
+    "category": "adversarial_dom",
+    "task": "Interact with custom web component dropdown via keyboard events",
+    "optimal_steps": 3,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://design-system.org/dropdowns",
+        "dom_snapshot": {
+          "title": "Design System",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "custom-dropdown",
+              "role": "combobox",
+              "aria_expanded": "false"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to custom component demonstration.",
+        "action": "navigate",
+        "target": "https://design-system.org/dropdowns",
+        "value": "",
+        "status": "success",
+        "observation": "Custom combobox visible."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://design-system.org/dropdowns",
+        "dom_snapshot": {
+          "title": "Design System",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "custom-dropdown",
+              "role": "combobox",
+              "aria_expanded": "false"
+            }
+          ]
+        },
+        "agent_thoughts": "Focus and trigger enter key to expand custom combobox @e0.",
+        "action": "click",
+        "target": "@e0",
+        "value": "",
+        "status": "success",
+        "observation": "Combobox opened."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://design-system.org/dropdowns",
+        "dom_snapshot": {
+          "title": "Design System",
+          "elements": [
+            {
+              "id": "@e3",
+              "tag": "custom-option",
+              "role": "option",
+              "text": "Enterprise Support Plan"
+            }
+          ]
+        },
+        "agent_thoughts": "Select option element @e3.",
+        "action": "click",
+        "target": "@e3",
+        "value": "",
+        "status": "success",
+        "observation": "Selected: Enterprise Support Plan"
+      }
+    ],
+    "outcome": "Selected: Enterprise Support Plan",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://design-system.org/dropdowns",
+      "extracted_text": "Enterprise Support Plan",
+      "element_present": "@e3"
+    }
   }
 ]
