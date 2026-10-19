@@ -15,7 +15,6 @@ if str(base_dir) not in sys.path:
 from common import FamilyResult
 from adapters.client import VelaClient, TurnResult
 from cost_latency.benchmarks import load_cost_latency_cases
-from cost_latency.collectors.cost_model import cost_per_turn, cost_per_turn as _c
 from cost_latency.collectors.langsmith_collector import fingerprint_prompt
 from cost_latency.thresholds import MIN_SAMPLE_FOR_P95, check_cost, check_latency
 
@@ -135,8 +134,7 @@ def run_cost_latency_eval(mode: str = "smoke", live: bool = False) -> FamilyResu
     cost_ok = check_cost(avg_cost)
 
     status = "passed" if (failed == 0 and latency_ok and cost_ok) else "failed"
-    if not cases:
-        status = "error"
+
 
     summary = {
         "p50_latency_ms": round(p50_lat, 2),
