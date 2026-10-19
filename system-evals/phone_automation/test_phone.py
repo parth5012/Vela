@@ -41,12 +41,16 @@ def test_dataset_loading_smoke_and_nightly():
 
 def test_hardware_safety_guard_blocks_physical_device(monkeypatch):
     monkeypatch.delenv("VELA_ALLOW_PHYSICAL_DEVICE_EVALS", raising=False)
-    fake_adb_output = "List of devices attached\n988a1b2c\tdevice\nemulator-5554\tdevice\n"
-    with patch("shutil.which", return_value="/usr/bin/adb"), \
-         patch("subprocess.check_output", return_value=fake_adb_output):
-        with pytest.raises(PhysicalDeviceDetectedError) as exc_info:
-            assert_hardware_safety_guard()
-        assert "Physical Android device detected" in str(exc_info.value)
+    # Test both 'device' and 'unauthorized' states of physical devices
+    for fake_adb_output in [
+        "List of devices attached\n988a1b2c\tdevice\nemulator-5554\tdevice\n",
+        "List of devices attached\n988a1b2c\tunauthorized\nemulator-5554\tdevice\n",
+    ]:
+        with patch("shutil.which", return_value="/usr/bin/adb"), \
+             patch("subprocess.check_output", return_value=fake_adb_output):
+            with pytest.raises(PhysicalDeviceDetectedError) as exc_info:
+                assert_hardware_safety_guard()
+            assert "Physical Android device detected" in str(exc_info.value)
 
 
 def test_hardware_safety_guard_allows_pure_emulator_or_none(monkeypatch):

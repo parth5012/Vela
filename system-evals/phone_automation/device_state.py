@@ -37,7 +37,7 @@ def assert_hardware_safety_guard() -> None:
         try:
             out = subprocess.check_output([adb_bin, "devices"], timeout=1.0, text=True, stderr=subprocess.DEVNULL)
             lines = [line.strip() for line in out.strip().splitlines()[1:] if line.strip()]
-            physical_devices = [l for l in lines if not l.startswith("emulator-") and "\tdevice" in l]
+            physical_devices = [l for l in lines if not l.startswith("emulator-")]
             if physical_devices:
                 raise PhysicalDeviceDetectedError(
                     f"Physical Android device detected on ADB: {physical_devices}. "
