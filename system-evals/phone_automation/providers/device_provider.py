@@ -10,12 +10,16 @@ base_dir = Path(__file__).resolve().parent.parent.parent
 if str(base_dir) not in sys.path:
     sys.path.insert(0, str(base_dir))
 
+from functools import lru_cache
 from phone_automation.device_state import SimulatedDeviceState, assert_hardware_safety_guard
 from phone_automation.providers.mock_phone_provider import MockPhoneProvider
 from adapters.client import VelaClient
 
-_device_state = SimulatedDeviceState()
-_mock_provider = MockPhoneProvider(_device_state)
+
+@lru_cache(maxsize=4)
+def _get_cached_cases(mode: str) -> list[dict[str, Any]]:
+    from phone_automation.datasets import load_phone_cases
+    return load_phone_cases(mode=mode)
 
 
 def call_device_agent(
@@ -45,14 +49,15 @@ def call_device_agent(
             "latencyMs": result.latency_ms,
         }
 
-    # Deterministic mock/simulated execution
-    # Attempt to locate matching case from datasets if possible
-    from phone_automation.datasets import load_phone_cases
-    cases = load_phone_cases(mode="nightly")
+    # Deterministic mock/simulated execution with isolated state per invocation
+    mode = options.get("mode") or context.get("vars", {}).get("mode", "nightly")
+    cases = _get_cached_cases(mode)
     matched_case = next((c for c in cases if c.get("prompt") == prompt), None)
 
+    mock_provider = MockPhoneProvider(SimulatedDeviceState())
+
     if matched_case:
-        res = _mock_provider.process_turn(matched_case)
+        res = mock_provider.process_turn(matched_case)
         return {
             "output": res["text"],
             "tool_calls": res["tool_calls"],
