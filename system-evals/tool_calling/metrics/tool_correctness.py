@@ -105,17 +105,25 @@ class ToolCorrectnessMetric:
         # Argument correctness: for each expected, find a called with same name and matching args
         arg_matches = 0
         total_expected = len(expected_names)
+        matched_called = set()
         for i, ename in enumerate(expected_names):
-            # find candidate called indices with same name not already matched
-            candidates = [j for j, cn in enumerate(called_names) if cn == ename]
+            if self.should_consider_ordering:
+                candidates = [i] if (i < len(called_names) and called_names[i] == ename and i not in matched_called) else []
+            else:
+                candidates = [j for j, cn in enumerate(called_names) if cn == ename and j not in matched_called]
             if not candidates:
                 continue
             eargs = expected_args[i] if i < len(expected_args) else {}
             matched = False
             for j in candidates:
                 cargs = called_args[j] if j < len(called_args) else {}
-                if all(cargs.get(k) == v for k, v in eargs.items()):
+                if self.should_exact_match:
+                    arg_cmp_ok = (cargs == eargs)
+                else:
+                    arg_cmp_ok = all(cargs.get(k) == v for k, v in eargs.items())
+                if arg_cmp_ok:
                     matched = True
+                    matched_called.add(j)
                     break
             if matched:
                 arg_matches += 1
@@ -125,7 +133,12 @@ class ToolCorrectnessMetric:
         else:
             arg_score = 1.0
 
-        if name_ok and arg_score == 1.0:
+        if self.should_exact_match:
+            if name_ok and arg_score == 1.0 and len(called_names) == len(expected_names):
+                self.score = 1.0
+            else:
+                self.score = 0.0
+        elif name_ok and arg_score == 1.0:
             self.score = 1.0
         elif name_ok:
             self.score = 0.5 * (1.0 + arg_score)  # between 0.5 and 1

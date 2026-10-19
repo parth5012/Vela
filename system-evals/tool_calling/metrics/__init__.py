@@ -1,4 +1,4 @@
-from tool_calling.metrics.tool_correctness import ToolCorrectnessMetric
+from .tool_correctness import ToolCorrectnessMetric
 
 # Convenience re-exports
 try:

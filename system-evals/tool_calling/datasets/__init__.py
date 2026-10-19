@@ -39,9 +39,9 @@ def _normalize_names(dataset) -> list[str] | None:
         names = [str(dataset)]
     normalized = []
     for name in names:
-        key = DATASET_ALIASES.get(name, name)
         # allow filename-style inputs
-        key = key.replace(".json", "")
+        stripped = name.replace(".json", "")
+        key = DATASET_ALIASES.get(stripped, stripped)
         normalized.append(key)
     return normalized
 
@@ -90,8 +90,9 @@ def load_tool_calling_cases(
     cases: list[dict[str, Any]] = []
     for cat, filename in target.items():
         file_path = DATASETS_DIR / filename
-        if file_path.exists():
-            with open(file_path, "r", encoding="utf-8") as f:
+        if not file_path.exists():
+            raise FileNotFoundError(f"Dataset file '{filename}' for category '{cat}' not found at {file_path}")
+        with open(file_path, "r", encoding="utf-8") as f:
                 loaded = json.load(f)
                 for c in loaded:
                     c.setdefault("dataset", cat)

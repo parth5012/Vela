@@ -4,8 +4,8 @@
     "category": "tool_arguments",
     "dataset": "tool_arguments",
     "description": "personal assistant args",
-    "persona": "Send an email to alice@example.com with subject 'Hello' and body 'Hi there'",
-    "prompt": "ta_arg_001",
+    "persona": "personal assistant",
+    "prompt": "Send an email to alice@example.com with subject 'Hello' and body 'Hi there'",
     "expected_tool": "gmail_send_email",
     "expected_tools": [
       "gmail_send_email"
@@ -27,8 +27,8 @@
     "category": "tool_arguments",
     "dataset": "tool_arguments",
     "description": "personal assistant args",
-    "persona": "Read my last 5 emails",
-    "prompt": "ta_arg_002",
+    "persona": "personal assistant",
+    "prompt": "Read my last 5 emails",
     "expected_tool": "gmail_read_emails",
     "expected_tools": [
       "gmail_read_emails"
@@ -46,8 +46,8 @@
     "category": "tool_arguments",
     "dataset": "tool_arguments",
     "description": "personal assistant args",
-    "persona": "Search emails with query 'invoice'",
-    "prompt": "ta_arg_003",
+    "persona": "personal assistant",
+    "prompt": "Search emails with query 'invoice'",
     "expected_tool": "gmail_read_emails",
     "expected_tools": [
       "gmail_read_emails"
@@ -65,8 +65,8 @@
     "category": "tool_arguments",
     "dataset": "tool_arguments",
     "description": "personal assistant args",
-    "persona": "List calendar events for 2026-10-15",
-    "prompt": "ta_arg_004",
+    "persona": "personal assistant",
+    "prompt": "List calendar events for 2026-10-15",
     "expected_tool": "calendar_list_events",
     "expected_tools": [
       "calendar_list_events"
@@ -84,8 +84,8 @@
     "category": "tool_arguments",
     "dataset": "tool_arguments",
     "description": "personal assistant args",
-    "persona": "Create an event 'Standup' starting 2026-10-15T09:30:00Z ending 2026-10-15T10:00:00Z",
-    "prompt": "ta_arg_005",
+    "persona": "personal assistant",
+    "prompt": "Create an event 'Standup' starting 2026-10-15T09:30:00Z ending 2026-10-15T10:00:00Z",
     "expected_tool": "calendar_create_event",
     "expected_tools": [
       "calendar_create_event"
@@ -107,8 +107,8 @@
     "category": "tool_arguments",
     "dataset": "tool_arguments",
     "description": "researcher args",
-    "persona": "Search the web for 'Rust 1.85'",
-    "prompt": "ta_arg_006",
+    "persona": "researcher",
+    "prompt": "Search the web for 'Rust 1.85'",
     "expected_tool": "web_search",
     "expected_tools": [
       "web_search"
@@ -126,8 +126,8 @@
     "category": "tool_arguments",
     "dataset": "tool_arguments",
     "description": "coder args",
-    "persona": "Run python code 'print(42)'",
-    "prompt": "ta_arg_007",
+    "persona": "coder",
+    "prompt": "Run python code 'print(42)'",
     "expected_tool": "run_python_code",
     "expected_tools": [
       "run_python_code"
@@ -145,8 +145,8 @@
     "category": "tool_arguments",
     "dataset": "tool_arguments",
     "description": "personal assistant args",
-    "persona": "Save memory 'my code is ALPHA-42'",
-    "prompt": "ta_arg_008",
+    "persona": "personal assistant",
+    "prompt": "Save memory 'my code is ALPHA-42'",
     "expected_tool": "save_user_memory",
     "expected_tools": [
       "save_user_memory"
@@ -164,8 +164,8 @@
     "category": "tool_arguments",
     "dataset": "tool_arguments",
     "description": "personal assistant args",
-    "persona": "Delete memory with id 7",
-    "prompt": "ta_arg_009",
+    "persona": "personal assistant",
+    "prompt": "Delete memory with id 7",
     "expected_tool": "delete_user_memory",
     "expected_tools": [
       "delete_user_memory"
@@ -183,8 +183,8 @@
     "category": "tool_arguments",
     "dataset": "tool_arguments",
     "description": "personal assistant args",
-    "persona": "Send status message 'done'",
-    "prompt": "ta_arg_010",
+    "persona": "personal assistant",
+    "prompt": "Send status message 'done'",
     "expected_tool": "send_status_message",
     "expected_tools": [
       "send_status_message"
@@ -202,8 +202,8 @@
     "category": "tool_arguments",
     "dataset": "tool_arguments",
     "description": "personal assistant args",
-    "persona": "Send an email to alice@example.com with subject 'Hello' and body 'Hi there'",
-    "prompt": "ta_arg_001",
+    "persona": "personal assistant",
+    "prompt": "Send an email to alice@example.com with subject 'Hello' and body 'Hi there'",
     "expected_tool": "gmail_send_email",
     "expected_tools": [
       "gmail_send_email"
@@ -225,8 +225,8 @@
     "category": "tool_arguments",
     "dataset": "tool_arguments",
     "description": "personal assistant args",
-    "persona": "Read my last 5 emails",
-    "prompt": "ta_arg_002",
+    "persona": "personal assistant",
+    "prompt": "Read my last 5 emails",
     "expected_tool": "gmail_read_emails",
     "expected_tools": [
       "gmail_read_emails"
@@ -244,8 +244,8 @@
     "category": "tool_arguments",
     "dataset": "tool_arguments",
     "description": "personal assistant args",
-    "persona": "Search emails with query 'invoice'",
-    "prompt": "ta_arg_003",
+    "persona": "personal assistant",
+    "prompt": "Search emails with query 'invoice'",
     "expected_tool": "gmail_read_emails",
     "expected_tools": [
       "gmail_read_emails"
@@ -263,8 +263,8 @@
     "category": "tool_arguments",
     "dataset": "tool_arguments",
     "description": "personal assistant args",
-    "persona": "List calendar events for 2026-10-15",
-    "prompt": "ta_arg_004",
+    "persona": "personal assistant",
+    "prompt": "List calendar events for 2026-10-15",
     "expected_tool": "calendar_list_events",
     "expected_tools": [
       "calendar_list_events"
@@ -282,8 +282,8 @@
     "category": "tool_arguments",
     "dataset": "tool_arguments",
     "description": "personal assistant args",
-    "persona": "Create an event 'Standup' starting 2026-10-15T09:30:00Z ending 2026-10-15T10:00:00Z",
-    "prompt": "ta_arg_005",
+    "persona": "personal assistant",
+    "prompt": "Create an event 'Standup' starting 2026-10-15T09:30:00Z ending 2026-10-15T10:00:00Z",
     "expected_tool": "calendar_create_event",
     "expected_tools": [
       "calendar_create_event"
@@ -305,8 +305,8 @@
     "category": "tool_arguments",
     "dataset": "tool_arguments",
     "description": "researcher args",
-    "persona": "Search the web for 'Rust 1.85'",
-    "prompt": "ta_arg_006",
+    "persona": "researcher",
+    "prompt": "Search the web for 'Rust 1.85'",
     "expected_tool": "web_search",
     "expected_tools": [
       "web_search"
@@ -324,8 +324,8 @@
     "category": "tool_arguments",
     "dataset": "tool_arguments",
     "description": "coder args",
-    "persona": "Run python code 'print(42)'",
-    "prompt": "ta_arg_007",
+    "persona": "coder",
+    "prompt": "Run python code 'print(42)'",
     "expected_tool": "run_python_code",
     "expected_tools": [
       "run_python_code"
@@ -343,8 +343,8 @@
     "category": "tool_arguments",
     "dataset": "tool_arguments",
     "description": "personal assistant args",
-    "persona": "Save memory 'my code is ALPHA-42'",
-    "prompt": "ta_arg_008",
+    "persona": "personal assistant",
+    "prompt": "Save memory 'my code is ALPHA-42'",
     "expected_tool": "save_user_memory",
     "expected_tools": [
       "save_user_memory"
@@ -362,8 +362,8 @@
     "category": "tool_arguments",
     "dataset": "tool_arguments",
     "description": "personal assistant args",
-    "persona": "Delete memory with id 7",
-    "prompt": "ta_arg_009",
+    "persona": "personal assistant",
+    "prompt": "Delete memory with id 7",
     "expected_tool": "delete_user_memory",
     "expected_tools": [
       "delete_user_memory"
@@ -381,8 +381,8 @@
     "category": "tool_arguments",
     "dataset": "tool_arguments",
     "description": "personal assistant args",
-    "persona": "Send status message 'done'",
-    "prompt": "ta_arg_010",
+    "persona": "personal assistant",
+    "prompt": "Send status message 'done'",
     "expected_tool": "send_status_message",
     "expected_tools": [
       "send_status_message"
@@ -400,8 +400,8 @@
     "category": "tool_arguments",
     "dataset": "tool_arguments",
     "description": "personal assistant args",
-    "persona": "Send an email to alice@example.com with subject 'Hello' and body 'Hi there'",
-    "prompt": "ta_arg_001",
+    "persona": "personal assistant",
+    "prompt": "Send an email to alice@example.com with subject 'Hello' and body 'Hi there'",
     "expected_tool": "gmail_send_email",
     "expected_tools": [
       "gmail_send_email"
@@ -423,8 +423,8 @@
     "category": "tool_arguments",
     "dataset": "tool_arguments",
     "description": "personal assistant args",
-    "persona": "Read my last 5 emails",
-    "prompt": "ta_arg_002",
+    "persona": "personal assistant",
+    "prompt": "Read my last 5 emails",
     "expected_tool": "gmail_read_emails",
     "expected_tools": [
       "gmail_read_emails"
@@ -442,8 +442,8 @@
     "category": "tool_arguments",
     "dataset": "tool_arguments",
     "description": "personal assistant args",
-    "persona": "Search emails with query 'invoice'",
-    "prompt": "ta_arg_003",
+    "persona": "personal assistant",
+    "prompt": "Search emails with query 'invoice'",
     "expected_tool": "gmail_read_emails",
     "expected_tools": [
       "gmail_read_emails"
@@ -461,8 +461,8 @@
     "category": "tool_arguments",
     "dataset": "tool_arguments",
     "description": "personal assistant args",
-    "persona": "List calendar events for 2026-10-15",
-    "prompt": "ta_arg_004",
+    "persona": "personal assistant",
+    "prompt": "List calendar events for 2026-10-15",
     "expected_tool": "calendar_list_events",
     "expected_tools": [
       "calendar_list_events"
@@ -480,8 +480,8 @@
     "category": "tool_arguments",
     "dataset": "tool_arguments",
     "description": "personal assistant args",
-    "persona": "Create an event 'Standup' starting 2026-10-15T09:30:00Z ending 2026-10-15T10:00:00Z",
-    "prompt": "ta_arg_005",
+    "persona": "personal assistant",
+    "prompt": "Create an event 'Standup' starting 2026-10-15T09:30:00Z ending 2026-10-15T10:00:00Z",
     "expected_tool": "calendar_create_event",
     "expected_tools": [
       "calendar_create_event"
