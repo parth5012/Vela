@@ -1,0 +1,137 @@
+[
+  {
+    "id": "cl_medium_001",
+    "category": "medium_reasoning",
+    "dataset": "medium_reasoning",
+    "prompt": "Explain step by step how to solve problem 1 in dynamic programming.",
+    "persona": "analyst",
+    "max_latency_ms": 3000,
+    "max_cost_usd": 0.02
+  },
+  {
+    "id": "cl_medium_002",
+    "category": "medium_reasoning",
+    "dataset": "medium_reasoning",
+    "prompt": "Explain step by step how to solve problem 2 in dynamic programming.",
+    "persona": "analyst",
+    "max_latency_ms": 3000,
+    "max_cost_usd": 0.02
+  },
+  {
+    "id": "cl_medium_003",
+    "category": "medium_reasoning",
+    "dataset": "medium_reasoning",
+    "prompt": "Explain step by step how to solve problem 3 in dynamic programming.",
+    "persona": "analyst",
+    "max_latency_ms": 3000,
+    "max_cost_usd": 0.02
+  },
+  {
+    "id": "cl_medium_004",
+    "category": "medium_reasoning",
+    "dataset": "medium_reasoning",
+    "prompt": "Explain step by step how to solve problem 4 in dynamic programming.",
+    "persona": "analyst",
+    "max_latency_ms": 3000,
+    "max_cost_usd": 0.02
+  },
+  {
+    "id": "cl_medium_005",
+    "category": "medium_reasoning",
+    "dataset": "medium_reasoning",
+    "prompt": "Explain step by step how to solve problem 5 in dynamic programming.",
+    "persona": "analyst",
+    "max_latency_ms": 3000,
+    "max_cost_usd": 0.02
+  },
+  {
+    "id": "cl_medium_006",
+    "category": "medium_reasoning",
+    "dataset": "medium_reasoning",
+    "prompt": "Explain step by step how to solve problem 6 in dynamic programming.",
+    "persona": "analyst",
+    "max_latency_ms": 3000,
+    "max_cost_usd": 0.02
+  },
+  {
+    "id": "cl_medium_007",
+    "category": "medium_reasoning",
+    "dataset": "medium_reasoning",
+    "prompt": "Explain step by step how to solve problem 7 in dynamic programming.",
+    "persona": "analyst",
+    "max_latency_ms": 3000,
+    "max_cost_usd": 0.02
+  },
+  {
+    "id": "cl_medium_008",
+    "category": "medium_reasoning",
+    "dataset": "medium_reasoning",
+    "prompt": "Explain step by step how to solve problem 8 in dynamic programming.",
+    "persona": "analyst",
+    "max_latency_ms": 3000,
+    "max_cost_usd": 0.02
+  },
+  {
+    "id": "cl_medium_009",
+    "category": "medium_reasoning",
+    "dataset": "medium_reasoning",
+    "prompt": "Explain step by step how to solve problem 9 in dynamic programming.",
+    "persona": "analyst",
+    "max_latency_ms": 3000,
+    "max_cost_usd": 0.02
+  },
+  {
+    "id": "cl_medium_010",
+    "category": "medium_reasoning",
+    "dataset": "medium_reasoning",
+    "prompt": "Explain step by step how to solve problem 10 in dynamic programming.",
+    "persona": "analyst",
+    "max_latency_ms": 3000,
+    "max_cost_usd": 0.02
+  },
+  {
+    "id": "cl_medium_011",
+    "category": "medium_reasoning",
+    "dataset": "medium_reasoning",
+    "prompt": "Explain step by step how to solve problem 11 in dynamic programming.",
+    "persona": "analyst",
+    "max_latency_ms": 3000,
+    "max_cost_usd": 0.02
+  },
+  {
+    "id": "cl_medium_012",
+    "category": "medium_reasoning",
+    "dataset": "medium_reasoning",
+    "prompt": "Explain step by step how to solve problem 12 in dynamic programming.",
+    "persona": "analyst",
+    "max_latency_ms": 3000,
+    "max_cost_usd": 0.02
+  },
+  {
+    "id": "cl_medium_013",
+    "category": "medium_reasoning",
+    "dataset": "medium_reasoning",
+    "prompt": "Explain step by step how to solve problem 13 in dynamic programming.",
+    "persona": "analyst",
+    "max_latency_ms": 3000,
+    "max_cost_usd": 0.02
+  },
+  {
+    "id": "cl_medium_014",
+    "category": "medium_reasoning",
+    "dataset": "medium_reasoning",
+    "prompt": "Explain step by step how to solve problem 14 in dynamic programming.",
+    "persona": "analyst",
+    "max_latency_ms": 3000,
+    "max_cost_usd": 0.02
+  },
+  {
+    "id": "cl_medium_015",
+    "category": "medium_reasoning",
+    "dataset": "medium_reasoning",
+    "prompt": "Explain step by step how to solve problem 15 in dynamic programming.",
+    "persona": "analyst",
+    "max_latency_ms": 3000,
+    "max_cost_usd": 0.02
+  }
+]
