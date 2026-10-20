@@ -38,6 +38,7 @@ import { healXmlTags } from '../utils/xmlHealer';
 import { useRouter } from 'expo-router';
 import { useBrowserStore } from '../store/useBrowserStore';
 import { useGoogleAuthStore } from '../store/useGoogleAuthStore';
+import { perfTracker } from '../utils/perfTracker';
 
 // Importing local mode modules
 import { initializeLocalModel, streamLocalLlmResponse, isLocalLlmDown, localModelStorageKey, LOCAL_MODELS } from '../utils/localLlm';
@@ -843,12 +844,15 @@ export default function ChatScreen() {
     const userText = input.trim();
     setInput('');
 
+    const syncStart = typeof performance !== 'undefined' ? performance.now() : Date.now();
+
     const userMsgId = generateId('msg_user');
     const assistantMsgId = generateId('msg_assistant');
     const nowIso = new Date().toISOString();
 
     const originalHistory = messages[activeThreadId] || [];
 
+    // Instantaneous optimistic state commit (< 4ms synchronous blocking invariant)
     addMessage(activeThreadId, {
       id: userMsgId,
       role: 'user',
@@ -865,6 +869,9 @@ export default function ChatScreen() {
 
     setStreamingThread(activeThreadId, true);
     triggerAutoScroll();
+
+    const syncDuration = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - syncStart;
+    perfTracker.recordMetric('sync_blocking_invariant_ms', syncDuration, 'ms');
 
     if (isLocalMode) {
       await streamLocalResponse(activeThreadId, userText, [...originalHistory, { id: userMsgId, role: 'user', content: userText }]);

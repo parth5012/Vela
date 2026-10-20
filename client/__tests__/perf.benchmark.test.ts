@@ -290,7 +290,7 @@ describe('Headless CI Engine Benchmark Suite (18-Metric Ratchet Lane 1)', () => 
     // Assert Invariants
     expect(medianRedundant).toBe(0);
     expect(medianRatio).toBeLessThan(2.5);
-    expect(medianSyncBlocking).toBeLessThan(16.6);
+    expect(medianSyncBlocking).toBeLessThan(4.0);
     expect(medianCommits).toBeLessThanOrEqual(10);
     expect(medianLagMs).toBeLessThan(4.0);
 
