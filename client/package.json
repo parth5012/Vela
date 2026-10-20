@@ -12,6 +12,7 @@
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-cookies/cookies": "^6.2.1",
     "@react-navigation/drawer": "^7.12.6",
+    "@shopify/flash-list": "^2.3.3",
     "@stardazed/streams-text-encoding": "^1.0.2",
     "ai": "^7.0.124",
     "device-agent": "file:./modules/device-agent",
@@ -105,7 +106,7 @@
       "<rootDir>/__tests__/helpers/"
     ],
     "transformIgnorePatterns": [
-      "node_modules/(?!(\\.pnpm/.*node_modules/)?((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|ai|@ai-sdk/.*|@openrouter/.*|@workflow/.*|effect))"
+      "node_modules/(?!(\\.pnpm/.*node_modules/)?((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|ai|@ai-sdk/.*|@openrouter/.*|@workflow/.*|effect|@shopify/flash-list))"
     ]
   },
   "private": true,
