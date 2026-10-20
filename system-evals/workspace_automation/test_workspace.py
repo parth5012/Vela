@@ -56,6 +56,12 @@ def test_datasets_integrity():
     cases = load_workspace_cases(mode="nightly")
     assert len(cases) == 25, f"Expected 25 cases, got {len(cases)}"
 
+    # Test category filtering
+    email_cases = load_workspace_cases(category="email_to_calendar", mode="nightly")
+    assert len(email_cases) == 6
+    email_smoke = load_workspace_cases(category="email_to_calendar", mode="smoke")
+    assert len(email_smoke) == 1
+
     categories = {c.get("category") for c in cases}
     expected_categories = {
         "email_to_calendar",

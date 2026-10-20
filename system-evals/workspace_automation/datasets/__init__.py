@@ -49,7 +49,10 @@ def load_workspace_cases(
         normalized_cat = CATEGORY_ALIASES.get(category.lower(), category.lower())
         if normalized_cat not in VALID_CATEGORIES:
             raise ValueError(f"Unknown category '{category}'. Valid: {sorted(VALID_CATEGORIES)}")
-        cases = [c for c in cases if c.get("category") == normalized_cat]
+        filtered = [c for c in cases if c.get("category") == normalized_cat]
+        if mode == "smoke":
+            return filtered[:1]
+        return filtered
 
     if mode == "smoke":
         # Select 1 representative case per category

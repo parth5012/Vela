@@ -98,8 +98,13 @@ def run_memory_eval(mode: str = "smoke", live: bool = False) -> FamilyResult:
         # Dispatch turn: Live vs Simulated
         if live:
             live_cases += 1
+            live_message = (
+                "Context from memory:\n"
+                + "\n".join(f"- {c}" for c in contexts)
+                + f"\n\nQuestion: {question}"
+            ) if contexts else question
             try:
-                turn = live_client.send_turn(message=question)
+                turn = live_client.send_turn(message=live_message)
             except Exception as e:
                 failed += 1
                 details.append({

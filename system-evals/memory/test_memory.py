@@ -51,6 +51,12 @@ def test_datasets_integrity():
     cases = load_memory_cases(mode="nightly")
     assert len(cases) == 25, f"Expected 25 cases, got {len(cases)}"
 
+    # Test category filtering
+    pref_cases = load_memory_cases(category="preference_recall", mode="nightly")
+    assert len(pref_cases) == 5
+    pref_smoke = load_memory_cases(category="preference_recall", mode="smoke")
+    assert len(pref_smoke) == 1
+
     categories = {c.get("category") for c in cases}
     expected_categories = {
         "preference_recall",
@@ -154,6 +160,7 @@ def test_negative_retrieval_no_hallucination():
         response="You have not mentioned having a pet dog or provided a pet name in memory.",
         retrieved_contexts=[],
         forbidden_in_answer=["Buddy", "Max"],
+        is_negative_retrieval=True,
     )
     assert res.passed is True
     assert res.score == 1.0
