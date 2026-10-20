@@ -25,3 +25,21 @@ jest.mock('expo-notifications', () => ({
   AndroidImportance: { MAX: 5, DEFAULT: 3, HIGH: 4 },
   setNotificationHandler: jest.fn(),
 }));
+
+if (typeof window !== 'undefined' && typeof window.dispatchEvent !== 'function') {
+  window.dispatchEvent = jest.fn();
+}
+
+jest.mock('@shopify/flash-list', () => {
+  const React = require('react');
+  const { FlatList } = require('react-native');
+  const FlashListMock = React.forwardRef((props, ref) => {
+    return React.createElement(FlatList, {
+      ...props,
+      ref,
+    });
+  });
+  return {
+    FlashList: FlashListMock,
+  };
+});
