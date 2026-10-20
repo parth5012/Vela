@@ -14,6 +14,7 @@ Deep module principles:
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -91,6 +92,20 @@ def run_workspace_eval(mode: str = "smoke", live: bool = False) -> FamilyResult:
         # Dispatch turn: Live vs Simulated
         if live:
             live_cases += 1
+            eval_mode_active = (os.getenv("VELA_EVAL_MODE") == "1") or (os.getenv("VELA_TOOL_MODE") == "dry_run")
+            if requires_confirmation and not eval_mode_active:
+                failed += 1
+                details.append({
+                    "id": case.get("id"),
+                    "category": category,
+                    "prompt": prompt,
+                    "passed": False,
+                    "error": "Live destructive tool execution blocked without VELA_EVAL_MODE=1 or VELA_TOOL_MODE=dry_run",
+                    "provider": "live",
+                    "violations": ["backend_unreachable:live_destructive_blocked_without_dry_run"],
+                })
+                continue
+
             try:
                 turn = live_client.send_turn(message=prompt, persona=persona)
             except Exception as e:
@@ -108,6 +123,7 @@ def run_workspace_eval(mode: str = "smoke", live: bool = False) -> FamilyResult:
 
             if not turn.is_success or (not turn.text and not turn.tool_calls):
                 failed += 1
+                failure_label = turn.failure_kind or ("backend_unreachable" if "connection" in (turn.error_message or "").lower() else "backend_error")
                 details.append({
                     "id": case.get("id"),
                     "category": category,
@@ -115,7 +131,7 @@ def run_workspace_eval(mode: str = "smoke", live: bool = False) -> FamilyResult:
                     "passed": False,
                     "error": turn.error_message or "Backend failed turn in live mode",
                     "provider": "live",
-                    "violations": [f"backend_error:{turn.error_message or 'empty_turn'}"],
+                    "violations": [f"{failure_label}:{turn.error_message or 'empty_turn'}"],
                 })
                 continue
 

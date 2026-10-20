@@ -99,7 +99,7 @@ def test_real_retrieval_cosine_distance():
     engine.add_memory(target)
     engine.add_memory(distractor)
 
-    results = engine.retrieve("What are my food allergies?")
+    results = engine.retrieve("What are my food allergies and peanut allergy?")
     assert len(results) == 2
     # Target memory must be ranked first (closest cosine distance)
     assert results[0].content == target
