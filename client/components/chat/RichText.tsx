@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { View, StyleSheet, Platform, Text, Pressable, ScrollView } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import Markdown from 'react-native-markdown-display';
-import { parseContent } from '../../utils/latexExtractor';
+import { parseContent, parseContentIncremental } from '../../utils/latexExtractor';
 import { perfTracker } from '../../utils/perfTracker';
 import LatexRenderer from './LatexRenderer';
 import { THEME_COLORS, FONT_SIZES, ACCENT_COLORS } from '../../utils/theme';
@@ -17,6 +17,7 @@ interface RichTextProps {
   sizes?: typeof FONT_SIZES[keyof typeof FONT_SIZES];
   accentHex?: string;
   onCopyText?: (text: string) => void;
+  isStreaming?: boolean;
 }
 
 export default function RichText({
@@ -28,10 +29,13 @@ export default function RichText({
   sizes: sizesOverride,
   accentHex: accentHexOverride,
   onCopyText,
+  isStreaming = false,
 }: RichTextProps) {
   const segments = useMemo(() => {
-    return perfTracker.measureMarkdownParse(content, () => parseContent(content));
-  }, [content]);
+    return perfTracker.measureMarkdownParse(content, () =>
+      isStreaming ? parseContentIncremental(content) : parseContent(content)
+    );
+  }, [content, isStreaming]);
   const colors = colorsOverride || THEME_COLORS[theme] || THEME_COLORS.deep;
   const sizes = sizesOverride || FONT_SIZES[fontSize] || FONT_SIZES.medium;
   const accentHex = accentHexOverride || ACCENT_COLORS[accentColor] || ACCENT_COLORS.indigo;

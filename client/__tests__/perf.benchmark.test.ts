@@ -4,6 +4,7 @@ import React from 'react';
 import renderer, { act } from 'react-test-renderer';
 import { perfTracker, useRenderCount } from '../utils/perfTracker';
 import { parseContentIncremental, clearBlockCache, findLastBlockBoundary } from '../utils/latexExtractor';
+import { TokenCoalescer } from '../hooks/useChatStream';
 
 // Mock DB client so SQLite benchmarks run deterministically in headless CI
 jest.mock('../db/client', () => {
@@ -220,12 +221,25 @@ describe('Headless CI Engine Benchmark Suite (18-Metric Ratchet Lane 1)', () => 
       // Initial mount counts
       const baselineHistoryRerenders = historicalCellRerenders;
 
-      // Simulate streaming updates
-      for (let c = 0; c < 5; c++) {
-        act(() => {
-          comp.update(React.createElement(ChatContainer, { streamText: `Chunk ${c}` }));
-        });
+      // Simulate frame-synchronized streaming updates using TokenCoalescer across 250 tokens
+      const coalescer = new TokenCoalescer({
+        initialContent: 'Initial',
+        onFlush: (updated) => {
+          act(() => {
+            comp.update(React.createElement(ChatContainer, { streamText: updated }));
+          });
+        },
+      });
+
+      // Stream 250 tokens in bursts simulating frame-timed SSE chunk arrival
+      for (let t = 0; t < 250; t++) {
+        coalescer.appendToken(`tok${t} `);
+        // Intermittently flush display frame batches (every 35 tokens ~ 33ms frame)
+        if (t % 35 === 0) {
+          coalescer.flush();
+        }
       }
+      coalescer.flushSync(); // Completion flush on [DONE]
 
       commitsRuns.push(streamingCellCommits);
       // Redundant rerenders must be 0 for memoized historical items
@@ -277,6 +291,8 @@ describe('Headless CI Engine Benchmark Suite (18-Metric Ratchet Lane 1)', () => 
     expect(medianRedundant).toBe(0);
     expect(medianRatio).toBeLessThan(2.5);
     expect(medianSyncBlocking).toBeLessThan(16.6);
+    expect(medianCommits).toBeLessThanOrEqual(10);
+    expect(medianLagMs).toBeLessThan(4.0);
 
     const metricsOutput = {
       version: '1.0.0',
