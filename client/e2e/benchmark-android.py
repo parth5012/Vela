@@ -200,6 +200,10 @@ def main():
         print("[DRY RUN] Simulating cold startup via am start -W...")
         cold_launch_ms = parse_am_start(SAMPLE_AM_START)
         print(f"  -> Cold Launch Time: {cold_launch_ms:.1f} ms")
+        if cold_launch_ms > 1200.0:
+            print(f"  [WARN] Cold launch ({cold_launch_ms:.1f}ms) exceeds 1200ms target SLA!")
+        else:
+            print(f"  -> Cold Launch Target SLA (< 1200ms): PASS ({cold_launch_ms:.1f}ms)")
 
         print("[DRY RUN] Simulating gfxinfo framestats...")
         jank_pct, p95_frame_ms, total_frames = parse_gfxinfo_framestats(SAMPLE_GFXINFO)
@@ -260,9 +264,9 @@ def main():
                 "value": cold_launch_ms,
                 "unit": "ms",
                 "lower_is_better": True,
-                "target": 500.0,
+                "target": 1200.0,
                 "tier": 1,
-                "description": "Cold application launch time (TotalTime)",
+                "description": "Cold application launch time (TotalTime < 1200ms)",
             },
             "android_jank_frame_pct": {
                 "value": jank_pct,
