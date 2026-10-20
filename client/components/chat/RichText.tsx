@@ -4,9 +4,24 @@ import * as Clipboard from 'expo-clipboard';
 import Markdown from 'react-native-markdown-display';
 import { parseContent, parseContentIncremental } from '../../utils/latexExtractor';
 import { perfTracker } from '../../utils/perfTracker';
-import LatexRenderer from './LatexRenderer';
 import { THEME_COLORS, FONT_SIZES, ACCENT_COLORS } from '../../utils/theme';
-import MermaidRenderer from './MermaidRenderer';
+
+// Lazy-loaded heavy modules to avoid blocking initial cold launch bundle evaluation
+let LazyLatexRenderer: React.ComponentType<any> | null = null;
+function getLatexRenderer(): React.ComponentType<any> {
+  if (!LazyLatexRenderer) {
+    LazyLatexRenderer = require('./LatexRenderer').default;
+  }
+  return LazyLatexRenderer!;
+}
+
+let LazyMermaidRenderer: React.ComponentType<any> | null = null;
+function getMermaidRenderer(): React.ComponentType<any> {
+  if (!LazyMermaidRenderer) {
+    LazyMermaidRenderer = require('./MermaidRenderer').default;
+  }
+  return LazyMermaidRenderer!;
+}
 
 interface RichTextProps {
   content: string;
@@ -46,8 +61,9 @@ export default function RichText({
       const lang = node.info || '';
 
       if (lang.toLowerCase().trim() === 'mermaid') {
+        const Mermaid = getMermaidRenderer();
         return (
-          <MermaidRenderer
+          <Mermaid
             key={node.key}
             graph={codeText}
             theme={theme}
@@ -238,16 +254,18 @@ export default function RichText({
         if (segment.type === 'markdown') {
           return <Markdown key={index} rules={rules} style={dynamicMarkdownStyles as any}>{segment.content}</Markdown>;
         } else if (segment.type === 'latex-inline') {
+          const Latex = getLatexRenderer();
           return (
-            <LatexRenderer
+            <Latex
               key={index}
               formula={segment.content}
               displayMode={false}
             />
           );
         } else if (segment.type === 'latex-block') {
+          const Latex = getLatexRenderer();
           return (
-            <LatexRenderer
+            <Latex
               key={index}
               formula={segment.content}
               displayMode={true}

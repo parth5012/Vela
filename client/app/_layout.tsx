@@ -2,7 +2,7 @@ import '@stardazed/streams-text-encoding';
 import { useEffect } from 'react';
 import { useRouter, useSegments, useRootNavigationState, Slot } from 'expo-router';
 import { Drawer } from 'expo-router/drawer';
-import { ActivityIndicator, View, StyleSheet, Pressable, Text, AppState } from 'react-native';
+import { ActivityIndicator, View, StyleSheet, Pressable, Text, AppState, InteractionManager } from 'react-native';
 import { useConfigStore } from '../store/useConfigStore';
 import { checkPermission, type OSPermission } from '../utils/permissionManager';
 import { useChatStore } from '../store/useChatStore';
@@ -106,17 +106,29 @@ export default function RootLayout() {
       if (!useChatStore.getState().activeThreadId) {
         useChatStore.getState().selectThread(null);
       }
-      runAgentDataBootstrap();
-      // Local-first offline sync: flush any pending offline messages once the
-      // store is hydrated, and listen for app foreground to flush again.
-      wireOfflineSync();
-      flushPendingMessages();
+      // Cold startup optimization (WF-427-04): defer background data bootstrap & offline sync
+      const task = InteractionManager.runAfterInteractions(() => {
+        runAgentDataBootstrap();
+        // Local-first offline sync: flush any pending offline messages once the
+        // store is hydrated, and listen for app foreground to flush again.
+        wireOfflineSync();
+        flushPendingMessages();
+      });
+      return () => {
+        task.cancel();
+      };
     }
   }, [hasHydrated, chatHasHydrated]);
 
   useEffect(() => {
     if (hasHydrated) {
-      registerVelaBackgroundTask();
+      // Cold startup optimization (WF-427-04): defer background task registration
+      const task = InteractionManager.runAfterInteractions(() => {
+        registerVelaBackgroundTask();
+      });
+      return () => {
+        task.cancel();
+      };
     }
   }, [hasHydrated]);
 
@@ -127,20 +139,24 @@ export default function RootLayout() {
     if (!hasHydrated || !isConfigured) return;
     let refreshSub: Notifications.Subscription | null = null;
     let cancelled = false;
-    // Fire registration; on success register refresh listener. Failures are silent+logged inside util.
-    registerAndPostToken().then((token) => {
-      if (cancelled) return;
-      // Only listen for refresh if permission was granted (token obtained).
-      // If denied, listener is skipped; next app launch after grant will register.
-      if (!token) return;
-      try {
-        refreshSub = setupTokenRefreshListener();
-      } catch {
-        // silent
-      }
+    // Cold startup optimization (WF-427-04): defer FCM push registration after interactions
+    const task = InteractionManager.runAfterInteractions(() => {
+      // Fire registration; on success register refresh listener. Failures are silent+logged inside util.
+      registerAndPostToken().then((token) => {
+        if (cancelled) return;
+        // Only listen for refresh if permission was granted (token obtained).
+        // If denied, listener is skipped; next app launch after grant will register.
+        if (!token) return;
+        try {
+          refreshSub = setupTokenRefreshListener();
+        } catch {
+          // silent
+        }
+      });
     });
     return () => {
       cancelled = true;
+      task.cancel();
       try {
         refreshSub?.remove();
       } catch {
@@ -161,19 +177,21 @@ export default function RootLayout() {
 
     const selectThread = (id: string | null) => useChatStore.getState().selectThread(id);
 
-    // Cold-start: app launched from killed state via notification tap
-    Notifications.getLastNotificationResponseAsync()
-      .then((response: unknown) => {
-        if (cancelled) return;
-        const data = (response as { notification?: { request?: { content?: { data?: Record<string, string> } } } })
-          ?.notification?.request?.content?.data;
-        if (data) {
-          routeByType(data, router, selectThread);
-        }
-      })
-      .catch(() => {
-        // silent
-      });
+    // Cold-start: app launched from killed state via notification tap (deferred after first frame)
+    const task = InteractionManager.runAfterInteractions(() => {
+      Notifications.getLastNotificationResponseAsync()
+        .then((response: unknown) => {
+          if (cancelled) return;
+          const data = (response as { notification?: { request?: { content?: { data?: Record<string, string> } } } })
+            ?.notification?.request?.content?.data;
+          if (data) {
+            routeByType(data, router, selectThread);
+          }
+        })
+        .catch(() => {
+          // silent
+        });
+    });
 
     // Foreground: system banner via setNotificationHandler; listener only for logging
     foregroundSub = Notifications.addNotificationReceivedListener((notification: unknown) => {
@@ -195,6 +213,7 @@ export default function RootLayout() {
 
     return () => {
       cancelled = true;
+      task.cancel();
       try {
         foregroundSub?.remove();
       } catch {
@@ -230,14 +249,19 @@ export default function RootLayout() {
         }
       }
     };
-    // Initial check
-    checkPermissionsAndUpdateStore();
+    // Cold startup optimization (WF-427-04): defer OS permission queries after first paint
+    const task = InteractionManager.runAfterInteractions(() => {
+      checkPermissionsAndUpdateStore();
+    });
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         checkPermissionsAndUpdateStore();
       }
     });
-    return () => sub.remove();
+    return () => {
+      task.cancel();
+      sub.remove();
+    };
   }, [hasHydrated]);
 
   useEffect(() => {
