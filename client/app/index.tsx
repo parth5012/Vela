@@ -26,6 +26,7 @@ import type { ConnectionMode } from '../store/useConfigStore';
 import { useChatStore, Message, Thread } from '../store/useChatStore';
 import { useAurora } from '../hooks/useAurora';
 import RichText from '../components/chat/RichText';
+import MessageItem from '../components/chat/MessageItem';
 import BubbleFooter from '../components/chat/BubbleFooter';
 import DateDividerPill from '../components/chat/DateDividerPill';
 import { buildChatFeedItems } from '../utils/chatFeed';
@@ -1372,148 +1373,77 @@ export default function ChatScreen() {
                 const message = item.message;
                 const isUser = message.role === 'user';
                 const showActionBar = activeMenuMessage?.id === message.id;
+                const isStreamingThis = !isUser && isCurrentThreadStreaming && activeMessages[activeMessages.length - 1]?.id === message.id;
 
                 // Hooks are illegal inside this callback (plain function, not a
                 // component) — use the module-level cache instead of useMemo.
                 const { segments, headerSegments, bubbleContent, sources } = getCachedParse(message.content, isUser);
 
-                return (
-                  <View style={[styles.messageRow, isUser ? styles.userRow : styles.assistantRow]}>
-                    <View style={{ flexDirection: 'column', alignItems: isUser ? 'flex-end' : 'flex-start', width: '100%' }}>
-                      {!isUser && headerSegments.length > 0 && (
-                        <View style={styles.thoughtNestingContainer}>
-                          {headerSegments.map((segment, idx) => renderSegment(segment, idx))}
-                        </View>
-                      )}
-
-                      <Pressable
-                        onLongPress={() => !isCurrentThreadStreaming && setActiveMenuMessage(message)}
-                        style={({ pressed }) => [
-                          styles.bubble,
-                          isUser ? styles.userBubble : styles.assistantBubble,
-                          pressed && { opacity: 0.85 },
-                          !isUser && { backgroundColor: colors.glass, borderColor: colors.glassBorder },
-                          isUser && { backgroundColor: aurora.acc1, borderColor: aurora.acc2 },
-                        ]}
-                      >
-                        {!isUser && (
-                          <Text style={[styles.senderLabel, { color: aurora.acc1 }]}>
-                            {isLocalMode ? 'Gemma (Local)' : (agents.find(p => p.id === currentAgentId)?.name || 'Vela')}
-                          </Text>
-                        )}
-
-                        {isUser ? (
-                          <Text style={[styles.messageText, { color: aurora.onAccent, fontSize: sizes.text }]}>
-                            {message.content}
-                          </Text>
-                        ) : showRawMap[message.id] ? (
-                          <Text style={[styles.rawText, { color: colors.text, fontSize: sizes.text }]}>
-                            {message.content}
-                          </Text>
-                        ) : bubbleContent.length === 0 ? (
-                          <RichText
-                            content={message.content || '…'}
-                            colors={colors}
-                            sizes={sizes}
-                            accentHex={accentHex}
-                            onCopyText={handleCopyText}
-                          />
-                        ) : (
-                          <View style={{ gap: 8 }}>
-                            {bubbleContent.map((segment, idx) => {
-                              if (segment.type === 'text') {
-                                return (
-                                  <RichText
-                                    key={idx}
-                                    content={segment.content || ''}
-                                    colors={colors}
-                                    sizes={sizes}
-                                    accentHex={accentHex}
-                                    onCopyText={handleCopyText}
-                                  />
-                                );
-                              }
-                              return renderSegment(segment, idx);
-                            })}
-                          </View>
-                        )}
-                        <BubbleFooter
-                          createdAt={message.created_at}
-                          isUser={isUser}
-                          isStreaming={!isUser && isCurrentThreadStreaming && activeMessages[activeMessages.length - 1]?.id === message.id}
-                          aurora={aurora}
-                          colors={colors}
-                        />
-                      </Pressable>
-
-                      {!isUser && (
-                        (() => {
-                          
-                          if (sources.length === 0) return null;
-                          return (
-                            <View style={{ marginTop: 8, width: '100%' }}>
-                              <Text style={[styles.sourcesTitleLabel, { color: colors.textMuted }]}>
-                                Reference Sources
-                              </Text>
-                              <View style={styles.sourcesContainer}>
-                                {sources.map((src, srcIdx) => (
-                                  <SourceCard
-                                    key={srcIdx}
-                                    src={src}
-                                    colors={colors}
-                                    sizes={sizes}
-                                    accentHex={accentHex}
-                                  />
-                                ))}
-                              </View>
-                            </View>
-                          );
-                        })()
-                      )}
-                    </View>
-
-                    {!isUser && isCurrentThreadStreaming && activeMessages[activeMessages.length - 1]?.id === message.id && (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12, gap: 4 }}>
-                        <ActivityIndicator size="small" color={aurora.acc1} />
-                        <Text style={{ color: aurora.acc2, fontSize: sizes.sub - 1, fontWeight: 'bold' }}>
-                          {isLocalMode ? 'LOCAL MODEL COMPILING...' : 'VELA COMPILING...'}
-                        </Text>
-                      </View>
-                    )}
-
-                    {showActionBar && (
-                      <View style={styles.actionBar}>
-                        <Pressable style={styles.actionBtn} onPress={() => handleCopyText(message.content)}>
-                          <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Copy</Text>
-                        </Pressable>
-                {!isUser && (
-                  <>
-                      <Pressable style={styles.actionBtn} onPress={() => setViewerContent(message.content)}>
-                      <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>View</Text>
-                    </Pressable>
-                      <Pressable style={styles.actionBtn} onPress={() => handleCopyCodeBlocks(message.content)}>
-                              <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Code</Text>
-                            </Pressable>
-                            <Pressable style={styles.actionBtn} onPress={() => handleRegenerate(message)}>
-                              <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Retry</Text>
-                            </Pressable>
-                            <Pressable style={styles.actionBtn} onPress={() => toggleRaw(message.id)}>
-                              <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Raw</Text>
-                            </Pressable>
-                          </>
-                        )}
-                        <Pressable style={styles.actionBtn} onPress={() => handleBranch(message)}>
-                          <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Branch</Text>
-                        </Pressable>
-                        <Pressable style={styles.actionBtn} onPress={() => handleDownloadMd(message)}>
-                          <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Download</Text>
-                        </Pressable>
-                        <Pressable style={styles.actionBtn} onPress={() => handleShowInfo(message)}>
-                          <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Info</Text>
-                        </Pressable>
-                      </View>
-                    )}
+                const compilingIndicator = isStreamingThis ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12, gap: 4 }}>
+                    <ActivityIndicator size="small" color={aurora.acc1} />
+                    <Text style={{ color: aurora.acc2, fontSize: sizes.sub - 1, fontWeight: 'bold' }}>
+                      {isLocalMode ? 'LOCAL MODEL COMPILING...' : 'VELA COMPILING...'}
+                    </Text>
                   </View>
+                ) : null;
+
+                const actionBar = showActionBar ? (
+                  <View style={styles.actionBar}>
+                    <Pressable style={styles.actionBtn} onPress={() => handleCopyText(message.content)}>
+                      <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Copy</Text>
+                    </Pressable>
+                    {!isUser && (
+                      <>
+                        <Pressable style={styles.actionBtn} onPress={() => setViewerContent(message.content)}>
+                          <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>View</Text>
+                        </Pressable>
+                        <Pressable style={styles.actionBtn} onPress={() => handleCopyCodeBlocks(message.content)}>
+                          <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Code</Text>
+                        </Pressable>
+                        <Pressable style={styles.actionBtn} onPress={() => handleRegenerate(message)}>
+                          <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Retry</Text>
+                        </Pressable>
+                        <Pressable style={styles.actionBtn} onPress={() => toggleRaw(message.id)}>
+                          <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Raw</Text>
+                        </Pressable>
+                      </>
+                    )}
+                    <Pressable style={styles.actionBtn} onPress={() => handleBranch(message)}>
+                      <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Branch</Text>
+                    </Pressable>
+                    <Pressable style={styles.actionBtn} onPress={() => handleDownloadMd(message)}>
+                      <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Download</Text>
+                    </Pressable>
+                    <Pressable style={styles.actionBtn} onPress={() => handleShowInfo(message)}>
+                      <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Info</Text>
+                    </Pressable>
+                  </View>
+                ) : null;
+
+                return (
+                  <MessageItem
+                    key={message.id}
+                    message={message}
+                    isUser={isUser}
+                    colors={colors}
+                    sizes={sizes}
+                    aurora={aurora}
+                    accentHex={accentHex}
+                    isLocalMode={isLocalMode}
+                    agentName={agents.find(p => p.id === currentAgentId)?.name || 'Vela'}
+                    showRaw={showRawMap[message.id]}
+                    isStreaming={isStreamingThis}
+                    inViewport={true}
+                    onLongPress={() => !isCurrentThreadStreaming && setActiveMenuMessage(message)}
+                    onCopyText={handleCopyText}
+                    renderSegment={renderSegment}
+                    headerSegments={headerSegments}
+                    bubbleContent={bubbleContent}
+                    sources={sources}
+                    actionBar={actionBar}
+                    compilingIndicator={compilingIndicator}
+                  />
                 );
               }}
             />

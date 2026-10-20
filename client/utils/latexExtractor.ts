@@ -51,6 +51,30 @@ let lastPrefix = '';
 let lastPrefixSegs: ContentSegment[] = [];
 let lastStreamLength = 0;
 
+/**
+ * Incremental markdown AST block cache.
+ * Exported for memory monitoring, snapshot profiling, and bounded pruning (WF-427-05).
+ */
+export const blockAstCache = blockCache;
+
+export function pruneBlockAstCache(maxCapacity: number = 200): number {
+  let pruned = 0;
+  while (blockCache.size > maxCapacity) {
+    const oldestKey = blockCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      blockCache.delete(oldestKey);
+      pruned++;
+    } else {
+      break;
+    }
+  }
+  return pruned;
+}
+
+export function getBlockAstCacheSize(): number {
+  return blockCache.size;
+}
+
 export function clearBlockCache(): void {
   blockCache.clear();
   lastPrefix = '';
@@ -70,10 +94,7 @@ function getCachedBlock(key: string): ContentSegment[] | undefined {
 
 function setCachedBlock(key: string, segments: ContentSegment[]): void {
   if (blockCache.size >= LRU_CAPACITY) {
-    const oldestKey = blockCache.keys().next().value;
-    if (oldestKey !== undefined) {
-      blockCache.delete(oldestKey);
-    }
+    pruneBlockAstCache(LRU_CAPACITY - 1);
   }
   blockCache.set(key, segments);
 }
