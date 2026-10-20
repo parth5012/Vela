@@ -5,7 +5,6 @@ Simulates faithful agent reasoning based on retrieved memory context.
 
 from __future__ import annotations
 
-import re
 from typing import Any
 from ..isolated_retriever import IsolatedMemoryEngine, RetrievedMemory
 

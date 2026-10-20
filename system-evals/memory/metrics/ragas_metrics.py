@@ -125,7 +125,7 @@ def calculate_faithfulness(
         )
 
     # 2. Check negative retrieval: model must acknowledge absent memory without hallucinating
-    if is_negative_retrieval or not retrieved_contexts:
+    if is_negative_retrieval:
         negative_cues = [
             "not mentioned",
             "not recorded",
@@ -146,6 +146,14 @@ def calculate_faithfulness(
             score=score,
             passed=score >= 0.7,
             reason="Correct negative retrieval acknowledgment" if score == 1.0 else "Hallucinated absent memory",
+        )
+
+    # For positive queries, if no contexts were retrieved, claims cannot be grounded
+    if not retrieved_contexts:
+        return FaithfulnessResult(
+            score=0.0,
+            passed=False,
+            reason="Ungrounded: zero contexts retrieved for positive query",
         )
 
     combined_context = " ".join(retrieved_contexts).lower()
