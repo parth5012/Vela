@@ -88,6 +88,7 @@ class VelaClient:
                     "POST", "/chat/message", json=payload, headers=headers
                 ) as resp:
                     if resp.status_code != 200:
+                        resp.read()
                         return TurnResult(
                             text="",
                             status_code=resp.status_code,
@@ -114,6 +115,7 @@ class VelaClient:
                     timeout=timeout,
                 ) as resp:
                     if resp.status_code != 200:
+                        resp.read()
                         return TurnResult(
                             text="",
                             status_code=resp.status_code,
