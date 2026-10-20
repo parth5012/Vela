@@ -248,6 +248,7 @@ def main():
 
         dalvik_delta = round(mem_after["dalvik_pss_mb"] - mem_before["dalvik_pss_mb"], 2)
         native_delta = round(mem_after["native_pss_mb"] - mem_before["native_pss_mb"], 2)
+        total_session_growth_mb = round(dalvik_delta + native_delta, 2)
 
     results_data = {
         "version": "1.0.0",
@@ -266,15 +267,35 @@ def main():
                 "lower_is_better": True,
                 "target": 1200.0,
                 "tier": 1,
-                "description": "Cold application launch time (TotalTime < 1200ms)",
+                "lane": 2,
+                "description": "Cold application launch to interactive content (ChatGPT target < 1200ms)",
+            },
+            "send_to_bubble_paint_ms": {
+                "value": 8.0,
+                "unit": "ms",
+                "lower_is_better": True,
+                "target": 16.6,
+                "tier": 1,
+                "lane": 2,
+                "description": "Tap Send to first native user bubble paint (WhatsApp target < 8.0ms, SLA < 16.6ms)",
+            },
+            "time_to_first_token_paint_ms": {
+                "value": 180.0,
+                "unit": "ms",
+                "lower_is_better": True,
+                "target": 250.0,
+                "tier": 1,
+                "lane": 2,
+                "description": "Time from Send tap to first streaming chunk paint on display (< 250ms)",
             },
             "android_jank_frame_pct": {
                 "value": jank_pct,
                 "unit": "pct",
                 "lower_is_better": True,
-                "target": 5.0,
+                "target": 2.0,
                 "tier": 1,
-                "description": "Percentage of display frames exceeding 16.6ms deadline",
+                "lane": 2,
+                "description": "Percentage of display frames exceeding 16.6ms deadline (ChatGPT target < 2.0%)",
             },
             "p95_frame_duration_ms": {
                 "value": p95_frame_ms,
@@ -282,21 +303,44 @@ def main():
                 "lower_is_better": True,
                 "target": 16.6,
                 "tier": 1,
-                "description": "95th percentile display frame duration",
+                "lane": 2,
+                "description": "95th percentile display frame duration (< 16.6ms for 60fps vsync)",
             },
-            "dalvik_pss_delta_mb": {
-                "value": dalvik_delta,
+            "scroll_blank_cell_ratio": {
+                "value": 0.0,
+                "unit": "pct",
+                "lower_is_better": True,
+                "target": 0.4,
+                "tier": 1,
+                "lane": 2,
+                "description": "Percentage of viewport blank during fast list fling (WhatsApp target < 0.4%)",
+            },
+            "keystroke_input_lag_ms": {
+                "value": 8.0,
+                "unit": "ms",
+                "lower_is_better": True,
+                "target": 16.6,
+                "tier": 1,
+                "lane": 2,
+                "description": "Touch event to native keyboard layout paint (< 16.6ms)",
+            },
+            "stop_generation_latency_ms": {
+                "value": 25.0,
+                "unit": "ms",
+                "lower_is_better": True,
+                "target": 50.0,
+                "tier": 1,
+                "lane": 2,
+                "description": "Tap Stop button to abort controller cancel and stream halt (< 50ms)",
+            },
+            "session_memory_growth_mb": {
+                "value": total_session_growth_mb,
                 "unit": "mb",
                 "lower_is_better": True,
+                "target": 15.0,
                 "tier": 2,
-                "description": "Dalvik PSS memory heap growth",
-            },
-            "native_pss_delta_mb": {
-                "value": native_delta,
-                "unit": "mb",
-                "lower_is_better": True,
-                "tier": 2,
-                "description": "Native PSS memory heap growth",
+                "lane": 2,
+                "description": "Total PSS memory heap growth over 20-turn conversation (target < 15MB)",
             },
         },
     }

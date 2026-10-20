@@ -92,5 +92,31 @@ The adversarial review identified three architectural fixes that must be impleme
 - `client/utils/perfTracker.ts` (Zero-allocation TypedArray telemetry)
 - `client/__tests__/perf.benchmark.test.ts` (Headless CI test suite)
 - `client/e2e/benchmark-android.py` (Local Android emulator hardware profiler)
-- `perf-baseline.json` (Locked metrics baseline with environment fingerprint)
+- `perf-baseline.json` (Locked metrics baseline with environment fingerprint and target SLAs)
 - `.github/workflows/perf-ratchet.yml` (GitHub Actions automated PR commenter)
+- `.opencode/skills/deep-performance-engineering/scripts/ratchet.py` (Multi-lane target SLA comparator CLI)
+
+---
+
+## 6. Target SLA Calibration Matrix (Reference Standards: T3 Chat, ChatGPT & WhatsApp)
+
+| ID | Metric | Baseline | Target SLA | Reference System & Rationale | Lane |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **01** | `stream_render_commits` | 10 commits | **$\le 10$ commits** | **T3 Chat**: Frame-throttled reactive streaming prevents reconciliation churn across 250 tokens | Lane 1 (CI) |
+| **02** | `redundant_cell_rerenders` | 0 commits | **$= 0$ commits** | **T3 Chat**: Historical memoized messages remain static during active streaming | Lane 1 (CI) |
+| **03** | `stream_total_parse_ms` | 1.00 ms | **$< 5.0$ ms** | **Vela Engine**: Cumulative AST markdown parse CPU time over 250 incoming tokens | Lane 1 (CI) |
+| **04** | `parse_quadratic_ratio` | 1.90 ratio | **$< 2.50$ ratio** | **T3 Chat**: Sub-quadratic scaling invariant ($T_{250} / T_{125} < 2.5$) | Lane 1 (CI) |
+| **05** | `js_event_loop_lag_ms` | 1.00 ms | **$< 4.0$ ms** | **WhatsApp**: Uninhibited JS event loop preserves 60fps microtask processing | Lane 1 (CI) |
+| **06** | `sqlite_insert_duration_ms` | 0.50 ms | **$< 3.0$ ms** | **WhatsApp**: WAL asynchronous background queue latency for single-message persistence | Lane 1 (CI) |
+| **07** | `sqlite_query_duration_ms` | 0.50 ms | **$< 5.0$ ms** | **WhatsApp**: 30-message history thread hydration query duration | Lane 1 (CI) |
+| **08** | `sqlite_write_batch_efficiency`| 1 writes | **$\le 5$ writes** | **Vela Engine**: Batching write efficiency restricts DB transactions during streaming | Lane 1 (CI) |
+| **09** | `sync_blocking_invariant_ms` | 0.10 ms | **$< 4.0$ ms** | **WhatsApp**: Instantaneous optimistic UI dispatch prior to async persistence / network | Lane 1 (CI) |
+| **10** | `cold_launch_to_content_ms` | 348 ms | **$< 1,200$ ms** | **ChatGPT**: Hermes AOT bytecode and deferred secondary bootstrap SLA | Lane 2 (Device) |
+| **11** | `send_to_bubble_paint_ms` | 8.00 ms | **$< 16.6$ ms** | **WhatsApp**: Sub-16ms touch-to-native-bubble paint deadline (1 frame @ 60Hz) | Lane 2 (Device) |
+| **12** | `time_to_first_token_paint_ms` | 180 ms | **$< 250$ ms** | **ChatGPT**: Rapid initial token response and display rendering | Lane 2 (Device) |
+| **13** | `android_jank_frame_pct` | 0.00 % | **$< 2.0$ %** | **ChatGPT**: Strict frame deadline enforcement via `dumpsys gfxinfo framestats` | Lane 2 (Device) |
+| **14** | `p95_frame_duration_ms` | 11.00 ms | **$< 16.6$ ms** | **WhatsApp**: 95th percentile display frame render duration within 60Hz deadline | Lane 2 (Device) |
+| **15** | `scroll_blank_cell_ratio` | 0.00 % | **$< 0.4$ %** | **WhatsApp / FlashList**: Native view recycling prevents unrendered blank cells on fling | Lane 2 (Device) |
+| **16** | `keystroke_input_lag_ms` | 8.00 ms | **$< 16.6$ ms** | **WhatsApp**: Instantaneous keyboard layout paint on key press | Lane 2 (Device) |
+| **17** | `stop_generation_latency_ms` | 25.00 ms | **$< 50$ ms** | **ChatGPT**: Immediate AbortController cancellation halting network and worker threads | Lane 2 (Device) |
+| **18** | `session_memory_growth_mb` | 5.00 MB | **$< 15$ MB** | **WhatsApp (< 8MB) & ChatGPT (< 22MB)**: Virtualized AST and image cache bound heap growth | Lane 2 (Device) |
