@@ -105,6 +105,35 @@ class PerfTracker {
     return result;
   }
 
+  /**
+   * Returns current heap memory in MB if available in environment (e.g. Node/V8).
+   */
+  public getHeapMemoryMb(): number {
+    if (typeof process !== 'undefined' && typeof process.memoryUsage === 'function') {
+      return Number((process.memoryUsage().heapUsed / (1024 * 1024)).toFixed(2));
+    }
+    return 0;
+  }
+
+  /**
+   * Tracks current heap memory telemetry in MB (WF-427-05).
+   */
+  public trackMemory(label: string = 'heap_used_mb'): number {
+    const heapMb = this.getHeapMemoryMb();
+    this.recordMetric(label, heapMb, 'mb');
+    return heapMb;
+  }
+
+  /**
+   * Measures session memory growth delta from an initial baseline snapshot (WF-427-05).
+   */
+  public measureMemoryGrowth(startHeapMb: number, label: string = 'session_memory_growth_mb'): number {
+    const currentHeapMb = this.getHeapMemoryMb();
+    const growthMb = Math.max(0, Number((currentHeapMb - startHeapMb).toFixed(2)));
+    this.recordMetric(label, growthMb, 'mb');
+    return growthMb;
+  }
+
   public flush(): PerfSummary {
     const summary: PerfSummary = {};
 

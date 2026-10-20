@@ -124,4 +124,26 @@ describe('perfTracker - Zero-Allocation Telemetry & Ring Buffer', () => {
       expect(summary.ChatCell_renders.max).toBe(3);
     });
   });
+
+  describe('memory telemetry (WF-427-05)', () => {
+    it('tracks heap memory and computes session memory growth delta', () => {
+      const initialHeap = perfTracker.trackMemory('initial_heap');
+      expect(typeof initialHeap).toBe('number');
+      expect(initialHeap).toBeGreaterThanOrEqual(0);
+
+      // Allocate array to simulate turn state growth
+      const dummyTurns: string[] = [];
+      for (let i = 0; i < 5000; i++) {
+        dummyTurns.push(`turn payload message content ${i}`);
+      }
+
+      const growth = perfTracker.measureMemoryGrowth(initialHeap);
+      expect(typeof growth).toBe('number');
+      expect(growth).toBeGreaterThanOrEqual(0);
+
+      const summary = perfTracker.flush();
+      expect(summary.initial_heap).toBeDefined();
+      expect(summary.session_memory_growth_mb).toBeDefined();
+    });
+  });
 });
