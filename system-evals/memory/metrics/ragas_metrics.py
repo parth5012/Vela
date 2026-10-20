@@ -138,9 +138,7 @@ def calculate_faithfulness(
             "not available",
             "no information",
         ]
-        is_refusal = any(cue in lower_resp for cue in negative_cues) or (
-            ground_truth and any(w.lower() in lower_resp for w in ground_truth.split() if len(w) > 4)
-        )
+        is_refusal = any(cue in lower_resp for cue in negative_cues)
         score = 1.0 if is_refusal else 0.0
         return FaithfulnessResult(
             score=score,

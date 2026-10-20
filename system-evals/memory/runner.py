@@ -120,6 +120,7 @@ def run_memory_eval(mode: str = "smoke", live: bool = False) -> FamilyResult:
 
             if not turn.is_success or not turn.text:
                 failed += 1
+                failure_label = turn.failure_kind or ("backend_unreachable" if "connection" in (turn.error_message or "").lower() else "backend_error")
                 details.append({
                     "id": case.get("id"),
                     "category": category,
@@ -127,7 +128,7 @@ def run_memory_eval(mode: str = "smoke", live: bool = False) -> FamilyResult:
                     "passed": False,
                     "error": turn.error_message or "Backend failed turn in live mode",
                     "provider": "live",
-                    "violations": [f"backend_error:{turn.error_message or 'empty_turn'}"],
+                    "violations": [f"{failure_label}:{turn.error_message or 'empty_turn'}"],
                 })
                 continue
 

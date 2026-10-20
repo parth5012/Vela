@@ -26,6 +26,7 @@ class TurnResult:
     status_code: int = 200
     is_success: bool = True
     error_message: str | None = None
+    failure_kind: str | None = None
     raw_chunks: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -93,6 +94,7 @@ class VelaClient:
                             text="",
                             status_code=resp.status_code,
                             is_success=False,
+                            failure_kind="backend_error",
                             error_message=f"HTTP {resp.status_code}: {resp.text}",
                             latency_ms=(time.monotonic() - start_time) * 1000,
                         )
@@ -120,6 +122,7 @@ class VelaClient:
                             text="",
                             status_code=resp.status_code,
                             is_success=False,
+                            failure_kind="backend_error",
                             error_message=f"HTTP {resp.status_code}: {resp.text}",
                             latency_ms=(time.monotonic() - start_time) * 1000,
                         )
@@ -149,11 +152,14 @@ class VelaClient:
             )
 
         except Exception as e:
+            is_transport = any(err in type(e).__name__ for err in ["Connect", "Request", "Timeout", "Network", "Socket", "HTTP"])
+            failure_kind = "backend_unreachable" if is_transport else "backend_error"
             return TurnResult(
                 text=accumulated_text,
                 status_code=500,
                 is_success=False,
                 error_message=str(e),
+                failure_kind=failure_kind,
                 latency_ms=(time.monotonic() - start_time) * 1000,
                 raw_chunks=raw_chunks,
             )
