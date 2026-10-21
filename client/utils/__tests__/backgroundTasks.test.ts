@@ -89,7 +89,7 @@ describe('backgroundTasks scheduler (wayfinder #363)', () => {
       apiUrl: '',
       apiKey: '',
       connectionMode: 'local',
-      localModelName: 'Needle-2 45M',
+      localModelName: 'Needle-3 (20-layer)',
     });
   });
 

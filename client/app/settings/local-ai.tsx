@@ -73,7 +73,7 @@ const GPU_QUANT_OPTIONS = [
 /**
  * Wayfinder #173 Audit — Local AI Rows
  * Model rows: LOCAL_MODELS filtered by getModelStatusForRam (recommended/borderline/unsupported) — filtered when showUnsupportedModels=false.
- * Needle rows (format cact: Needle-2 45M, Needle-3 (20-layer)) are 'recommended' on <4.5GB and 4.5-7.5GB tiers (ramDetection.ts), so they are
+ * Needle rows (format cact: Needle-3 (20-layer)) are 'recommended' on <4.5GB and 4.5-7.5GB tiers (ramDetection.ts), so they are
  * never hidden when showUnsupportedModels=false — no duplicated tier logic here, just the shared helper.
  * Download state: useConfigStore localModelDownloadProgress nullable; isDownloading = progress!==null; isActiveDownloading = isSelected && progress!==null.
  * Progress lives inline under filename when isActiveDownloading (View h8 radius4 bg rgba(255,255,255,0.08) + fill aurora.acc1 width `${progress}%`) plus global Card fallback when isDownloading.

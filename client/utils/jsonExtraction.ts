@@ -291,7 +291,7 @@ export async function runJsonExtraction(
     return {
       status: 'engine_error',
       mock: false,
-      message: `JSON extraction needs a Needle model (.cact); "${localModelName}" is not one. Select Needle-2 45M or Needle-3 (20-layer) in Settings -> Local AI.`,
+      message: `JSON extraction needs a Needle model (.cact); "${localModelName}" is not one. Select Needle-3 (20-layer) in Settings -> Local AI.`,
     };
   }
 

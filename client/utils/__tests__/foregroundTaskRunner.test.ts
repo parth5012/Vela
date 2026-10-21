@@ -72,7 +72,7 @@ describe('foregroundTaskRunner (System B approval path standalone verification #
       apiUrl: '',
       apiKey: '',
       connectionMode: 'local',
-      localModelName: 'Needle-2 45M',
+      localModelName: 'Needle-3 (20-layer)',
     });
 
     useForegroundTaskStore.setState({

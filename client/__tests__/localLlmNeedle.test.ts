@@ -50,10 +50,10 @@ describe('localLlm NeedleEngine (.cact) integration', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     await unloadLocalModel();
-    useConfigStore.setState({ localModelName: 'Needle-2 45M' });
+    useConfigStore.setState({ localModelName: 'Needle-3 (20-layer)' });
     await AsyncStorage.setItem(
-      'local_model_downloaded_Needle-2 45M_path',
-      'file:///data/local/tmp/needle2.cact'
+      'local_model_downloaded_Needle-3 (20-layer)_path',
+      'file:///data/local/tmp/needle3.cact'
     );
   });
 
@@ -61,9 +61,12 @@ describe('localLlm NeedleEngine (.cact) integration', () => {
     await unloadLocalModel();
   });
 
-  it('includes Needle-2 45M and Needle-3 (20-layer) with format cact in LOCAL_MODELS', () => {
+  // Only one Needle model ships: a build links exactly one engine generation
+  // (gen 3), so needle2.cact can never load and its option was removed.
+  it('ships Needle-3 (20-layer) and no Needle-2 entry', () => {
     const needleModels = LOCAL_MODELS.filter((m) => m.format === 'cact');
-    expect(needleModels.map((m) => m.name)).toEqual(['Needle-2 45M', 'Needle-3 (20-layer)']);
+    expect(needleModels.map((m) => m.name)).toEqual(['Needle-3 (20-layer)']);
+    expect(LOCAL_MODELS.some((m) => m.name === 'Needle-2 45M')).toBe(false);
     for (const model of needleModels) {
       expect(model.filename).toContain('.cact');
     }
@@ -72,17 +75,7 @@ describe('localLlm NeedleEngine (.cact) integration', () => {
   // #294 — researched upstream facts (issue #292): live Cactus-Compute repos,
   // exact file sizes, and config.json context (ticket text's "ctx 256" was
   // needle2's sliding window, not a context length).
-  it('matches the needle2/needle3 specs exactly (filename + HF URL + size + ctx)', () => {
-    const needle2 = LOCAL_MODELS.find((m) => m.name === 'Needle-2 45M');
-    expect(needle2).toBeDefined();
-    expect(needle2?.filename).toBe('needle2.cact');
-    expect(needle2?.format).toBe('cact');
-    expect(needle2?.downloadUrl).toBe(
-      'https://huggingface.co/Cactus-Compute/needle2/resolve/main/needle2.cact'
-    );
-    expect(needle2?.size).toMatch(/GB$/);
-    expect(needle2?.contextSize).toBe(2048);
-
+  it('matches the needle3 spec exactly (filename + HF URL + size + ctx)', () => {
     const needle3 = LOCAL_MODELS.find((m) => m.name === 'Needle-3 (20-layer)');
     expect(needle3).toBeDefined();
     expect(needle3?.filename).toBe('needle3.cact');
@@ -109,15 +102,16 @@ describe('localLlm NeedleEngine (.cact) integration', () => {
   // #294 — both listings must be loadable by the shared magic-byte sniffer:
   // needle2.cact starts 83 2A E1 05 (tag 0x05E12A83), needle3.cact starts
   // 84 2A E1 05 (tag 0x05E12A84); both are declared format 'cact'.
-  it('ties both needle entries to their .cact magic bytes', () => {
+  it('ties the shipped needle entry to its .cact magic bytes', () => {
+    // The sniffer still recognises needle2 files (imported/custom models), even
+    // though the app no longer offers needle2 as a downloadable model.
     expect(sniffMagicBytes(new Uint8Array([0x83, 0x2a, 0xe1, 0x05]))).toBe('cact');
     expect(sniffMagicBytes(new Uint8Array([0x84, 0x2a, 0xe1, 0x05]))).toBe('cact');
-    expect(LOCAL_MODELS.find((m) => m.name === 'Needle-2 45M')?.format).toBe('cact');
     expect(LOCAL_MODELS.find((m) => m.name === 'Needle-3 (20-layer)')?.format).toBe('cact');
   });
 
-  it('resolves useConfigStore.localModelName exactly for both needle entries', () => {
-    for (const name of ['Needle-2 45M', 'Needle-3 (20-layer)']) {
+  it('resolves useConfigStore.localModelName for the Needle entry', () => {
+    for (const name of ['Needle-3 (20-layer)']) {
       useConfigStore.setState({ localModelName: name });
       const resolved = LOCAL_MODELS.find(
         (m) => m.name === useConfigStore.getState().localModelName
@@ -131,7 +125,7 @@ describe('localLlm NeedleEngine (.cact) integration', () => {
     await initializeLocalModel();
     expect(isLocalModelLoaded).toBe(true);
     expect(NeedleModule.init).toHaveBeenCalledWith(
-      '/data/local/tmp/needle2.cact',
+      '/data/local/tmp/needle3.cact',
       expect.any(Number),
       '',
       '',

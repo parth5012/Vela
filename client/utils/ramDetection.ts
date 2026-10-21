@@ -350,7 +350,6 @@ export async function detectRamBytes(): Promise<number> {
  *
  * | Model                    | Size     | <=4 GB     | 4-6 GB     | 6-8 GB     | >8 GB      |
  * |--------------------------|----------|------------|------------|------------|-----------|
- * | Needle-2 45M             | ~0.014 GB| recommended| recommended| recommended| recommended|
  * | Needle-3 (20-layer)      | ~0.035 GB| recommended| recommended| recommended| recommended|
  * | SmolLM 135M              | ~0.16 GB | recommended| recommended| recommended| recommended|
  * | Qwen2.5 0.5B             | ~0.52 GB | borderline | recommended| recommended| recommended|
@@ -382,7 +381,6 @@ export function getModelStatusForRam(modelName: string, ramBytes: number): Model
       return 'recommended';
     }
     if (
-      modelName === 'Needle-2 45M' ||
       modelName === 'Needle-3 (20-layer)' ||
       modelName === 'SmolLM 135M'
     ) {
@@ -392,7 +390,6 @@ export function getModelStatusForRam(modelName: string, ramBytes: number): Model
     return 'unsupported';
   } else if (ramGB <= 6) {
     if (
-      modelName === 'Needle-2 45M' ||
       modelName === 'Needle-3 (20-layer)' ||
       modelName === 'SmolLM 135M' ||
       modelName === 'Qwen2.5 0.5B' ||
@@ -423,7 +420,7 @@ export function getModelStatusForRam(modelName: string, ramBytes: number): Model
  * - <= 8 GB:  Qwen2.5 1.5B (GGUF),    ctx 4096, max 1024
  * - > 8 GB:   Qwen2.5 1.5B (GGUF),    ctx 8192, max 4096
  *
- * Needle entries (Needle-2 45M / Needle-3 (20-layer)) are never returned as a
+ * Needle entries (Needle-3 (20-layer)) are never returned as a
  * tier preset: they are 'recommended' on every tier via getModelStatusForRam
  * (so the picker never hides them), but this function keeps returning the chat
  * presets above. Needle session RAM is TBC (#292) — do not invent a number to

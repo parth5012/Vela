@@ -89,10 +89,10 @@ describe('jsonExtraction — schema-as-only-tool helper (#298)', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     await unloadLocalModel();
-    useConfigStore.setState({ localModelName: 'Needle-2 45M' });
+    useConfigStore.setState({ localModelName: 'Needle-3 (20-layer)' });
     await AsyncStorage.setItem(
-      'local_model_downloaded_Needle-2 45M_path',
-      'file:///data/local/tmp/needle2.cact'
+      'local_model_downloaded_Needle-3 (20-layer)_path',
+      'file:///data/local/tmp/needle3.cact'
     );
   });
 
@@ -207,7 +207,7 @@ describe('jsonExtraction — schema-as-only-tool helper (#298)', () => {
       expect(res.confidence).toBe(0.91);
 
       expect(NeedleModule.init).toHaveBeenCalledWith(
-        '/data/local/tmp/needle2.cact',
+        '/data/local/tmp/needle3.cact',
         expect.any(Number),
         '',
         '',
@@ -284,7 +284,7 @@ describe('jsonExtraction — schema-as-only-tool helper (#298)', () => {
     });
 
     it('reports an engine error (not a crash) when no model has been downloaded', async () => {
-      await AsyncStorage.removeItem('local_model_downloaded_Needle-2 45M_path');
+      await AsyncStorage.removeItem('local_model_downloaded_Needle-3 (20-layer)_path');
       const res = await runJsonExtraction(SCHEMA, SOURCE);
       expect(res.status).toBe('engine_error');
       expect(res.message).toMatch(/download/i);
@@ -293,7 +293,7 @@ describe('jsonExtraction — schema-as-only-tool helper (#298)', () => {
 
     it('refuses to run against a non-Needle (.cact) selected model', async () => {
       await AsyncStorage.setItem(
-        'local_model_downloaded_Needle-2 45M_path',
+        'local_model_downloaded_Needle-3 (20-layer)_path',
         'file:///data/local/tmp/qwen.task'
       );
       const res = await runJsonExtraction(SCHEMA, SOURCE);

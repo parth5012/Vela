@@ -461,7 +461,11 @@ export const useConfigStore = create<ConfigState>()(
       // isLocalMode, adding cloudProviders and activeCloudProvider.
       // v4 (#356/#357): defaultPersona -> defaultAgent.
       // v5 (#357): suggestionStarters[].persona -> suggestionStarters[].agent.
-      version: 5,
+      // v6 (PR #277 follow-up): 'Needle-2 45M' removed from LOCAL_MODELS — the
+      // shipped build links exactly one Needle engine generation (gen 3), so a
+      // needle2.cact can never load (`needle_load` rejects the mismatch). A
+      // persisted needle2 selection moves to 'Needle-3 (20-layer)'.
+      version: 6,
       migrate: (persistedState: any, fromVersion: number) => {
         if (persistedState) {
           if (fromVersion < 4) {
@@ -502,6 +506,9 @@ export const useConfigStore = create<ConfigState>()(
               persistedState.activeCloudProvider = 'gemini';
             }
             persistedState.isConfigured = computeIsConfigured(persistedState);
+          }
+          if (fromVersion < 6 && persistedState.localModelName === 'Needle-2 45M') {
+            persistedState.localModelName = 'Needle-3 (20-layer)';
           }
           if (persistedState.maxSteps === undefined) {
             persistedState.maxSteps = 15;

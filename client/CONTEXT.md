@@ -35,13 +35,16 @@ Three engines, three formats — they are NOT interchangeable:
 
 ### Needle `.cact` models (Wayfinder #289)
 
-- **Two models ship, not three** — `Needle-2 45M` (2048 context) and
-  `Needle-3 (20-layer)` (8192 context) in `LOCAL_MODELS`.
+- **Only `Needle-3 (20-layer)` (8192 context) ships in `LOCAL_MODELS`.** A
+  build statically links ONE engine generation, and the shipped archive is
+  generation 3, so `needle2.cact` is rejected by `needle_load`. Needle-2 was
+  removed from the picker (config v6 migrates a stale selection to Needle-3);
+  `-DNEEDLE_ENGINE_MODEL=needle2` still exists for a custom needle2 build.
   **Needle-1 (26M safetensors) is out of scope** — decided in #290
   (format/contract/licence mismatch). Never write "3 models".
-- **Model source** — `Cactus-Compute/needle2` and `Cactus-Compute/needle3`
-  (`needle2.cact`, `needle3.cact`). The old `cactus-ai/needle-45m` URL is dead
-  (HTTP 401); it was hard-migrated away in #294.
+- **Model source** — `Cactus-Compute/needle3` (`needle3.cact`). The needle2
+  archives remain pinned in `engine.lock.json` for needle2 builds. The old
+  `cactus-ai/needle-45m` URL is dead (HTTP 401); hard-migrated away in #294.
 - **Per-version magic** — 4-byte tags `0x05E12A83` (needle2) and `0x05E12A84`
   (needle3). Both sniff as `format: 'cact'`, so version-aware consumers read the
   separate `variant` field from `sniffNeedleVariant()` (`'needle2' |

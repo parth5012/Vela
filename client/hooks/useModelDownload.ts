@@ -104,7 +104,7 @@ export function useModelDownload({ customModels, needleHasNative, isMounted }: U
     }
     // Wayfinder #230 / #232: block-with-warning on mock Needle runtime (never silent mock).
     // CodeReview #234: gate covers every built-in Needle row (format cact:
-    // Needle-2 45M, Needle-3 (20-layer)) AND any custom .cact model
+    // Needle-3 (20-layer)) AND any custom .cact model
     // (custom .cact models run through the Needle engine, so they bypass silently otherwise).
     const isNeedleModel =
       LOCAL_MODELS.find((m) => m.name === localModelName)?.format === 'cact' ||

@@ -387,7 +387,6 @@ describe('RAM tier alignment ladder (#375)', () => {
   it('preserves needle recommendation across all tiers and never returns needle as tier preset', () => {
     for (const ramGB of [2, 4, 6, 8, 12]) {
       const ram = ramGB * ONE_GB;
-      expect(getModelStatusForRam('Needle-2 45M', ram)).toBe('recommended');
       expect(getModelStatusForRam('Needle-3 (20-layer)', ram)).toBe('recommended');
 
       const preset = getOptimalSettingsForRam(ram);
