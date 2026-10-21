@@ -331,12 +331,20 @@ async function resolveLiteRtBackend(
  *  - `.gguf` models use llama.cpp via `llama.rn` (requires New Architecture).
  * Gracefully falls back to mock initialization in test/preview/non-native environments.
  */
-export async function initializeLocalModel(throwOnFallback: boolean = false): Promise<void> {
+export async function initializeLocalModel(
+  throwOnFallback: boolean = false,
+  /**
+   * Load a specific model instead of the configured one. Used by the device
+   * automation bridge (`utils/needleAutomation`) to swap the planner out for
+   * the Needle engine and restore it afterwards without mutating user config.
+   */
+  modelNameOverride?: string
+): Promise<void> {
   if (isLocalLlmDown) {
     throw new Error('Local LLM is down/unavailable.');
   }
 
-  const localModelName = useConfigStore.getState().localModelName;
+  const localModelName = modelNameOverride || useConfigStore.getState().localModelName;
   const key = localModelStorageKey(localModelName) + '_path';
   const modelPath = await AsyncStorage.getItem(key);
   if (!modelPath) {

@@ -28,6 +28,38 @@ describe('cloudTools', () => {
     expect(executeDevice).toHaveBeenCalledWith('device_screen_read', undefined, undefined)
   })
 
+  it('delegates run_device_automation to the Needle bridge', async () => {
+    const runNeedleAutomation = jest.fn(async () => ({
+      ok: true,
+      output: '1. device_open_app (target=Settings) -> executed: Opened Settings\nResult: completed in 1 step(s).',
+      model: 'Needle-3 (20-layer)',
+      steps: 1,
+    }))
+
+    const result = await executeCloudTool(
+      'run_device_automation',
+      { instruction: 'open Settings', max_steps: '3', conversation_id: 'c1' },
+      { runNeedleAutomation }
+    )
+
+    expect(runNeedleAutomation).toHaveBeenCalledWith('open Settings', {
+      conversationId: 'c1',
+      maxSteps: 3,
+    })
+    expect(result.success).toBe(true)
+    expect(result.output).toContain('Opened Settings')
+  })
+
+  it('rejects run_device_automation without an instruction', async () => {
+    const runNeedleAutomation = jest.fn()
+
+    const result = await executeCloudTool('run_device_automation', {}, { runNeedleAutomation })
+
+    expect(runNeedleAutomation).not.toHaveBeenCalled()
+    expect(result.success).toBe(false)
+    expect(result.output).toContain('needs an instruction')
+  })
+
   it('blocks device tools if evaluateSafety returns an error', async () => {
     const executeDevice = jest.fn(async () => ({ outcome: 'executed' as const, observation: 'Success' }))
     const evaluateSafety = jest.fn(async () => ({ status: 'error' as const, result: 'Blocked by user policy' }))

@@ -5,6 +5,11 @@ import { executeDeviceAction } from './deviceActionExecutor'
 import { evaluateSafety } from './safetyManager'
 import { searchStandalone } from './standaloneSearch'
 import { saveMemory as defaultSaveMemory, deleteMemory as defaultDeleteMemory } from '../db/memoryRepository'
+import {
+  runNeedleDeviceAutomation,
+  type NeedleAutomationOptions,
+  type NeedleAutomationResult,
+} from './needleAutomation'
 
 export interface CloudToolResult {
   success: boolean
@@ -28,6 +33,11 @@ export interface CloudExecutorDeps {
   evaluateSafety?: SafetyEvaluator
   webSearch?: WebSearchFn
   memoryStore?: MemoryStoreOps
+  /** Planner -> Needle bridge; injectable so tests never touch the engine. */
+  runNeedleAutomation?: (
+    instruction: string,
+    options?: NeedleAutomationOptions
+  ) => Promise<NeedleAutomationResult>
 }
 
 export function listCloudToolNames(caps: StandaloneCapabilities = {}): string[] {
@@ -118,6 +128,32 @@ export async function executeCloudTool(
     const action = await executeDevice(toolName, args.target, args.value ?? args.text)
     const success = action.outcome === 'executed' || action.outcome === 'simulated'
     return { success, output: action.observation }
+  }
+
+  if (toolName === 'run_device_automation') {
+    const instruction = String(args.instruction ?? '').trim()
+    if (!instruction) {
+      return {
+        success: false,
+        output: 'run_device_automation needs an instruction, e.g. "open Settings".',
+      }
+    }
+    const rawMaxSteps = Number(args.max_steps ?? args.maxSteps)
+    const maxSteps =
+      Number.isFinite(rawMaxSteps) && rawMaxSteps > 0 ? Math.floor(rawMaxSteps) : undefined
+    const runAutomation = deps.runNeedleAutomation ?? runNeedleDeviceAutomation
+    try {
+      const result = await runAutomation(instruction, {
+        conversationId: String(args.conversation_id || 'default'),
+        ...(maxSteps ? { maxSteps } : {}),
+      })
+      return { success: result.ok, output: result.output }
+    } catch (error: any) {
+      return {
+        success: false,
+        output: `Device automation failed: ${error?.message || String(error)}`,
+      }
+    }
   }
 
   if (toolName === 'web_search') {
