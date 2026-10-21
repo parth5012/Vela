@@ -1,4 +1,5 @@
 import { parseAndExecuteTools } from '../utils/toolProxy';
+import * as cloudTools from '../utils/cloudTools';
 
 globalThis.fetch = jest.fn();
 
@@ -141,6 +142,103 @@ describe('toolProxy parser', () => {
 
       expect(result.hasInvocations).toBe(true);
       expect(result.updatedContent).toContain('<response name="device_screen_read">');
+    });
+  });
+
+  // Needle (.cact) engines answer with a JSON envelope instead of the GGUF
+  // `<call>` XML the compiled prompt asks for, so the local chat path has to
+  // recognise that shape too — otherwise the call renders as text and nothing
+  // is executed (on-device report, PR #277).
+  describe('needle JSON envelope dispatch', () => {
+    it('executes a device tool from the real engine envelope', async () => {
+      const content =
+        '{"type":"call","function_calls":[{"name":"device_screen_read","arguments":{}}],"confidence":0.91}';
+
+      const result = await parseAndExecuteTools(
+        content,
+        'thread_123',
+        undefined,
+        undefined,
+        'local'
+      );
+
+      expect(result.hasInvocations).toBe(true);
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+      expect(result.updatedContent).toContain('<response name="device_screen_read">');
+    });
+
+    it('maps Needle argument names onto the executor target/value slots', async () => {
+      const spy = jest
+        .spyOn(cloudTools, 'executeCloudTool')
+        .mockResolvedValue({ success: true, output: 'opened Settings' });
+
+      const content =
+        '{"type":"call","function_calls":[{"name":"device_open_app","arguments":{"app":"Settings"}}]}';
+
+      const result = await parseAndExecuteTools(
+        content,
+        'thread_123',
+        undefined,
+        undefined,
+        'local'
+      );
+
+      expect(spy).toHaveBeenCalledWith(
+        'device_open_app',
+        expect.objectContaining({ target: 'Settings', app: 'Settings' })
+      );
+      expect(result.hasInvocations).toBe(true);
+      expect(result.updatedContent).toContain('<response name="device_open_app">\nopened Settings\n</response>');
+      // The envelope is still shown above the observation for traceability.
+      expect(result.updatedContent).toContain('"function_calls"');
+
+      spy.mockRestore();
+    });
+
+    it('dispatches the flat mock shape too', async () => {
+      const content = '{"name":"device_info","arguments":{},"confidence":0.5}';
+
+      const result = await parseAndExecuteTools(
+        content,
+        'thread_123',
+        undefined,
+        undefined,
+        'local'
+      );
+
+      expect(result.hasInvocations).toBe(true);
+      expect(result.updatedContent).toContain('<response name="device_info">');
+    });
+
+    it('never executes a refusal envelope', async () => {
+      const content = '{"type":"call","function_calls":[],"reasoning":"No device action fits."}';
+
+      const result = await parseAndExecuteTools(
+        content,
+        'thread_123',
+        undefined,
+        undefined,
+        'local'
+      );
+
+      expect(result.hasInvocations).toBe(false);
+      expect(result.updatedContent).toBe(content);
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+    });
+
+    it('leaves plain JSON that is not a tool call alone', async () => {
+      const content = 'Here is the schema you asked for: {"type":"object","properties":{}}';
+
+      const result = await parseAndExecuteTools(
+        content,
+        'thread_123',
+        undefined,
+        undefined,
+        'local'
+      );
+
+      expect(result.hasInvocations).toBe(false);
+      expect(result.updatedContent).toBe(content);
     });
   });
 });
