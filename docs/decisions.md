@@ -27,6 +27,48 @@
 - **Decision**: Fetch-at-build with pinned URLs + SHA256 (`client/modules/needle/scripts/fetch-engine.js` + `scripts/engine.lock.json`) into the gitignored `client/modules/needle/android/engine/` directory; CMake links the archive statically (`add_library(needle_engine STATIC IMPORTED)`) into our own JNI `libneedle.so` and defines `HAVE_NEEDLE_ENGINE`. No binaries are committed; Apache-2.0 text + Cactus Compute attribution ship in `client/modules/needle/android/THIRD_PARTY_NOTICES.md`. needle2 and needle3 export the *same* `needle_*` symbols, so exactly one archive can be linked per shared object: **link-time selection** via `-DNEEDLE_ENGINE_MODEL=needle3|needle2` (default needle3), not a runtime model switch — a runtime switch would need separate link units (upstream itself ships libneedle2/libneedle3 as separate CDLLs) and is deferred.
 - **Consequences**: first build needs network + node (afterwards cached and checksum-verified); builds without the archive keep the honest mock fallback (`HAVE_NEEDLE_ENGINE=0`, surfaced by the "Mock Fallback" pill); switching engine generation requires a rebuild, and the non-matching generation's `.cact` is rejected at `needle_load` with an honest `needle_last_error()` message.
 
+### 2026-10-22: On-Device AI — Target Device Tier & 6 GB RAM Floor
+
+- **Status**: Accepted
+- **Context**: On-device MiniCPM5-2B inference requires sufficient RAM for Android OS (~2.5-3 GB), quantized model weights (~1.2-1.5 GB), and KV cache + runtime overhead (~0.5-1 GB).
+- **Decision**: Minimum 6 GB RAM floor for local on-device execution. Devices with < 6 GB RAM are classified as `UNSUPPORTED` for local inference and automatically route to cloud gateway.
+- **Consequences**: Protects against Android Low Memory Killer (LMK) process termination while covering mainstream mid-range devices (Pixel 6a+, Galaxy A54+, Nothing Phone).
+
+### 2026-10-22: On-Device AI — Model Download Source, Network Policy & Storage Gate
+
+- **Status**: Accepted
+- **Context**: The quantized MiniCPM5-2B model artifact is ~1.2-1.5 GB in size.
+- **Decision**: Model download URLs are retrieved dynamically from remote config/backend (never hardcoded in client). Downloads default to Wi-Fi only (with explicit user opt-in toggle for cellular). Pre-flight check requires >= 3 GB free storage before initiating download, and artifact SHA-256 checksum is verified before mounting.
+- **Consequences**: Avoids accidental user data overages, prevents storage exhaustion crashes, and guarantees file integrity.
+
+### 2026-10-22: On-Device AI — Low-RAM Runtime Degradation & Cloud Fallback
+
+- **Status**: Accepted
+- **Context**: Even on 6 GB+ devices, system memory pressure can fluctuate during active multitasking.
+- **Decision**: Two-tier graceful degradation strategy: (1) Under moderate memory warnings, prune KV cache context window from 4096 to 1024 tokens; (2) If `TRIM_MEMORY_RUNNING_CRITICAL` is received from the OS, halt local inference and fallback to cloud execution with a user notification.
+- **Consequences**: Keeps the application responsive without triggering OS process kills.
+
+### 2026-10-22: On-Device AI — Cloud Fallback Policy & Privacy Disclosure
+
+- **Status**: Accepted
+- **Context**: When on-device execution cannot proceed (model not downloaded, low RAM, or unsupported hardware), requests may route to remote servers.
+- **Decision**: Opt-in cloud fallback with prominent visual indication (a distinct "Cloud Fallback" badge/pill on message turns). Privacy copy explicitly guarantees encrypted transport, zero logging, and no training on user prompts.
+- **Consequences**: High transparency for privacy-conscious users with graceful service continuity.
+
+### 2026-10-22: On-Device AI — Tool-Calling Scope & Security Consent Gates for v0
+
+- **Status**: Accepted
+- **Context**: On-device AI needs tool capabilities to act as an assistant without introducing prompt injection or unintended device modification risks.
+- **Decision**: Scope for v0: Alarms, Calendar, Messages, Clipboard. Read actions gated by standard Android runtime OS permissions; Write/Mutating actions require an explicit user confirmation dialog (deny-by-default); Hard cap of maximum 3 tool executions per turn.
+- **Consequences**: Prevents unprompted modifications to user device data while enabling safe practical utility.
+
+### 2026-10-22: On-Device AI — Voice Stack Direction for v1 (Bridge Pipeline)
+
+- **Status**: Accepted
+- **Context**: Adding voice interaction to Vela on mobile.
+- **Decision**: Commit to the Bridge Pipeline for v1: Android SpeechRecognizer / local STT -> local MiniCPM5-2B -> Android TextToSpeech / system TTS. Target latency < 2s total turn time on mid-range phones. Defer tokenizer-free TTS (VoxCPM2) and omni full-duplex models (MiniCPM-o 4.5) to v2 flagship tiers.
+- **Consequences**: Achieves reliable, low-latency, battery-conscious voice experience immediately without requiring flagship NPU hardware.
+
 ## Canonical ADRs (docs/adr/)
 
 - **0001** — Unified Agents and explicit tool binding (`docs/adr/0001-unified-agents-and-explicit-tool-binding.md`)
