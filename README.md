@@ -263,3 +263,16 @@ uv run python -m pytest -v
 - **[Setup Check Script](backend/scripts/setup_check.py)** — run `uv run python scripts/setup_check.py` after local setup to verify your environment
 - **[render.yaml](render.yaml)** — Render Blueprint for one-click deployment
 - **[ADR Documentation](docs/ADR/)** — architectural decision records explaining key design choices
+
+---
+
+## 🧠 Vela On-Device AI — Product Decisions
+
+The on-device AI workstream (Map #425) executes MiniCPM5-2B locally on Android with high privacy and low latency. The foundational product decisions (resolved via WF-01) are:
+
+1. **Target Device Tier & Memory Floor**: Minimum 6 GB RAM floor for local on-device execution. Devices with < 6 GB RAM automatically route requests to the secure cloud gateway.
+2. **Model Download & Storage Gate**: Download URLs are sourced dynamically from remote configuration (never hardcoded); downloads default to Wi-Fi only (with explicit cellular override); requires >= 3 GB free disk space and SHA-256 integrity validation.
+3. **Low-RAM Runtime Behavior**: Two-tier graceful degradation — prunes KV cache context window (4096 -> 1024 tokens) under moderate memory warnings; seamlessly offloads to Cloud fallback with user notification upon receiving `TRIM_MEMORY_RUNNING_CRITICAL`.
+4. **Cloud Fallback & Privacy Policy**: Opt-in fallback with prominent user-facing "Cloud Fallback" badge on turns. Disclosures guarantee encrypted transport, zero-log retention, and zero training on user prompts.
+5. **Tool-Calling Scope & Security Gates (v0)**: Capabilities limited to Alarms, Calendar, Messages, and Clipboard. Read actions gated by Android OS permissions; Mutating/Write actions require explicit user confirmation dialogs (deny-by-default); hard-capped at 3 tool calls per turn.
+6. **Voice Stack Direction (v1)**: Bridge pipeline (Android SpeechRecognizer / local STT -> local MiniCPM5-2B -> Android TextToSpeech / system TTS) targeting sub-2s turn latency on mid-range phones. Defer tokenizer-free TTS (VoxCPM2) and omni full-duplex models (MiniCPM-o 4.5) to v2 flagship tiers.
