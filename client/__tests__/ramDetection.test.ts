@@ -27,15 +27,17 @@ describe('ramDetection', () => {
       expect(getModelStatusForRam('Qwen2.5 1.5B (GGUF)', ram6GB)).toBe('borderline');
       expect(getModelStatusForRam('DeepSeek-R1 1.5B (GGUF)', ram6GB)).toBe('borderline');
       expect(getModelStatusForRam('Phi-4 Mini (GGUF)', ram6GB)).toBe('unsupported');
-      expect(getModelStatusForRam('Qwen2.5 1.5B', ram6GB)).toBe('borderline');
-      expect(getModelStatusForRam('DeepSeek-R1 1.5B', ram6GB)).toBe('borderline');
+      // Retired `.task` rows (v7): their no-suffix names no longer resolve to a
+      // shipped model, so they fall through to 'unsupported'.
+      expect(getModelStatusForRam('Qwen2.5 1.5B', ram6GB)).toBe('unsupported');
+      expect(getModelStatusForRam('DeepSeek-R1 1.5B', ram6GB)).toBe('unsupported');
     });
 
     it('correctly classifies models for high memory devices (>= 7.5 GB)', () => {
       const ram8GB = 8 * 1024 * 1024 * 1024;
       expect(getModelStatusForRam('Phi-4 Mini (GGUF)', ram8GB)).toBe('recommended');
       expect(getModelStatusForRam('DeepSeek-R1 1.5B (GGUF)', ram8GB)).toBe('recommended');
-      expect(getModelStatusForRam('Qwen2.5 1.5B', ram8GB)).toBe('recommended');
+      expect(getModelStatusForRam('Qwen2.5 1.5B (GGUF)', ram8GB)).toBe('recommended');
     });
 
     it("marks 'Needle-3 (20-layer)' as recommended on 2GB, 3GB, 4GB, 6GB, and 8GB RAM devices", () => {

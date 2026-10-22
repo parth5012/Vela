@@ -18,13 +18,30 @@ Three engines, three formats — they are NOT interchangeable:
   accepts (that is a MediaPipe limit, not an app limit). A zip containing
   `TF_LITE_PREFILL_DECODE`, `TOKENIZER_MODEL`, and `METADATA`.
   **GGUF is a llama.cpp format and will never load in MediaPipe** — feeding one
-  to `LlmInference` aborts the process natively.
-- **GGUF** — llama.cpp via `llama.rn`; needs the Native (New Architecture) build.
+  to `LlmInference` aborts the process natively. **No `.task` model ships**:
+  this build has no MediaPipe module (`GemmaReactNativeModule` /
+  `com.google.mediapipe:tasks-genai`), so a `.task` row could only ever run in
+  mock mode. `.task` handling remains for imported custom bundles only.
+- **GGUF** — llama.cpp via `llama.rn`; needs the Native (New Architecture)
+  build AND `rnllamaBuildFromSource=true`, because the `llama.rn` npm package
+  ships no prebuilt `jniLibs` — without that flag no `librnllama.so` is packaged
+  and every GGUF model silently falls back to mock at runtime.
 - **`.cact`** — the static Needle engine (below).
 
-- **Model source** — the ungated `litert-community` HuggingFace repos. Every
-  `google/*` and Gemma LiteRT repo is gated (HTTP 401 without a token plus
-  license acceptance), which is why Gemma is not in `LOCAL_MODELS`.
+- **Model source** — ungated HuggingFace GGUF repos (Qwen official,
+  `QuantFactory/SmolLM-135M-Instruct-GGUF`, `TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF`,
+  `bartowski/Llama-3.2-1B-Instruct-GGUF`, `unsloth/Phi-4-mini-instruct-GGUF`,
+  `unsloth/DeepSeek-R1-Distill-Qwen-1.5B-GGUF`). The old `litert-community`
+  `.task` repos are no longer used. Every `google/*` and Gemma repo is gated
+  (HTTP 401 without a token plus license acceptance), which is why Gemma is not
+  in `LOCAL_MODELS`.
+- **Stale downloads** — replacing a `.task` row with a GGUF one keeps the same
+  model name for SmolLM / Qwen2.5 0.5B / TinyLlama, so a persisted
+  "downloaded" flag would point at an unreadable file. Download status is
+  therefore validated against `LocalModelSpec.format` via
+  `isStoredModelUsable()`; a mismatch shows "Not downloaded" and forces a
+  re-download. Config v7 maps the retired 1.5B `.task` names to their `(GGUF)`
+  twins.
 - **`LOCAL_MODELS`** — single source of truth in `utils/localLlm.ts`. Both
   `app/settings.tsx` and `app/index.tsx` import it; they previously kept
   independent copies that silently drifted to different URLs.

@@ -141,6 +141,33 @@ export function localModelStorageKey(modelName: string): string {
   return `${LOCAL_MODEL_STORAGE_PREFIX}${modelName}`;
 }
 
+/**
+ * Engine family implied by a stored model path. The loader dispatches on the
+ * extension (not on `LocalModelSpec.format`), so a stale path from a previous
+ * model list would silently pick the wrong engine — and end up in mock mode.
+ */
+export function getModelFileFormat(path: string): 'gguf' | 'cact' | 'task' {
+  const lower = path.toLowerCase();
+  if (lower.endsWith('.gguf')) return 'gguf';
+  if (lower.endsWith('.cact')) return 'cact';
+  return 'task';
+}
+
+/**
+ * A "downloaded" record is only usable when the persisted flag is set AND the
+ * stored file matches the format the current model list declares. Model lists
+ * change across releases (`.task` → GGUF); without this check the picker keeps
+ * showing "Downloaded" for a file the packaged engine cannot open.
+ */
+export function isStoredModelUsable(
+  spec: Pick<LocalModelSpec, 'format'>,
+  flag: string | null,
+  path: string | null
+): boolean {
+  if (flag !== 'true' || !path) return false;
+  return getModelFileFormat(path) === spec.format;
+}
+
 export interface LocalModelSpec {
   name: string;
   size: string;
@@ -160,16 +187,21 @@ export interface LocalModelSpec {
 /**
  * Single source of truth for the downloadable local models.
  *
- * Two engines are supported:
- *  - `format: 'task'`  → MediaPipe `tasks-genai` via GemmaReactNativeModule.
- *    Requires the LiteRT `.task` bundle format; CANNOT read GGUF. Sourced from
- *    the ungated `litert-community` HuggingFace repos (no auth token needed).
- *  - `format: 'gguf'`  → llama.cpp GGUF via the `llama.rn` native module.
- *    Requires a Native (New Architecture) build — see android/gradle.properties.
+ * Every shipped model is runnable by an engine that is actually packaged:
+ *  - `format: 'gguf'` → llama.cpp via the `llama.rn` native module, built from
+ *    source (`rnllamaBuildFromSource=true` in android/gradle.properties).
  *    Sourced from ungated HuggingFace GGUF repos (verified gated:false).
+ *  - `format: 'cact'` → the static Needle engine (generation 3).
  *
- * If a `.task` URL is swapped back to a GGUF URL, `createFromOptions` throws
- * and the app silently serves mock responses. Keep formats matched to engines.
+ * `format: 'task'` (MediaPipe `tasks-genai` / GemmaReactNativeModule) is still
+ * *supported* for imported custom bundles, but NO `.task` model ships: this
+ * build has no MediaPipe module, so a `.task` row could only ever run in mock
+ * mode. Those rows were replaced by GGUF equivalents (Qwen2.5 0.5B, TinyLlama,
+ * SmolLM) or dropped where a GGUF duplicate already existed (Qwen2.5 1.5B,
+ * DeepSeek-R1 1.5B).
+ *
+ * If a model's URL does not match its `format`, the loader throws and the app
+ * silently serves mock responses. Keep formats matched to engines.
  */
 export const LOCAL_MODELS: LocalModelSpec[] = [
   {
@@ -183,54 +215,36 @@ export const LOCAL_MODELS: LocalModelSpec[] = [
     contextSize: 8192,
   },
   {
-    name: 'Qwen2.5 0.5B',
-    size: '~0.52 GB',
-    description: 'Fastest, lowest memory use',
+    name: 'SmolLM 135M',
+    size: '~0.11 GB',
+    description: 'Smallest, for low-end devices, llama.cpp engine',
     downloadUrl:
-      'https://huggingface.co/litert-community/Qwen2.5-0.5B-Instruct/resolve/main/Qwen2.5-0.5B-Instruct_multi-prefill-seq_q8_ekv1280.task',
-    filename: 'Qwen2.5-0.5B-Instruct_q8_ekv1280.task',
-    format: 'task',
+      'https://huggingface.co/QuantFactory/SmolLM-135M-Instruct-GGUF/resolve/main/SmolLM-135M-Instruct.Q4_K_M.gguf',
+    filename: 'SmolLM-135M-Instruct.Q4_K_M.gguf',
+    format: 'gguf',
+  },
+  {
+    name: 'Qwen2.5 0.5B',
+    size: '~0.49 GB',
+    description: 'Fastest, lowest memory use, llama.cpp engine',
+    downloadUrl:
+      'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf',
+    filename: 'qwen2.5-0.5b-instruct-q4_k_m.gguf',
+    format: 'gguf',
   },
   {
     name: 'TinyLlama 1.1B',
-    size: '~1.1 GB',
-    description: 'Balanced quality and speed',
+    size: '~0.67 GB',
+    description: 'Balanced quality and speed, llama.cpp engine',
     downloadUrl:
-      'https://huggingface.co/litert-community/TinyLlama-1.1B-Chat-v1.0/resolve/main/TinyLlama-1.1B-Chat-v1.0_multi-prefill-seq_q8_ekv1280.task',
-    filename: 'TinyLlama-1.1B-Chat-v1.0_q8_ekv1280.task',
-    format: 'task',
-  },
-  {
-    name: 'SmolLM 135M',
-    size: '~0.16 GB',
-    description: 'Smallest, for low-end devices',
-    downloadUrl:
-      'https://huggingface.co/litert-community/SmolLM-135M-Instruct/resolve/main/SmolLM-135M-Instruct_multi-prefill-seq_q8_ekv1280.task',
-    filename: 'SmolLM-135M-Instruct_q8_ekv1280.task',
-    format: 'task',
-  },
-  {
-    name: 'Qwen2.5 1.5B',
-    size: '~1.5 GB',
-    description: 'Best quality for its size, 2 GB peak RAM',
-    downloadUrl:
-      'https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv1280.task',
-    filename: 'Qwen2.5-1.5B-Instruct_q8_ekv1280.task',
-    format: 'task',
-  },
-  {
-    name: 'DeepSeek-R1 1.5B',
-    size: '~1.9 GB',
-    description: 'Reasoning model, thinks before answering',
-    downloadUrl:
-      'https://huggingface.co/litert-community/DeepSeek-R1-Distill-Qwen-1.5B/resolve/main/DeepSeek-R1-Distill-Qwen-1.5B_multi-prefill-seq_q8_ekv1280.task',
-    filename: 'DeepSeek-R1-Distill-Qwen-1.5B_q8_ekv1280.task',
-    format: 'task',
+      'https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf',
+    filename: 'tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf',
+    format: 'gguf',
   },
   {
     name: 'Qwen2.5 1.5B (GGUF)',
     size: '~1.06 GB',
-    description: 'ChatML, smaller than .task, llama.cpp engine',
+    description: 'ChatML, best quality for its size, llama.cpp engine',
     downloadUrl:
       'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf',
     filename: 'qwen2.5-1.5b-instruct-q4_k_m.gguf',
@@ -257,7 +271,7 @@ export const LOCAL_MODELS: LocalModelSpec[] = [
   {
     name: 'DeepSeek-R1 1.5B (GGUF)',
     size: '~1.06 GB',
-    description: 'Reasoning model, thinks before answering',
+    description: 'Reasoning model, thinks before answering, llama.cpp engine',
     downloadUrl:
       'https://huggingface.co/unsloth/DeepSeek-R1-Distill-Qwen-1.5B-GGUF/resolve/main/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf',
     filename: 'DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf',
