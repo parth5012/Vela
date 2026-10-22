@@ -69,6 +69,18 @@
 - **Decision**: Commit to the Bridge Pipeline for v1: Android SpeechRecognizer / local STT -> local MiniCPM5-2B -> Android TextToSpeech / system TTS. Target latency < 2s total turn time on mid-range phones. Defer tokenizer-free TTS (VoxCPM2) and omni full-duplex models (MiniCPM-o 4.5) to v2 flagship tiers.
 - **Consequences**: Achieves reliable, low-latency, battery-conscious voice experience immediately without requiring flagship NPU hardware.
 
+### 2026-10-22: On-Device AI — Voice Lane Architecture & Latency SLA (WF-03)
+
+- **Status**: Accepted
+- **Context**: Rigorous evaluation of the three voice lanes (Bridge, Polish/VoxCPM2, Omni/MiniCPM-o 4.5) from WF-08 against the 6 GB RAM floor constraint and latency SLA.
+- **Decision**:
+  1. **v1 Architecture**: Commit to **Lane 1 (Bridge Pipeline)** completely on-device (STT: Android SpeechRecognizer/vela-whisper; LLM: MiniCPM5-2B LiteRT INT4; TTS: System TTS/Piper).
+  2. **Latency Budget SLA**: STT <= 250 ms, LLM TTFT & first chunk <= 350 ms, TTS <= 200 ms, total turn latency <= 1200 ms (sub-2s budget), active RAM <= 2.1 GB.
+  3. **Flagship / v2 Direction**: Roadmap **Lane 3 (MiniCPM-o 4.5)** via OpenBMB Cloud API (WebSocket 16 kHz PCM streaming) or local on-device inference on flagship devices with >= 16 GB unified RAM.
+  4. **Cloud Privacy Disclosure Copy**: Any remote audio processing requires explicit opt-in with user consent copy: `"Voice audio will be securely streamed to OpenBMB Cloud API solely for real-time transcription and generation. Audio is processed transiently in memory, never logged, and never used for model training."`
+  5. **Child Tickets Groomed for Phase 3**: WF-V01 (Local STT integration), WF-V02 (Streaming chunking & barge-in), WF-V03 (System TTS & UI visualizer), WF-V04 (MiniCPM-o 4.5 Cloud API client).
+- **Consequences**: Guarantees snappy, battery-efficient on-device voice turns without risking LMK process kills on 6 GB devices while establishing a clear upgrade path for flagship conversational omni-modality.
+
 ## Canonical ADRs (docs/adr/)
 
 - **0001** — Unified Agents and explicit tool binding (`docs/adr/0001-unified-agents-and-explicit-tool-binding.md`)
