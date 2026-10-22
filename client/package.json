@@ -92,7 +92,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "npm run lint && jest",
-    "postinstall": "patch-package || echo \"patch-package: some patches failed but continuing\""
+    "postinstall": "patch-package || echo \"patch-package: some patches failed but continuing\" && node scripts/fetch-llama-jni.js"
   },
   "jest": {
     "preset": "jest-expo",
