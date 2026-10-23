@@ -254,6 +254,7 @@ export class OpenAiCompatibleClient implements AiExecutionProvider {
 
     let accumulatedText = '';
     let streamUsage: TokenUsage | undefined;
+    const toolCallAccumulator: Record<number, { id: string; name: string; arguments: string }> = {};
 
     if (response.body && typeof (response.body as any).getReader === 'function') {
       const reader = (response.body as any).getReader();
@@ -276,11 +277,28 @@ export class OpenAiCompatibleClient implements AiExecutionProvider {
 
           try {
             const parsed = JSON.parse(dataContent);
-            const deltaContent = parsed.choices?.[0]?.delta?.content;
+            const delta = parsed.choices?.[0]?.delta;
+            const deltaContent = delta?.content;
             if (deltaContent) {
               accumulatedText += deltaContent;
               if (request.onToken) {
                 request.onToken(deltaContent);
+              }
+            }
+            if (delta?.tool_calls && Array.isArray(delta.tool_calls)) {
+              for (const tc of delta.tool_calls) {
+                const idx = tc.index ?? 0;
+                if (!toolCallAccumulator[idx]) {
+                  toolCallAccumulator[idx] = {
+                    id: tc.id || `call_${idx}`,
+                    name: tc.function?.name || '',
+                    arguments: tc.function?.arguments || '',
+                  };
+                } else {
+                  if (tc.id) toolCallAccumulator[idx].id = tc.id;
+                  if (tc.function?.name) toolCallAccumulator[idx].name += tc.function.name;
+                  if (tc.function?.arguments) toolCallAccumulator[idx].arguments += tc.function.arguments;
+                }
               }
             }
             if (parsed.usage) {
@@ -308,6 +326,20 @@ export class OpenAiCompatibleClient implements AiExecutionProvider {
       this.recordTokenUsage(streamUsage);
     }
 
+    const assembledToolCalls: ParsedToolCall[] = Object.values(toolCallAccumulator).map((item) => {
+      let args = {};
+      try {
+        args = typeof item.arguments === 'string' ? JSON.parse(item.arguments) : item.arguments;
+      } catch {
+        args = {};
+      }
+      return {
+        id: item.id,
+        name: item.name,
+        args,
+      };
+    });
+
     return {
       text: accumulatedText,
       executionMode: 'cloud',
@@ -317,6 +349,7 @@ export class OpenAiCompatibleClient implements AiExecutionProvider {
         modalText: PRIVACY_DISCLOSURE_COPY.modalExplanation,
       },
       tokenUsage: streamUsage,
+      toolCalls: assembledToolCalls.length > 0 ? assembledToolCalls : undefined,
     };
   }
 
@@ -331,10 +364,18 @@ export class OpenAiCompatibleClient implements AiExecutionProvider {
     fn: (signal: AbortSignal) => Promise<Response>,
     externalSignal?: AbortSignal
   ): Promise<Response> {
+    if (externalSignal?.aborted) {
+      throw new Error('Request aborted by caller');
+    }
+
     let attempts = 0;
     const maxAttempts = this.maxRetries + 1;
 
     while (attempts < maxAttempts) {
+      if (externalSignal?.aborted) {
+        throw new Error('Request aborted by caller');
+      }
+
       attempts++;
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
