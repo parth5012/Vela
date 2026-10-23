@@ -252,7 +252,16 @@ describe('WF-10: Cloud Fallback Path & Privacy Disclosure Gate', () => {
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
       const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(callBody.tools).toEqual(tools);
+      expect(callBody.tools).toEqual([
+        {
+          type: 'function',
+          function: {
+            name: 'get_weather',
+            description: 'Get current weather',
+            parameters: { type: 'object', properties: { location: { type: 'string' } } },
+          },
+        },
+      ]);
     });
 
     it('accumulates local token metering across multiple requests and allows reset', async () => {

@@ -230,7 +230,14 @@ export class OpenAiCompatibleClient implements AiExecutionProvider {
     };
 
     if (request.tools && request.tools.length > 0) {
-      payload.tools = request.tools;
+      payload.tools = request.tools.map((t) => ({
+        type: 'function',
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters ?? {},
+        },
+      }));
     }
 
     const response = await this.executeWithRetry(async (signal) => {
