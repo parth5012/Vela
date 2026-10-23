@@ -95,7 +95,7 @@ To prevent partial, truncated, or corrupted model files from crashing native run
 ## 6. Implementation Reference
 
 The gate logic is implemented and tested in:
-- Implementation: `client/utils/modelGate.ts`
-- Test Suite: `client/__tests__/modelGate.test.ts` (16/16 tests passing)
+- Implementation: `client/utils/modelGate.ts` (`ModelDownloadGate`, `ResumableModelDownloader`, `evaluateDeviceCapabilities`)
+- Test Suite: `client/__tests__/modelGate.test.ts` (19/19 tests passing)
 - RAM Detection Module: `client/utils/ramDetection.ts`
 - Storage Integration: `client/utils/customModelStorage.ts`
