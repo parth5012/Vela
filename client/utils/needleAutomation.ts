@@ -23,16 +23,29 @@ import {
   LOCAL_MODELS,
   getLoadedModelName,
   initializeLocalModel,
+  isStoredModelUsable,
   localModelStorageKey,
   unloadLocalModel,
 } from './localLlm';
+import NeedleModule from '../modules/needle';
 import { runLocalAgentLoop, type LocalAgentLoopResult } from './localAgentLoop';
 
-/** A downloaded model counts as available when its stored path marker exists. */
+/**
+ * A downloaded model counts as available when its persisted record is usable:
+ * the flag is set, a path exists, and the file format matches the model list.
+ * Checking only the path (as this used to) treats a leftover `_path` key as a
+ * downloaded model, swaps the engine, and then fails at load time.
+ */
 async function isModelDownloaded(name: string): Promise<boolean> {
+  const spec = LOCAL_MODELS.find((m) => m.name === name);
+  if (!spec) return false;
   try {
-    const path = await AsyncStorage.getItem(`${localModelStorageKey(name)}_path`);
-    return !!path;
+    const key = localModelStorageKey(name);
+    const [flag, path] = await Promise.all([
+      AsyncStorage.getItem(key),
+      AsyncStorage.getItem(`${key}_path`),
+    ]);
+    return isStoredModelUsable(spec, flag, path);
   } catch {
     return false;
   }
@@ -47,6 +60,8 @@ export interface NeedleAutomationDeps {
     instruction: string,
     opts: { maxSteps?: number; conversationId?: string }
   ) => Promise<LocalAgentLoopResult>;
+  /** True when the app packages the real Needle engine, not the mock stub. */
+  hasNativeLibrary?: () => boolean;
 }
 
 export interface NeedleAutomationOptions {
@@ -137,10 +152,28 @@ export async function runNeedleDeviceAutomation(
   const getLoaded = deps.getLoadedModel ?? getLoadedModelName;
   const loadModel = deps.loadModel ?? ((name: string) => initializeLocalModel(true, name));
   const unloadModel = deps.unloadModel ?? unloadLocalModel;
+  const hasNativeLibrary = deps.hasNativeLibrary ?? (() => NeedleModule.hasNativeLibrary());
   const runLoop =
     deps.runLoop ??
     ((prompt: string, opts: { maxSteps?: number; conversationId?: string }) =>
       runLocalAgentLoop(prompt, opts));
+
+  // A HAVE_NEEDLE_ENGINE=0 build initializes "successfully" and answers with
+  // canned JSON (device_click at a fixed coordinate, device_set_volume 5). Those
+  // calls would really tap and type, so never automate on the mock stub.
+  let nativeEngine = false;
+  try {
+    nativeEngine = Boolean(hasNativeLibrary());
+  } catch {
+    nativeEngine = false;
+  }
+  if (!nativeEngine) {
+    return {
+      ok: false,
+      output:
+        'This build has no Needle engine (mock fallback only), so on-device automation is disabled. Install a build that packages libneedle.so to use run_device_automation.',
+    };
+  }
 
   const model = await resolveNeedleAutomationModel({ ...deps, isModelDownloaded: isDownloaded, getLoadedModel: getLoaded });
   if (!model) {
@@ -161,6 +194,18 @@ export async function runNeedleDeviceAutomation(
     try {
       await loadModel(model);
     } catch (error: any) {
+      // The planner is parked at this point. Restore it before returning, or
+      // the rest of the chat turn runs with no engine at all.
+      if (planner) {
+        try {
+          await loadModel(planner);
+        } catch (restoreError: any) {
+          console.warn(
+            `[needleAutomation] could not restore planner model ${planner}:`,
+            restoreError?.message || String(restoreError)
+          );
+        }
+      }
       return {
         ok: false,
         model,

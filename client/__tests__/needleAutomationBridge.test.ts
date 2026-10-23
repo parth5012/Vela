@@ -11,6 +11,7 @@ import {
   type NeedleAutomationDeps,
 } from '../utils/needleAutomation';
 import type { LocalAgentLoopResult } from '../utils/localAgentLoop';
+import { localModelStorageKey } from '../utils/localLlm';
 
 const NEEDLE = 'Needle-3 (20-layer)';
 const PLANNER = 'Qwen2.5 1.5B (GGUF)';
@@ -44,6 +45,7 @@ function harness(overrides: Partial<NeedleAutomationDeps> = {}) {
   const deps: NeedleAutomationDeps = {
     isModelDownloaded: jest.fn(async (name: string) => name === NEEDLE),
     getLoadedModel: jest.fn(() => PLANNER),
+    hasNativeLibrary: jest.fn(() => true),
     unloadModel: jest.fn(async () => {
       calls.push('unload');
     }),
@@ -73,6 +75,19 @@ describe('resolveNeedleAutomationModel', () => {
       isModelDownloaded: jest.fn(async () => false),
     });
     await expect(resolveNeedleAutomationModel(deps)).resolves.toBe(NEEDLE);
+  });
+
+  it('ignores a stored path whose downloaded flag is missing', async () => {
+    // A path key can outlive the flag (failed delete, restored backup). Treating
+    // it as downloaded swaps the engine and then fails at load time.
+    const AsyncStorage = require('@react-native-async-storage/async-storage');
+    const key = localModelStorageKey(NEEDLE);
+    await AsyncStorage.removeItem(key);
+    await AsyncStorage.setItem(`${key}_path`, 'file:///models/needle3.cact');
+
+    await expect(resolveNeedleAutomationModel()).resolves.toBeNull();
+
+    await AsyncStorage.removeItem(`${key}_path`);
   });
 });
 
@@ -120,6 +135,43 @@ describe('runNeedleDeviceAutomation', () => {
       maxSteps: 4,
       conversationId: undefined,
     });
+  });
+
+  it('refuses to automate when the packaged Needle engine is a mock stub', async () => {
+    // HAVE_NEEDLE_ENGINE=0 builds answer init() successfully and return canned
+    // JSON from complete(); those calls would tap/type for real.
+    const { deps, calls } = harness({ hasNativeLibrary: jest.fn(() => false) });
+
+    const result = await runNeedleDeviceAutomation('open Settings', { deps });
+
+    expect(result.ok).toBe(false);
+    expect(result.output).toMatch(/mock|not packaged/i);
+    expect(calls).toEqual([]);
+    expect(deps.runLoop).not.toHaveBeenCalled();
+  });
+
+  it('restores the planner when the Needle model fails to load', async () => {
+    const calls: string[] = [];
+    const deps: NeedleAutomationDeps = {
+      isModelDownloaded: jest.fn(async (name: string) => name === NEEDLE),
+      getLoadedModel: jest.fn(() => PLANNER),
+      hasNativeLibrary: jest.fn(() => true),
+      unloadModel: jest.fn(async () => {
+        calls.push('unload');
+      }),
+      loadModel: jest.fn(async (name: string) => {
+        calls.push(`load:${name}`);
+        if (name === NEEDLE) throw new Error('needle_load: failed to load .cact model');
+      }),
+      runLoop: jest.fn(async () => loopResult()),
+    };
+
+    const result = await runNeedleDeviceAutomation('open Settings', { deps });
+
+    expect(result.ok).toBe(false);
+    expect(result.output).toContain('needle_load');
+    // The planner must come back: the chat turn continues after the tool call.
+    expect(calls).toEqual(['unload', `load:${NEEDLE}`, `load:${PLANNER}`]);
   });
 
   it('reports an engine load failure without running the loop', async () => {
