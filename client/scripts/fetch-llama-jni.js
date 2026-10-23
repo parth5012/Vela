@@ -48,13 +48,17 @@ function artifactUrl(version, artifact) {
 }
 
 /**
- * True when the package already carries a real arm64 native library.
- * The size floor catches a truncated/partial extract.
+ * True when the package already carries a verified extract: a real arm64
+ * library (size floor catches a truncated extract) plus the marker our script
+ * writes after checking the archive's SHA-256. Size alone cannot detect a
+ * tampered or stale-from-another-version `.so`.
  */
 function isJniLibsInstalled(packageDir, artifact) {
   const lib = path.join(packageDir, artifact.relativePath, REQUIRED_LIB);
+  const marker = path.join(packageDir, artifact.markerPath);
   try {
-    return fs.statSync(lib).size >= MIN_LIB_BYTES;
+    if (fs.statSync(lib).size < MIN_LIB_BYTES) return false;
+    return fs.readFileSync(marker, 'utf8').trim() === artifact.sha256;
   } catch {
     return false;
   }
@@ -108,8 +112,16 @@ function extract(archive, destDir) {
 /**
  * Ensures llama.rn's Android JNI libs are present.
  * Returns true when it had to download, false when the install was already good.
+ *
+ * `downloadImpl` / `extractImpl` are injectable so tests can exercise the
+ * hash-check and marker-stamping paths without network or tar.
  */
-async function ensureLlamaJniLibs({ packageDir = llamaPackageDir(), log = console.log } = {}) {
+async function ensureLlamaJniLibs({
+  packageDir = llamaPackageDir(),
+  log = console.log,
+  downloadImpl = download,
+  extractImpl = extract,
+} = {}) {
   const manifestPath = path.join(packageDir, 'install', 'native-artifacts.json');
   if (!fs.existsSync(manifestPath)) {
     log('llama.rn: package not installed, skipping JNI lib check');
@@ -127,7 +139,7 @@ async function ensureLlamaJniLibs({ packageDir = llamaPackageDir(), log = consol
   const archive = path.join(tmpDir, artifact.assetName);
 
   log(`llama.rn: downloading ${artifact.assetName} (${pkg.version})`);
-  await download(url, archive);
+  await downloadImpl(url, archive);
 
   const actual = sha256File(archive);
   if (actual !== artifact.sha256) {
@@ -138,14 +150,20 @@ async function ensureLlamaJniLibs({ packageDir = llamaPackageDir(), log = consol
   }
 
   fs.mkdirSync(packageDir, { recursive: true });
-  extract(archive, packageDir);
+  extractImpl(archive, packageDir);
   fs.rmSync(tmpDir, { recursive: true, force: true });
 
-  if (!isJniLibsInstalled(packageDir, artifact)) {
-    throw new Error('llama.rn: extraction finished but librnllama.so is still missing');
-  }
-  // Stamp the verified archive hash the way llama.rn's own extractor does.
+  // Stamp the verified archive hash the way llama.rn's own extractor does, then
+  // verify the extract landed. The marker is part of the installation check, so
+  // it must exist before that check runs.
+  fs.mkdirSync(path.dirname(path.join(packageDir, artifact.markerPath)), { recursive: true });
   fs.writeFileSync(path.join(packageDir, artifact.markerPath), `${artifact.sha256}\n`);
+
+  if (!isJniLibsInstalled(packageDir, artifact)) {
+    throw new Error(
+      'llama.rn: extraction finished but librnllama.so is missing or truncated'
+    );
+  }
   log('llama.rn: Android JNI libs installed');
   return true;
 }
