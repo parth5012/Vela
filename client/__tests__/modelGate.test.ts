@@ -4,6 +4,7 @@ import {
   checkNetworkDownloadAllowed,
   verifyArtifactIntegrity,
   recoverCorruptArtifact,
+  DEFAULT_FALLBACK_MODEL_CONFIG,
   ModelDownloadGate,
   ResumableModelDownloader,
   type DeviceCapabilityOptions,
@@ -134,7 +135,7 @@ describe('WF-05: Model Download + Device Capability Gate', () => {
         downloadUrl: 'https://cdn.example.com/models/MiniCPM5-2B_int4.litertlm',
         filename: 'MiniCPM5-2B_int4.litertlm',
         format: 'litertlm',
-        sizeBytes: 1664299000,
+        sizeBytes: 1553670064,
         sha256: 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2',
         minRamGb: 6,
         minStorageGb: 3,
@@ -162,8 +163,8 @@ describe('WF-05: Model Download + Device Capability Gate', () => {
           downloadUrl: 'https://huggingface.co/litert-community/MiniCPM5-2B/resolve/main/MiniCPM5-2B_int4.litertlm',
           filename: 'MiniCPM5-2B_int4.litertlm',
           format: 'litertlm',
-          sizeBytes: 1664299000,
-          sha256: '7b98f280a559d8717596d66e850b57e7eb372a9a83424696e19b4e7235b0ff72',
+          sizeBytes: 1553670064,
+          sha256: '05b78bb57dd5ded8a76907cc953cbc57d6261ee9fa66fbfca21ae677a897da45',
           minRamGb: 6,
           minStorageGb: 3,
         }),
@@ -188,7 +189,14 @@ describe('WF-05: Model Download + Device Capability Gate', () => {
 
       const config = await fetchRemoteModelConfig('https://api.vela.app/config/bad', mockFetch);
       expect(config.modelId).toBe('minicpm5-2b-int4');
-      expect(config.sha256).toBe('7b98f280a559d8717596d66e850b57e7eb372a9a83424696e19b4e7235b0ff72');
+      expect(config.sha256).toBe('05b78bb57dd5ded8a76907cc953cbc57d6261ee9fa66fbfca21ae677a897da45');
+    });
+
+    it('pins fallback config to the verified MiniCPM5-2B int4 artifact digest and size', () => {
+      expect(DEFAULT_FALLBACK_MODEL_CONFIG.sha256).toBe(
+        '05b78bb57dd5ded8a76907cc953cbc57d6261ee9fa66fbfca21ae677a897da45'
+      );
+      expect(DEFAULT_FALLBACK_MODEL_CONFIG.sizeBytes).toBe(1553670064);
     });
   });
 
@@ -228,12 +236,12 @@ describe('WF-05: Model Download + Device Capability Gate', () => {
   describe('SHA-256 Integrity Verification & Corrupt Artifact Recovery', () => {
     it('verifies valid file checksum against expected SHA-256', async () => {
       const mockHasher = jest.fn().mockResolvedValue(
-        '7b98f280a559d8717596d66e850b57e7eb372a9a83424696e19b4e7235b0ff72'
+        '05b78bb57dd5ded8a76907cc953cbc57d6261ee9fa66fbfca21ae677a897da45'
       );
 
       const isValid = await verifyArtifactIntegrity(
         '/data/models/MiniCPM5-2B_int4.litertlm',
-        '7b98f280a559d8717596d66e850b57e7eb372a9a83424696e19b4e7235b0ff72',
+        '05b78bb57dd5ded8a76907cc953cbc57d6261ee9fa66fbfca21ae677a897da45',
         mockHasher
       );
 
@@ -246,11 +254,48 @@ describe('WF-05: Model Download + Device Capability Gate', () => {
 
       const isValid = await verifyArtifactIntegrity(
         '/data/models/MiniCPM5-2B_int4.litertlm',
-        '7b98f280a559d8717596d66e850b57e7eb372a9a83424696e19b4e7235b0ff72',
+        '05b78bb57dd5ded8a76907cc953cbc57d6261ee9fa66fbfca21ae677a897da45',
         mockHasher
       );
 
       expect(isValid).toBe(false);
+    });
+
+    it('fails closed when hashProvider rejects instead of throwing', async () => {
+      const failingHasher = jest.fn().mockRejectedValue(new Error('hash backend unavailable'));
+
+      const isValid = await verifyArtifactIntegrity(
+        '/data/models/MiniCPM5-2B_int4.litertlm',
+        '05b78bb57dd5ded8a76907cc953cbc57d6261ee9fa66fbfca21ae677a897da45',
+        failingHasher
+      );
+
+      expect(isValid).toBe(false);
+      expect(failingHasher).toHaveBeenCalled();
+    });
+
+    it('fails closed without a hashProvider even when the file exists with a matching digest', async () => {
+      const fs = require('fs');
+      const crypto = require('crypto');
+      const path = require('path');
+
+      const fixturePath = path.join(__dirname, '..', '.tmp', 'integrity-no-provider.bin');
+      fs.mkdirSync(path.dirname(fixturePath), { recursive: true });
+      fs.writeFileSync(fixturePath, 'vela model gate integrity fixture');
+      const realDigest = crypto
+        .createHash('sha256')
+        .update(fs.readFileSync(fixturePath))
+        .digest('hex');
+
+      try {
+        // hashProvider omitted: must fail closed (no fs/Base64 fallbacks) so a
+        // provider-less caller can never silently "verify" a multi-GB artifact.
+        const isValid = await (verifyArtifactIntegrity as any)(fixturePath, realDigest);
+
+        expect(isValid).toBe(false);
+      } finally {
+        fs.rmSync(fixturePath, { force: true });
+      }
     });
 
     it('recovers from corrupt artifact by purging file and clearing resume markers', async () => {
