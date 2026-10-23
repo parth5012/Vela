@@ -1,6 +1,10 @@
-import { buildCloudToolDescriptions, buildVercelCloudTools, executeCloudTool, listCloudToolNames } from '../utils/cloudTools'
+import { buildCloudToolDescriptions, buildVercelCloudTools, executeCloudTool, listCloudToolNames, resetAutomationRequestGuard } from '../utils/cloudTools'
+import type { NeedleAutomationResult } from '../utils/needleAutomation'
 
 describe('cloudTools', () => {
+  beforeEach(() => {
+    resetAutomationRequestGuard()
+  })
   it('lists cloud tools without server-only entries', () => {
     const names = listCloudToolNames()
 
@@ -88,6 +92,40 @@ describe('cloudTools', () => {
     expect(result.success).toBe(false)
     expect(result.output).toBe('Blocked by user policy')
     expect(runNeedleAutomation).not.toHaveBeenCalled()
+  })
+
+  it('rejects a second delegation while the first is still running', async () => {
+    let release!: (value: NeedleAutomationResult) => void
+    const runNeedleAutomation = jest.fn(
+      (_instruction: string, _options?: unknown) =>
+        new Promise<NeedleAutomationResult>((resolve) => {
+          release = resolve
+        })
+    )
+    const evaluateSafety = jest.fn(async () => ({ status: 'success' as const, result: 'Allowed' }))
+
+    const first = executeCloudTool(
+      'run_device_automation',
+      { instruction: 'open Settings' },
+      { runNeedleAutomation, evaluateSafety }
+    )
+    // Let the first call clear the safety gate and enter the bridge.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    const second = await executeCloudTool(
+      'run_device_automation',
+      { instruction: 'delete all photos' },
+      { runNeedleAutomation, evaluateSafety }
+    )
+
+    expect(second.success).toBe(false)
+    expect(second.output).toContain('already running')
+    expect(runNeedleAutomation).toHaveBeenCalledTimes(1)
+    // The second call must not open a parallel approval modal either.
+    expect(evaluateSafety).toHaveBeenCalledTimes(1)
+
+    release({ ok: true, output: 'done', model: 'Needle-3 (20-layer)', steps: 1 })
+    await expect(first).resolves.toMatchObject({ success: true })
   })
 
   it('caps an untrusted max_steps at the automation limit', async () => {

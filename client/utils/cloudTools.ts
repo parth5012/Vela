@@ -6,6 +6,7 @@ import { evaluateSafety } from './safetyManager'
 import { searchStandalone } from './standaloneSearch'
 import { saveMemory as defaultSaveMemory, deleteMemory as defaultDeleteMemory } from '../db/memoryRepository'
 import {
+  isNeedleAutomationRunning,
   runNeedleDeviceAutomation,
   type NeedleAutomationOptions,
   type NeedleAutomationResult,
@@ -50,6 +51,18 @@ function isDeviceTool(toolName: string): boolean {
 
 /** Upper bound for `max_steps`: an untrusted model must not run an unbounded loop. */
 export const MAX_AUTOMATION_STEPS = 30
+
+/**
+ * Covers the window between the approval prompt and the engine swap. The
+ * safety store keeps a single pending task, so two parallel delegations would
+ * overwrite one approval and orphan the first call.
+ */
+let automationRequestInFlight = false
+
+/** Test hook: reset the single-flight state between cases. */
+export function resetAutomationRequestGuard(): void {
+  automationRequestInFlight = false
+}
 
 export function buildCloudToolDescriptions(caps: StandaloneCapabilities = {}): Record<string, string> {
   const tools = filterAvailable('cloud', caps)
@@ -149,33 +162,45 @@ export async function executeCloudTool(
       Number.isFinite(rawMaxSteps) && rawMaxSteps > 0 ? Math.floor(rawMaxSteps) : undefined
     const maxSteps = requestedSteps ? Math.min(requestedSteps, MAX_AUTOMATION_STEPS) : undefined
 
-    // Gate the delegation itself: per-step checks only see a tool name plus a
-    // coordinate/ref, so the instruction's intent ("delete all photos") is lost
-    // before classification. This boundary check classifies that intent once.
-    const safetyCheck = deps.evaluateSafety ?? evaluateSafety
-    if (safetyCheck) {
-      try {
-        const safety = await safetyCheck('run_device_automation', instruction)
-        if (safety.status === 'error') {
-          return { success: false, output: safety.result }
-        }
-      } catch (e: any) {
-        return { success: false, output: `Safety evaluation failed: ${e?.message || e}` }
+    if (automationRequestInFlight || isNeedleAutomationRunning()) {
+      return {
+        success: false,
+        output: 'Another device automation is already running. Wait for it to finish before starting another.',
       }
     }
 
-    const runAutomation = deps.runNeedleAutomation ?? runNeedleDeviceAutomation
+    automationRequestInFlight = true
     try {
-      const result = await runAutomation(instruction, {
-        conversationId: String(args.conversation_id || 'default'),
-        ...(maxSteps ? { maxSteps } : {}),
-      })
-      return { success: result.ok, output: result.output }
-    } catch (error: any) {
-      return {
-        success: false,
-        output: `Device automation failed: ${error?.message || String(error)}`,
+      // Gate the delegation itself: per-step checks only see a tool name plus a
+      // coordinate/ref, so the instruction's intent ("delete all photos") is lost
+      // before classification. This boundary check classifies that intent once.
+      const safetyCheck = deps.evaluateSafety ?? evaluateSafety
+      if (safetyCheck) {
+        try {
+          const safety = await safetyCheck('run_device_automation', instruction)
+          if (safety.status === 'error') {
+            return { success: false, output: safety.result }
+          }
+        } catch (e: any) {
+          return { success: false, output: `Safety evaluation failed: ${e?.message || e}` }
+        }
       }
+
+      const runAutomation = deps.runNeedleAutomation ?? runNeedleDeviceAutomation
+      try {
+        const result = await runAutomation(instruction, {
+          conversationId: String(args.conversation_id || 'default'),
+          ...(maxSteps ? { maxSteps } : {}),
+        })
+        return { success: result.ok, output: result.output }
+      } catch (error: any) {
+        return {
+          success: false,
+          output: `Device automation failed: ${error?.message || String(error)}`,
+        }
+      }
+    } finally {
+      automationRequestInFlight = false
     }
   }
 

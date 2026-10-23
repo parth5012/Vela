@@ -208,6 +208,37 @@ describe('runNeedleDeviceAutomation', () => {
     expect(result.ok).toBe(false);
     expect(calls).toEqual([]);
   });
+
+  it('rejects a second delegation while one owns the shared engine', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { deps } = harness({
+      runLoop: jest.fn(async () => {
+        await gate;
+        return loopResult();
+      }),
+    });
+
+    const first = runNeedleDeviceAutomation('open Settings', { deps });
+    const second = await runNeedleDeviceAutomation('delete all photos', { deps });
+
+    // The engine swap is global; a second run would unload the model under the
+    // first loop and duplicate its tool calls through the broadcast stream.
+    expect(second.ok).toBe(false);
+    expect(second.output).toContain('already running');
+
+    release();
+    await expect(first).resolves.toMatchObject({ ok: true });
+    expect(deps.runLoop).toHaveBeenCalledTimes(1);
+
+    // The guard must clear so the planner can retry afterwards.
+    const { deps: nextDeps } = harness();
+    await expect(
+      runNeedleDeviceAutomation('open Settings', { deps: nextDeps })
+    ).resolves.toMatchObject({ ok: true });
+  });
 });
 
 describe('formatNeedleTranscript', () => {

@@ -132,6 +132,14 @@ export function formatNeedleTranscript(result: LocalAgentLoopResult): string {
   return lines.join('\n');
 }
 
+/** Guards the single native engine against overlapping delegations. */
+let automationInFlight = false;
+
+/** True while a device automation owns the shared engine. */
+export function isNeedleAutomationRunning(): boolean {
+  return automationInFlight;
+}
+
 /**
  * Runs one device-automation task on the Needle engine.
  *
@@ -147,6 +155,29 @@ export async function runNeedleDeviceAutomation(
     return { ok: false, output: 'run_device_automation needs a non-empty instruction.' };
   }
 
+  // The swap below mutates global engine state (one llama.rn/Needle runtime).
+  // Two overlapping calls either unload each other's model or share a torn
+  // engine whose broadcast stream duplicates tool calls. Reject rather than
+  // queue: the planner can retry, and a stale instruction is worse than a
+  // clear refusal.
+  if (automationInFlight) {
+    return {
+      ok: false,
+      output: 'Another device automation is already running. Wait for it to finish before starting another.',
+    };
+  }
+  automationInFlight = true;
+  try {
+    return await runAutomationTask(text, options);
+  } finally {
+    automationInFlight = false;
+  }
+}
+
+async function runAutomationTask(
+  text: string,
+  options: NeedleAutomationOptions
+): Promise<NeedleAutomationResult> {
   const deps = options.deps ?? {};
   const isDownloaded = deps.isModelDownloaded ?? isModelDownloaded;
   const getLoaded = deps.getLoadedModel ?? getLoadedModelName;
