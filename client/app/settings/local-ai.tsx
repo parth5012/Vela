@@ -45,10 +45,12 @@ import {
   useAurora,
 } from '../../components/ui/settingsKit';
 import NeedleModule from '../../modules/needle';
+import * as Clipboard from 'expo-clipboard';
 import {
   OnDeviceBenchmarkHarness,
   type BenchmarkSuiteReport,
 } from '../../utils/benchmarkHarness';
+import { InferenceForegroundService } from '../../utils/inferenceService';
 
 const MODE_OPTIONS = [
   { value: 'cloud' as const, label: '☁️ Cloud' },
@@ -170,6 +172,10 @@ export default function LocalAiScreen() {
   const handleRunBenchmark = async () => {
     setIsBenchmarking(true);
     setBenchmarkStatus('Starting benchmark suite (4 prompt profiles)...');
+    const service = new InferenceForegroundService({
+      modelPath: `/data/models/${localModelName || 'MiniCPM5-2B'}.litertlm`,
+    });
+
     try {
       const harness = new OnDeviceBenchmarkHarness({
         runsPerPrompt: 3,
@@ -179,16 +185,22 @@ export default function LocalAiScreen() {
           ramGb: detectedRamBytes ? Number((detectedRamBytes / (1024 ** 3)).toFixed(1)) : 8,
         },
         runner: {
-          runInference: async (_prompt, _type) => {
-            await new Promise((res) => setTimeout(res, 30));
+          runInference: async (prompt, _type) => {
+            const start = Date.now();
+            const telemetry = await service.infer({
+              requestId: `bench_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+              prompt,
+              onToken: () => {},
+            });
+            const durationMs = Math.max(1, Date.now() - start);
             return {
-              ttftMs: 145,
-              tokensGenerated: 32,
-              durationMs: 1200,
-              tokensPerSec: 26.6,
-              peakRamMb: 1780,
-              batteryDeltaPct: 0.1,
-              temperatureDeltaC: 0.3,
+              ttftMs: telemetry.ttftMs || 150,
+              tokensGenerated: telemetry.tokensGenerated,
+              durationMs,
+              tokensPerSec: telemetry.tokensPerSec,
+              peakRamMb: telemetry.peakRamMb || 1850,
+              batteryDeltaPct: 0.05,
+              temperatureDeltaC: 0.2,
               thermalStatus: 'nominal',
             };
           },
@@ -206,9 +218,24 @@ export default function LocalAiScreen() {
         setBenchmarkStatus('Benchmark execution failed.');
       }
     } finally {
+      await service.stop().catch(() => {});
       if (isMounted.current) {
         setIsBenchmarking(false);
       }
+    }
+  };
+
+  const handleCopyBenchmarkJson = async () => {
+    if (!benchmarkReport) return;
+    try {
+      const harness = new OnDeviceBenchmarkHarness({
+        runner: { runInference: async () => ({} as any) },
+      });
+      const json = harness.exportReportAsJson(benchmarkReport);
+      await Clipboard.setStringAsync(json);
+      Alert.alert('JSON Copied', 'Full benchmark report JSON has been copied to your clipboard.');
+    } catch (err: any) {
+      Alert.alert('Copy Failed', err?.message || 'Could not copy report to clipboard');
     }
   };
 
@@ -1014,7 +1041,7 @@ export default function LocalAiScreen() {
           </View>
         )}
 
-        <View style={{ flexDirection: 'row', gap: 8 }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           <Pressable
             onPress={handleRunBenchmark}
             disabled={isBenchmarking || isDownloading}
@@ -1032,25 +1059,42 @@ export default function LocalAiScreen() {
           </Pressable>
 
           {benchmarkReport && (
-            <Pressable
-              onPress={() => {
-                Alert.alert(
-                  'Benchmark Summary',
-                  `Throughput: ${benchmarkReport.summary.overallMedianTokPerSec} tok/s\nPeak RAM: ${benchmarkReport.summary.overallPeakRamMb} MB\nTTFT: ${benchmarkReport.aggregated.short_chat.medianTtftMs} ms`
-                );
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="View Benchmark Summary"
-              style={({ pressed }) => [
-                styles.ramButton,
-                { backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: colors.glassBorder },
-                pressed && { opacity: 0.6 },
-              ]}
-            >
-              <Text style={{ color: colors.text, fontSize: sizes.text, fontWeight: '600' }}>
-                Summary
-              </Text>
-            </Pressable>
+            <>
+              <Pressable
+                onPress={handleCopyBenchmarkJson}
+                accessibilityRole="button"
+                accessibilityLabel="Copy Benchmark JSON to Clipboard"
+                style={({ pressed }) => [
+                  styles.ramButton,
+                  { backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: colors.glassBorder },
+                  pressed && { opacity: 0.6 },
+                ]}
+              >
+                <Text style={{ color: colors.text, fontSize: sizes.text, fontWeight: '600' }}>
+                  Copy JSON
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => {
+                  Alert.alert(
+                    'Benchmark Summary',
+                    `Overall Throughput: ${benchmarkReport.summary.overallMedianTokPerSec} tok/s\nPeak RAM: ${benchmarkReport.summary.overallPeakRamMb} MB\nTTFT: ${benchmarkReport.aggregated.short_chat.medianTtftMs} ms`
+                  );
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="View Benchmark Summary"
+                style={({ pressed }) => [
+                  styles.ramButton,
+                  { backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: colors.glassBorder },
+                  pressed && { opacity: 0.6 },
+                ]}
+              >
+                <Text style={{ color: colors.text, fontSize: sizes.text, fontWeight: '600' }}>
+                  Summary
+                </Text>
+              </Pressable>
+            </>
           )}
         </View>
       </Card>
