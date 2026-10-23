@@ -48,6 +48,9 @@ function isDeviceTool(toolName: string): boolean {
   return toolName.startsWith('device_')
 }
 
+/** Upper bound for `max_steps`: an untrusted model must not run an unbounded loop. */
+export const MAX_AUTOMATION_STEPS = 30
+
 export function buildCloudToolDescriptions(caps: StandaloneCapabilities = {}): Record<string, string> {
   const tools = filterAvailable('cloud', caps)
   const descriptions: Record<string, string> = {}
@@ -131,7 +134,10 @@ export async function executeCloudTool(
   }
 
   if (toolName === 'run_device_automation') {
-    const instruction = String(args.instruction ?? '').trim()
+    // Models sometimes emit the task as a raw call body (`args.text`) or as
+    // `target`; accept those so the planner->Needle bridge is reachable even
+    // when the model ignores the JSON parameter name.
+    const instruction = String(args.instruction ?? args.target ?? args.text ?? '').trim()
     if (!instruction) {
       return {
         success: false,
@@ -139,8 +145,25 @@ export async function executeCloudTool(
       }
     }
     const rawMaxSteps = Number(args.max_steps ?? args.maxSteps)
-    const maxSteps =
+    const requestedSteps =
       Number.isFinite(rawMaxSteps) && rawMaxSteps > 0 ? Math.floor(rawMaxSteps) : undefined
+    const maxSteps = requestedSteps ? Math.min(requestedSteps, MAX_AUTOMATION_STEPS) : undefined
+
+    // Gate the delegation itself: per-step checks only see a tool name plus a
+    // coordinate/ref, so the instruction's intent ("delete all photos") is lost
+    // before classification. This boundary check classifies that intent once.
+    const safetyCheck = deps.evaluateSafety ?? evaluateSafety
+    if (safetyCheck) {
+      try {
+        const safety = await safetyCheck('run_device_automation', instruction)
+        if (safety.status === 'error') {
+          return { success: false, output: safety.result }
+        }
+      } catch (e: any) {
+        return { success: false, output: `Safety evaluation failed: ${e?.message || e}` }
+      }
+    }
+
     const runAutomation = deps.runNeedleAutomation ?? runNeedleDeviceAutomation
     try {
       const result = await runAutomation(instruction, {

@@ -129,11 +129,25 @@ export async function parseAndExecuteTools(
   }
 
   for (const block of callBlocks) {
-    let parsedArgs = {};
-    try {
-      parsedArgs = JSON.parse(block.rawArgs.trim());
-    } catch (e) {
-      console.warn(`Failed to parse arguments for tool ${block.toolName}:`, e);
+    const rawArgs = block.rawArgs.trim();
+    let parsedArgs: Record<string, any> = {};
+    if (rawArgs.length > 0) {
+      try {
+        const parsed = JSON.parse(rawArgs);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          parsedArgs = parsed;
+        } else {
+          // `<call name="x">Some text</call>` — a model that ignored the JSON
+          // instruction. Keep the text as `args.text` so tools that accept plain
+          // language (e.g. run_device_automation) can still use it.
+          parsedArgs = { text: String(parsed) };
+        }
+      } catch (e) {
+        console.warn(`Failed to parse arguments for tool ${block.toolName}:`, e);
+        // Silently dropping the body made `run_device_automation` unreachable
+        // for models that emit prose instead of JSON (#277 review).
+        parsedArgs = { text: rawArgs };
+      }
     }
 
     const responseText = await dispatchTool(

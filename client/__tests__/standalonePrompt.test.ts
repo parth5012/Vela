@@ -23,4 +23,10 @@ describe('standalonePrompt', () => {
   it('describes an empty list as empty', () => {
     expect(describeToolsForPrompt([])).toBe('')
   })
+
+  it('lists parameter names so a model knows what to put in the call body', () => {
+    expect(buildLocalPromptBlock()).toContain(
+      'run_device_automation (params: instruction: string, max_steps?: number)'
+    )
+  })
 })

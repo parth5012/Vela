@@ -226,6 +226,24 @@ describe('toolProxy parser', () => {
       spy.mockRestore();
     });
 
+    it('passes a prose call body through as text so run_device_automation is reachable', async () => {
+      const spy = jest
+        .spyOn(cloudTools, 'executeCloudTool')
+        .mockResolvedValue({ success: true, output: 'opened Settings' });
+
+      const content = '<call name="run_device_automation">Open Settings</call>';
+      const result = await parseAndExecuteTools(content, 'thread_123', undefined, undefined, 'local');
+
+      // A model that ignores the JSON instruction must still reach the bridge.
+      expect(spy).toHaveBeenCalledWith(
+        'run_device_automation',
+        expect.objectContaining({ text: 'Open Settings' })
+      );
+      expect(result.updatedContent).toContain('<response name="run_device_automation">\nopened Settings\n</response>');
+
+      spy.mockRestore();
+    });
+
     it('never executes a refusal envelope', async () => {
       const content = '{"type":"call","function_calls":[],"reasoning":"No device action fits."}';
 
