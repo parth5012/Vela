@@ -229,6 +229,10 @@ export class OpenAiCompatibleClient implements AiExecutionProvider {
       max_tokens: request.sampling?.maxTokens ?? 2048,
     };
 
+    if (request.tools && request.tools.length > 0) {
+      payload.tools = request.tools;
+    }
+
     const response = await this.executeWithRetry(async (signal) => {
       return this.fetchFn(endpoint, {
         method: 'POST',
@@ -346,7 +350,15 @@ export class OpenAiCompatibleClient implements AiExecutionProvider {
           response.status === 429 ||
           (response.status >= 500 && response.status <= 504);
 
-        if (!isRetryable || attempts >= maxAttempts) {
+        if (!isRetryable) {
+          const nonRetryableError: any = new Error(
+            `Cloud request failed with status ${response.status}: ${response.statusText}`
+          );
+          nonRetryableError.nonRetryable = true;
+          throw nonRetryableError;
+        }
+
+        if (attempts >= maxAttempts) {
           throw new Error(
             `Cloud request failed with status ${response.status}: ${response.statusText}`
           );
@@ -360,7 +372,7 @@ export class OpenAiCompatibleClient implements AiExecutionProvider {
         if (externalSignal?.aborted) {
           throw new Error('Request aborted by caller');
         }
-        if (attempts >= maxAttempts) {
+        if (err?.nonRetryable || attempts >= maxAttempts) {
           throw err;
         }
         const backoffMs = Math.min(100 * Math.pow(2, attempts - 1), 1000);
