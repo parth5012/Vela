@@ -97,26 +97,27 @@ export async function evaluateDeviceCapabilities(
   const ramFloor = options.ramFloorBytes ?? DEFAULT_RAM_FLOOR_BYTES;
   const ramRecommended = options.ramRecommendedBytes ?? DEFAULT_RAM_RECOMMENDED_BYTES;
   const minStorage = options.minDiskFreeBytes ?? DEFAULT_MIN_STORAGE_FREE_BYTES;
+  const allowEmulator = options.allowEmulator ?? false;
 
-  // Resolve RAM
+  // Resolve RAM (fails closed to 0 if total memory is unavailable)
   let ramBytes = options.ramBytes;
   if (ramBytes === undefined) {
-    ramBytes = await detectRamBytes();
+    ramBytes = await detectRamBytes({ allowEmulator });
   }
 
-  // Resolve Free Disk Storage
+  // Resolve Free Disk Storage (fails closed to 0 if disk query fails)
   let freeDiskBytes = options.freeDiskBytes;
   if (freeDiskBytes === undefined) {
     try {
-      freeDiskBytes = await FileSystem.getFreeDiskStorageAsync();
+      const disk = await FileSystem.getFreeDiskStorageAsync();
+      freeDiskBytes = typeof disk === 'number' && disk > 0 ? disk : 0;
     } catch {
-      freeDiskBytes = 5 * BYTES_PER_GB; // safe default in simulation
+      freeDiskBytes = allowEmulator ? 5 * BYTES_PER_GB : 0;
     }
   }
 
   // Resolve Architecture
   const architecture = options.architecture ?? detectCpuArchitecture();
-  const allowEmulator = options.allowEmulator ?? false;
 
   const reasons: string[] = [];
   let isArchSupported = false;
@@ -136,7 +137,9 @@ export async function evaluateDeviceCapabilities(
 
   const ramGb = (ramBytes / BYTES_PER_GB).toFixed(1);
   const ramFloorGb = (ramFloor / BYTES_PER_GB).toFixed(0);
-  if (ramBytes < ramFloor) {
+  if (ramBytes <= 0) {
+    reasons.push('Unable to determine device RAM: total memory is unavailable or unreadable');
+  } else if (ramBytes < ramFloor) {
     reasons.push(
       `Insufficient RAM: device has ${ramGb} GB, requires minimum ${ramFloorGb} GB floor for on-device inference`
     );
@@ -144,14 +147,16 @@ export async function evaluateDeviceCapabilities(
 
   const diskGb = (freeDiskBytes / BYTES_PER_GB).toFixed(1);
   const minStorageGb = (minStorage / BYTES_PER_GB).toFixed(0);
-  if (freeDiskBytes < minStorage) {
+  if (freeDiskBytes <= 0) {
+    reasons.push('Unable to determine free storage: device disk storage query failed or returned 0');
+  } else if (freeDiskBytes < minStorage) {
     reasons.push(
       `Insufficient storage: ${diskGb} GB free, requires minimum ${minStorageGb} GB free storage`
     );
   }
 
   // Determine status
-  if (!isArchSupported || ramBytes < ramFloor || freeDiskBytes < minStorage) {
+  if (!isArchSupported || ramBytes < ramFloor || freeDiskBytes < minStorage || ramBytes <= 0 || freeDiskBytes <= 0) {
     return {
       status: 'UNSUPPORTED',
       canRunOnDevice: false,
@@ -201,7 +206,7 @@ export const DEFAULT_FALLBACK_MODEL_CONFIG: ModelArtifactConfig = {
   filename: 'MiniCPM5-2B_int4.litertlm',
   format: 'litertlm',
   sizeBytes: 1664299000,
-  sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+  sha256: '7b98f280a559d8717596d66e850b57e7eb372a9a83424696e19b4e7235b0ff72',
   minRamGb: 6,
   minStorageGb: 3,
 };
@@ -224,18 +229,26 @@ export async function fetchRemoteModelConfig(
 
     if (response.ok) {
       const data = await response.json();
-      if (data && data.downloadUrl && data.modelId) {
+      const isValidHex64 = typeof data?.sha256 === 'string' && /^[a-fA-F0-9]{64}$/.test(data.sha256);
+      const isValidHttps = typeof data?.downloadUrl === 'string' && data.downloadUrl.startsWith('https://');
+      const isValidSize = typeof data?.sizeBytes === 'number' && data.sizeBytes > 0;
+      const isValidFormat = ['litertlm', 'task', 'gguf', 'cact'].includes(data?.format);
+      const isValidModelId = typeof data?.modelId === 'string' && data.modelId.trim().length > 0;
+
+      if (isValidModelId && isValidHttps && isValidSize && isValidHex64 && isValidFormat) {
         return {
           modelId: data.modelId,
-          name: data.name || 'MiniCPM5-2B (LiteRT)',
+          name: data.name || data.modelId,
           downloadUrl: data.downloadUrl,
-          filename: data.filename || 'MiniCPM5-2B_int4.litertlm',
-          format: data.format || 'litertlm',
-          sizeBytes: data.sizeBytes || 1664299000,
-          sha256: data.sha256 || DEFAULT_FALLBACK_MODEL_CONFIG.sha256,
-          minRamGb: data.minRamGb || 6,
-          minStorageGb: data.minStorageGb || 3,
+          filename: data.filename || `${data.modelId}.${data.format}`,
+          format: data.format,
+          sizeBytes: data.sizeBytes,
+          sha256: data.sha256,
+          minRamGb: typeof data.minRamGb === 'number' && data.minRamGb > 0 ? data.minRamGb : 6,
+          minStorageGb: typeof data.minStorageGb === 'number' && data.minStorageGb > 0 ? data.minStorageGb : 3,
         };
+      } else {
+        console.warn('[ModelGate] Remote config validation failed, using fallback config:', data);
       }
     }
   } catch (err) {
@@ -364,20 +377,28 @@ export async function recoverCorruptArtifact(
 
   console.warn(`[ModelGate] Purging corrupt artifact for model ${modelId} at ${fileUri}`);
 
+  let deleteSucceeded = false;
   try {
     await deleter(fileUri, { idempotent: true });
+    deleteSucceeded = true;
   } catch (e) {
     console.warn('[ModelGate] Failed to delete corrupt file:', e);
   }
 
-  try {
-    await remover(`download_resume_${modelId}`);
-    await remover(`model_status_${modelId}`);
-  } catch (e) {
-    console.warn('[ModelGate] Failed to clear storage resume keys:', e);
+  const [resumeResult, statusResult] = await Promise.allSettled([
+    remover(`download_resume_${modelId}`),
+    remover(`model_status_${modelId}`),
+  ]);
+
+  if (resumeResult.status === 'rejected') {
+    console.warn('[ModelGate] Failed to clear storage resume key:', resumeResult.reason);
+  }
+  if (statusResult.status === 'rejected') {
+    console.warn('[ModelGate] Failed to clear storage status key:', statusResult.reason);
   }
 
-  return { recovered: true };
+  const storageCleared = resumeResult.status === 'fulfilled' && statusResult.status === 'fulfilled';
+  return { recovered: deleteSucceeded && storageCleared };
 }
 
 export interface ModelDownloadGateOptions {
@@ -431,7 +452,7 @@ export class ModelDownloadGate {
     }
 
     const networkPolicy: NetworkDownloadPolicy = {
-      isWifi: this.options.networkOptions?.isWifi ?? true,
+      isWifi: this.options.networkOptions?.isWifi ?? false,
       wifiOnly: this.options.networkOptions?.wifiOnly ?? true,
       allowCellular: this.options.networkOptions?.allowCellular ?? false,
     };
