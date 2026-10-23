@@ -314,6 +314,45 @@ describe('WF-10: Cloud Fallback Path & Privacy Disclosure Gate', () => {
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
+    it('aborts mid-stream when signal is triggered and cancels reader', async () => {
+      const client = new OpenAiCompatibleClient(mockRemoteConfig, mockFetch);
+      const controller = new AbortController();
+      const cancelMock = jest.fn().mockResolvedValue(undefined);
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        body: {
+          getReader: () => {
+            let count = 0;
+            return {
+              read: async () => {
+                count++;
+                if (count === 1) {
+                  const chunk = 'data: {"choices":[{"delta":{"content":"First chunk"}}]}\n\n';
+                  return { done: false, value: new TextEncoder().encode(chunk) };
+                }
+                // Simulate mid-stream abort
+                controller.abort();
+                const chunk = 'data: {"choices":[{"delta":{"content":"Second chunk"}}]}\n\n';
+                return { done: false, value: new TextEncoder().encode(chunk) };
+              },
+              cancel: cancelMock,
+            };
+          },
+        },
+      });
+
+      await expect(
+        client.streamChat({
+          messages: [{ role: 'user', content: 'Stream test' }],
+          signal: controller.signal,
+        })
+      ).rejects.toThrow('Request aborted by caller');
+
+      expect(cancelMock).toHaveBeenCalled();
+    });
+
     it('accumulates local token metering across multiple requests and allows reset', async () => {
       const client = new OpenAiCompatibleClient(mockRemoteConfig, mockFetch);
 
