@@ -96,6 +96,8 @@ export class InferenceForegroundService {
   private idleTimer: NodeJS.Timeout | null = null;
   private activeGenerations: number = 0;
   private fallbackListeners = new Set<(details: { reason: string; timestamp: number }) => void>();
+  private loadingPromise: Promise<void> | null = null;
+  private currentAbortController: AbortController | null = null;
 
   constructor(config: InferenceServiceConfig = {}) {
     this.config = config;
@@ -119,6 +121,9 @@ export class InferenceForegroundService {
       },
       cancelNotification: async (identifier) => {
         try {
+          if (typeof Notifications.dismissNotificationAsync === 'function') {
+            await Notifications.dismissNotificationAsync(identifier);
+          }
           await Notifications.cancelScheduledNotificationAsync(identifier);
         } catch (e) {
           console.warn('[InferenceService] Cancel notification failed:', e);
@@ -190,20 +195,31 @@ export class InferenceForegroundService {
   }
 
   /**
-   * Lazy loads model into RAM.
+   * Lazy loads model into RAM. Synchronized to prevent concurrent initialization races.
    */
   async ensureLoaded(): Promise<void> {
     if (this._isLoaded) return;
-
-    this.clearIdleTimer();
-    if (this.driver) {
-      const ok = await this.driver.init(this.modelPath);
-      if (!ok) {
-        throw new Error(`Driver failed to initialize model at ${this.modelPath}`);
-      }
+    if (this.loadingPromise) {
+      return this.loadingPromise;
     }
-    this._isLoaded = true;
-    await this.showForegroundNotification('MiniCPM5-2B loaded in memory');
+
+    this.loadingPromise = (async () => {
+      this.clearIdleTimer();
+      if (this.driver) {
+        const ok = await this.driver.init(this.modelPath);
+        if (!ok) {
+          throw new Error(`Driver failed to initialize model at ${this.modelPath}`);
+        }
+      }
+      this._isLoaded = true;
+      await this.showForegroundNotification('MiniCPM5-2B loaded in memory');
+    })();
+
+    try {
+      await this.loadingPromise;
+    } finally {
+      this.loadingPromise = null;
+    }
   }
 
   /**
@@ -214,8 +230,18 @@ export class InferenceForegroundService {
     this.activeGenerations++;
     this.clearIdleTimer();
 
+    const abortController = new AbortController();
+    this.currentAbortController = abortController;
+
+    const abortListener = () => {
+      abortController.abort();
+    };
+    if (request.signal) {
+      request.signal.addEventListener('abort', abortListener);
+    }
+
     try {
-      if (request.signal?.aborted) {
+      if (request.signal?.aborted || abortController.signal.aborted) {
         throw new Error('Inference aborted before start');
       }
 
@@ -233,7 +259,7 @@ export class InferenceForegroundService {
       let tokensGenerated = 0;
 
       const handleToken = (token: string) => {
-        if (request.signal?.aborted) {
+        if (request.signal?.aborted || abortController.signal.aborted) {
           const err = new Error('Inference aborted by caller');
           err.name = 'AbortError';
           throw err;
@@ -312,6 +338,12 @@ export class InferenceForegroundService {
       }
       throw err;
     } finally {
+      if (request.signal) {
+        request.signal.removeEventListener('abort', abortListener);
+      }
+      if (this.currentAbortController === abortController) {
+        this.currentAbortController = null;
+      }
       this.activeGenerations = Math.max(0, this.activeGenerations - 1);
       if (this._isLoaded) {
         await this.showForegroundNotification('MiniCPM5-2B ready in memory');
@@ -321,10 +353,14 @@ export class InferenceForegroundService {
   }
 
   /**
-   * Explicitly unloads the model, clears idle timer, and dismisses notifications.
+   * Explicitly unloads the model, aborts active generations, clears idle timer, and dismisses notifications.
    */
   async stop(): Promise<void> {
     this.clearIdleTimer();
+    if (this.currentAbortController) {
+      this.currentAbortController.abort();
+      this.currentAbortController = null;
+    }
     if (this._isLoaded) {
       if (this.driver) {
         try {
