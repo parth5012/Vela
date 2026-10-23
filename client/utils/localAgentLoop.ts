@@ -91,6 +91,20 @@ export interface LocalAgentLoopResult {
   stoppedBySafety?: boolean;
 }
 
+export const ALLOWED_DEVICE_TOOLS = new Set([
+  'device_screen_read',
+  'device_info',
+  'device_screenshot',
+  'device_click',
+  'device_tap',
+  'device_type',
+  'device_scroll',
+  'device_swipe',
+  'device_press_key',
+  'device_set_volume',
+  'device_open_app',
+]);
+
 import { filterAvailable, isAvailable } from './toolRegistry';
 import { searchStandalone } from './standaloneSearch';
 import { buildUnavailableHint } from './standalonePrompt';
@@ -213,6 +227,14 @@ export function parseToolCall(text: string): ParsedToolCall | null {
                   value = String(args.query);
                 } else if (args.input !== undefined) {
                   value = String(args.input);
+                } else if (args.key !== undefined) {
+                  value = String(args.key);
+                } else if (args.level !== undefined) {
+                  value = String(args.level);
+                } else if (args.direction !== undefined) {
+                  value = String(args.direction);
+                } else if (args.app !== undefined && target === undefined) {
+                  value = String(args.app);
                 }
 
                 return {

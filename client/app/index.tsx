@@ -42,7 +42,7 @@ import { useGoogleAuthStore } from '../store/useGoogleAuthStore';
 import { perfTracker } from '../utils/perfTracker';
 
 // Importing local mode modules
-import { initializeLocalModel, streamLocalLlmResponse, isLocalLlmDown, localModelStorageKey, LOCAL_MODELS } from '../utils/localLlm';
+import { initializeLocalModel, streamLocalLlmResponse, isLocalLlmDown, isStoredModelUsable, localModelStorageKey, LOCAL_MODELS } from '../utils/localLlm';
 import { compileLocalPrompt } from '../utils/promptCompiler';
 import { parseAndExecuteTools } from '../utils/toolProxy';
 import { streamCloudResponse } from '../utils/providers';
@@ -1149,16 +1149,21 @@ export default function ChatScreen() {
         Alert.alert('Local Model Down', 'The local LLM is currently down/unavailable.');
         return;
       }
-      // Check if model already downloaded
-      const isDownloaded = await AsyncStorage.getItem(localModelStorageKey(localModelName));
-      if (isDownloaded === 'true') {
-        setConnectionMode('local');
-        return;
-      }
-
       const selectedModel = LOCAL_MODELS.find(m => m.name === localModelName);
       if (!selectedModel) {
         Alert.alert('Error', 'Selected model not found.');
+        return;
+      }
+
+      // Check if model already downloaded. A stale file from a previous model
+      // list (e.g. a `.task` bundle after the switch to GGUF) is not usable.
+      const storageKey = localModelStorageKey(localModelName);
+      const [downloadedFlag, storedPath] = await Promise.all([
+        AsyncStorage.getItem(storageKey),
+        AsyncStorage.getItem(`${storageKey}_path`),
+      ]);
+      if (isStoredModelUsable(selectedModel, downloadedFlag, storedPath)) {
+        setConnectionMode('local');
         return;
       }
 

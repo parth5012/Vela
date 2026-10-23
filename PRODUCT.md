@@ -43,7 +43,7 @@ Confirmed functionality (client surface):
 Confirmed constraints:
 - Android-only client (Expo SDK 57 / React Native 0.86, expo-router). Portrait orientation.
 - Backend is single-tenant, self-host-only; external/client requests authenticate with a static Bearer API key.
-- Local model formats are engine-specific: MediaPipe accepts LiteRT `.task` only and requires tasks-genai 0.10.24+ (older versions crash natively); llama.rn accepts GGUF; the Needle engine accepts `.cact`. Exactly two Needle models ship — `Needle-2 45M` (2048 context) and `Needle-3 (20-layer)` (8192 context) — from `Cactus-Compute/needle2|needle3`; Needle-1 (26M) is out of scope (decided in wayfinder #290), so "three models" is wrong.
+- Local model formats are engine-specific: MediaPipe accepts LiteRT `.task` only and requires tasks-genai 0.10.24+ (older versions crash natively); llama.rn accepts GGUF; the Needle engine accepts `.cact`. Only `Needle-3 (20-layer)` (8192 context, `Cactus-Compute/needle3`) is offered in-app: a build links exactly one engine generation, and the shipped engine is generation 3, so `needle2.cact` is rejected by `needle_load` — it was removed from the picker (the `-DNEEDLE_ENGINE_MODEL=needle2` CMake option still exists for a custom build). Needle-1 (26M) is out of scope (wayfinder #290).
 - Accessibility: WCAG AA contrast on the dark themes is a confirmed requirement.
 - Platform guidance: Material Design 3 governs structure, navigation, and interaction; the current app uses a drawer + 48dp-class touch targets — treat that as incumbent evidence, not a binding decision.
 
@@ -68,7 +68,7 @@ Steps 1–3, plus the toolchain prerequisites (NDK 27.1.12297006, CMake 3.22.1+,
 2. `cd client/android && ./gradlew assembleDebug` — the first CMake configure runs `modules/needle/scripts/fetch-engine.js`, which downloads the pinned `libneedle.a` archives into `modules/needle/android/engine/<model>/<abi>/` and re-verifies every SHA256 against `modules/needle/scripts/engine.lock.json`. A pin mismatch, missing `node`, or unsupported ABI fails closed to `HAVE_NEEDLE_ENGINE=0` (honest mock stub still builds). Engine selection is link-time, default `needle3` (`-DNEEDLE_ENGINE_MODEL=needle2` to link needle2 instead).
 3. `adb install -r client/android/app/build/outputs/apk/debug/app-debug.apk` (dev package `com.parth5012.client.dev`). Installing the app itself needs no approval; installing anything else does (see policy below).
 4. Settings → Local AI: the engine pill must read **⚡ Needle Engine: Accelerated (native)**. If it reads **Mock Fallback**, the engine was not linked — stop there and diagnose; do not treat mock text as model output.
-5. Download and load `Needle-2 45M`, send a chat turn, confirm real model output (no `[Mock mode — the local model is NOT running]` prefix). Repeat with `Needle-3 (20-layer)`.
+5. Download and load `Needle-3 (20-layer)`, send a chat turn, confirm real model output (no `[Mock mode — the local model is NOT running]` prefix).
 6. Settings → Local AI → JSON Extraction (`/settings/extract`): run a small schema end to end; confirm schema-conformant JSON and that an empty `function_calls[]` (refusal) is reported distinctly from `parse_failure`.
 7. Exercise a `.cact` tool-call turn so the envelope path (`function_calls`, `reasoning`, `confidence`) is observed on-device, not just in jest.
 8. Wayfinder #299 gate (currently UNRUN): run the paraphrase quality gate for `needle_embed` / hybrid message search on-device. The search UI half stays parked until this passes.

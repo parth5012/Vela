@@ -13,7 +13,16 @@ export function buildUnavailableHint(toolName: string): string {
   return `${toolName} is unavailable in standalone mode — connect to server for full access.`
 }
 
+/** `instruction`, `instruction?`, ... so a model knows the argument names it must emit. */
+function describeParameters(tool: ToolDefinition): string {
+  const entries = Object.entries(tool.parameters ?? {})
+  if (entries.length === 0) return ''
+  return ` (params: ${entries
+    .map(([name, param]) => `${name}${param.required ? '' : '?'}: ${param.type}`)
+    .join(', ')})`
+}
+
 export function describeToolsForPrompt(tools: ToolDefinition[]): string {
   if (tools.length === 0) return ''
-  return tools.map((tool) => `${tool.name} - ${tool.description}`).join('\n')
+  return tools.map((tool) => `${tool.name}${describeParameters(tool)} - ${tool.description}`).join('\n')
 }

@@ -94,7 +94,7 @@
     "typecheck": "tsc --noEmit",
     "benchmark:ci": "jest __tests__/perf.benchmark.test.ts --runInBand",
     "test": "npm run lint && jest",
-    "postinstall": "patch-package || echo \"patch-package: some patches failed but continuing\""
+    "postinstall": "patch-package || echo \"patch-package: some patches failed but continuing\" && node scripts/fetch-llama-jni.js"
   },
   "jest": {
     "preset": "jest-expo",
@@ -103,7 +103,7 @@
     ],
     "testPathIgnorePatterns": [
       "/node_modules/",
-      "<rootDir>/__tests__/helpers/"
+      "[\\/]__tests__[\\/]helpers[\\/]"
     ],
     "transformIgnorePatterns": [
       "node_modules/(?!(\\.pnpm/.*node_modules/)?((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|ai|@ai-sdk/.*|@openrouter/.*|@workflow/.*|effect|@shopify/flash-list))"

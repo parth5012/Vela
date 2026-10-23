@@ -106,8 +106,15 @@ export default function RootLayout() {
       if (!useChatStore.getState().activeThreadId) {
         useChatStore.getState().selectThread(null);
       }
-      // Cold startup optimization (WF-427-04): defer background data bootstrap & offline sync
-      const task = InteractionManager.runAfterInteractions(() => {
+      // Cold startup optimization (WF-427-04): defer background data bootstrap & offline sync.
+      // Migrations must finish before anything touches the DB, otherwise a cold
+      // start queries tables that do not exist yet.
+      const task = InteractionManager.runAfterInteractions(async () => {
+        try {
+          await initializeDatabase();
+        } catch (e) {
+          console.warn('[Layout] Database initialization error:', e);
+        }
         runAgentDataBootstrap();
         // Local-first offline sync: flush any pending offline messages once the
         // store is hydrated, and listen for app foreground to flush again.

@@ -19,26 +19,30 @@ describe('ramDetection', () => {
 
     it('correctly classifies models for mid memory devices (4.5 - 7.5 GB)', () => {
       const ram6GB = 6 * 1024 * 1024 * 1024;
+      expect(getModelStatusForRam('Needle-3 (20-layer)', ram6GB)).toBe('recommended');
+      expect(getModelStatusForRam('SmolLM 135M', ram6GB)).toBe('recommended');
       expect(getModelStatusForRam('Qwen2.5 0.5B', ram6GB)).toBe('recommended');
       expect(getModelStatusForRam('Llama 3.2 1B (GGUF)', ram6GB)).toBe('recommended');
       expect(getModelStatusForRam('TinyLlama 1.1B', ram6GB)).toBe('borderline');
       expect(getModelStatusForRam('Qwen2.5 1.5B (GGUF)', ram6GB)).toBe('borderline');
       expect(getModelStatusForRam('DeepSeek-R1 1.5B (GGUF)', ram6GB)).toBe('borderline');
       expect(getModelStatusForRam('Phi-4 Mini (GGUF)', ram6GB)).toBe('unsupported');
-      expect(getModelStatusForRam('Qwen2.5 1.5B', ram6GB)).toBe('borderline');
-      expect(getModelStatusForRam('DeepSeek-R1 1.5B', ram6GB)).toBe('borderline');
+      // Retired `.task` rows (v7): their no-suffix names no longer resolve to a
+      // shipped model, so they fall through to 'unsupported'.
+      expect(getModelStatusForRam('Qwen2.5 1.5B', ram6GB)).toBe('unsupported');
+      expect(getModelStatusForRam('DeepSeek-R1 1.5B', ram6GB)).toBe('unsupported');
     });
 
     it('correctly classifies models for high memory devices (>= 7.5 GB)', () => {
       const ram8GB = 8 * 1024 * 1024 * 1024;
       expect(getModelStatusForRam('Phi-4 Mini (GGUF)', ram8GB)).toBe('recommended');
       expect(getModelStatusForRam('DeepSeek-R1 1.5B (GGUF)', ram8GB)).toBe('recommended');
-      expect(getModelStatusForRam('Qwen2.5 1.5B', ram8GB)).toBe('recommended');
+      expect(getModelStatusForRam('Qwen2.5 1.5B (GGUF)', ram8GB)).toBe('recommended');
     });
 
-    it("marks 'Needle-2 45M' and 'Needle-3 (20-layer)' as recommended on 2GB, 3GB, 4GB, 6GB, and 8GB RAM devices", () => {
+    it("marks 'Needle-3 (20-layer)' as recommended on 2GB, 3GB, 4GB, 6GB, and 8GB RAM devices", () => {
       const GB = 1024 * 1024 * 1024;
-      for (const name of ['Needle-2 45M', 'Needle-3 (20-layer)']) {
+      for (const name of ['Needle-3 (20-layer)']) {
         for (const ramGB of [2, 3, 4, 6, 8]) {
           expect(getModelStatusForRam(name, ramGB * GB)).toBe('recommended');
         }
@@ -48,9 +52,9 @@ describe('ramDetection', () => {
     // #294 — the settings picker hides 'unsupported' rows unless
     // showUnsupportedModels is on; both needle rows must stay visible by
     // default (low tier, the 6 GB fallback tier, and the high tier).
-    it('keeps both needle rows visible in the picker (never unsupported)', () => {
+    it('keeps the needle row visible in the picker (never unsupported)', () => {
       const GB = 1024 * 1024 * 1024;
-      for (const name of ['Needle-2 45M', 'Needle-3 (20-layer)']) {
+      for (const name of ['Needle-3 (20-layer)']) {
         expect(getModelStatusForRam(name, 4 * GB)).not.toBe('unsupported');
         expect(getModelStatusForRam(name, 6 * GB)).not.toBe('unsupported');
         expect(getModelStatusForRam(name, 8 * GB)).not.toBe('unsupported');
@@ -149,7 +153,7 @@ describe('ramDetection', () => {
     });
 
     it('derives needle sizes from LOCAL_MODELS (single source of truth)', () => {
-      for (const name of ['Needle-2 45M', 'Needle-3 (20-layer)']) {
+      for (const name of ['Needle-3 (20-layer)']) {
         const model = LOCAL_MODELS.find((m) => m.name === name);
         expect(model).toBeDefined();
         // `size` strings are "~0.014 GB" / "~0.035 GB" — parsed as GB, never MB

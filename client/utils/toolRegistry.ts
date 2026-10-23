@@ -96,6 +96,32 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
   serverOnly('calendar_list_events', 'Lists Calendar events via server-side OAuth.'),
   serverOnly('calendar_create_event', 'Creates Calendar events via server-side OAuth.'),
   device('device_screen_read', 'Reads the current screen hierarchy and visible text.'),
+  {
+    // Planner -> worker bridge: a larger local LLM (Gemma/Qwen/DeepSeek) plans,
+    // this tool hands one self-contained step to the Needle device agent, which
+    // emits the concrete device_* calls and executes them. Not named `device_*`
+    // on purpose: it is a task, not a single device action.
+    name: 'run_device_automation',
+    description:
+      'Delegate a self-contained on-device automation task to the Needle device agent (it reads the screen, taps, types, opens apps). Use this for ANY action inside a phone app; do not guess coordinates yourself.',
+    requiresServer: false,
+    availableInLocal: true,
+    availableInCloud: true,
+    standaloneReady: true,
+    parameters: {
+      instruction: {
+        type: 'string',
+        description:
+          'Self-contained task in plain language, e.g. "Open Settings and turn on Wi-Fi".',
+        required: true,
+      },
+      max_steps: {
+        type: 'number',
+        description: 'Optional step budget (default 15).',
+        required: false,
+      },
+    },
+  },
   device('device_tap', 'Taps an element or coordinate.', {
     target: { type: 'string', description: 'Resource id, text, or x,y.', required: true },
   }),

@@ -408,6 +408,62 @@ describe('useConfigStore', () => {
     useConfigStore.getState().clearConfig();
   });
 
+  it('migrates a removed `.task` Qwen2.5 selection to its GGUF twin (v7)', async () => {
+    const AsyncStorage = require('@react-native-async-storage/async-storage');
+    await AsyncStorage.setItem(
+      'vela-config-storage',
+      JSON.stringify({
+        state: { ...useConfigStore.getState(), localModelName: 'Qwen2.5 1.5B' },
+        version: 6,
+      })
+    );
+
+    await useConfigStore.persist.rehydrate();
+    expect(useConfigStore.getState().localModelName).toBe('Qwen2.5 1.5B (GGUF)');
+
+    await AsyncStorage.removeItem('vela-config-storage');
+    useConfigStore.getState().clearConfig();
+  });
+
+  it('migrates a removed `.task` DeepSeek-R1 selection to its GGUF twin (v7)', async () => {
+    const AsyncStorage = require('@react-native-async-storage/async-storage');
+    await AsyncStorage.setItem(
+      'vela-config-storage',
+      JSON.stringify({
+        state: {
+          ...useConfigStore.getState(),
+          localModelName: 'DeepSeek-R1 1.5B',
+          temperature: 0.2,
+        },
+        version: 6,
+      })
+    );
+
+    await useConfigStore.persist.rehydrate();
+    expect(useConfigStore.getState().localModelName).toBe('DeepSeek-R1 1.5B (GGUF)');
+    expect(useConfigStore.getState().temperature).toBe(0.2);
+
+    await AsyncStorage.removeItem('vela-config-storage');
+    useConfigStore.getState().clearConfig();
+  });
+
+  it('leaves same-name model selections untouched in v7', async () => {
+    const AsyncStorage = require('@react-native-async-storage/async-storage');
+    await AsyncStorage.setItem(
+      'vela-config-storage',
+      JSON.stringify({
+        state: { ...useConfigStore.getState(), localModelName: 'Qwen2.5 0.5B' },
+        version: 6,
+      })
+    );
+
+    await useConfigStore.persist.rehydrate();
+    expect(useConfigStore.getState().localModelName).toBe('Qwen2.5 0.5B');
+
+    await AsyncStorage.removeItem('vela-config-storage');
+    useConfigStore.getState().clearConfig();
+  });
+
   it('clears the LiteRT crash keys on clearConfig', async () => {
     await AsyncStorage.setItem(
       LITERT_GPU_CRASH_FLAG_KEY,

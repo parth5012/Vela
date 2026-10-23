@@ -148,15 +148,26 @@ describe('fetch-engine.js', () => {
       expect(new Set(keys).size).toBe(6);
     });
 
-    it('has a valid sha256, byte count and pinned https url per entry', async () => {
+    it('pins an immutable upstream revision, not the mutable main branch', async () => {
       for (const entry of manifest.engines) {
         expect(entry.sha256).toMatch(/^[0-9a-f]{64}$/);
         expect(Number.isInteger(entry.bytes)).toBe(true);
         expect(entry.bytes).toBeGreaterThan(0);
-        expect(entry.url).toMatch(/^https:\/\/huggingface\.co\//);
         expect(entry.upstreamAbi).toBe(UPSTREAM_ABI[entry.abi]);
-        expect(entry.url).toContain(
-          `/Cactus-Compute/${entry.model}/resolve/main/${entry.upstreamAbi}/libneedle.a`
+        // `resolve/main` is a moving pointer. Upstream replaced the archives on
+        // 2026-10-18/19, the sha256 gate correctly refused them, and every build
+        // silently degraded to the mock stub — the app then reported "Needle
+        // models blocked until the native library is packaged". A 40-hex commit
+        // makes the pin reproducible: the bytes can never change under it.
+        expect(entry.url).not.toMatch(/\/resolve\/(main|master)\//);
+        expect(entry.url).toMatch(
+          new RegExp(
+            '^https://huggingface\\.co/Cactus-Compute/' +
+              entry.model +
+              '/resolve/[0-9a-f]{40}/' +
+              entry.upstreamAbi +
+              '/libneedle\\.a$'
+          )
         );
       }
     });

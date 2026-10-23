@@ -9,4 +9,3 @@ CREATE TABLE `check_ins` (
 	`synced` integer DEFAULT false NOT NULL,
 	`created_at` integer NOT NULL
 );
-

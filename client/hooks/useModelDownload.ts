@@ -22,6 +22,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { useConfigStore } from '../store/useConfigStore';
 import {
   isLocalLlmDown,
+  isStoredModelUsable,
   localModelStorageKey,
   LOCAL_MODELS,
   getLoadedModelName,
@@ -73,12 +74,19 @@ export function useModelDownload({ customModels, needleHasNative, isMounted }: U
     const checkDownloaded = async () => {
       try {
         const statuses = await Promise.all(
-          LOCAL_MODELS.map((m) => AsyncStorage.getItem(localModelStorageKey(m.name)))
+          LOCAL_MODELS.map(async (m) => {
+            const key = localModelStorageKey(m.name);
+            const [flag, path] = await Promise.all([
+              AsyncStorage.getItem(key),
+              AsyncStorage.getItem(`${key}_path`),
+            ]);
+            return isStoredModelUsable(m, flag, path);
+          })
         );
         if (cancelled || !isMounted.current) return;
         setDownloadedModels(
           LOCAL_MODELS.reduce<Record<string, boolean>>((acc, model, idx) => {
-            acc[model.name] = statuses[idx] === 'true';
+            acc[model.name] = statuses[idx];
             return acc;
           }, {})
         );
@@ -104,7 +112,7 @@ export function useModelDownload({ customModels, needleHasNative, isMounted }: U
     }
     // Wayfinder #230 / #232: block-with-warning on mock Needle runtime (never silent mock).
     // CodeReview #234: gate covers every built-in Needle row (format cact:
-    // Needle-2 45M, Needle-3 (20-layer)) AND any custom .cact model
+    // Needle-3 (20-layer)) AND any custom .cact model
     // (custom .cact models run through the Needle engine, so they bypass silently otherwise).
     const isNeedleModel =
       LOCAL_MODELS.find((m) => m.name === localModelName)?.format === 'cact' ||

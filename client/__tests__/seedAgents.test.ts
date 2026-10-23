@@ -33,7 +33,7 @@ function readPythonRegistry(): {
   compact: Record<string, string>;
   meta: Record<string, { display_name: string; description: string }>;
 } {
-  const source = fs.readFileSync(REGISTRY_PATH, 'utf8');
+  const source = fs.readFileSync(REGISTRY_PATH, 'utf8').replace(/\r\n/g, '\n');
   const prompts = readPythonStringDict(source, 'AGENT_PROMPTS: dict[str, str]', 'COMPACT_PROMPTS: dict[str, str]');
   const compact = readPythonStringDict(source, 'COMPACT_PROMPTS: dict[str, str]', '_registry = AgentRegistry()');
   const meta: Record<string, { display_name: string; description: string }> = {};

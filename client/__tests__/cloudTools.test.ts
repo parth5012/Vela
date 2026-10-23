@@ -1,6 +1,10 @@
-import { buildCloudToolDescriptions, buildVercelCloudTools, executeCloudTool, listCloudToolNames } from '../utils/cloudTools'
+import { buildCloudToolDescriptions, buildVercelCloudTools, executeCloudTool, listCloudToolNames, resetAutomationRequestGuard } from '../utils/cloudTools'
+import type { NeedleAutomationResult } from '../utils/needleAutomation'
 
 describe('cloudTools', () => {
+  beforeEach(() => {
+    resetAutomationRequestGuard()
+  })
   it('lists cloud tools without server-only entries', () => {
     const names = listCloudToolNames()
 
@@ -26,6 +30,135 @@ describe('cloudTools', () => {
     expect(result.success).toBe(true)
     expect(result.output).toBe('Success')
     expect(executeDevice).toHaveBeenCalledWith('device_screen_read', undefined, undefined)
+  })
+
+  it('delegates run_device_automation to the Needle bridge after a safety check', async () => {
+    const runNeedleAutomation = jest.fn(async () => ({
+      ok: true,
+      output: '1. device_open_app (target=Settings) -> executed: Opened Settings\nResult: completed in 1 step(s).',
+      model: 'Needle-3 (20-layer)',
+      steps: 1,
+    }))
+    const evaluateSafety = jest.fn(async () => ({ status: 'success' as const, result: 'Allowed' }))
+
+    const result = await executeCloudTool(
+      'run_device_automation',
+      { instruction: 'open Settings', max_steps: '3', conversation_id: 'c1' },
+      { runNeedleAutomation, evaluateSafety }
+    )
+
+    expect(evaluateSafety).toHaveBeenCalledWith('run_device_automation', 'open Settings')
+    expect(runNeedleAutomation).toHaveBeenCalledWith('open Settings', {
+      conversationId: 'c1',
+      maxSteps: 3,
+    })
+    expect(result.success).toBe(true)
+    expect(result.output).toContain('Opened Settings')
+  })
+
+  it('accepts a plain-text call body as the automation instruction', async () => {
+    const runNeedleAutomation = jest.fn(async () => ({
+      ok: true,
+      output: 'opened',
+      model: 'Needle-3 (20-layer)',
+      steps: 1,
+    }))
+
+    await executeCloudTool(
+      'run_device_automation',
+      { text: 'open Settings' },
+      {
+        runNeedleAutomation,
+        evaluateSafety: jest.fn(async () => ({ status: 'success' as const, result: 'Allowed' })),
+      }
+    )
+
+    expect(runNeedleAutomation).toHaveBeenCalledWith('open Settings', { conversationId: 'default' })
+  })
+
+  it('does not run automation when the safety gate denies the instruction', async () => {
+    const runNeedleAutomation = jest.fn()
+    const evaluateSafety = jest.fn(async () => ({
+      status: 'error' as const,
+      result: 'Blocked by user policy',
+    }))
+
+    const result = await executeCloudTool(
+      'run_device_automation',
+      { instruction: 'delete all photos' },
+      { runNeedleAutomation, evaluateSafety }
+    )
+
+    expect(result.success).toBe(false)
+    expect(result.output).toBe('Blocked by user policy')
+    expect(runNeedleAutomation).not.toHaveBeenCalled()
+  })
+
+  it('rejects a second delegation while the first is still running', async () => {
+    let release!: (value: NeedleAutomationResult) => void
+    const runNeedleAutomation = jest.fn(
+      (_instruction: string, _options?: unknown) =>
+        new Promise<NeedleAutomationResult>((resolve) => {
+          release = resolve
+        })
+    )
+    const evaluateSafety = jest.fn(async () => ({ status: 'success' as const, result: 'Allowed' }))
+
+    const first = executeCloudTool(
+      'run_device_automation',
+      { instruction: 'open Settings' },
+      { runNeedleAutomation, evaluateSafety }
+    )
+    // Let the first call clear the safety gate and enter the bridge.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    const second = await executeCloudTool(
+      'run_device_automation',
+      { instruction: 'delete all photos' },
+      { runNeedleAutomation, evaluateSafety }
+    )
+
+    expect(second.success).toBe(false)
+    expect(second.output).toContain('already running')
+    expect(runNeedleAutomation).toHaveBeenCalledTimes(1)
+    // The second call must not open a parallel approval modal either.
+    expect(evaluateSafety).toHaveBeenCalledTimes(1)
+
+    release({ ok: true, output: 'done', model: 'Needle-3 (20-layer)', steps: 1 })
+    await expect(first).resolves.toMatchObject({ success: true })
+  })
+
+  it('caps an untrusted max_steps at the automation limit', async () => {
+    const runNeedleAutomation = jest.fn(async () => ({
+      ok: true,
+      output: 'done',
+      model: 'Needle-3 (20-layer)',
+      steps: 1,
+    }))
+
+    await executeCloudTool(
+      'run_device_automation',
+      { instruction: 'open Settings', max_steps: '9999' },
+      {
+        runNeedleAutomation,
+        evaluateSafety: jest.fn(async () => ({ status: 'success' as const, result: 'Allowed' })),
+      }
+    )
+
+    expect(runNeedleAutomation).toHaveBeenCalledWith('open Settings', {
+      conversationId: 'default',
+      maxSteps: 30,
+    })
+  })
+
+  it('rejects run_device_automation without an instruction', async () => {
+    const runNeedleAutomation = jest.fn()
+
+    const result = await executeCloudTool('run_device_automation', {}, { runNeedleAutomation })
+
+    expect(runNeedleAutomation).not.toHaveBeenCalled()
+    expect(result.success).toBe(false)
+    expect(result.output).toContain('needs an instruction')
   })
 
   it('blocks device tools if evaluateSafety returns an error', async () => {

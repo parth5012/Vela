@@ -18,13 +18,30 @@ Three engines, three formats — they are NOT interchangeable:
   accepts (that is a MediaPipe limit, not an app limit). A zip containing
   `TF_LITE_PREFILL_DECODE`, `TOKENIZER_MODEL`, and `METADATA`.
   **GGUF is a llama.cpp format and will never load in MediaPipe** — feeding one
-  to `LlmInference` aborts the process natively.
-- **GGUF** — llama.cpp via `llama.rn`; needs the Native (New Architecture) build.
+  to `LlmInference` aborts the process natively. **No `.task` model ships**:
+  this build has no MediaPipe module (`GemmaReactNativeModule` /
+  `com.google.mediapipe:tasks-genai`), so a `.task` row could only ever run in
+  mock mode. `.task` handling remains for imported custom bundles only.
+- **GGUF** — llama.cpp via `llama.rn`; needs the Native (New Architecture)
+  build AND `rnllamaBuildFromSource=true`, because the `llama.rn` npm package
+  ships no prebuilt `jniLibs` — without that flag no `librnllama.so` is packaged
+  and every GGUF model silently falls back to mock at runtime.
 - **`.cact`** — the static Needle engine (below).
 
-- **Model source** — the ungated `litert-community` HuggingFace repos. Every
-  `google/*` and Gemma LiteRT repo is gated (HTTP 401 without a token plus
-  license acceptance), which is why Gemma is not in `LOCAL_MODELS`.
+- **Model source** — ungated HuggingFace GGUF repos (Qwen official,
+  `QuantFactory/SmolLM-135M-Instruct-GGUF`, `TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF`,
+  `bartowski/Llama-3.2-1B-Instruct-GGUF`, `unsloth/Phi-4-mini-instruct-GGUF`,
+  `unsloth/DeepSeek-R1-Distill-Qwen-1.5B-GGUF`). The old `litert-community`
+  `.task` repos are no longer used. Every `google/*` and Gemma repo is gated
+  (HTTP 401 without a token plus license acceptance), which is why Gemma is not
+  in `LOCAL_MODELS`.
+- **Stale downloads** — replacing a `.task` row with a GGUF one keeps the same
+  model name for SmolLM / Qwen2.5 0.5B / TinyLlama, so a persisted
+  "downloaded" flag would point at an unreadable file. Download status is
+  therefore validated against `LocalModelSpec.format` via
+  `isStoredModelUsable()`; a mismatch shows "Not downloaded" and forces a
+  re-download. Config v7 maps the retired 1.5B `.task` names to their `(GGUF)`
+  twins.
 - **`LOCAL_MODELS`** — single source of truth in `utils/localLlm.ts`. Both
   `app/settings.tsx` and `app/index.tsx` import it; they previously kept
   independent copies that silently drifted to different URLs.
@@ -35,13 +52,16 @@ Three engines, three formats — they are NOT interchangeable:
 
 ### Needle `.cact` models (Wayfinder #289)
 
-- **Two models ship, not three** — `Needle-2 45M` (2048 context) and
-  `Needle-3 (20-layer)` (8192 context) in `LOCAL_MODELS`.
+- **Only `Needle-3 (20-layer)` (8192 context) ships in `LOCAL_MODELS`.** A
+  build statically links ONE engine generation, and the shipped archive is
+  generation 3, so `needle2.cact` is rejected by `needle_load`. Needle-2 was
+  removed from the picker (config v6 migrates a stale selection to Needle-3);
+  `-DNEEDLE_ENGINE_MODEL=needle2` still exists for a custom needle2 build.
   **Needle-1 (26M safetensors) is out of scope** — decided in #290
   (format/contract/licence mismatch). Never write "3 models".
-- **Model source** — `Cactus-Compute/needle2` and `Cactus-Compute/needle3`
-  (`needle2.cact`, `needle3.cact`). The old `cactus-ai/needle-45m` URL is dead
-  (HTTP 401); it was hard-migrated away in #294.
+- **Model source** — `Cactus-Compute/needle3` (`needle3.cact`). The needle2
+  archives remain pinned in `engine.lock.json` for needle2 builds. The old
+  `cactus-ai/needle-45m` URL is dead (HTTP 401); hard-migrated away in #294.
 - **Per-version magic** — 4-byte tags `0x05E12A83` (needle2) and `0x05E12A84`
   (needle3). Both sniff as `format: 'cact'`, so version-aware consumers read the
   separate `variant` field from `sniffNeedleVariant()` (`'needle2' |

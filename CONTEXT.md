@@ -63,7 +63,7 @@ A contiguous sequence of messages sent within the same calendar day in the Owner
 _Avoid_: Daily block, message date group
 
 **Needle Model**:
-One of the two on-device Cactus `.cact` models Vela ships — `Needle-2 45M` (2048 context) and `Needle-3 (20-layer)` (8192 context) — identified by its 4-byte magic tag (`0x05E12A83` needle2, `0x05E12A84` needle3) and run by the statically linked, Apache-2.0 Needle engine. Needle-1 (26M) was decided out of scope, so "three models" is never correct.
+The on-device Cactus `.cact` model Vela ships — `Needle-3 (20-layer)` (8192 context) — identified by its 4-byte magic tag (`0x05E12A84`) and run by the statically linked, Apache-2.0 Needle engine. A build links one engine generation only, so `Needle-2 45M` (`0x05E12A83`) is no longer offered: the shipped gen-3 engine rejects it. Needle-1 (26M) was decided out of scope, so "three models" is never correct.
 _Avoid_: Needle lineup, 3-model family
 
 **Local Model Format**:

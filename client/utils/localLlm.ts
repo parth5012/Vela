@@ -3,6 +3,10 @@ import { initLlama, LlamaContext } from 'llama.rn';
 import { useConfigStore } from '../store/useConfigStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NeedleModule from '../modules/needle';
+import {
+  NEEDLE_DEVICE_TOOLS_JSON,
+  buildNeedleAutomationPrompt,
+} from './needleDeviceTools';
 import type { NeedleStreamEvent } from '../modules/needle';
 import {
   beginGpuInitSession,
@@ -26,6 +30,43 @@ const GEMMA_STREAM_EVENT = 'GemmaLlmStream';
 /** Upper bound on a single generation before we give up and fall back. */
 const NATIVE_STREAM_TIMEOUT_MS = 120000;
 
+interface TokenStreamState {
+  finished: boolean;
+  failure: Error | null;
+}
+
+/**
+ * Shared queue-drain loop for the Needle / llama.cpp / MediaPipe streamers.
+ * Yields queued tokens, surfaces async failures, stops on done, and enforces
+ * the generation deadline. `waitOnce` resolves on the next native event (or a
+ * short poll fallback) — supplied by the caller so engine wiring stays local.
+ */
+async function* drainTokenStream(
+  queue: string[],
+  state: TokenStreamState,
+  onToken: ((token: string) => void) | undefined,
+  deadline: number,
+  timeoutMessage: string,
+  waitOnce: () => Promise<void>
+): AsyncGenerator<string, void, unknown> {
+  while (true) {
+    while (queue.length > 0) {
+      const token = queue.shift() as string;
+      onToken?.(token);
+      yield token;
+    }
+
+    if (state.failure) throw state.failure;
+    if (state.finished) break;
+
+    if (Date.now() > deadline) {
+      throw new Error(timeoutMessage);
+    }
+
+    await waitOnce();
+  }
+}
+
 type GemmaStreamEvent =
   | { type: 'token'; token?: string }
   | { type: 'done' }
@@ -44,6 +85,9 @@ let llamaContext: LlamaContext | null = null;
 
 /** Name of the model currently loaded into RAM, or null when nothing is loaded. */
 let loadedModelName: string | null = null;
+
+/** Format of the loaded model (cact | gguf | task), so custom .cact models route to Needle. */
+let loadedModelFormat: 'cact' | 'gguf' | 'task' | null = null;
 
 type LoadedStateListener = () => void;
 const loadedStateListeners = new Set<LoadedStateListener>();
@@ -97,6 +141,33 @@ export function localModelStorageKey(modelName: string): string {
   return `${LOCAL_MODEL_STORAGE_PREFIX}${modelName}`;
 }
 
+/**
+ * Engine family implied by a stored model path. The loader dispatches on the
+ * extension (not on `LocalModelSpec.format`), so a stale path from a previous
+ * model list would silently pick the wrong engine — and end up in mock mode.
+ */
+export function getModelFileFormat(path: string): 'gguf' | 'cact' | 'task' {
+  const lower = path.toLowerCase();
+  if (lower.endsWith('.gguf')) return 'gguf';
+  if (lower.endsWith('.cact')) return 'cact';
+  return 'task';
+}
+
+/**
+ * A "downloaded" record is only usable when the persisted flag is set AND the
+ * stored file matches the format the current model list declares. Model lists
+ * change across releases (`.task` → GGUF); without this check the picker keeps
+ * showing "Downloaded" for a file the packaged engine cannot open.
+ */
+export function isStoredModelUsable(
+  spec: Pick<LocalModelSpec, 'format'>,
+  flag: string | null,
+  path: string | null
+): boolean {
+  if (flag !== 'true' || !path) return false;
+  return getModelFileFormat(path) === spec.format;
+}
+
 export interface LocalModelSpec {
   name: string;
   size: string;
@@ -116,85 +187,66 @@ export interface LocalModelSpec {
 /**
  * Single source of truth for the downloadable local models.
  *
- * Two engines are supported:
- *  - `format: 'task'`  → MediaPipe `tasks-genai` via GemmaReactNativeModule.
- *    Requires the LiteRT `.task` bundle format; CANNOT read GGUF. Sourced from
- *    the ungated `litert-community` HuggingFace repos (no auth token needed).
- *  - `format: 'gguf'`  → llama.cpp GGUF via the `llama.rn` native module.
- *    Requires a Native (New Architecture) build — see android/gradle.properties.
- *    Sourced from ungated HuggingFace GGUF repos (verified gated:false).
+ * Every shipped model is runnable by an engine that is actually packaged:
+ *  - `format: 'gguf'` → llama.cpp via the `llama.rn` native module. The APK
+ *    packages llama.rn's prebuilt `librnllama*.so` archives (fetched and
+ *    SHA-256-verified by `scripts/fetch-llama-jni.js` in `postinstall`); no
+ *    source build is required. Sourced from ungated HuggingFace GGUF repos
+ *    (verified gated:false).
+ *  - `format: 'cact'` → the static Needle engine (generation 3).
  *
- * If a `.task` URL is swapped back to a GGUF URL, `createFromOptions` throws
- * and the app silently serves mock responses. Keep formats matched to engines.
+ * `format: 'task'` (MediaPipe `tasks-genai` / GemmaReactNativeModule) is still
+ * *supported* for imported custom bundles, but NO `.task` model ships: this
+ * build has no MediaPipe module, so a `.task` row could only ever run in mock
+ * mode. Those rows were replaced by GGUF equivalents (Qwen2.5 0.5B, TinyLlama,
+ * SmolLM) or dropped where a GGUF duplicate already existed (Qwen2.5 1.5B,
+ * DeepSeek-R1 1.5B).
+ *
+ * If a model's URL does not match its `format`, the loader throws and the app
+ * silently serves mock responses. Keep formats matched to engines.
  */
 export const LOCAL_MODELS: LocalModelSpec[] = [
   {
-    name: 'Needle-2 45M',
-    size: '~0.014 GB',
-    description: 'Ultra-fast on-device action & tool routing model (Needle Engine, 2048 context)',
-    downloadUrl: 'https://huggingface.co/Cactus-Compute/needle2/resolve/main/needle2.cact',
-    filename: 'needle2.cact',
-    format: 'cact',
-    contextSize: 2048,
-  },
-  {
     name: 'Needle-3 (20-layer)',
     size: '~0.035 GB',
-    description: 'Needle-3 full 20-layer model (Needle Engine, 8192 context)',
+    description:
+      'On-device device-automation model (Needle Engine, 8192 context). Non-Needle models call it through the run_device_automation tool.',
     downloadUrl: 'https://huggingface.co/Cactus-Compute/needle3/resolve/main/needle3.cact',
     filename: 'needle3.cact',
     format: 'cact',
     contextSize: 8192,
   },
   {
-    name: 'Qwen2.5 0.5B',
-    size: '~0.52 GB',
-    description: 'Fastest, lowest memory use',
+    name: 'SmolLM 135M',
+    size: '~0.11 GB',
+    description: 'Smallest, for low-end devices, llama.cpp engine',
     downloadUrl:
-      'https://huggingface.co/litert-community/Qwen2.5-0.5B-Instruct/resolve/main/Qwen2.5-0.5B-Instruct_multi-prefill-seq_q8_ekv1280.task',
-    filename: 'Qwen2.5-0.5B-Instruct_q8_ekv1280.task',
-    format: 'task',
+      'https://huggingface.co/QuantFactory/SmolLM-135M-Instruct-GGUF/resolve/main/SmolLM-135M-Instruct.Q4_K_M.gguf',
+    filename: 'SmolLM-135M-Instruct.Q4_K_M.gguf',
+    format: 'gguf',
+  },
+  {
+    name: 'Qwen2.5 0.5B',
+    size: '~0.49 GB',
+    description: 'Fastest, lowest memory use, llama.cpp engine',
+    downloadUrl:
+      'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf',
+    filename: 'qwen2.5-0.5b-instruct-q4_k_m.gguf',
+    format: 'gguf',
   },
   {
     name: 'TinyLlama 1.1B',
-    size: '~1.1 GB',
-    description: 'Balanced quality and speed',
+    size: '~0.67 GB',
+    description: 'Balanced quality and speed, llama.cpp engine',
     downloadUrl:
-      'https://huggingface.co/litert-community/TinyLlama-1.1B-Chat-v1.0/resolve/main/TinyLlama-1.1B-Chat-v1.0_multi-prefill-seq_q8_ekv1280.task',
-    filename: 'TinyLlama-1.1B-Chat-v1.0_q8_ekv1280.task',
-    format: 'task',
-  },
-  {
-    name: 'SmolLM 135M',
-    size: '~0.16 GB',
-    description: 'Smallest, for low-end devices',
-    downloadUrl:
-      'https://huggingface.co/litert-community/SmolLM-135M-Instruct/resolve/main/SmolLM-135M-Instruct_multi-prefill-seq_q8_ekv1280.task',
-    filename: 'SmolLM-135M-Instruct_q8_ekv1280.task',
-    format: 'task',
-  },
-  {
-    name: 'Qwen2.5 1.5B',
-    size: '~1.5 GB',
-    description: 'Best quality for its size, 2 GB peak RAM',
-    downloadUrl:
-      'https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv1280.task',
-    filename: 'Qwen2.5-1.5B-Instruct_q8_ekv1280.task',
-    format: 'task',
-  },
-  {
-    name: 'DeepSeek-R1 1.5B',
-    size: '~1.9 GB',
-    description: 'Reasoning model, thinks before answering',
-    downloadUrl:
-      'https://huggingface.co/litert-community/DeepSeek-R1-Distill-Qwen-1.5B/resolve/main/DeepSeek-R1-Distill-Qwen-1.5B_multi-prefill-seq_q8_ekv1280.task',
-    filename: 'DeepSeek-R1-Distill-Qwen-1.5B_q8_ekv1280.task',
-    format: 'task',
+      'https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf',
+    filename: 'tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf',
+    format: 'gguf',
   },
   {
     name: 'Qwen2.5 1.5B (GGUF)',
     size: '~1.06 GB',
-    description: 'ChatML, smaller than .task, llama.cpp engine',
+    description: 'ChatML, best quality for its size, llama.cpp engine',
     downloadUrl:
       'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf',
     filename: 'qwen2.5-1.5b-instruct-q4_k_m.gguf',
@@ -221,7 +273,7 @@ export const LOCAL_MODELS: LocalModelSpec[] = [
   {
     name: 'DeepSeek-R1 1.5B (GGUF)',
     size: '~1.06 GB',
-    description: 'Reasoning model, thinks before answering',
+    description: 'Reasoning model, thinks before answering, llama.cpp engine',
     downloadUrl:
       'https://huggingface.co/unsloth/DeepSeek-R1-Distill-Qwen-1.5B-GGUF/resolve/main/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf',
     filename: 'DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf',
@@ -295,12 +347,20 @@ async function resolveLiteRtBackend(
  *  - `.gguf` models use llama.cpp via `llama.rn` (requires New Architecture).
  * Gracefully falls back to mock initialization in test/preview/non-native environments.
  */
-export async function initializeLocalModel(throwOnFallback: boolean = false): Promise<void> {
+export async function initializeLocalModel(
+  throwOnFallback: boolean = false,
+  /**
+   * Load a specific model instead of the configured one. Used by the device
+   * automation bridge (`utils/needleAutomation`) to swap the planner out for
+   * the Needle engine and restore it afterwards without mutating user config.
+   */
+  modelNameOverride?: string
+): Promise<void> {
   if (isLocalLlmDown) {
     throw new Error('Local LLM is down/unavailable.');
   }
 
-  const localModelName = useConfigStore.getState().localModelName;
+  const localModelName = modelNameOverride || useConfigStore.getState().localModelName;
   const key = localModelStorageKey(localModelName) + '_path';
   const modelPath = await AsyncStorage.getItem(key);
   if (!modelPath) {
@@ -326,13 +386,22 @@ export async function initializeLocalModel(throwOnFallback: boolean = false): Pr
 
   if (isCact) {
     try {
+      // A HAVE_NEEDLE_ENGINE=0 build ships a stub: init() returns true and
+      // complete() returns canned device calls. Those calls would be executed as
+      // real taps, so refuse to "load" the engine instead of mocking silently.
+      if (!NeedleModule.hasNativeLibrary()) {
+        throw new Error(
+          'Needle engine is not packaged in this build (mock fallback only); on-device automation is disabled.'
+        );
+      }
       const cleanPath = modelPath.startsWith('file://') ? modelPath.slice(7) : modelPath;
       const ctxSize = useConfigStore.getState().localContextSize || 256;
-      const success = await NeedleModule.init(cleanPath, ctxSize);
+      const success = await NeedleModule.init(cleanPath, ctxSize, '', '', NEEDLE_DEVICE_TOOLS_JSON);
       if (!success) {
         throw new Error('NeedleModule initialization returned false');
       }
       loadedModelName = localModelName;
+      loadedModelFormat = 'cact';
       notifyLoadedStateChanged();
     } catch (error: any) {
       try {
@@ -342,6 +411,7 @@ export async function initializeLocalModel(throwOnFallback: boolean = false): Pr
   }
 
   loadedModelName = null;
+      loadedModelFormat = null;
       notifyLoadedStateChanged();
       const reason = error?.message || String(error);
       console.warn('NeedleModule initialization failed, using mock fallback:', reason);
@@ -372,10 +442,12 @@ export async function initializeLocalModel(throwOnFallback: boolean = false): Pr
           }
         );
         loadedModelName = localModelName;
+        loadedModelFormat = 'gguf';
         notifyLoadedStateChanged();
       } catch (error: any) {
         llamaContext = null;
         loadedModelName = null;
+        loadedModelFormat = null;
         notifyLoadedStateChanged();
         const reason = error?.message || String(error);
         console.warn('llama.rn initialization failed, using mock fallback:', reason);
@@ -440,6 +512,7 @@ export async function initializeLocalModel(throwOnFallback: boolean = false): Pr
       }
 
       loadedModelName = localModelName;
+      loadedModelFormat = 'task';
       notifyLoadedStateChanged();
     } catch (error: any) {
       if (isGpuBackend(targetBackend)) {
@@ -448,6 +521,7 @@ export async function initializeLocalModel(throwOnFallback: boolean = false): Pr
       const reason = error?.message || String(error);
       console.warn('Native local LLM initialization failed, using mock fallback:', reason);
       loadedModelName = null;
+      loadedModelFormat = null;
       notifyLoadedStateChanged();
       useFallback = true;
       localLlmFallbackReason = forceCpuFromCrash
@@ -506,6 +580,7 @@ export async function unloadLocalModel(): Promise<void> {
   }
 
   loadedModelName = null;
+  loadedModelFormat = null;
   isLocalModelLoaded = false;
   useFallback = false;
   localLlmFallbackReason = null;
@@ -529,19 +604,18 @@ export async function* streamLocalLlmResponse(
     throw new Error('Local model not loaded. Call initializeLocalModel() first.');
   }
 
-  const isCactModel = loadedModelName ? (
+  const isCactModel = loadedModelFormat === 'cact' || (loadedModelName ? (
     LOCAL_MODELS.find(m => m.name === loadedModelName)?.format === 'cact' ||
     loadedModelName.toLowerCase().endsWith('.cact') ||
     loadedModelName.includes('Needle')
-  ) : false;
+  ) : false);
 
   if (!useFallback && isCactModel) {
     let sub: any = null;
     try {
       const queue: string[] = [];
-      let finished = false;
+      const state: TokenStreamState = { finished: false, failure: null };
       let hasReceivedStreamTokens = false;
-      let failure: Error | null = null;
       let wake: (() => void) | null = null;
 
       const notify = () => {
@@ -592,43 +666,41 @@ export async function* streamLocalLlmResponse(
           }
           notify();
         } else if (event.type === 'done') {
-          finished = true;
+          state.finished = true;
           notify();
         }
       });
 
-      NeedleModule.complete(prompt).then((res) => {
+      NeedleModule.complete(
+        buildNeedleAutomationPrompt(prompt),
+        NEEDLE_DEVICE_TOOLS_JSON,
+        useConfigStore.getState().localMaxTokens || 128
+      ).then((res) => {
         if (!hasReceivedStreamTokens && queue.length === 0 && res.text) {
           queue.push(res.text);
         }
-        finished = true;
+        state.finished = true;
         notify();
       }).catch((err) => {
-        failure = err;
+        state.failure = err;
         notify();
       });
 
       const deadline = Date.now() + NATIVE_STREAM_TIMEOUT_MS;
-
-      while (true) {
-        while (queue.length > 0) {
-          const token = queue.shift() as string;
-          onToken?.(token);
-          yield token;
-        }
-
-        if (failure) throw failure;
-        if (finished && queue.length === 0) break;
-
-        if (Date.now() > deadline) {
-          throw new Error(`Needle streaming timed out after ${NATIVE_STREAM_TIMEOUT_MS / 1000}s`);
-        }
-
-        await new Promise<void>((resolve) => {
+      const waitOnce = () =>
+        new Promise<void>((resolve) => {
           wake = resolve;
           setTimeout(notify, 250);
         });
-      }
+
+      yield* drainTokenStream(
+        queue,
+        state,
+        onToken,
+        deadline,
+        `Needle streaming timed out after ${NATIVE_STREAM_TIMEOUT_MS / 1000}s`,
+        waitOnce
+      );
 
       return;
     } catch (error: any) {
@@ -645,8 +717,7 @@ export async function* streamLocalLlmResponse(
   if (!useFallback && llamaContext) {
     try {
       const queue: string[] = [];
-      let finished = false;
-      let failure: Error | null = null;
+      const state: TokenStreamState = { finished: false, failure: null };
       let wake: (() => void) | null = null;
 
       const notify = () => {
@@ -674,39 +745,31 @@ export async function* streamLocalLlmResponse(
 
       completionPromise.then(
         () => {
-          finished = true;
+          state.finished = true;
           notify();
         },
         (error) => {
-          failure = error instanceof Error ? error : new Error(String(error));
-          finished = true;
+          state.failure = error instanceof Error ? error : new Error(String(error));
+          state.finished = true;
           notify();
         }
       );
 
       const deadline = Date.now() + NATIVE_STREAM_TIMEOUT_MS;
-
-      while (true) {
-        while (queue.length > 0) {
-          const token = queue.shift() as string;
-          onToken?.(token);
-          yield token;
-        }
-
-        if (failure) throw failure;
-        if (finished) break;
-
-        if (Date.now() > deadline) {
-          throw new Error(
-            `Native streaming timed out after ${NATIVE_STREAM_TIMEOUT_MS / 1000}s`
-          );
-        }
-
-        await new Promise<void>((resolve) => {
+      const waitOnce = () =>
+        new Promise<void>((resolve) => {
           wake = resolve;
           setTimeout(notify, 250);
         });
-      }
+
+      yield* drainTokenStream(
+        queue,
+        state,
+        onToken,
+        deadline,
+        `Native streaming timed out after ${NATIVE_STREAM_TIMEOUT_MS / 1000}s`,
+        waitOnce
+      );
 
       return;
     } catch (error: any) {
@@ -727,8 +790,7 @@ export async function* streamLocalLlmResponse(
       const emitter = new NativeEventEmitter(GemmaNative);
 
       const queue: string[] = [];
-      let finished = false;
-      let failure: Error | null = null;
+      const state: TokenStreamState = { finished: false, failure: null };
       let wake: (() => void) | null = null;
 
       const notify = () => {
@@ -743,10 +805,10 @@ export async function* streamLocalLlmResponse(
             queue.push(event.token);
           }
         } else if (event?.type === 'done') {
-          finished = true;
+          state.finished = true;
         } else if (event?.type === 'error') {
-          failure = new Error(event.message || 'Native generation error');
-          finished = true;
+          state.failure = new Error(event.message || 'Native generation error');
+          state.finished = true;
         }
         notify();
       });
@@ -756,29 +818,21 @@ export async function* streamLocalLlmResponse(
       await GemmaNative.streamLlmResponse(prompt);
 
       const deadline = Date.now() + NATIVE_STREAM_TIMEOUT_MS;
-
-      while (true) {
-        while (queue.length > 0) {
-          const token = queue.shift() as string;
-          onToken?.(token);
-          yield token;
-        }
-
-        if (failure) throw failure;
-        if (finished) break;
-
-        if (Date.now() > deadline) {
-          throw new Error(
-            `Native streaming timed out after ${NATIVE_STREAM_TIMEOUT_MS / 1000}s`
-          );
-        }
-
-        // Wait for the next event rather than polling hot.
-        await new Promise<void>((resolve) => {
+      const waitOnce = () =>
+        new Promise<void>((resolve) => {
           wake = resolve;
           setTimeout(notify, 250);
         });
-      }
+
+      // Wait for events via the shared drain loop rather than polling hot.
+      yield* drainTokenStream(
+        queue,
+        state,
+        onToken,
+        deadline,
+        `Native streaming timed out after ${NATIVE_STREAM_TIMEOUT_MS / 1000}s`,
+        waitOnce
+      );
 
       return;
     } catch (error: any) {

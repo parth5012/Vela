@@ -461,7 +461,18 @@ export const useConfigStore = create<ConfigState>()(
       // isLocalMode, adding cloudProviders and activeCloudProvider.
       // v4 (#356/#357): defaultPersona -> defaultAgent.
       // v5 (#357): suggestionStarters[].persona -> suggestionStarters[].agent.
-      version: 5,
+      // v6 (PR #277 follow-up): 'Needle-2 45M' removed from LOCAL_MODELS — the
+      // shipped build links exactly one Needle engine generation (gen 3), so a
+      // needle2.cact can never load (`needle_load` rejects the mismatch). A
+      // persisted needle2 selection moves to 'Needle-3 (20-layer)'.
+      // v7 (PR #277 follow-up): every LiteRT `.task` model was replaced by a
+      // GGUF equivalent (this build packages no MediaPipe engine, so `.task`
+      // rows were mock-only). The two 1.5B rows lost their `.task` duplicate,
+      // so a persisted selection moves to the '(GGUF)' twin. Same-name rows
+      // (SmolLM 135M, Qwen2.5 0.5B, TinyLlama 1.1B) are handled by the
+      // format-aware download check, which forces a re-download instead of
+      // trying to load the stale `.task` file.
+      version: 7,
       migrate: (persistedState: any, fromVersion: number) => {
         if (persistedState) {
           if (fromVersion < 4) {
@@ -502,6 +513,20 @@ export const useConfigStore = create<ConfigState>()(
               persistedState.activeCloudProvider = 'gemini';
             }
             persistedState.isConfigured = computeIsConfigured(persistedState);
+          }
+          if (fromVersion < 6 && persistedState.localModelName === 'Needle-2 45M') {
+            persistedState.localModelName = 'Needle-3 (20-layer)';
+          }
+          if (fromVersion < 7) {
+            // `.task` (MediaPipe) rows are gone; only their GGUF twins ship.
+            const taskToGguf: Record<string, string> = {
+              'Qwen2.5 1.5B': 'Qwen2.5 1.5B (GGUF)',
+              'DeepSeek-R1 1.5B': 'DeepSeek-R1 1.5B (GGUF)',
+            };
+            const mapped = taskToGguf[persistedState.localModelName];
+            if (mapped) {
+              persistedState.localModelName = mapped;
+            }
           }
           if (persistedState.maxSteps === undefined) {
             persistedState.maxSteps = 15;

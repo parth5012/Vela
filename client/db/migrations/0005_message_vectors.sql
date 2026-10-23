@@ -5,4 +5,3 @@ CREATE TABLE `message_vectors` (
 	`created_at` integer NOT NULL,
 	FOREIGN KEY (`message_id`) REFERENCES `messages`(`id`) ON UPDATE no action ON DELETE cascade
 );
-

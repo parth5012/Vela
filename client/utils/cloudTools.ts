@@ -5,6 +5,12 @@ import { executeDeviceAction } from './deviceActionExecutor'
 import { evaluateSafety } from './safetyManager'
 import { searchStandalone } from './standaloneSearch'
 import { saveMemory as defaultSaveMemory, deleteMemory as defaultDeleteMemory } from '../db/memoryRepository'
+import {
+  isNeedleAutomationRunning,
+  runNeedleDeviceAutomation,
+  type NeedleAutomationOptions,
+  type NeedleAutomationResult,
+} from './needleAutomation'
 
 export interface CloudToolResult {
   success: boolean
@@ -28,6 +34,11 @@ export interface CloudExecutorDeps {
   evaluateSafety?: SafetyEvaluator
   webSearch?: WebSearchFn
   memoryStore?: MemoryStoreOps
+  /** Planner -> Needle bridge; injectable so tests never touch the engine. */
+  runNeedleAutomation?: (
+    instruction: string,
+    options?: NeedleAutomationOptions
+  ) => Promise<NeedleAutomationResult>
 }
 
 export function listCloudToolNames(caps: StandaloneCapabilities = {}): string[] {
@@ -36,6 +47,21 @@ export function listCloudToolNames(caps: StandaloneCapabilities = {}): string[] 
 
 function isDeviceTool(toolName: string): boolean {
   return toolName.startsWith('device_')
+}
+
+/** Upper bound for `max_steps`: an untrusted model must not run an unbounded loop. */
+export const MAX_AUTOMATION_STEPS = 30
+
+/**
+ * Covers the window between the approval prompt and the engine swap. The
+ * safety store keeps a single pending task, so two parallel delegations would
+ * overwrite one approval and orphan the first call.
+ */
+let automationRequestInFlight = false
+
+/** Test hook: reset the single-flight state between cases. */
+export function resetAutomationRequestGuard(): void {
+  automationRequestInFlight = false
 }
 
 export function buildCloudToolDescriptions(caps: StandaloneCapabilities = {}): Record<string, string> {
@@ -118,6 +144,64 @@ export async function executeCloudTool(
     const action = await executeDevice(toolName, args.target, args.value ?? args.text)
     const success = action.outcome === 'executed' || action.outcome === 'simulated'
     return { success, output: action.observation }
+  }
+
+  if (toolName === 'run_device_automation') {
+    // Models sometimes emit the task as a raw call body (`args.text`) or as
+    // `target`; accept those so the planner->Needle bridge is reachable even
+    // when the model ignores the JSON parameter name.
+    const instruction = String(args.instruction ?? args.target ?? args.text ?? '').trim()
+    if (!instruction) {
+      return {
+        success: false,
+        output: 'run_device_automation needs an instruction, e.g. "open Settings".',
+      }
+    }
+    const rawMaxSteps = Number(args.max_steps ?? args.maxSteps)
+    const requestedSteps =
+      Number.isFinite(rawMaxSteps) && rawMaxSteps > 0 ? Math.floor(rawMaxSteps) : undefined
+    const maxSteps = requestedSteps ? Math.min(requestedSteps, MAX_AUTOMATION_STEPS) : undefined
+
+    if (automationRequestInFlight || isNeedleAutomationRunning()) {
+      return {
+        success: false,
+        output: 'Another device automation is already running. Wait for it to finish before starting another.',
+      }
+    }
+
+    automationRequestInFlight = true
+    try {
+      // Gate the delegation itself: per-step checks only see a tool name plus a
+      // coordinate/ref, so the instruction's intent ("delete all photos") is lost
+      // before classification. This boundary check classifies that intent once.
+      const safetyCheck = deps.evaluateSafety ?? evaluateSafety
+      if (safetyCheck) {
+        try {
+          const safety = await safetyCheck('run_device_automation', instruction)
+          if (safety.status === 'error') {
+            return { success: false, output: safety.result }
+          }
+        } catch (e: any) {
+          return { success: false, output: `Safety evaluation failed: ${e?.message || e}` }
+        }
+      }
+
+      const runAutomation = deps.runNeedleAutomation ?? runNeedleDeviceAutomation
+      try {
+        const result = await runAutomation(instruction, {
+          conversationId: String(args.conversation_id || 'default'),
+          ...(maxSteps ? { maxSteps } : {}),
+        })
+        return { success: result.ok, output: result.output }
+      } catch (error: any) {
+        return {
+          success: false,
+          output: `Device automation failed: ${error?.message || String(error)}`,
+        }
+      }
+    } finally {
+      automationRequestInFlight = false
+    }
   }
 
   if (toolName === 'web_search') {

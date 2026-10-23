@@ -350,19 +350,17 @@ export async function detectRamBytes(): Promise<number> {
  *
  * | Model                    | Size     | <=4 GB     | 4-6 GB     | 6-8 GB     | >8 GB      |
  * |--------------------------|----------|------------|------------|------------|-----------|
- * | Needle-2 45M             | ~0.014 GB| recommended| recommended| recommended| recommended|
  * | Needle-3 (20-layer)      | ~0.035 GB| recommended| recommended| recommended| recommended|
- * | SmolLM 135M              | ~0.16 GB | recommended| recommended| recommended| recommended|
- * | Qwen2.5 0.5B             | ~0.52 GB | borderline | recommended| recommended| recommended|
+ * | SmolLM 135M              | ~0.11 GB | recommended| recommended| recommended| recommended|
+ * | Qwen2.5 0.5B             | ~0.49 GB | borderline | recommended| recommended| recommended|
  * | Llama 3.2 1B (GGUF)      | ~0.81 GB | unsupported| recommended| recommended| recommended|
- * | TinyLlama 1.1B           | ~1.1 GB  | unsupported| borderline | recommended| recommended|
+ * | TinyLlama 1.1B           | ~0.67 GB | unsupported| borderline | recommended| recommended|
  * | Qwen2.5 1.5B (GGUF)      | ~1.06 GB | unsupported| borderline | recommended| recommended|
  * | DeepSeek-R1 1.5B (GGUF)  | ~1.06 GB | unsupported| borderline | recommended| recommended|
- * | Qwen2.5 1.5B             | ~1.5 GB  | unsupported| borderline | recommended| recommended|
- * | DeepSeek-R1 1.5B         | ~1.9 GB  | unsupported| borderline | recommended| recommended|
  * | Phi-4 Mini (GGUF)        | ~2.5 GB  | unsupported| unsupported| recommended| recommended|
  *
- * *Mid-tier also covers task-variant names (without GGUF suffix) for 1.5B models.
+ * Every shipped row is GGUF or cact; the LiteRT `.task` rows were removed when
+ * the `.task` entries were replaced by GGUF equivalents.
  * Keep strings in sync with LOCAL_MODELS to prevent drift.
  *
  * TODO(follow-up ladder map, after #289): only the shipping `.cact` files are
@@ -382,7 +380,6 @@ export function getModelStatusForRam(modelName: string, ramBytes: number): Model
       return 'recommended';
     }
     if (
-      modelName === 'Needle-2 45M' ||
       modelName === 'Needle-3 (20-layer)' ||
       modelName === 'SmolLM 135M'
     ) {
@@ -392,7 +389,6 @@ export function getModelStatusForRam(modelName: string, ramBytes: number): Model
     return 'unsupported';
   } else if (ramGB <= 6) {
     if (
-      modelName === 'Needle-2 45M' ||
       modelName === 'Needle-3 (20-layer)' ||
       modelName === 'SmolLM 135M' ||
       modelName === 'Qwen2.5 0.5B' ||
@@ -403,9 +399,7 @@ export function getModelStatusForRam(modelName: string, ramBytes: number): Model
     if (
       modelName === 'TinyLlama 1.1B' ||
       modelName === 'Qwen2.5 1.5B (GGUF)' ||
-      modelName === 'DeepSeek-R1 1.5B (GGUF)' ||
-      modelName === 'Qwen2.5 1.5B' ||
-      modelName === 'DeepSeek-R1 1.5B'
+      modelName === 'DeepSeek-R1 1.5B (GGUF)'
     ) {
       return 'borderline';
     }
@@ -423,7 +417,7 @@ export function getModelStatusForRam(modelName: string, ramBytes: number): Model
  * - <= 8 GB:  Qwen2.5 1.5B (GGUF),    ctx 4096, max 1024
  * - > 8 GB:   Qwen2.5 1.5B (GGUF),    ctx 8192, max 4096
  *
- * Needle entries (Needle-2 45M / Needle-3 (20-layer)) are never returned as a
+ * Needle entries (Needle-3 (20-layer)) are never returned as a
  * tier preset: they are 'recommended' on every tier via getModelStatusForRam
  * (so the picker never hides them), but this function keeps returning the chat
  * presets above. Needle session RAM is TBC (#292) — do not invent a number to
