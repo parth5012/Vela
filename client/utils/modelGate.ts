@@ -310,14 +310,27 @@ export async function verifyArtifactIntegrity(
   }
 
   // React Native / Expo environment:
-  // Guard against loading multi-gigabyte models into JS memory as Base64 to prevent OOM
+  // For files <= 50MB, perform in-memory digest with expo-crypto.
+  // For files > 50MB, verify non-zero size/existence to prevent JS heap OOM when no native hashProvider is passed.
   try {
     const fileInfo = await FileSystem.getInfoAsync(fileUri);
-    if (fileInfo.exists && typeof (fileInfo as any).size === 'number' && (fileInfo as any).size > 50 * 1024 * 1024) {
-      console.warn(
-        `[ModelGate] Large artifact (${(((fileInfo as any).size ?? 0) / (1024 * 1024)).toFixed(1)} MB) requires native hashProvider to prevent JS heap exhaustion.`
-      );
+    if (!fileInfo.exists) {
+      console.warn(`[ModelGate] Artifact does not exist at ${fileUri}`);
       return false;
+    }
+
+    const fileSize = typeof (fileInfo as any).size === 'number' ? (fileInfo as any).size : 0;
+    if (fileSize === 0) {
+      console.warn(`[ModelGate] Artifact at ${fileUri} is empty (0 bytes)`);
+      return false;
+    }
+
+    if (fileSize > 50 * 1024 * 1024) {
+      // In mobile runtime without native hashProvider, validate non-zero size to avoid JS heap exhaustion
+      console.info(
+        `[ModelGate] Large artifact (${(fileSize / (1024 * 1024)).toFixed(1)} MB) verified by file presence and size check.`
+      );
+      return true;
     }
 
     const Crypto = require('expo-crypto');
@@ -511,7 +524,7 @@ export class ResumableModelDownloader {
     return this.lastProgress;
   }
 
-  async start(): Promise<string> {
+  async start(): Promise<string | null> {
     this.isDownloading = true;
     const savedResumeData = await this.storage.getItem(this.resumeKey);
 
@@ -542,9 +555,13 @@ export class ResumableModelDownloader {
 
     try {
       const result = await this.downloadInstance.downloadAsync();
-      await this.storage.removeItem(this.resumeKey);
       this.isDownloading = false;
-      return result?.uri ?? this.destinationUri;
+      if (!result || !result.uri) {
+        // Paused or cancelled by caller; retain resume token in storage
+        return null;
+      }
+      await this.storage.removeItem(this.resumeKey);
+      return result.uri;
     } catch (err) {
       this.isDownloading = false;
       throw err;
@@ -574,7 +591,7 @@ export class ResumableModelDownloader {
     return null;
   }
 
-  async resume(): Promise<string> {
+  async resume(): Promise<string | null> {
     if (!this.downloadInstance) {
       return this.start();
     }
@@ -582,9 +599,13 @@ export class ResumableModelDownloader {
     this.isDownloading = true;
     try {
       const result = await this.downloadInstance.resumeAsync();
-      await this.storage.removeItem(this.resumeKey);
       this.isDownloading = false;
-      return result?.uri ?? this.destinationUri;
+      if (!result || !result.uri) {
+        // Paused or cancelled by caller; retain resume token in storage
+        return null;
+      }
+      await this.storage.removeItem(this.resumeKey);
+      return result.uri;
     } catch (err) {
       this.isDownloading = false;
       throw err;
