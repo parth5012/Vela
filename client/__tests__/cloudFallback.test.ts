@@ -264,6 +264,56 @@ describe('WF-10: Cloud Fallback Path & Privacy Disclosure Gate', () => {
       ]);
     });
 
+    it('assembles streaming tool calls from SSE chunks', async () => {
+      const client = new OpenAiCompatibleClient(mockRemoteConfig, mockFetch);
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        body: {
+          getReader: () => {
+            const chunks = [
+              'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_123","type":"function","function":{"name":"set_timer","arguments":"{\\"duration\\":"}}]}}]}\n\n',
+              'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"60}"}}]}}]}\n\n',
+              'data: [DONE]\n\n',
+            ];
+            let i = 0;
+            return {
+              read: async () => {
+                if (i >= chunks.length) return { done: true, value: undefined };
+                const val = new TextEncoder().encode(chunks[i++]);
+                return { done: false, value: val };
+              },
+            };
+          },
+        },
+      });
+
+      const response = await client.streamChat({
+        messages: [{ role: 'user', content: 'Set a 60s timer' }],
+      });
+
+      expect(response.toolCalls).toBeDefined();
+      expect(response.toolCalls).toHaveLength(1);
+      expect(response.toolCalls![0].name).toBe('set_timer');
+      expect(response.toolCalls![0].args).toEqual({ duration: 60 });
+    });
+
+    it('rejects immediately when external signal is pre-aborted without making network calls', async () => {
+      const client = new OpenAiCompatibleClient(mockRemoteConfig, mockFetch);
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(
+        client.chat({
+          messages: [{ role: 'user', content: 'Hello' }],
+          signal: controller.signal,
+        })
+      ).rejects.toThrow('Request aborted by caller');
+
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
     it('accumulates local token metering across multiple requests and allows reset', async () => {
       const client = new OpenAiCompatibleClient(mockRemoteConfig, mockFetch);
 
