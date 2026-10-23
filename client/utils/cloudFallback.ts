@@ -261,59 +261,98 @@ export class OpenAiCompatibleClient implements AiExecutionProvider {
       const decoder = new TextDecoder('utf-8');
       let buffer = '';
 
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
+      const onAbort = () => {
+        if (typeof reader.cancel === 'function') {
+          reader.cancel().catch(() => {});
+        }
+      };
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
+      if (request.signal) {
+        if (request.signal.aborted) {
+          if (typeof reader.cancel === 'function') {
+            await reader.cancel().catch(() => {});
+          }
+          throw new Error('Request aborted by caller');
+        }
+        request.signal.addEventListener('abort', onAbort, { once: true });
+      }
 
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || !trimmed.startsWith('data:')) continue;
-          const dataContent = trimmed.slice(5).trim();
-          if (dataContent === '[DONE]') continue;
-
-          try {
-            const parsed = JSON.parse(dataContent);
-            const delta = parsed.choices?.[0]?.delta;
-            const deltaContent = delta?.content;
-            if (deltaContent) {
-              accumulatedText += deltaContent;
-              if (request.onToken) {
-                request.onToken(deltaContent);
-              }
+      try {
+        while (true) {
+          if (request.signal?.aborted) {
+            if (typeof reader.cancel === 'function') {
+              await reader.cancel().catch(() => {});
             }
-            if (delta?.tool_calls && Array.isArray(delta.tool_calls)) {
-              for (const tc of delta.tool_calls) {
-                const idx = tc.index ?? 0;
-                if (!toolCallAccumulator[idx]) {
-                  toolCallAccumulator[idx] = {
-                    id: tc.id || `call_${idx}`,
-                    name: tc.function?.name || '',
-                    arguments: tc.function?.arguments || '',
-                  };
-                } else {
-                  if (tc.id) toolCallAccumulator[idx].id = tc.id;
-                  if (tc.function?.name) toolCallAccumulator[idx].name += tc.function.name;
-                  if (tc.function?.arguments) toolCallAccumulator[idx].arguments += tc.function.arguments;
+            throw new Error('Request aborted by caller');
+          }
+
+          const { value, done } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+
+          for (const line of lines) {
+            if (request.signal?.aborted) {
+              if (typeof reader.cancel === 'function') {
+                await reader.cancel().catch(() => {});
+              }
+              throw new Error('Request aborted by caller');
+            }
+
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith('data:')) continue;
+            const dataContent = trimmed.slice(5).trim();
+            if (dataContent === '[DONE]') continue;
+
+            try {
+              const parsed = JSON.parse(dataContent);
+              const delta = parsed.choices?.[0]?.delta;
+              const deltaContent = delta?.content;
+              if (deltaContent) {
+                accumulatedText += deltaContent;
+                if (request.onToken) {
+                  request.onToken(deltaContent);
                 }
               }
+              if (delta?.tool_calls && Array.isArray(delta.tool_calls)) {
+                for (const tc of delta.tool_calls) {
+                  const idx = tc.index ?? 0;
+                  if (!toolCallAccumulator[idx]) {
+                    toolCallAccumulator[idx] = {
+                      id: tc.id || `call_${idx}`,
+                      name: tc.function?.name || '',
+                      arguments: tc.function?.arguments || '',
+                    };
+                  } else {
+                    if (tc.id) toolCallAccumulator[idx].id = tc.id;
+                    if (tc.function?.name) toolCallAccumulator[idx].name += tc.function.name;
+                    if (tc.function?.arguments) toolCallAccumulator[idx].arguments += tc.function.arguments;
+                  }
+                }
+              }
+              if (parsed.usage) {
+                streamUsage = {
+                  promptTokens: parsed.usage.prompt_tokens ?? 0,
+                  completionTokens: parsed.usage.completion_tokens ?? 0,
+                  totalTokens: parsed.usage.total_tokens ?? 0,
+                };
+              }
+            } catch {
+              // Ignore incomplete chunks
             }
-            if (parsed.usage) {
-              streamUsage = {
-                promptTokens: parsed.usage.prompt_tokens ?? 0,
-                completionTokens: parsed.usage.completion_tokens ?? 0,
-                totalTokens: parsed.usage.total_tokens ?? 0,
-              };
-            }
-          } catch {
-            // Ignore incomplete chunks
           }
+        }
+      } finally {
+        if (request.signal) {
+          request.signal.removeEventListener('abort', onAbort);
         }
       }
     } else {
+      if (request.signal?.aborted) {
+        throw new Error('Request aborted by caller');
+      }
       // Fallback for non-streaming reader mock
       const text = await response.text();
       accumulatedText = text;
