@@ -394,5 +394,39 @@ describe('WF-05: Model Download + Device Capability Gate', () => {
       expect(finalUri).toBe('/data/models/model.litertlm');
       expect(mockStorage['download_resume_minicpm5-2b-int4']).toBeUndefined();
     });
+
+    it('returns null and preserves resume key when download is paused (downloadAsync returns undefined)', async () => {
+      const mockStorage: Record<string, string> = {
+        'download_resume_minicpm5-2b-int4': 'saved_token_456',
+      };
+
+      const mockDownloadResumable = {
+        downloadAsync: jest.fn().mockResolvedValue(undefined), // Expo returns undefined on pause
+        pauseAsync: jest.fn().mockResolvedValue({ resumeData: 'saved_token_456' }),
+        resumeAsync: jest.fn().mockResolvedValue(undefined),
+      };
+
+      const factory = jest.fn().mockReturnValue(mockDownloadResumable);
+
+      const downloader = new ResumableModelDownloader({
+        modelConfig: mockModel,
+        destinationUri: '/data/models/model.litertlm',
+        storage: {
+          getItem: async (key) => mockStorage[key] ?? null,
+          setItem: async (key, val) => {
+            mockStorage[key] = val;
+          },
+          removeItem: async (key) => {
+            delete mockStorage[key];
+          },
+        },
+        createDownloadResumableFn: factory,
+      });
+
+      const result = await downloader.start();
+      expect(result).toBeNull();
+      // Resume token must NOT be purged
+      expect(mockStorage['download_resume_minicpm5-2b-int4']).toBe('saved_token_456');
+    });
   });
 });
