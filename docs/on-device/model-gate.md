@@ -59,7 +59,7 @@ Per **WF-01** product decisions, model download endpoints and artifact hashes ar
   "filename": "MiniCPM5-2B_int4.litertlm",
   "format": "litertlm",
   "sizeBytes": 1664299000,
-  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "sha256": "7b98f280a559d8717596d66e850b57e7eb372a9a83424696e19b4e7235b0ff72",
   "minRamGb": 6,
   "minStorageGb": 3
 }
@@ -81,7 +81,7 @@ Because the MiniCPM5-2B INT4 artifact is **~1.55 GB**, unconstrained cellular do
 
 ## 5. SHA-256 Integrity Verification & Corrupt Artifact Recovery
 
-To prevent partial, truncated, or corrupted model files from crashing native runtimes, verification and recovery run automatically:
+To prevent partial, truncated, or corrupted model files from crashing native runtimes, verification and recovery helpers are specified and provided in `client/utils/modelGate.ts` (`verifyArtifactIntegrity`, `recoverCorruptArtifact`):
 
 1. **Pre-flight Range Check**: An HTTP `Range: bytes=0-15` request verifies file availability and format headers before downloading the full artifact.
 2. **SHA-256 Digest**: Upon download completion, `verifyArtifactIntegrity(fileUri, expectedSha256)` computes the cryptographic hash.

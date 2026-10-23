@@ -325,9 +325,9 @@ export function getDynamicModelStatusForRam(
   return 'unsupported';
 }
 
-export async function detectRamBytes(): Promise<number> {
+export async function detectRamBytes(options?: { allowEmulator?: boolean }): Promise<number> {
   if (Platform.OS === 'web') {
-    return 6 * 1024 * 1024 * 1024; // 6 GB default for web/simulation
+    return options?.allowEmulator ? 6 * 1024 * 1024 * 1024 : 0; // default for web simulation only when allowed
   }
   
   try {
@@ -339,7 +339,7 @@ export async function detectRamBytes(): Promise<number> {
     console.warn('[ramDetection] Failed to read totalMemory from Device api:', err);
   }
   
-  return 6 * 1024 * 1024 * 1024; // fallback 6 GB if not available
+  return options?.allowEmulator ? 6 * 1024 * 1024 * 1024 : 0; // return 0 when unknown to fail closed
 }
 
 /**

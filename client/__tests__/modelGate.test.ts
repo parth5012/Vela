@@ -100,6 +100,30 @@ describe('WF-05: Model Download + Device Capability Gate', () => {
       expect(result.status).toBe('OK');
       expect(result.canRunOnDevice).toBe(true);
     });
+
+    it('returns UNSUPPORTED when device RAM cannot be determined or is 0 bytes', async () => {
+      const result = await evaluateDeviceCapabilities({
+        ramBytes: 0,
+        freeDiskBytes: 10 * GB,
+        architecture: 'arm64-v8a',
+      });
+
+      expect(result.status).toBe('UNSUPPORTED');
+      expect(result.canRunOnDevice).toBe(false);
+      expect(result.reasons.some((r) => r.includes('Unable to determine device RAM'))).toBe(true);
+    });
+
+    it('returns UNSUPPORTED when free disk storage is 0 or cannot be read', async () => {
+      const result = await evaluateDeviceCapabilities({
+        ramBytes: 8 * GB,
+        freeDiskBytes: 0,
+        architecture: 'arm64-v8a',
+      });
+
+      expect(result.status).toBe('UNSUPPORTED');
+      expect(result.canRunOnDevice).toBe(false);
+      expect(result.reasons.some((r) => r.includes('Unable to determine free storage'))).toBe(true);
+    });
   });
 
   describe('Dynamic Remote Model Config (Never Hardcoded)', () => {
@@ -139,7 +163,7 @@ describe('WF-05: Model Download + Device Capability Gate', () => {
           filename: 'MiniCPM5-2B_int4.litertlm',
           format: 'litertlm',
           sizeBytes: 1664299000,
-          sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+          sha256: '7b98f280a559d8717596d66e850b57e7eb372a9a83424696e19b4e7235b0ff72',
           minRamGb: 6,
           minStorageGb: 3,
         }),
@@ -148,6 +172,23 @@ describe('WF-05: Model Download + Device Capability Gate', () => {
       const config = await fetchRemoteModelConfig(undefined, mockFetch);
       expect(config.modelId).toBe('minicpm5-2b-int4');
       expect(mockFetch).toHaveBeenCalled();
+    });
+
+    it('rejects malformed remote payloads (invalid sha256 or non-https URL) and uses fallback config', async () => {
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          modelId: 'bad-model',
+          downloadUrl: 'http://insecure.example.com/model.litertlm', // Non-https
+          sha256: 'short_hash', // Not 64 hex characters
+          sizeBytes: -10, // Invalid size
+          format: 'invalid_format',
+        }),
+      } as any);
+
+      const config = await fetchRemoteModelConfig('https://api.vela.app/config/bad', mockFetch);
+      expect(config.modelId).toBe('minicpm5-2b-int4');
+      expect(config.sha256).toBe('7b98f280a559d8717596d66e850b57e7eb372a9a83424696e19b4e7235b0ff72');
     });
   });
 
@@ -187,12 +228,12 @@ describe('WF-05: Model Download + Device Capability Gate', () => {
   describe('SHA-256 Integrity Verification & Corrupt Artifact Recovery', () => {
     it('verifies valid file checksum against expected SHA-256', async () => {
       const mockHasher = jest.fn().mockResolvedValue(
-        'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+        '7b98f280a559d8717596d66e850b57e7eb372a9a83424696e19b4e7235b0ff72'
       );
 
       const isValid = await verifyArtifactIntegrity(
         '/data/models/MiniCPM5-2B_int4.litertlm',
-        'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+        '7b98f280a559d8717596d66e850b57e7eb372a9a83424696e19b4e7235b0ff72',
         mockHasher
       );
 
@@ -205,7 +246,7 @@ describe('WF-05: Model Download + Device Capability Gate', () => {
 
       const isValid = await verifyArtifactIntegrity(
         '/data/models/MiniCPM5-2B_int4.litertlm',
-        'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+        '7b98f280a559d8717596d66e850b57e7eb372a9a83424696e19b4e7235b0ff72',
         mockHasher
       );
 
@@ -229,6 +270,38 @@ describe('WF-05: Model Download + Device Capability Gate', () => {
       expect(mockDelete).toHaveBeenCalledWith('/data/models/MiniCPM5-2B_int4.litertlm', { idempotent: true });
       expect(mockRemoveItem).toHaveBeenCalledWith('download_resume_minicpm5-2b-int4');
       expect(mockRemoveItem).toHaveBeenCalledWith('model_status_minicpm5-2b-int4');
+    });
+
+    it('returns recovered: false when file deletion fails', async () => {
+      const mockDelete = jest.fn().mockRejectedValue(new Error('Permission denied'));
+      const mockRemoveItem = jest.fn().mockResolvedValue(undefined);
+
+      const recovery = await recoverCorruptArtifact(
+        '/data/models/MiniCPM5-2B_int4.litertlm',
+        'minicpm5-2b-int4',
+        {
+          deleteAsync: mockDelete,
+          removeItem: mockRemoveItem,
+        }
+      );
+
+      expect(recovery.recovered).toBe(false);
+    });
+
+    it('returns recovered: false when storage key removal rejects', async () => {
+      const mockDelete = jest.fn().mockResolvedValue(undefined);
+      const mockRemoveItem = jest.fn().mockRejectedValue(new Error('AsyncStorage error'));
+
+      const recovery = await recoverCorruptArtifact(
+        '/data/models/MiniCPM5-2B_int4.litertlm',
+        'minicpm5-2b-int4',
+        {
+          deleteAsync: mockDelete,
+          removeItem: mockRemoveItem,
+        }
+      );
+
+      expect(recovery.recovered).toBe(false);
     });
   });
 
@@ -268,6 +341,25 @@ describe('WF-05: Model Download + Device Capability Gate', () => {
       expect(outcome.modelConfig.modelId).toBe('minicpm5-2b-int4');
     });
 
+    it('blocks download when networkOptions.isWifi is omitted on wifiOnly policy', async () => {
+      const gate = new ModelDownloadGate({
+        capabilityOptions: {
+          ramBytes: 8 * GB,
+          freeDiskBytes: 10 * GB,
+          architecture: 'arm64-v8a',
+        },
+        networkOptions: {
+          // isWifi omitted -> defaults to false (not assumed Wi-Fi)
+          wifiOnly: true,
+          allowCellular: false,
+        },
+      });
+
+      const outcome = await gate.prepareDownload();
+      expect(outcome.ready).toBe(false);
+      expect(outcome.error).toContain('Wi-Fi only policy');
+    });
+
     it('enforces higher RAM and disk requirements when specified by remote model config', async () => {
       const mockFetch = jest.fn().mockResolvedValue({
         ok: true,
@@ -278,7 +370,7 @@ describe('WF-05: Model Download + Device Capability Gate', () => {
           filename: 'large.litertlm',
           format: 'litertlm',
           sizeBytes: 4000000000,
-          sha256: 'abc123',
+          sha256: 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2',
           minRamGb: 12,
           minStorageGb: 8,
         }),
