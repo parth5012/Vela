@@ -197,6 +197,64 @@ describe('WF-10: Cloud Fallback Path & Privacy Disclosure Gate', () => {
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
 
+    it('fails immediately without retrying on non-retryable 4xx client errors', async () => {
+      const client = new OpenAiCompatibleClient(
+        { ...mockRemoteConfig, maxRetries: 3 },
+        mockFetch
+      );
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+      });
+
+      await expect(
+        client.chat({ messages: [{ role: 'user', content: 'Auth test' }] })
+      ).rejects.toThrow('Cloud request failed with status 401');
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('serializes tool definitions in streaming requests', async () => {
+      const client = new OpenAiCompatibleClient(mockRemoteConfig, mockFetch);
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        body: {
+          getReader: () => {
+            let done = false;
+            return {
+              read: async () => {
+                if (done) return { done: true, value: undefined };
+                done = true;
+                const chunk = 'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\ndata: [DONE]\n\n';
+                return { done: false, value: new TextEncoder().encode(chunk) };
+              },
+            };
+          },
+        },
+      });
+
+      const tools = [
+        {
+          name: 'get_weather',
+          description: 'Get current weather',
+          parameters: { type: 'object', properties: { location: { type: 'string' } } },
+        },
+      ];
+
+      await client.streamChat({
+        messages: [{ role: 'user', content: 'Weather?' }],
+        tools,
+      });
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(callBody.tools).toEqual(tools);
+    });
+
     it('accumulates local token metering across multiple requests and allows reset', async () => {
       const client = new OpenAiCompatibleClient(mockRemoteConfig, mockFetch);
 
