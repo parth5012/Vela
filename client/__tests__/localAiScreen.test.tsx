@@ -59,6 +59,48 @@ jest.mock('../modules/stable-diffusion', () => ({
   getGpuInfo: jest.fn(async () => ({ hardware: 'qcom', vendor: 'adreno' })),
 }));
 
+jest.mock('../utils/ramDetection', () => {
+  const actual = jest.requireActual('../utils/ramDetection');
+  return {
+    ...actual,
+    // Mirrors prod fail-closed behavior: 0 unless emulator/simulation is explicitly allowed.
+    detectRamBytes: jest.fn(async (options?: { allowEmulator?: boolean }) =>
+      options?.allowEmulator ? 6 * 1024 * 1024 * 1024 : 0
+    ),
+  };
+});
+
+describe('LocalAiScreen RAM Display (fail-closed detectRamBytes)', () => {
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    await AsyncStorage.clear();
+    act(() => {
+      useConfigStore.getState().clearConfig();
+    });
+  });
+
+  it('requests RAM with allowEmulator so the display never shows 0.0 GB', async () => {
+    const { detectRamBytes } = require('../utils/ramDetection');
+
+    let component: renderer.ReactTestRenderer | undefined;
+    await act(async () => {
+      component = renderer.create(<LocalAiScreen />);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    expect(detectRamBytes).toHaveBeenCalledWith({ allowEmulator: true });
+
+    const allTextNodes = component!.root.findAllByType('Text' as any);
+    const combinedText = allTextNodes
+      .map((n) => n.props.children)
+      .flat()
+      .join(' ')
+      .replace(/\s+/g, ' ');
+    expect(combinedText).toContain('Device RAM: 6.0 GB');
+    expect(combinedText).not.toContain('Device RAM: 0.0 GB');
+  });
+});
+
 describe('LocalAiScreen LiteRT Crash Badge', () => {
   beforeEach(async () => {
     jest.clearAllMocks();

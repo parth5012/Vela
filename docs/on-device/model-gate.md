@@ -58,8 +58,8 @@ Per **WF-01** product decisions, model download endpoints and artifact hashes ar
   "downloadUrl": "https://huggingface.co/litert-community/MiniCPM5-2B/resolve/main/MiniCPM5-2B_int4.litertlm",
   "filename": "MiniCPM5-2B_int4.litertlm",
   "format": "litertlm",
-  "sizeBytes": 1664299000,
-  "sha256": "7b98f280a559d8717596d66e850b57e7eb372a9a83424696e19b4e7235b0ff72",
+  "sizeBytes": 1553670064,
+  "sha256": "05b78bb57dd5ded8a76907cc953cbc57d6261ee9fa66fbfca21ae677a897da45",
   "minRamGb": 6,
   "minStorageGb": 3
 }
@@ -81,10 +81,10 @@ Because the MiniCPM5-2B INT4 artifact is **~1.55 GB**, unconstrained cellular do
 
 ## 5. SHA-256 Integrity Verification & Corrupt Artifact Recovery
 
-To prevent partial, truncated, or corrupted model files from crashing native runtimes, verification and recovery helpers are specified and provided in `client/utils/modelGate.ts` (`verifyArtifactIntegrity`, `recoverCorruptArtifact`):
+To prevent partial, truncated, or corrupted model files from crashing native runtimes, the following verification and recovery behavior is specified. The helpers live in `client/utils/modelGate.ts` (`verifyArtifactIntegrity`, `recoverCorruptArtifact`) but are **not yet wired into the download path** — `ResumableModelDownloader` does not call them; wiring them in is follow-up work.
 
 1. **Pre-flight Range Check**: An HTTP `Range: bytes=0-15` request verifies file availability and format headers before downloading the full artifact.
-2. **SHA-256 Digest**: Upon download completion, `verifyArtifactIntegrity(fileUri, expectedSha256)` computes the cryptographic hash.
+2. **SHA-256 Digest**: Once wired, `verifyArtifactIntegrity(fileUri, expectedSha256, hashProvider)` compares the artifact's digest against `expectedSha256`. `hashProvider` is required and must hash the raw file bytes (e.g. a native streaming hasher); there is no fs/Base64 fallback, and a missing or throwing provider fails closed (`false`).
 3. **Corrupt Artifact Recovery**: If the digest fails to match `expectedSha256`:
    - The corrupt file is purged from disk via `FileSystem.deleteAsync(fileUri, { idempotent: true })`.
    - The resume state and status markers are deleted from `AsyncStorage`.
@@ -96,6 +96,6 @@ To prevent partial, truncated, or corrupted model files from crashing native run
 
 The gate logic is implemented and tested in:
 - Implementation: `client/utils/modelGate.ts` (`ModelDownloadGate`, `ResumableModelDownloader`, `evaluateDeviceCapabilities`)
-- Test Suite: `client/__tests__/modelGate.test.ts` (19/19 tests passing)
+- Test Suite: `client/__tests__/modelGate.test.ts` (29/29 tests passing)
 - RAM Detection Module: `client/utils/ramDetection.ts`
 - Storage Integration: `client/utils/customModelStorage.ts`

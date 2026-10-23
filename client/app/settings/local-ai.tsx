@@ -124,7 +124,10 @@ export default function LocalAiScreen() {
 
   useEffect(() => {
     if (detectedRamBytes === null) {
-      detectRamBytes().then((bytes) => {
+      // Display-only call site: allowEmulator keeps the settings readout sane
+      // (6 GB simulation on web/unknown memory) while the download gate keeps
+      // failing closed via evaluateDeviceCapabilities.
+      detectRamBytes({ allowEmulator: true }).then((bytes) => {
         if (isMounted.current) {
           setDetectedRamBytes(bytes);
         }

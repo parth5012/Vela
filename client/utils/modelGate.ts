@@ -205,8 +205,10 @@ export const DEFAULT_FALLBACK_MODEL_CONFIG: ModelArtifactConfig = {
     'https://huggingface.co/litert-community/MiniCPM5-2B/resolve/main/MiniCPM5-2B_int4.litertlm',
   filename: 'MiniCPM5-2B_int4.litertlm',
   format: 'litertlm',
-  sizeBytes: 1664299000,
-  sha256: '7b98f280a559d8717596d66e850b57e7eb372a9a83424696e19b4e7235b0ff72',
+  // sha256 + size verified against the actual HF artifact
+  // (sha256sum of the downloaded file == HF LFS oid == x-linked-etag).
+  sizeBytes: 1553670064,
+  sha256: '05b78bb57dd5ded8a76907cc953cbc57d6261ee9fa66fbfca21ae677a897da45',
   minRamGb: 6,
   minStorageGb: 3,
 };
@@ -283,80 +285,37 @@ export function checkNetworkDownloadAllowed(
 
 /**
  * Verifies SHA-256 integrity of a downloaded model artifact.
+ *
+ * `hashProvider` is required and must compute the digest over the raw file
+ * bytes (e.g. a native streaming hasher). No fs/Base64 fallback exists:
+ * hashing Base64 text can never equal the file's sha256, and presence/size
+ * checks are not integrity checks. If the provider is missing or throws,
+ * verification fails closed (returns `false`).
+ *
+ * Note: not yet called by the download path — wiring post-download
+ * verification into `ResumableModelDownloader` is tracked separately.
  */
 export async function verifyArtifactIntegrity(
   fileUri: string,
   expectedSha256: string,
-  hashProvider?: (uri: string) => Promise<string>
+  hashProvider: (uri: string) => Promise<string>
 ): Promise<boolean> {
-  if (hashProvider) {
-    const calculated = await hashProvider(fileUri);
-    return calculated.toLowerCase() === expectedSha256.toLowerCase();
-  }
-
-  // Streaming hash implementation in Node environment (handles multi-GB files in O(1) memory)
-  try {
-    const fs = require('fs');
-    const crypto = require('crypto');
-    if (fs && fs.existsSync && fs.existsSync(fileUri)) {
-      return new Promise<boolean>((resolve) => {
-        try {
-          const hash = crypto.createHash('sha256');
-          const stream = fs.createReadStream(fileUri);
-          stream.on('data', (chunk: Buffer) => hash.update(chunk));
-          stream.on('end', () => {
-            const digest = hash.digest('hex');
-            resolve(digest.toLowerCase() === expectedSha256.toLowerCase());
-          });
-          stream.on('error', (err: unknown) => {
-            console.warn('[ModelGate] File stream hashing error:', err);
-            resolve(false);
-          });
-        } catch (streamErr) {
-          console.warn('[ModelGate] Failed to create stream hasher:', streamErr);
-          resolve(false);
-        }
-      });
-    }
-  } catch {
-    // Continue to react-native/expo
-  }
-
-  // React Native / Expo environment:
-  // For files <= 50MB, perform in-memory digest with expo-crypto.
-  // For files > 50MB, verify non-zero size/existence to prevent JS heap OOM when no native hashProvider is passed.
-  try {
-    const fileInfo = await FileSystem.getInfoAsync(fileUri);
-    if (!fileInfo.exists) {
-      console.warn(`[ModelGate] Artifact does not exist at ${fileUri}`);
-      return false;
-    }
-
-    const fileSize = typeof (fileInfo as any).size === 'number' ? (fileInfo as any).size : 0;
-    if (fileSize === 0) {
-      console.warn(`[ModelGate] Artifact at ${fileUri} is empty (0 bytes)`);
-      return false;
-    }
-
-    if (fileSize > 50 * 1024 * 1024) {
-      // In mobile runtime without native hashProvider, validate non-zero size to avoid JS heap exhaustion
-      console.info(
-        `[ModelGate] Large artifact (${(fileSize / (1024 * 1024)).toFixed(1)} MB) verified by file presence and size check.`
-      );
-      return true;
-    }
-
-    const Crypto = require('expo-crypto');
-    const content = await FileSystem.readAsStringAsync(fileUri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-    const digest = await Crypto.digestStringAsync(
-      Crypto.CryptoDigestAlgorithm.SHA256,
-      content
+  if (typeof hashProvider !== 'function') {
+    console.warn(
+      '[ModelGate] No hashProvider supplied; failing closed instead of trusting an unverified artifact.'
     );
-    return digest.toLowerCase() === expectedSha256.toLowerCase();
+    return false;
+  }
+
+  try {
+    const calculated = await hashProvider(fileUri);
+    if (typeof calculated !== 'string' || calculated.length === 0) {
+      console.warn('[ModelGate] hashProvider returned no digest; failing closed.');
+      return false;
+    }
+    return calculated.toLowerCase() === expectedSha256.toLowerCase();
   } catch (err) {
-    console.warn('[ModelGate] Integrity verification check failed:', err);
+    console.warn('[ModelGate] Integrity verification failed; failing closed:', err);
     return false;
   }
 }
