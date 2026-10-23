@@ -1,30 +1,448 @@
 [
   {
-    "id": "ragas_mem_001",
-    "question": "What is my current shipping address?",
-    "contexts": [
-      "User profile note: Shipping address updated to 200 New Ave, Apt 4B.",
-      "Previous order #102 delivered to 100 Old St in 2024."
-    ],
-    "ground_truth": "Your current shipping address is 200 New Ave, Apt 4B.",
-    "forbidden_in_answer": ["100 Old St"]
-  },
-  {
-    "id": "ragas_mem_002",
+    "id": "ragas_mem_pref_001",
+    "category": "preference_recall",
     "question": "What are my dietary restrictions?",
     "contexts": [
-      "Dietary preference: Strictly vegetarian, severe peanut allergy."
+      "User dietary preference: Strictly vegetarian, severe peanut allergy.",
+      "Previous lunch note: Ordered vegetable curry in 2024.",
+      "User hobby: Likes outdoor photography."
     ],
     "ground_truth": "You are strictly vegetarian and have a severe peanut allergy.",
-    "forbidden_in_answer": ["eats meat", "no allergies"]
+    "ground_truth_contexts": [
+      "User dietary preference: Strictly vegetarian, severe peanut allergy."
+    ],
+    "distractor_contexts": [
+      "User hobby: Likes outdoor photography."
+    ],
+    "forbidden_in_answer": ["eats meat", "eats beef", "no allergies", "fish allergy"]
   },
   {
-    "id": "ragas_mem_003",
-    "question": "What is my flight date?",
+    "id": "ragas_mem_pref_002",
+    "category": "preference_recall",
+    "question": "What is my current shipping address?",
     "contexts": [
-      "Travel itinerary: Flight to Chicago confirmed for Friday at 9am."
+      "User profile: Current shipping address is 200 New Ave, Apt 4B, Seattle WA.",
+      "Old archive: Past shipping was 100 Old St in 2022.",
+      "User preference: Prefers UPS delivery."
     ],
-    "ground_truth": "Your flight is on Friday at 9am.",
-    "forbidden_in_answer": ["Saturday", "Sunday"]
+    "ground_truth": "Your current shipping address is 200 New Ave, Apt 4B, Seattle WA.",
+    "ground_truth_contexts": [
+      "User profile: Current shipping address is 200 New Ave, Apt 4B, Seattle WA."
+    ],
+    "distractor_contexts": [
+      "Old archive: Past shipping was 100 Old St in 2022."
+    ],
+    "forbidden_in_answer": ["100 Old St", "Portland"]
+  },
+  {
+    "id": "ragas_mem_pref_003",
+    "category": "preference_recall",
+    "question": "What is my preferred code editor and primary programming language?",
+    "contexts": [
+      "User development setup: Uses Neovim as daily editor, writes Python for backend services.",
+      "Colleague note: Alex uses VS Code.",
+      "Meeting note: Discussed React frontend."
+    ],
+    "ground_truth": "Your preferred editor is Neovim and your primary language is Python.",
+    "ground_truth_contexts": [
+      "User development setup: Uses Neovim as daily editor, writes Python for backend services."
+    ],
+    "distractor_contexts": [
+      "Colleague note: Alex uses VS Code."
+    ],
+    "forbidden_in_answer": ["Emacs", "Java", "VS Code"]
+  },
+  {
+    "id": "ragas_mem_pref_004",
+    "category": "preference_recall",
+    "question": "What are my seat preferences when flying?",
+    "contexts": [
+      "Travel preference: Prefers window seat, forward cabin near row 5.",
+      "Hotel note: Prefers king bed on quiet floor.",
+      "Airport note: Has TSA PreCheck."
+    ],
+    "ground_truth": "You prefer a window seat in the forward cabin near row 5.",
+    "ground_truth_contexts": [
+      "Travel preference: Prefers window seat, forward cabin near row 5."
+    ],
+    "distractor_contexts": [
+      "Hotel note: Prefers king bed on quiet floor."
+    ],
+    "forbidden_in_answer": ["aisle seat", "back of the plane", "middle seat"]
+  },
+  {
+    "id": "ragas_mem_pref_005",
+    "category": "preference_recall",
+    "question": "When do I prefer to have meetings scheduled?",
+    "contexts": [
+      "Calendar preference: Deep work focus in afternoons; all meetings preferred before 12pm noon.",
+      "Previous event: Lunch standup at 12:30pm.",
+      "Timezone: Pacific Time PT."
+    ],
+    "ground_truth": "You prefer meetings in the morning before 12pm noon to protect afternoon deep work.",
+    "ground_truth_contexts": [
+      "Calendar preference: Deep work focus in afternoons; all meetings preferred before 12pm noon."
+    ],
+    "distractor_contexts": [
+      "Timezone: Pacific Time PT."
+    ],
+    "forbidden_in_answer": ["afternoon meetings", "evening syncs", "all day"]
+  },
+  {
+    "id": "ragas_mem_temp_001",
+    "category": "temporal_updates",
+    "question": "What is my current phone number?",
+    "contexts": [
+      "User note (Oct 2026): New mobile number is 555-0199.",
+      "Old profile (2023): Old phone was 555-0100.",
+      "Email contact: user@example.com."
+    ],
+    "ground_truth": "Your current mobile number is 555-0199.",
+    "ground_truth_contexts": [
+      "User note (Oct 2026): New mobile number is 555-0199."
+    ],
+    "distractor_contexts": [
+      "Old profile (2023): Old phone was 555-0100."
+    ],
+    "forbidden_in_answer": ["555-0100"]
+  },
+  {
+    "id": "ragas_mem_temp_002",
+    "category": "temporal_updates",
+    "question": "Where do I currently live?",
+    "contexts": [
+      "Relocation record (Sept 2026): Moved to Seattle WA.",
+      "Past residency: Lived in Austin TX until August 2026.",
+      "Office note: Remote employee."
+    ],
+    "ground_truth": "You currently live in Seattle, WA.",
+    "ground_truth_contexts": [
+      "Relocation record (Sept 2026): Moved to Seattle WA."
+    ],
+    "distractor_contexts": [
+      "Past residency: Lived in Austin TX until August 2026."
+    ],
+    "forbidden_in_answer": ["Austin", "Texas", "Dallas"]
+  },
+  {
+    "id": "ragas_mem_temp_003",
+    "category": "temporal_updates",
+    "question": "Where do I currently work?",
+    "contexts": [
+      "Career transition (2026): Started as Senior AI Engineer at Anthropic.",
+      "Past employment: Worked at Stripe as Software Engineer from 2021 to 2025.",
+      "Education: BS in Computer Science."
+    ],
+    "ground_truth": "You currently work at Anthropic as a Senior AI Engineer.",
+    "ground_truth_contexts": [
+      "Career transition (2026): Started as Senior AI Engineer at Anthropic."
+    ],
+    "distractor_contexts": [
+      "Past employment: Worked at Stripe as Software Engineer from 2021 to 2025."
+    ],
+    "forbidden_in_answer": ["Stripe", "Google", "Meta"]
+  },
+  {
+    "id": "ragas_mem_temp_004",
+    "category": "temporal_updates",
+    "question": "What car do I drive?",
+    "contexts": [
+      "Current car update (2026): Purchased and drives a silver Tesla Model Y.",
+      "Previous car: Traded in 2018 Honda Civic.",
+      "Insurance note: Full coverage with Geico."
+    ],
+    "ground_truth": "You drive a silver Tesla Model Y.",
+    "ground_truth_contexts": [
+      "Current car update (2026): Purchased and drives a silver Tesla Model Y."
+    ],
+    "distractor_contexts": [
+      "Previous car: Traded in 2018 Honda Civic."
+    ],
+    "forbidden_in_answer": ["Honda Civic", "Toyota", "Ford"]
+  },
+  {
+    "id": "ragas_mem_temp_005",
+    "category": "temporal_updates",
+    "question": "Who is my emergency contact?",
+    "contexts": [
+      "Emergency contact (Updated 2026): Brother David, phone 555-9876.",
+      "Previous contact (2023): Roommate Chris.",
+      "Medical record: Blood type O positive."
+    ],
+    "ground_truth": "Your emergency contact is your brother David at 555-9876.",
+    "ground_truth_contexts": [
+      "Emergency contact (Updated 2026): Brother David, phone 555-9876."
+    ],
+    "distractor_contexts": [
+      "Previous contact (2023): Roommate Chris."
+    ],
+    "forbidden_in_answer": ["Chris", "roommate"]
+  },
+  {
+    "id": "ragas_mem_contra_001",
+    "category": "contradiction_resolution",
+    "question": "What food am I allergic to?",
+    "contexts": [
+      "Correction note: User corrected allergy to dairy, not gluten.",
+      "Earlier statement: User thought they had gluten intolerance.",
+      "Diet note: Enjoys oat milk."
+    ],
+    "ground_truth": "You are allergic to dairy.",
+    "ground_truth_contexts": [
+      "Correction note: User corrected allergy to dairy, not gluten."
+    ],
+    "distractor_contexts": [
+      "Diet note: Enjoys oat milk."
+    ],
+    "forbidden_in_answer": ["gluten intolerance", "allergic to gluten", "shellfish"]
+  },
+  {
+    "id": "ragas_mem_contra_002",
+    "category": "contradiction_resolution",
+    "question": "What is my approved monthly software budget?",
+    "contexts": [
+      "Budget revision: Department approved increased monthly software budget to $1200.",
+      "Initial proposal: Proposed budget of $500.",
+      "Vendor note: AWS monthly invoice."
+    ],
+    "ground_truth": "Your approved monthly software budget is $1200.",
+    "ground_truth_contexts": [
+      "Budget revision: Department approved increased monthly software budget to $1200."
+    ],
+    "distractor_contexts": [
+      "Vendor note: AWS monthly invoice."
+    ],
+    "forbidden_in_answer": ["$500", "500 dollars"]
+  },
+  {
+    "id": "ragas_mem_contra_003",
+    "category": "contradiction_resolution",
+    "question": "What is my work arrangement?",
+    "contexts": [
+      "Contract update: User transitioned to hybrid work in NYC office 2 days per week.",
+      "Previous agreement: 100% remote.",
+      "Laptop note: MacBook Pro M3."
+    ],
+    "ground_truth": "Your work arrangement is hybrid in the NYC office 2 days per week.",
+    "ground_truth_contexts": [
+      "Contract update: User transitioned to hybrid work in NYC office 2 days per week."
+    ],
+    "distractor_contexts": [
+      "Laptop note: MacBook Pro M3."
+    ],
+    "forbidden_in_answer": ["100% remote", "fully remote", "Austin office"]
+  },
+  {
+    "id": "ragas_mem_contra_004",
+    "category": "contradiction_resolution",
+    "question": "Which city is my upcoming conference trip to?",
+    "contexts": [
+      "Itinerary revision: Conference travel changed to San Francisco Moscone Center.",
+      "Initial draft: Travel to Chicago McCormick Place.",
+      "Flight status: Confirmed."
+    ],
+    "ground_truth": "Your conference trip is to San Francisco at Moscone Center.",
+    "ground_truth_contexts": [
+      "Itinerary revision: Conference travel changed to San Francisco Moscone Center."
+    ],
+    "distractor_contexts": [
+      "Flight status: Confirmed."
+    ],
+    "forbidden_in_answer": ["Chicago", "McCormick"]
+  },
+  {
+    "id": "ragas_mem_contra_005",
+    "category": "contradiction_resolution",
+    "question": "What is the official codename for our autonomous agent project?",
+    "contexts": [
+      "Project branding note: System officially named Vela (formerly Project Alpha).",
+      "Old repository: Project Alpha design docs.",
+      "Team lead: Parth."
+    ],
+    "ground_truth": "The official project codename is Vela.",
+    "ground_truth_contexts": [
+      "Project branding note: System officially named Vela (formerly Project Alpha)."
+    ],
+    "distractor_contexts": [
+      "Team lead: Parth."
+    ],
+    "forbidden_in_answer": ["Project Alpha", "Apollo"]
+  },
+  {
+    "id": "ragas_mem_cross_001",
+    "category": "cross_domain_synthesis",
+    "question": "What is my current role and what project am I leading?",
+    "contexts": [
+      "Role profile: User is Staff Machine Learning Engineer.",
+      "Project allocation: Leading Vela system-level evaluation pipelines.",
+      "Department: Core AI Infrastructure."
+    ],
+    "ground_truth": "You are a Staff Machine Learning Engineer leading the Vela system-level evaluation pipelines.",
+    "ground_truth_contexts": [
+      "Role profile: User is Staff Machine Learning Engineer.",
+      "Project allocation: Leading Vela system-level evaluation pipelines."
+    ],
+    "distractor_contexts": [
+      "Department: Core AI Infrastructure."
+    ],
+    "forbidden_in_answer": ["Product Manager", "intern", "junior developer"]
+  },
+  {
+    "id": "ragas_mem_cross_002",
+    "category": "cross_domain_synthesis",
+    "question": "When is my wedding anniversary and where do we like to celebrate?",
+    "contexts": [
+      "Personal milestone: Wedding anniversary is November 14.",
+      "Dining preference: Favorite celebration restaurant is Canlis in Seattle.",
+      "Gift note: Likes silver jewelry."
+    ],
+    "ground_truth": "Your wedding anniversary is November 14 and your favorite celebration restaurant is Canlis in Seattle.",
+    "ground_truth_contexts": [
+      "Personal milestone: Wedding anniversary is November 14.",
+      "Dining preference: Favorite celebration restaurant is Canlis in Seattle."
+    ],
+    "distractor_contexts": [
+      "Gift note: Likes silver jewelry."
+    ],
+    "forbidden_in_answer": ["October", "Olive Garden", "December"]
+  },
+  {
+    "id": "ragas_mem_cross_003",
+    "category": "cross_domain_synthesis",
+    "question": "What phone do I use and what is my preferred encrypted chat app?",
+    "contexts": [
+      "Device inventory: Primary mobile device is Google Pixel 8 Pro.",
+      "Security preference: Uses Signal for all sensitive messaging.",
+      "OS version: Android 15."
+    ],
+    "ground_truth": "You use a Google Pixel 8 Pro and your preferred encrypted chat app is Signal.",
+    "ground_truth_contexts": [
+      "Device inventory: Primary mobile device is Google Pixel 8 Pro.",
+      "Security preference: Uses Signal for all sensitive messaging."
+    ],
+    "distractor_contexts": [
+      "OS version: Android 15."
+    ],
+    "forbidden_in_answer": ["iPhone", "WhatsApp", "Telegram"]
+  },
+  {
+    "id": "ragas_mem_cross_004",
+    "category": "cross_domain_synthesis",
+    "question": "What are my travel details for the Chicago trip?",
+    "contexts": [
+      "Flight booking: United flight UA1042 arrives in Chicago on Oct 25 at 11am.",
+      "Accommodation: Marriott Downtown Chicago booked from Oct 25 to Oct 28.",
+      "Expense code: ENG-TRAVEL-2026."
+    ],
+    "ground_truth": "You arrive in Chicago on Oct 25 via United flight UA1042 and are staying at Marriott Downtown through Oct 28.",
+    "ground_truth_contexts": [
+      "Flight booking: United flight UA1042 arrives in Chicago on Oct 25 at 11am.",
+      "Accommodation: Marriott Downtown Chicago booked from Oct 25 to Oct 28."
+    ],
+    "distractor_contexts": [
+      "Expense code: ENG-TRAVEL-2026."
+    ],
+    "forbidden_in_answer": ["Hilton", "American Airlines", "Nov 5"]
+  },
+  {
+    "id": "ragas_mem_cross_005",
+    "category": "cross_domain_synthesis",
+    "question": "What is my workstation setup?",
+    "contexts": [
+      "Workstation spec: M3 Max MacBook Pro with 64GB RAM.",
+      "Peripherals note: Connected to dual Dell 32-inch 4K monitors.",
+      "Keyboard: Keychron mechanical keyboard."
+    ],
+    "ground_truth": "Your workstation is an M3 Max MacBook Pro with 64GB RAM connected to dual Dell 32-inch 4K monitors.",
+    "ground_truth_contexts": [
+      "Workstation spec: M3 Max MacBook Pro with 64GB RAM.",
+      "Peripherals note: Connected to dual Dell 32-inch 4K monitors."
+    ],
+    "distractor_contexts": [
+      "Keyboard: Keychron mechanical keyboard."
+    ],
+    "forbidden_in_answer": ["Windows", "Lenovo", "16GB RAM"]
+  },
+  {
+    "id": "ragas_mem_neg_001",
+    "category": "negative_retrieval",
+    "question": "What is the name of my pet dog?",
+    "contexts": [
+      "User profile note: Likes animals and volunteering at shelters.",
+      "Hobby note: Weekend trail running.",
+      "User diet: Vegetarian."
+    ],
+    "ground_truth": "You have not mentioned having a pet dog or provided a pet name in memory.",
+    "ground_truth_contexts": [],
+    "distractor_contexts": [
+      "User profile note: Likes animals and volunteering at shelters.",
+      "Hobby note: Weekend trail running."
+    ],
+    "forbidden_in_answer": ["Buddy", "Max", "Rex", "Charlie", "your dog is"]
+  },
+  {
+    "id": "ragas_mem_neg_002",
+    "category": "negative_retrieval",
+    "question": "What is my passport number?",
+    "contexts": [
+      "Travel preference: Prefers window seat on flights.",
+      "Airport note: Has TSA PreCheck.",
+      "Frequent flyer: United MileagePlus Gold."
+    ],
+    "ground_truth": "Your passport number is not stored in memory.",
+    "ground_truth_contexts": [],
+    "distractor_contexts": [
+      "Airport note: Has TSA PreCheck."
+    ],
+    "forbidden_in_answer": ["passport number is", "USA-", "A1234567"]
+  },
+  {
+    "id": "ragas_mem_neg_003",
+    "category": "negative_retrieval",
+    "question": "What is my car's license plate number?",
+    "contexts": [
+      "Vehicle note: Drives a silver Tesla Model Y.",
+      "Insurance note: Covered by Geico policy.",
+      "Garage: Parking spot #14."
+    ],
+    "ground_truth": "Your vehicle's license plate number is not recorded in memory.",
+    "ground_truth_contexts": [],
+    "distractor_contexts": [
+      "Vehicle note: Drives a silver Tesla Model Y."
+    ],
+    "forbidden_in_answer": ["license plate is", "ABC-1234", "7XYZ89"]
+  },
+  {
+    "id": "ragas_mem_neg_004",
+    "category": "negative_retrieval",
+    "question": "What is my bank routing number for direct deposit?",
+    "contexts": [
+      "Employment note: Senior AI Engineer at Anthropic.",
+      "Compensation: Salaried employee.",
+      "Tax status: W-2 filer."
+    ],
+    "ground_truth": "Your banking routing number is not stored in memory.",
+    "ground_truth_contexts": [],
+    "distractor_contexts": [
+      "Employment note: Senior AI Engineer at Anthropic."
+    ],
+    "forbidden_in_answer": ["routing number is", "Chase", "Wells Fargo", "021000021"]
+  },
+  {
+    "id": "ragas_mem_neg_005",
+    "category": "negative_retrieval",
+    "question": "What is the passcode for my home security system?",
+    "contexts": [
+      "Home address: 200 New Ave, Apt 4B, Seattle WA.",
+      "Building note: Gated entry with keyfob.",
+      "Utilities: City light electric."
+    ],
+    "ground_truth": "Your home security alarm passcode is not stored in memory.",
+    "ground_truth_contexts": [],
+    "distractor_contexts": [
+      "Building note: Gated entry with keyfob."
+    ],
+    "forbidden_in_answer": ["passcode is", "code is 1234", "alarm code is"]
   }
 ]

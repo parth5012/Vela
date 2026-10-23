@@ -25,12 +25,24 @@ from httpx import HTTPStatusError
 from typing import Optional
 from pydantic import BaseModel, Field, AliasChoices
 from fastapi.responses import StreamingResponse
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from agent.graph import graph
 from db.models import Conversation, Experience, SyncMessage, ToolInvocation, Base, utcnow_naive
 from fastapi import Response
 from utils.ulid import generate_ulid
 from utils.auth_gate import GLOBAL_OAUTH_CONVERSATION_ID
+
+# Eval-only in-memory conversation history keyed by normalized thread_id.
+# Retains multi-turn dialogue state during evaluations without writing to Experience database.
+_EVAL_THREAD_HISTORY: dict[str, list[BaseMessage]] = {}
+
+
+def clear_eval_thread_history(thread_id: Optional[str] = None) -> None:
+    """Clear in-memory eval thread history for a specific thread or all threads."""
+    if thread_id is not None:
+        _EVAL_THREAD_HISTORY.pop(thread_id, None)
+    else:
+        _EVAL_THREAD_HISTORY.clear()
 
 # Import PENDING_TASKS at runtime to avoid module duplication issues
 # This ensures we always reference the current module's PENDING_TASKS dict
@@ -621,22 +633,35 @@ async def chat_message(payload: MessagePayload):
             # T6 (issue #254): create the Experience row at turn start so the
             # turn owns its row by ID. T3 transaction rule: flush-only here,
             # get_db_session owns the commit.
-            try:
-                with get_db_session() as session:
-                    exp_client = DBClient(session)
-                    exp_row = exp_client.save_experience(
-                        conversation_id=thread_uuid,
-                        user_query=initial_message,
-                        agent_response="",
-                    )
-                    experience_id = exp_row.id
-            except Exception as e:
-                logger.error("Failed to create experience row at turn start", error=str(e))
+            # Bypass persistent Experience creation for eval turns or VELA_EVAL_MODE=1
+            # to prevent memory DB pollution (hardening rule for system evals).
+            is_eval = os.getenv("VELA_EVAL_MODE") == "1" or str(payload.thread_id).startswith("eval-")
+            if not is_eval:
+                try:
+                    with get_db_session() as session:
+                        exp_client = DBClient(session)
+                        exp_row = exp_client.save_experience(
+                            conversation_id=thread_uuid,
+                            user_query=initial_message,
+                            agent_response="",
+                        )
+                        experience_id = exp_row.id
+                except Exception as e:
+                    logger.error("Failed to create experience row at turn start", error=str(e))
+                    experience_id = None
+            else:
                 experience_id = None
 
+            eval_key = str(payload.thread_id)
+            if is_eval:
+                prior_messages = _EVAL_THREAD_HISTORY.get(eval_key) or _EVAL_THREAD_HISTORY.get(normalized_id, [])
+                initial_messages = list(prior_messages) + [HumanMessage(content=payload.message)]
+            else:
+                initial_messages = [HumanMessage(content=payload.message)]
+
             initial_state = {
-                "messages": [HumanMessage(content=payload.message)],
-                "db_conv_id": thread_uuid,
+                "messages": initial_messages,
+                "db_conv_id": None if is_eval else thread_uuid,
                 "next_node": "supervisor",
                 "agent": thread_agent
             }
@@ -771,6 +796,16 @@ async def chat_message(payload: MessagePayload):
             # Success path: update the owned Experience row by ID (never the
             # "latest" row). Shielded so a late disconnect cannot drop it.
             await _persist_once("stream-complete")
+
+            # Retain turn in eval-only memory store if this is an eval thread
+            if is_eval and full_response:
+                turn_pair = [
+                    HumanMessage(content=initial_message),
+                    AIMessage(content=full_response),
+                ]
+                _EVAL_THREAD_HISTORY.setdefault(eval_key, []).extend(turn_pair)
+                if eval_key != normalized_id:
+                    _EVAL_THREAD_HISTORY[normalized_id] = _EVAL_THREAD_HISTORY[eval_key]
 
             # Generate a dynamic title if thread title is 'New Chat'
             if thread_title == "New Chat":

@@ -1,35 +1,91 @@
-# Promptfoo test suite for Phone Automation action mappings
-description: "Vela Phone Automation Intent-to-Action Mapping"
+# Declarative Promptfoo Test Suite for Phone Automation Intent-to-Action Mapping
+description: "Vela Phone Automation Intent-to-Action Mapping Suite (Family 6)"
 
 prompts:
   - "Device Agent User Request: {{prompt}}"
 
 providers:
   - id: "python:phone_automation.providers.device_provider:call_device_agent"
-    label: "Vela Device Agent"
+    label: "Vela Device Agent Simulated Provider"
 
 tests:
-  - description: "Open YouTube app on phone"
+  # Action Mapping Suite
+  - description: "[action_mapping] Open YouTube app on phone"
     vars:
       prompt: "Open YouTube on my phone"
     assert:
-      - type: icontains
-        value: "device_open_app"
-      - type: icontains
-        value: "YouTube"
+      - type: javascript
+        value: "output.tool_calls.some(c => c.tool === 'device_open_app' && c.args.app_name === 'YouTube')"
 
-  - description: "Tap the search icon"
+  - description: "[action_mapping] Tap search icon"
     vars:
-      prompt: "Tap on the search icon at the top right"
+      prompt: "Click on the Search icon"
     assert:
-      - type: icontains
-        value: "device_tap"
+      - type: javascript
+        value: "output.tool_calls.some(c => c.tool === 'device_tap' && c.args.target === 'search icon')"
 
-  - description: "Type query into search input"
+  - description: "[action_mapping] Type text query into input"
     vars:
-      prompt: "Type 'Lofi Hip Hop' into the search bar"
+      prompt: "Type 'Lofi Hip Hop beats' into the search box"
     assert:
-      - type: icontains
-        value: "device_type"
-      - type: icontains
-        value: "Lofi Hip Hop"
+      - type: javascript
+        value: "output.tool_calls.some(c => c.tool === 'device_type' && c.args.target === 'search box' && c.args.value === 'Lofi Hip Hop beats')"
+
+  - description: "[action_mapping] Scroll down feed"
+    vars:
+      prompt: "Scroll down to see more comments"
+    assert:
+      - type: javascript
+        value: "output.tool_calls.some(c => c.tool === 'device_scroll' && c.args.direction === 'down')"
+
+  - description: "[action_mapping] Press home hardware key"
+    vars:
+      prompt: "Go to the Home screen"
+    assert:
+      - type: javascript
+        value: "output.tool_calls.some(c => c.tool === 'device_press_key' && c.args.key_name === 'HOME')"
+
+  # Parameter Integrity Suite
+  - description: "[parameter_integrity] Integer volume level 15"
+    vars:
+      prompt: "Set phone volume to 15"
+    assert:
+      - type: javascript
+        value: "output.tool_calls.some(c => c.tool === 'device_set_volume' && Number(c.args.level) === 15)"
+
+  - description: "[parameter_integrity] Specific coordinate tap"
+    vars:
+      prompt: "Tap precisely at coordinates 720,1440"
+    assert:
+      - type: javascript
+        value: "output.tool_calls.some(c => c.tool === 'device_tap' && c.args.target === '720,1440')"
+
+  - description: "[parameter_integrity] Shizuku setting put integer string"
+    vars:
+      prompt: "Put system setting screen_off_timeout to 60000 via Shizuku"
+    assert:
+      - type: javascript
+        value: "output.tool_calls.some(c => c.tool === 'device_setting_put' && c.args.namespace === 'system' && c.args.key === 'screen_off_timeout' && String(c.args.value) === '60000')"
+
+  # Shizuku Permissions Suite
+  - description: "[shizuku_permissions] Grant camera permission"
+    vars:
+      prompt: "Grant camera permission to com.example.cameraapp via Shizuku"
+    assert:
+      - type: javascript
+        value: "output.tool_calls.some(c => c.tool === 'device_app_permission_grant' && c.args.package === 'com.example.cameraapp' && c.args.permission === 'android.permission.CAMERA')"
+
+  - description: "[shizuku_permissions] Force stop package"
+    vars:
+      prompt: "Force stop background app com.example.bloatware using Shizuku"
+    assert:
+      - type: javascript
+        value: "output.tool_calls.some(c => c.tool === 'device_app_force_stop' && c.args.package === 'com.example.bloatware')"
+
+  # OCR Screen Reading Suite
+  - description: "[ocr_screen_reading] Read battery percentage from screen"
+    vars:
+      prompt: "What is the battery percentage shown on screen?"
+    assert:
+      - type: javascript
+        value: "output.tool_calls.some(c => c.tool === 'device_screen_read')"

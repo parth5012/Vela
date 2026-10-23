@@ -1,0 +1,272 @@
+[
+  {
+    "id": "ts_seq_001",
+    "category": "tool_sequencing",
+    "dataset": "tool_sequencing",
+    "description": "Chained tool calls",
+    "persona": "personal assistant",
+    "prompt": "Read my emails then reply to Priya",
+    "expected_tools": [
+      "gmail_read_emails",
+      "gmail_send_email"
+    ],
+    "expected_sequence": [
+      "gmail_read_emails",
+      "gmail_send_email"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  },
+  {
+    "id": "ts_seq_002",
+    "category": "tool_sequencing",
+    "dataset": "tool_sequencing",
+    "description": "Chained tool calls",
+    "persona": "personal assistant",
+    "prompt": "Check calendar then create a meeting",
+    "expected_tools": [
+      "calendar_list_events",
+      "calendar_create_event"
+    ],
+    "expected_sequence": [
+      "calendar_list_events",
+      "calendar_create_event"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  },
+  {
+    "id": "ts_seq_003",
+    "category": "tool_sequencing",
+    "dataset": "tool_sequencing",
+    "description": "Chained tool calls",
+    "persona": "researcher",
+    "prompt": "Search web then run python to analyze",
+    "expected_tools": [
+      "web_search",
+      "run_python_code"
+    ],
+    "expected_sequence": [
+      "web_search",
+      "run_python_code"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  },
+  {
+    "id": "ts_seq_004",
+    "category": "tool_sequencing",
+    "dataset": "tool_sequencing",
+    "description": "Chained tool calls",
+    "persona": "personal assistant",
+    "prompt": "Save memory then delete old memory",
+    "expected_tools": [
+      "save_user_memory",
+      "delete_user_memory"
+    ],
+    "expected_sequence": [
+      "save_user_memory",
+      "delete_user_memory"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  },
+  {
+    "id": "ts_seq_005",
+    "category": "tool_sequencing",
+    "dataset": "tool_sequencing",
+    "description": "Chained tool calls",
+    "persona": "personal assistant",
+    "prompt": "Read emails and schedule followup",
+    "expected_tools": [
+      "gmail_read_emails",
+      "calendar_create_event"
+    ],
+    "expected_sequence": [
+      "gmail_read_emails",
+      "calendar_create_event"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  },
+  {
+    "id": "ts_seq_006",
+    "category": "tool_sequencing",
+    "dataset": "tool_sequencing",
+    "description": "Chained tool calls",
+    "persona": "personal assistant",
+    "prompt": "Read my emails then reply to Priya",
+    "expected_tools": [
+      "gmail_read_emails",
+      "gmail_send_email"
+    ],
+    "expected_sequence": [
+      "gmail_read_emails",
+      "gmail_send_email"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  },
+  {
+    "id": "ts_seq_007",
+    "category": "tool_sequencing",
+    "dataset": "tool_sequencing",
+    "description": "Chained tool calls",
+    "persona": "personal assistant",
+    "prompt": "Check calendar then create a meeting",
+    "expected_tools": [
+      "calendar_list_events",
+      "calendar_create_event"
+    ],
+    "expected_sequence": [
+      "calendar_list_events",
+      "calendar_create_event"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  },
+  {
+    "id": "ts_seq_008",
+    "category": "tool_sequencing",
+    "dataset": "tool_sequencing",
+    "description": "Chained tool calls",
+    "persona": "researcher",
+    "prompt": "Search web then run python to analyze",
+    "expected_tools": [
+      "web_search",
+      "run_python_code"
+    ],
+    "expected_sequence": [
+      "web_search",
+      "run_python_code"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  },
+  {
+    "id": "ts_seq_009",
+    "category": "tool_sequencing",
+    "dataset": "tool_sequencing",
+    "description": "Chained tool calls",
+    "persona": "personal assistant",
+    "prompt": "Save memory then delete old memory",
+    "expected_tools": [
+      "save_user_memory",
+      "delete_user_memory"
+    ],
+    "expected_sequence": [
+      "save_user_memory",
+      "delete_user_memory"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  },
+  {
+    "id": "ts_seq_010",
+    "category": "tool_sequencing",
+    "dataset": "tool_sequencing",
+    "description": "Chained tool calls",
+    "persona": "personal assistant",
+    "prompt": "Read emails and schedule followup",
+    "expected_tools": [
+      "gmail_read_emails",
+      "calendar_create_event"
+    ],
+    "expected_sequence": [
+      "gmail_read_emails",
+      "calendar_create_event"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  },
+  {
+    "id": "ts_seq_011",
+    "category": "tool_sequencing",
+    "dataset": "tool_sequencing",
+    "description": "Chained tool calls",
+    "persona": "personal assistant",
+    "prompt": "Read my emails then reply to Priya",
+    "expected_tools": [
+      "gmail_read_emails",
+      "gmail_send_email"
+    ],
+    "expected_sequence": [
+      "gmail_read_emails",
+      "gmail_send_email"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  },
+  {
+    "id": "ts_seq_012",
+    "category": "tool_sequencing",
+    "dataset": "tool_sequencing",
+    "description": "Chained tool calls",
+    "persona": "personal assistant",
+    "prompt": "Check calendar then create a meeting",
+    "expected_tools": [
+      "calendar_list_events",
+      "calendar_create_event"
+    ],
+    "expected_sequence": [
+      "calendar_list_events",
+      "calendar_create_event"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  },
+  {
+    "id": "ts_seq_013",
+    "category": "tool_sequencing",
+    "dataset": "tool_sequencing",
+    "description": "Chained tool calls",
+    "persona": "researcher",
+    "prompt": "Search web then run python to analyze",
+    "expected_tools": [
+      "web_search",
+      "run_python_code"
+    ],
+    "expected_sequence": [
+      "web_search",
+      "run_python_code"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  },
+  {
+    "id": "ts_seq_014",
+    "category": "tool_sequencing",
+    "dataset": "tool_sequencing",
+    "description": "Chained tool calls",
+    "persona": "personal assistant",
+    "prompt": "Save memory then delete old memory",
+    "expected_tools": [
+      "save_user_memory",
+      "delete_user_memory"
+    ],
+    "expected_sequence": [
+      "save_user_memory",
+      "delete_user_memory"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  },
+  {
+    "id": "ts_seq_015",
+    "category": "tool_sequencing",
+    "dataset": "tool_sequencing",
+    "description": "Chained tool calls",
+    "persona": "personal assistant",
+    "prompt": "Read emails and schedule followup",
+    "expected_tools": [
+      "gmail_read_emails",
+      "calendar_create_event"
+    ],
+    "expected_sequence": [
+      "gmail_read_emails",
+      "calendar_create_event"
+    ],
+    "should_call_tool": true,
+    "arg_keys": []
+  }
+]

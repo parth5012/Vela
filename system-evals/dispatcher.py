@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from typing import Any, Callable
 
@@ -96,10 +97,23 @@ registry.register("workspace-automation", _run_workspace)
 registry.register("memory", _run_memory)
 
 
+def _is_evals_active(live: bool = False) -> bool:
+    """Determine whether system evaluations are active via config, flag, or environment."""
+    return config.enabled or live or os.getenv("VELA_SYSTEM_EVALS_ENABLED", "0") == "1"
+
+
 def run_family(family: str, mode: str = "smoke", live: bool = False) -> FamilyResult:
-    """Programmatic entry point for running an evaluation family."""
-    is_active = config.enabled or live
-    if not is_active:
+    """Programmatic entry point for running an evaluation family.
+
+    Args:
+        family: The evaluation family name (e.g. 'multi-turn', 'safety').
+        mode: Execution mode ('smoke' or 'nightly').
+        live: Whether to execute against live backend instead of mock providers.
+
+    Returns:
+        FamilyResult containing evaluation metrics and status.
+    """
+    if not _is_evals_active(live):
         return FamilyResult(
             family=family,
             status="skipped",
@@ -109,16 +123,23 @@ def run_family(family: str, mode: str = "smoke", live: bool = False) -> FamilyRe
 
 
 def run_all(mode: str = "smoke", live: bool = False) -> dict[str, FamilyResult]:
-    """Programmatic entry point for running all evaluation families."""
-    is_active = config.enabled or live
-    if not is_active:
+    """Programmatic entry point for running all evaluation families.
+
+    Args:
+        mode: Execution mode ('smoke' or 'nightly').
+        live: Whether to execute against live backend instead of mock providers.
+
+    Returns:
+        Dictionary mapping family names to their respective FamilyResult.
+    """
+    if not _is_evals_active(live):
         print("\n[INFO] Vela System Evals are currently DISABLED by default.")
         print("       Set VELA_SYSTEM_EVALS_ENABLED=1 or pass --live to execute.\n")
         return {
             fam: FamilyResult(
                 family=fam,
                 status="skipped",
-                error="Disabled by default (VELA_SYSTEM_EVALS_ENABLED=0).",
+                error="System evals disabled by default. Pass --live or set VELA_SYSTEM_EVALS_ENABLED=1.",
             )
             for fam in ALL_FAMILIES
         }

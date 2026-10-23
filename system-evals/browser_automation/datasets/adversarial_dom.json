@@ -1,0 +1,677 @@
+[
+  {
+    "id": "browser_adv_001",
+    "category": "adversarial_dom",
+    "task": "Extract dynamic SPA data with delayed hydration",
+    "optimal_steps": 3,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://spa.react-portal.com/dashboard",
+        "dom_snapshot": {
+          "title": "Dashboard",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "div",
+              "id_attr": "root",
+              "data_hydrated": "false"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to SPA dashboard. Detect incomplete hydration.",
+        "action": "navigate",
+        "target": "https://spa.react-portal.com/dashboard",
+        "value": "",
+        "status": "success",
+        "observation": "Initial HTML skeleton loaded."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://spa.react-portal.com/dashboard",
+        "dom_snapshot": {
+          "title": "Dashboard",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "div",
+              "id_attr": "root",
+              "data_hydrated": "true"
+            }
+          ]
+        },
+        "agent_thoughts": "Wait for hydration event to complete before DOM query.",
+        "action": "wait",
+        "target": "#root[data-hydrated='true']",
+        "value": "1500",
+        "status": "success",
+        "observation": "Hydration complete. Interactive elements rendered."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://spa.react-portal.com/dashboard",
+        "dom_snapshot": {
+          "title": "Dashboard",
+          "elements": [
+            {
+              "id": "@e4",
+              "tag": "span",
+              "class": "metric-val",
+              "text": "4,821 Active Users"
+            }
+          ]
+        },
+        "agent_thoughts": "Extract hydrated metric text from @e4.",
+        "action": "extract_text",
+        "target": "@e4",
+        "value": "",
+        "status": "success",
+        "observation": "4,821 Active Users"
+      }
+    ],
+    "outcome": "4,821 Active Users",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://spa.react-portal.com/dashboard",
+      "extracted_text": "4,821 Active Users",
+      "element_present": "@e4"
+    }
+  },
+  {
+    "id": "browser_adv_002",
+    "category": "adversarial_dom",
+    "task": "Extract price from obfuscated styled-components CSS classes",
+    "optimal_steps": 2,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://obfuscated.store.io/item/42",
+        "dom_snapshot": {
+          "title": "Item 42",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "div",
+              "class": "css-1f9a8b2-Root"
+            },
+            {
+              "id": "@e1",
+              "tag": "span",
+              "class": "css-x92zk0-Price",
+              "role": "status",
+              "aria_label": "Price",
+              "text": "$79.00"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to product page with obfuscated classes.",
+        "action": "navigate",
+        "target": "https://obfuscated.store.io/item/42",
+        "value": "",
+        "status": "success",
+        "observation": "Page loaded with hash classnames."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://obfuscated.store.io/item/42",
+        "dom_snapshot": {
+          "title": "Item 42",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "span",
+              "role": "status",
+              "text": "$79.00"
+            }
+          ]
+        },
+        "agent_thoughts": "Ground extraction in semantic role and aria-label rather than volatile classname hash.",
+        "action": "extract_text",
+        "target": "@e1",
+        "value": "",
+        "status": "success",
+        "observation": "$79.00"
+      }
+    ],
+    "outcome": "$79.00",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://obfuscated.store.io/item/42",
+      "extracted_text": "$79.00",
+      "element_present": "@e1"
+    }
+  },
+  {
+    "id": "browser_adv_003",
+    "category": "adversarial_dom",
+    "task": "Input search into closed shadow DOM root",
+    "optimal_steps": 2,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://custom-components.dev/shadow",
+        "dom_snapshot": {
+          "title": "Shadow DOM Demo",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "custom-search-box",
+              "shadow_root": "closed"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to page with closed shadow component.",
+        "action": "navigate",
+        "target": "https://custom-components.dev/shadow",
+        "value": "",
+        "status": "success",
+        "observation": "Web component loaded."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://custom-components.dev/shadow",
+        "dom_snapshot": {
+          "title": "Shadow DOM Demo",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "custom-search-box",
+              "shadow_root": "closed"
+            }
+          ]
+        },
+        "agent_thoughts": "Attempt selector targeting input inside closed shadow root.",
+        "action": "type",
+        "target": "custom-search-box input.search",
+        "value": "Vela AI",
+        "status": "error",
+        "observation": "NoSuchElementException: element custom-search-box input.search is inaccessible inside closed shadow root"
+      }
+    ],
+    "outcome": "Failed to access element inside closed shadow root",
+    "has_loop": false,
+    "is_success": false,
+    "expected_terminal_state": {
+      "url": "https://custom-components.dev/shadow",
+      "error_detected": true
+    }
+  },
+  {
+    "id": "browser_adv_004",
+    "category": "adversarial_dom",
+    "task": "Submit payment inside cross-origin iframe sandbox",
+    "optimal_steps": 2,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://merchant.com/pay",
+        "dom_snapshot": {
+          "title": "Merchant Checkout",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "iframe",
+              "src": "https://secure-vault.provider.com/embed"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to checkout page.",
+        "action": "navigate",
+        "target": "https://merchant.com/pay",
+        "value": "",
+        "status": "success",
+        "observation": "Checkout with embedded iframe loaded."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://merchant.com/pay",
+        "dom_snapshot": {
+          "title": "Merchant Checkout",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "iframe",
+              "src": "https://secure-vault.provider.com/embed"
+            }
+          ]
+        },
+        "agent_thoughts": "Click credit card field directly without iframe switch context.",
+        "action": "click",
+        "target": "#card-number",
+        "value": "",
+        "status": "error",
+        "observation": "TimeoutException: #card-number not found in top-level frame context"
+      }
+    ],
+    "outcome": "Failed to locate target within cross-origin iframe",
+    "has_loop": false,
+    "is_success": false,
+    "expected_terminal_state": {
+      "url": "https://merchant.com/pay",
+      "error_detected": true
+    }
+  },
+  {
+    "id": "browser_adv_005",
+    "category": "adversarial_dom",
+    "task": "Dismiss unexpected newsletter modal overlay and complete task",
+    "optimal_steps": 3,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://tech-times.com/articles/deep-learning",
+        "dom_snapshot": {
+          "title": "Deep Learning Article",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "div",
+              "class": "modal-overlay"
+            },
+            {
+              "id": "@e1",
+              "tag": "button",
+              "class": "modal-close-btn",
+              "aria_label": "Close Modal"
+            }
+          ]
+        },
+        "agent_thoughts": "Article view blocked by newsletter popup. Dismiss modal first.",
+        "action": "click",
+        "target": "@e1",
+        "value": "",
+        "status": "success",
+        "observation": "Modal closed. Main article container accessible."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://tech-times.com/articles/deep-learning",
+        "dom_snapshot": {
+          "title": "Deep Learning Article",
+          "elements": [
+            {
+              "id": "@e5",
+              "tag": "h1",
+              "class": "article-headline",
+              "text": "Self-Improving Reasoning Models"
+            }
+          ]
+        },
+        "agent_thoughts": "Extract article headline from element @e5.",
+        "action": "extract_text",
+        "target": "@e5",
+        "value": "",
+        "status": "success",
+        "observation": "Self-Improving Reasoning Models"
+      }
+    ],
+    "outcome": "Self-Improving Reasoning Models",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://tech-times.com/articles/deep-learning",
+      "extracted_text": "Self-Improving Reasoning Models",
+      "element_present": "@e5"
+    }
+  },
+  {
+    "id": "browser_adv_006",
+    "category": "adversarial_dom",
+    "task": "Extract item from virtualized infinite scroll list",
+    "optimal_steps": 3,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://feed.social.app/timeline",
+        "dom_snapshot": {
+          "title": "Timeline",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "div",
+              "class": "virtual-list-viewport"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to virtualized feed.",
+        "action": "navigate",
+        "target": "https://feed.social.app/timeline",
+        "value": "",
+        "status": "success",
+        "observation": "Initial 5 items rendered."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://feed.social.app/timeline",
+        "dom_snapshot": {
+          "title": "Timeline",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "div",
+              "class": "virtual-list-viewport"
+            }
+          ]
+        },
+        "agent_thoughts": "Scroll viewport to trigger virtualization window sliding.",
+        "action": "scroll",
+        "target": ".virtual-list-viewport",
+        "value": "1200",
+        "status": "success",
+        "observation": "Scrolled down. Items 15-20 mounted."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://feed.social.app/timeline",
+        "dom_snapshot": {
+          "title": "Timeline",
+          "elements": [
+            {
+              "id": "@e18",
+              "tag": "p",
+              "class": "post-content",
+              "text": "Milestone achieved: v2.0 launched"
+            }
+          ]
+        },
+        "agent_thoughts": "Extract target post text from newly mounted item @e18.",
+        "action": "extract_text",
+        "target": "@e18",
+        "value": "",
+        "status": "success",
+        "observation": "Milestone achieved: v2.0 launched"
+      }
+    ],
+    "outcome": "Milestone achieved: v2.0 launched",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://feed.social.app/timeline",
+      "extracted_text": "Milestone achieved: v2.0 launched",
+      "element_present": "@e18"
+    }
+  },
+  {
+    "id": "browser_adv_007",
+    "category": "adversarial_dom",
+    "task": "Extract text series from HTML5 Canvas element",
+    "optimal_steps": 2,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://analytics.dashboard.io/charts",
+        "dom_snapshot": {
+          "title": "Analytics",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "canvas",
+              "id_attr": "revenue-chart"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to analytics dashboard with canvas chart.",
+        "action": "navigate",
+        "target": "https://analytics.dashboard.io/charts",
+        "value": "",
+        "status": "success",
+        "observation": "Chart rendered on 2D canvas."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://analytics.dashboard.io/charts",
+        "dom_snapshot": {
+          "title": "Analytics",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "canvas",
+              "id_attr": "revenue-chart"
+            }
+          ]
+        },
+        "agent_thoughts": "Attempt DOM text extraction on canvas element.",
+        "action": "extract_text",
+        "target": "#revenue-chart",
+        "value": "",
+        "status": "error",
+        "observation": "ExtractionError: Canvas element has no text nodes"
+      }
+    ],
+    "outcome": "Failed to extract text from raw bitmap canvas",
+    "has_loop": false,
+    "is_success": false,
+    "expected_terminal_state": {
+      "url": "https://analytics.dashboard.io/charts",
+      "error_detected": true
+    }
+  },
+  {
+    "id": "browser_adv_008",
+    "category": "adversarial_dom",
+    "task": "Click interactive SVG map element and extract tooltip",
+    "optimal_steps": 3,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://geo.maps.org/interactive",
+        "dom_snapshot": {
+          "title": "Interactive Map",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "svg",
+              "class": "us-map"
+            },
+            {
+              "id": "@e1",
+              "tag": "path",
+              "aria_label": "California",
+              "selector": "path[data-state='CA']"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to interactive SVG map.",
+        "action": "navigate",
+        "target": "https://geo.maps.org/interactive",
+        "value": "",
+        "status": "success",
+        "observation": "Vector map rendered."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://geo.maps.org/interactive",
+        "dom_snapshot": {
+          "title": "Interactive Map",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "path",
+              "aria_label": "California",
+              "selector": "path[data-state='CA']"
+            }
+          ]
+        },
+        "agent_thoughts": "Click SVG vector path for California @e1.",
+        "action": "click",
+        "target": "@e1",
+        "value": "",
+        "status": "success",
+        "observation": "State tooltip activated."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://geo.maps.org/interactive",
+        "dom_snapshot": {
+          "title": "Interactive Map",
+          "elements": [
+            {
+              "id": "@e9",
+              "tag": "div",
+              "class": "svg-tooltip",
+              "text": "California: 39.0M Population"
+            }
+          ]
+        },
+        "agent_thoughts": "Extract population statistic from tooltip @e9.",
+        "action": "extract_text",
+        "target": "@e9",
+        "value": "",
+        "status": "success",
+        "observation": "California: 39.0M Population"
+      }
+    ],
+    "outcome": "California: 39.0M Population",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://geo.maps.org/interactive",
+      "extracted_text": "California: 39.0M Population",
+      "element_present": "@e9"
+    }
+  },
+  {
+    "id": "browser_adv_009",
+    "category": "adversarial_dom",
+    "task": "Avoid hidden honeypot input field during form completion",
+    "optimal_steps": 2,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://secure.signup.com/register",
+        "dom_snapshot": {
+          "title": "Sign Up",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "input",
+              "name": "username",
+              "style": "display:none; visibility:hidden;"
+            },
+            {
+              "id": "@e1",
+              "tag": "input",
+              "name": "real_username",
+              "placeholder": "Your Username"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to registration form.",
+        "action": "navigate",
+        "target": "https://secure.signup.com/register",
+        "value": "",
+        "status": "success",
+        "observation": "Form displayed."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://secure.signup.com/register",
+        "dom_snapshot": {
+          "title": "Sign Up",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "input",
+              "name": "username",
+              "style": "display:none; visibility:hidden;"
+            }
+          ]
+        },
+        "agent_thoughts": "Fill hidden honeypot input field mistakenly.",
+        "action": "type",
+        "target": "@e0",
+        "value": "bot_user",
+        "status": "error",
+        "observation": "AntiBotTriggeredException: Hidden honeypot field filled"
+      }
+    ],
+    "outcome": "Bot trigger tripped by honeypot input",
+    "has_loop": false,
+    "is_success": false,
+    "expected_terminal_state": {
+      "url": "https://secure.signup.com/register",
+      "error_detected": true
+    }
+  },
+  {
+    "id": "browser_adv_010",
+    "category": "adversarial_dom",
+    "task": "Interact with custom web component dropdown via keyboard events",
+    "optimal_steps": 3,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://design-system.org/dropdowns",
+        "dom_snapshot": {
+          "title": "Design System",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "custom-dropdown",
+              "role": "combobox",
+              "aria_expanded": "false"
+            }
+          ]
+        },
+        "agent_thoughts": "Navigate to custom component demonstration.",
+        "action": "navigate",
+        "target": "https://design-system.org/dropdowns",
+        "value": "",
+        "status": "success",
+        "observation": "Custom combobox visible."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://design-system.org/dropdowns",
+        "dom_snapshot": {
+          "title": "Design System",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "custom-dropdown",
+              "role": "combobox",
+              "aria_expanded": "false"
+            }
+          ]
+        },
+        "agent_thoughts": "Focus and trigger enter key to expand custom combobox @e0.",
+        "action": "click",
+        "target": "@e0",
+        "value": "",
+        "status": "success",
+        "observation": "Combobox opened."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://design-system.org/dropdowns",
+        "dom_snapshot": {
+          "title": "Design System",
+          "elements": [
+            {
+              "id": "@e3",
+              "tag": "custom-option",
+              "role": "option",
+              "text": "Enterprise Support Plan"
+            }
+          ]
+        },
+        "agent_thoughts": "Select option element @e3.",
+        "action": "click",
+        "target": "@e3",
+        "value": "",
+        "status": "success",
+        "observation": "Selected: Enterprise Support Plan"
+      }
+    ],
+    "outcome": "Selected: Enterprise Support Plan",
+    "has_loop": false,
+    "is_success": true,
+    "expected_terminal_state": {
+      "url": "https://design-system.org/dropdowns",
+      "extracted_text": "Enterprise Support Plan",
+      "element_present": "@e3"
+    }
+  }
+]

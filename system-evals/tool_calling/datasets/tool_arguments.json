@@ -1,0 +1,501 @@
+[
+  {
+    "id": "ta_arg_001",
+    "category": "tool_arguments",
+    "dataset": "tool_arguments",
+    "description": "personal assistant args",
+    "persona": "personal assistant",
+    "prompt": "Send an email to alice@example.com with subject 'Hello' and body 'Hi there'",
+    "expected_tool": "gmail_send_email",
+    "expected_tools": [
+      "gmail_send_email"
+    ],
+    "expected_arguments": {
+      "to": "alice@example.com",
+      "subject": "Hello",
+      "body": "Hi there"
+    },
+    "arg_keys": [
+      "to",
+      "subject",
+      "body"
+    ],
+    "should_call_tool": true
+  },
+  {
+    "id": "ta_arg_002",
+    "category": "tool_arguments",
+    "dataset": "tool_arguments",
+    "description": "personal assistant args",
+    "persona": "personal assistant",
+    "prompt": "Read my last 5 emails",
+    "expected_tool": "gmail_read_emails",
+    "expected_tools": [
+      "gmail_read_emails"
+    ],
+    "expected_arguments": {
+      "max_results": 5
+    },
+    "arg_keys": [
+      "max_results"
+    ],
+    "should_call_tool": true
+  },
+  {
+    "id": "ta_arg_003",
+    "category": "tool_arguments",
+    "dataset": "tool_arguments",
+    "description": "personal assistant args",
+    "persona": "personal assistant",
+    "prompt": "Search emails with query 'invoice'",
+    "expected_tool": "gmail_read_emails",
+    "expected_tools": [
+      "gmail_read_emails"
+    ],
+    "expected_arguments": {
+      "query": "invoice"
+    },
+    "arg_keys": [
+      "query"
+    ],
+    "should_call_tool": true
+  },
+  {
+    "id": "ta_arg_004",
+    "category": "tool_arguments",
+    "dataset": "tool_arguments",
+    "description": "personal assistant args",
+    "persona": "personal assistant",
+    "prompt": "List calendar events for 2026-10-15",
+    "expected_tool": "calendar_list_events",
+    "expected_tools": [
+      "calendar_list_events"
+    ],
+    "expected_arguments": {
+      "date": "2026-10-15"
+    },
+    "arg_keys": [
+      "date"
+    ],
+    "should_call_tool": true
+  },
+  {
+    "id": "ta_arg_005",
+    "category": "tool_arguments",
+    "dataset": "tool_arguments",
+    "description": "personal assistant args",
+    "persona": "personal assistant",
+    "prompt": "Create an event 'Standup' starting 2026-10-15T09:30:00Z ending 2026-10-15T10:00:00Z",
+    "expected_tool": "calendar_create_event",
+    "expected_tools": [
+      "calendar_create_event"
+    ],
+    "expected_arguments": {
+      "summary": "Standup",
+      "start": "2026-10-15T09:30:00Z",
+      "end": "2026-10-15T10:00:00Z"
+    },
+    "arg_keys": [
+      "summary",
+      "start",
+      "end"
+    ],
+    "should_call_tool": true
+  },
+  {
+    "id": "ta_arg_006",
+    "category": "tool_arguments",
+    "dataset": "tool_arguments",
+    "description": "researcher args",
+    "persona": "researcher",
+    "prompt": "Search the web for 'Rust 1.85'",
+    "expected_tool": "web_search",
+    "expected_tools": [
+      "web_search"
+    ],
+    "expected_arguments": {
+      "query": "Rust 1.85"
+    },
+    "arg_keys": [
+      "query"
+    ],
+    "should_call_tool": true
+  },
+  {
+    "id": "ta_arg_007",
+    "category": "tool_arguments",
+    "dataset": "tool_arguments",
+    "description": "coder args",
+    "persona": "coder",
+    "prompt": "Run python code 'print(42)'",
+    "expected_tool": "run_python_code",
+    "expected_tools": [
+      "run_python_code"
+    ],
+    "expected_arguments": {
+      "code": "print(42)"
+    },
+    "arg_keys": [
+      "code"
+    ],
+    "should_call_tool": true
+  },
+  {
+    "id": "ta_arg_008",
+    "category": "tool_arguments",
+    "dataset": "tool_arguments",
+    "description": "personal assistant args",
+    "persona": "personal assistant",
+    "prompt": "Save memory 'my code is ALPHA-42'",
+    "expected_tool": "save_user_memory",
+    "expected_tools": [
+      "save_user_memory"
+    ],
+    "expected_arguments": {
+      "content": "my code is ALPHA-42"
+    },
+    "arg_keys": [
+      "content"
+    ],
+    "should_call_tool": true
+  },
+  {
+    "id": "ta_arg_009",
+    "category": "tool_arguments",
+    "dataset": "tool_arguments",
+    "description": "personal assistant args",
+    "persona": "personal assistant",
+    "prompt": "Delete memory with id 7",
+    "expected_tool": "delete_user_memory",
+    "expected_tools": [
+      "delete_user_memory"
+    ],
+    "expected_arguments": {
+      "memory_id": 7
+    },
+    "arg_keys": [
+      "memory_id"
+    ],
+    "should_call_tool": true
+  },
+  {
+    "id": "ta_arg_010",
+    "category": "tool_arguments",
+    "dataset": "tool_arguments",
+    "description": "personal assistant args",
+    "persona": "personal assistant",
+    "prompt": "Send status message 'done'",
+    "expected_tool": "send_status_message",
+    "expected_tools": [
+      "send_status_message"
+    ],
+    "expected_arguments": {
+      "message": "done"
+    },
+    "arg_keys": [
+      "message"
+    ],
+    "should_call_tool": true
+  },
+  {
+    "id": "ta_arg_011",
+    "category": "tool_arguments",
+    "dataset": "tool_arguments",
+    "description": "personal assistant args",
+    "persona": "personal assistant",
+    "prompt": "Send an email to alice@example.com with subject 'Hello' and body 'Hi there'",
+    "expected_tool": "gmail_send_email",
+    "expected_tools": [
+      "gmail_send_email"
+    ],
+    "expected_arguments": {
+      "to": "alice@example.com",
+      "subject": "Hello",
+      "body": "Hi there"
+    },
+    "arg_keys": [
+      "to",
+      "subject",
+      "body"
+    ],
+    "should_call_tool": true
+  },
+  {
+    "id": "ta_arg_012",
+    "category": "tool_arguments",
+    "dataset": "tool_arguments",
+    "description": "personal assistant args",
+    "persona": "personal assistant",
+    "prompt": "Read my last 5 emails",
+    "expected_tool": "gmail_read_emails",
+    "expected_tools": [
+      "gmail_read_emails"
+    ],
+    "expected_arguments": {
+      "max_results": 5
+    },
+    "arg_keys": [
+      "max_results"
+    ],
+    "should_call_tool": true
+  },
+  {
+    "id": "ta_arg_013",
+    "category": "tool_arguments",
+    "dataset": "tool_arguments",
+    "description": "personal assistant args",
+    "persona": "personal assistant",
+    "prompt": "Search emails with query 'invoice'",
+    "expected_tool": "gmail_read_emails",
+    "expected_tools": [
+      "gmail_read_emails"
+    ],
+    "expected_arguments": {
+      "query": "invoice"
+    },
+    "arg_keys": [
+      "query"
+    ],
+    "should_call_tool": true
+  },
+  {
+    "id": "ta_arg_014",
+    "category": "tool_arguments",
+    "dataset": "tool_arguments",
+    "description": "personal assistant args",
+    "persona": "personal assistant",
+    "prompt": "List calendar events for 2026-10-15",
+    "expected_tool": "calendar_list_events",
+    "expected_tools": [
+      "calendar_list_events"
+    ],
+    "expected_arguments": {
+      "date": "2026-10-15"
+    },
+    "arg_keys": [
+      "date"
+    ],
+    "should_call_tool": true
+  },
+  {
+    "id": "ta_arg_015",
+    "category": "tool_arguments",
+    "dataset": "tool_arguments",
+    "description": "personal assistant args",
+    "persona": "personal assistant",
+    "prompt": "Create an event 'Standup' starting 2026-10-15T09:30:00Z ending 2026-10-15T10:00:00Z",
+    "expected_tool": "calendar_create_event",
+    "expected_tools": [
+      "calendar_create_event"
+    ],
+    "expected_arguments": {
+      "summary": "Standup",
+      "start": "2026-10-15T09:30:00Z",
+      "end": "2026-10-15T10:00:00Z"
+    },
+    "arg_keys": [
+      "summary",
+      "start",
+      "end"
+    ],
+    "should_call_tool": true
+  },
+  {
+    "id": "ta_arg_016",
+    "category": "tool_arguments",
+    "dataset": "tool_arguments",
+    "description": "researcher args",
+    "persona": "researcher",
+    "prompt": "Search the web for 'Rust 1.85'",
+    "expected_tool": "web_search",
+    "expected_tools": [
+      "web_search"
+    ],
+    "expected_arguments": {
+      "query": "Rust 1.85"
+    },
+    "arg_keys": [
+      "query"
+    ],
+    "should_call_tool": true
+  },
+  {
+    "id": "ta_arg_017",
+    "category": "tool_arguments",
+    "dataset": "tool_arguments",
+    "description": "coder args",
+    "persona": "coder",
+    "prompt": "Run python code 'print(42)'",
+    "expected_tool": "run_python_code",
+    "expected_tools": [
+      "run_python_code"
+    ],
+    "expected_arguments": {
+      "code": "print(42)"
+    },
+    "arg_keys": [
+      "code"
+    ],
+    "should_call_tool": true
+  },
+  {
+    "id": "ta_arg_018",
+    "category": "tool_arguments",
+    "dataset": "tool_arguments",
+    "description": "personal assistant args",
+    "persona": "personal assistant",
+    "prompt": "Save memory 'my code is ALPHA-42'",
+    "expected_tool": "save_user_memory",
+    "expected_tools": [
+      "save_user_memory"
+    ],
+    "expected_arguments": {
+      "content": "my code is ALPHA-42"
+    },
+    "arg_keys": [
+      "content"
+    ],
+    "should_call_tool": true
+  },
+  {
+    "id": "ta_arg_019",
+    "category": "tool_arguments",
+    "dataset": "tool_arguments",
+    "description": "personal assistant args",
+    "persona": "personal assistant",
+    "prompt": "Delete memory with id 7",
+    "expected_tool": "delete_user_memory",
+    "expected_tools": [
+      "delete_user_memory"
+    ],
+    "expected_arguments": {
+      "memory_id": 7
+    },
+    "arg_keys": [
+      "memory_id"
+    ],
+    "should_call_tool": true
+  },
+  {
+    "id": "ta_arg_020",
+    "category": "tool_arguments",
+    "dataset": "tool_arguments",
+    "description": "personal assistant args",
+    "persona": "personal assistant",
+    "prompt": "Send status message 'done'",
+    "expected_tool": "send_status_message",
+    "expected_tools": [
+      "send_status_message"
+    ],
+    "expected_arguments": {
+      "message": "done"
+    },
+    "arg_keys": [
+      "message"
+    ],
+    "should_call_tool": true
+  },
+  {
+    "id": "ta_arg_021",
+    "category": "tool_arguments",
+    "dataset": "tool_arguments",
+    "description": "personal assistant args",
+    "persona": "personal assistant",
+    "prompt": "Send an email to alice@example.com with subject 'Hello' and body 'Hi there'",
+    "expected_tool": "gmail_send_email",
+    "expected_tools": [
+      "gmail_send_email"
+    ],
+    "expected_arguments": {
+      "to": "alice@example.com",
+      "subject": "Hello",
+      "body": "Hi there"
+    },
+    "arg_keys": [
+      "to",
+      "subject",
+      "body"
+    ],
+    "should_call_tool": true
+  },
+  {
+    "id": "ta_arg_022",
+    "category": "tool_arguments",
+    "dataset": "tool_arguments",
+    "description": "personal assistant args",
+    "persona": "personal assistant",
+    "prompt": "Read my last 5 emails",
+    "expected_tool": "gmail_read_emails",
+    "expected_tools": [
+      "gmail_read_emails"
+    ],
+    "expected_arguments": {
+      "max_results": 5
+    },
+    "arg_keys": [
+      "max_results"
+    ],
+    "should_call_tool": true
+  },
+  {
+    "id": "ta_arg_023",
+    "category": "tool_arguments",
+    "dataset": "tool_arguments",
+    "description": "personal assistant args",
+    "persona": "personal assistant",
+    "prompt": "Search emails with query 'invoice'",
+    "expected_tool": "gmail_read_emails",
+    "expected_tools": [
+      "gmail_read_emails"
+    ],
+    "expected_arguments": {
+      "query": "invoice"
+    },
+    "arg_keys": [
+      "query"
+    ],
+    "should_call_tool": true
+  },
+  {
+    "id": "ta_arg_024",
+    "category": "tool_arguments",
+    "dataset": "tool_arguments",
+    "description": "personal assistant args",
+    "persona": "personal assistant",
+    "prompt": "List calendar events for 2026-10-15",
+    "expected_tool": "calendar_list_events",
+    "expected_tools": [
+      "calendar_list_events"
+    ],
+    "expected_arguments": {
+      "date": "2026-10-15"
+    },
+    "arg_keys": [
+      "date"
+    ],
+    "should_call_tool": true
+  },
+  {
+    "id": "ta_arg_025",
+    "category": "tool_arguments",
+    "dataset": "tool_arguments",
+    "description": "personal assistant args",
+    "persona": "personal assistant",
+    "prompt": "Create an event 'Standup' starting 2026-10-15T09:30:00Z ending 2026-10-15T10:00:00Z",
+    "expected_tool": "calendar_create_event",
+    "expected_tools": [
+      "calendar_create_event"
+    ],
+    "expected_arguments": {
+      "summary": "Standup",
+      "start": "2026-10-15T09:30:00Z",
+      "end": "2026-10-15T10:00:00Z"
+    },
+    "arg_keys": [
+      "summary",
+      "start",
+      "end"
+    ],
+    "should_call_tool": true
+  }
+]

@@ -2,10 +2,26 @@ import React, { useMemo } from 'react';
 import { View, StyleSheet, Platform, Text, Pressable, ScrollView } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import Markdown from 'react-native-markdown-display';
-import { parseContent } from '../../utils/latexExtractor';
-import LatexRenderer from './LatexRenderer';
+import { parseContent, parseContentIncremental } from '../../utils/latexExtractor';
+import { perfTracker } from '../../utils/perfTracker';
 import { THEME_COLORS, FONT_SIZES, ACCENT_COLORS } from '../../utils/theme';
-import MermaidRenderer from './MermaidRenderer';
+
+// Lazy-loaded heavy modules to avoid blocking initial cold launch bundle evaluation
+let LazyLatexRenderer: React.ComponentType<any> | null = null;
+function getLatexRenderer(): React.ComponentType<any> {
+  if (!LazyLatexRenderer) {
+    LazyLatexRenderer = require('./LatexRenderer').default;
+  }
+  return LazyLatexRenderer!;
+}
+
+let LazyMermaidRenderer: React.ComponentType<any> | null = null;
+function getMermaidRenderer(): React.ComponentType<any> {
+  if (!LazyMermaidRenderer) {
+    LazyMermaidRenderer = require('./MermaidRenderer').default;
+  }
+  return LazyMermaidRenderer!;
+}
 
 interface RichTextProps {
   content: string;
@@ -16,6 +32,7 @@ interface RichTextProps {
   sizes?: typeof FONT_SIZES[keyof typeof FONT_SIZES];
   accentHex?: string;
   onCopyText?: (text: string) => void;
+  isStreaming?: boolean;
 }
 
 export default function RichText({
@@ -27,8 +44,13 @@ export default function RichText({
   sizes: sizesOverride,
   accentHex: accentHexOverride,
   onCopyText,
+  isStreaming = false,
 }: RichTextProps) {
-  const segments = parseContent(content);
+  const segments = useMemo(() => {
+    return perfTracker.measureMarkdownParse(content, () =>
+      isStreaming ? parseContentIncremental(content) : parseContent(content)
+    );
+  }, [content, isStreaming]);
   const colors = colorsOverride || THEME_COLORS[theme] || THEME_COLORS.deep;
   const sizes = sizesOverride || FONT_SIZES[fontSize] || FONT_SIZES.medium;
   const accentHex = accentHexOverride || ACCENT_COLORS[accentColor] || ACCENT_COLORS.indigo;
@@ -39,8 +61,9 @@ export default function RichText({
       const lang = node.info || '';
 
       if (lang.toLowerCase().trim() === 'mermaid') {
+        const Mermaid = getMermaidRenderer();
         return (
-          <MermaidRenderer
+          <Mermaid
             key={node.key}
             graph={codeText}
             theme={theme}
@@ -51,22 +74,23 @@ export default function RichText({
       }
 
       return (
-        <View key={node.key} style={[styles.codeBlockWrapper, { backgroundColor: colors.background, borderColor: colors.border }]}>
-          <View style={[styles.codeBlockHeader, { borderBottomColor: colors.border }]}>
+        <View key={node.key} style={[styles.codeBlockWrapper, { backgroundColor: colors.codeBg || colors.background, borderColor: colors.border }]}>
+          <View style={[styles.codeBlockHeader, { borderBottomColor: colors.border, backgroundColor: 'rgba(0, 0, 0, 0.25)' }]}>
             <Text style={[styles.codeBlockLang, { color: colors.textDark }]}>
               {lang.toUpperCase() || 'CODE'}
             </Text>
             <Pressable 
-              style={({ pressed }) => [styles.codeCopyBtn, pressed && { opacity: 0.7 }]} 
+              style={({ pressed }) => [styles.codeCopyBtn, { borderColor: colors.glassBorder }, pressed && { opacity: 0.7, transform: [{ scale: 0.96 }] }]} 
               onPress={async () => {
                 await Clipboard.setStringAsync(codeText);
               }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, fontWeight: 'bold' }}>Copy</Text>
+              <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, fontWeight: '700', letterSpacing: 0.2 }}>Copy</Text>
             </Pressable>
           </View>
           <ScrollView horizontal={true} showsHorizontalScrollIndicator={true} style={{ width: '100%', maxWidth: '100%' }} contentContainerStyle={{ flexGrow: 1 }}>
-            <Text style={[styles.codeText, { color: colors.text, fontSize: sizes.text - 1, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }]}>
+            <Text style={[styles.codeText, { color: colors.codeFg || colors.text, fontSize: sizes.text - 1, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }]}>
               {codeText.replace(/\n$/, '')}
             </Text>
           </ScrollView>
@@ -76,20 +100,21 @@ export default function RichText({
     code_block: (node: any) => {
       const codeText = node.content || '';
       return (
-        <View key={node.key} style={[styles.codeBlockWrapper, { backgroundColor: colors.background, borderColor: colors.border }]}>
-          <View style={[styles.codeBlockHeader, { borderBottomColor: colors.border }]}>
+        <View key={node.key} style={[styles.codeBlockWrapper, { backgroundColor: colors.codeBg || colors.background, borderColor: colors.border }]}>
+          <View style={[styles.codeBlockHeader, { borderBottomColor: colors.border, backgroundColor: 'rgba(0, 0, 0, 0.25)' }]}>
             <Text style={[styles.codeBlockLang, { color: colors.textDark }]}>CODE</Text>
             <Pressable 
-              style={({ pressed }) => [styles.codeCopyBtn, pressed && { opacity: 0.7 }]} 
+              style={({ pressed }) => [styles.codeCopyBtn, { borderColor: colors.glassBorder }, pressed && { opacity: 0.7, transform: [{ scale: 0.96 }] }]} 
               onPress={async () => {
                 await Clipboard.setStringAsync(codeText);
               }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, fontWeight: 'bold' }}>Copy</Text>
+              <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, fontWeight: '700', letterSpacing: 0.2 }}>Copy</Text>
             </Pressable>
           </View>
           <ScrollView horizontal={true} showsHorizontalScrollIndicator={true} style={{ width: '100%', maxWidth: '100%' }} contentContainerStyle={{ flexGrow: 1 }}>
-            <Text style={[styles.codeText, { color: colors.text, fontSize: sizes.text - 1, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }]}>
+            <Text style={[styles.codeText, { color: colors.codeFg || colors.text, fontSize: sizes.text - 1, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }]}>
               {codeText.replace(/\n$/, '')}
             </Text>
           </ScrollView>
@@ -109,41 +134,44 @@ export default function RichText({
       textDecorationLine: 'underline' as const,
     },
     code_inline: {
-      backgroundColor: colors.card,
+      backgroundColor: 'rgba(0, 0, 0, 0.25)',
       color: colors.text,
       fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-      paddingHorizontal: 4,
-      borderRadius: 4,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: colors.glassBorder,
       fontSize: sizes.text - 1,
     },
     code_block: {
-      backgroundColor: colors.background,
+      backgroundColor: colors.codeBg || colors.background,
       borderColor: colors.border,
       borderWidth: 1,
-      borderRadius: 8,
-      padding: 12,
-      marginVertical: 8,
-      color: colors.text,
+      borderRadius: 14,
+      padding: 14,
+      marginVertical: 10,
+      color: colors.codeFg || colors.text,
       fontSize: sizes.text - 1,
     },
     fence: {
-      backgroundColor: colors.background,
+      backgroundColor: colors.codeBg || colors.background,
       borderColor: colors.border,
       borderWidth: 1,
-      borderRadius: 8,
-      padding: 12,
-      marginVertical: 8,
-      color: colors.text,
+      borderRadius: 14,
+      padding: 14,
+      marginVertical: 10,
+      color: colors.codeFg || colors.text,
       fontSize: sizes.text - 1,
     },
     blockquote: {
-      backgroundColor: colors.card,
+      backgroundColor: colors.bubbleAssistant || 'rgba(217, 169, 109, 0.05)',
       borderColor: accentHex,
-      borderLeftWidth: 4,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      marginVertical: 8,
-      borderRadius: 4,
+      borderLeftWidth: 3,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      marginVertical: 10,
+      borderRadius: 8,
       color: colors.textMuted,
       fontSize: sizes.text,
     },
@@ -226,16 +254,18 @@ export default function RichText({
         if (segment.type === 'markdown') {
           return <Markdown key={index} rules={rules} style={dynamicMarkdownStyles as any}>{segment.content}</Markdown>;
         } else if (segment.type === 'latex-inline') {
+          const Latex = getLatexRenderer();
           return (
-            <LatexRenderer
+            <Latex
               key={index}
               formula={segment.content}
               displayMode={false}
             />
           );
         } else if (segment.type === 'latex-block') {
+          const Latex = getLatexRenderer();
           return (
-            <LatexRenderer
+            <Latex
               key={index}
               formula={segment.content}
               displayMode={true}
@@ -256,8 +286,8 @@ const styles = StyleSheet.create({
   },
   codeBlockWrapper: {
     borderWidth: 1,
-    borderRadius: 8,
-    marginVertical: 8,
+    borderRadius: 14,
+    marginVertical: 10,
     overflow: 'hidden',
     alignSelf: 'stretch',
     maxWidth: '100%',
@@ -266,23 +296,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderBottomWidth: 1,
   },
   codeBlockLang: {
     fontSize: 10,
     fontWeight: 'bold',
-    letterSpacing: 1,
+    letterSpacing: 1.2,
   },
   codeCopyBtn: {
-    paddingVertical: 2,
-    paddingHorizontal: 6,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
   },
   codeText: {
-    padding: 12,
-    lineHeight: 18,
+    padding: 14,
+    lineHeight: 20,
   },
 });

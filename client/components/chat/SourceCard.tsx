@@ -30,10 +30,11 @@ export default function SourceCard({ src, colors, sizes, accentHex }: { src: Sea
     <Pressable
       style={({ pressed }) => [
         styles.sourceCard,
-        { backgroundColor: 'rgba(0,0,0,0.25)', borderColor: colors.glassBorder },
-        pressed && { opacity: 0.8 }
+        { backgroundColor: 'rgba(0,0,0,0.3)', borderColor: colors.glassBorder },
+        pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] }
       ]}
       onPress={handlePress}
+      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
     >
       <View style={styles.sourceHeader}>
         {src.favicon && !imgError ? (
@@ -43,7 +44,7 @@ export default function SourceCard({ src, colors, sizes, accentHex }: { src: Sea
             onError={() => setImgError(true)}
           />
         ) : (
-          <View style={[styles.sourceIconFallback, { backgroundColor: accentHex + '20' }]}>
+          <View style={[styles.sourceIconFallback, { backgroundColor: accentHex + '25' }]}>
             <Text style={[styles.sourceIconFallbackText, { color: accentHex }]}>
               {getInitials(src.siteName || src.domain)}
             </Text>
@@ -53,7 +54,7 @@ export default function SourceCard({ src, colors, sizes, accentHex }: { src: Sea
           {src.siteName || 'Web Page'}
         </Text>
       </View>
-      <Text style={[styles.sourceTitle, { color: colors.textMuted, fontSize: sizes.text }]} numberOfLines={2}>
+      <Text style={[styles.sourceTitle, { color: colors.textMuted, fontSize: sizes.text - 1, lineHeight: Math.round((sizes.text - 1) * 1.3) }]} numberOfLines={2}>
         {src.title}
       </Text>
     </Pressable>
@@ -63,35 +64,37 @@ export default function SourceCard({ src, colors, sizes, accentHex }: { src: Sea
 const styles = StyleSheet.create({
   sourceCard: {
     borderWidth: 1,
-    borderRadius: 10,
-    padding: 8,
-    width: 140,
+    borderRadius: 14,
+    padding: 10,
+    width: 148,
+    minHeight: 56,
   },
   sourceHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
-    gap: 6,
+    marginBottom: 6,
+    gap: 8,
   },
   sourceFavicon: {
-    width: 14,
-    height: 14,
-    borderRadius: 2,
+    width: 16,
+    height: 16,
+    borderRadius: 4,
   },
   sourceIconFallback: {
-    width: 14,
-    height: 14,
-    borderRadius: 2,
+    width: 16,
+    height: 16,
+    borderRadius: 4,
     justifyContent: 'center',
     alignItems: 'center',
   },
   sourceIconFallbackText: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: 'bold',
   },
   sourceSiteName: {
     flex: 1,
     fontWeight: '600',
+    letterSpacing: 0.2,
   },
   sourceTitle: {
     fontWeight: '500',

@@ -1,0 +1,72 @@
+{
+  "version": "1.0.0",
+  "timestamp": "2026-10-17T15:43:29.891Z",
+  "platform": "mobile-android",
+  "environment": {
+    "os": "win32",
+    "device": "CI / Headless Engine",
+    "build_type": "release",
+    "runtime": "Node v26.7.0 / Jest"
+  },
+  "metrics": {
+    "stream_render_commits": {
+      "value": 6,
+      "unit": "commits",
+      "lower_is_better": true,
+      "tier": 1,
+      "description": "Total React commits during streaming updates"
+    },
+    "redundant_cell_rerenders": {
+      "value": 0,
+      "unit": "commits",
+      "lower_is_better": true,
+      "target": 0,
+      "tier": 1,
+      "description": "Historical cell re-render count during stream (must be 0)"
+    },
+    "stream_total_parse_ms": {
+      "value": 1.74,
+      "unit": "ms",
+      "lower_is_better": true,
+      "tier": 1,
+      "description": "Cumulative AST parse duration across 250 tokens"
+    },
+    "parse_quadratic_ratio": {
+      "value": 1.91,
+      "unit": "ratio",
+      "lower_is_better": true,
+      "target": 2.5,
+      "tier": 1,
+      "description": "Scaling ratio total_parse(250) / total_parse(125) (< 2.5)"
+    },
+    "js_event_loop_lag_ms": {
+      "value": 0,
+      "unit": "ms",
+      "lower_is_better": true,
+      "tier": 1,
+      "description": "JavaScript event-loop delay under active streaming load"
+    },
+    "sqlite_insert_duration_ms": {
+      "value": 0,
+      "unit": "ms",
+      "lower_is_better": true,
+      "tier": 2,
+      "description": "SQLite insert duration (p50)"
+    },
+    "sqlite_query_duration_ms": {
+      "value": 1,
+      "unit": "ms",
+      "lower_is_better": true,
+      "tier": 2,
+      "description": "SQLite 30-message history query duration (p50)"
+    },
+    "sync_blocking_invariant_ms": {
+      "value": 0,
+      "unit": "ms",
+      "lower_is_better": true,
+      "target": 16.6,
+      "tier": 1,
+      "description": "Synchronous dispatch delay before optimistic state commit"
+    }
+  }
+}

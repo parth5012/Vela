@@ -3,6 +3,7 @@ import { threads, messages, operationLog } from './schema';
 import { eq, asc, desc } from 'drizzle-orm';
 import { useChatStore, Thread, Message } from '../store/useChatStore';
 import { parseSafeDate } from '../utils/date';
+import { perfTracker } from '../utils/perfTracker';
 
 /**
  * Local-first chat repository.
@@ -101,6 +102,44 @@ export async function deleteMessageLocal(messageId: string): Promise<void> {
   await db.delete(messages).where(eq(messages.id, messageId));
 }
 
+// Asynchronous WAL Background Write Queue: processes SQLite writes without blocking JS thread
+const walWriteQueue: Array<() => Promise<void>> = [];
+let isProcessingWalQueue = false;
+
+export function enqueueWalWrite(task: () => Promise<void>): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    walWriteQueue.push(async () => {
+      try {
+        await task();
+        resolve();
+      } catch (err) {
+        reject(err);
+      }
+    });
+
+    if (!isProcessingWalQueue) {
+      isProcessingWalQueue = true;
+      if (typeof queueMicrotask === 'function') {
+        queueMicrotask(processWalQueue);
+      } else {
+        setTimeout(processWalQueue, 0);
+      }
+    }
+  });
+}
+
+async function processWalQueue() {
+  while (walWriteQueue.length > 0) {
+    const nextTask = walWriteQueue.shift();
+    if (nextTask) {
+      try {
+        await nextTask();
+      } catch (err) {}
+    }
+  }
+  isProcessingWalQueue = false;
+}
+
 export async function clearChatLocal(): Promise<void> {
   if (!db) return;
   await db.delete(messages);
@@ -108,29 +147,37 @@ export async function clearChatLocal(): Promise<void> {
 }
 
 export async function saveMessage(conversationId: string, message: Message): Promise<void> {
-  if (!db) return;
-  try {
-    const existingThread = await db.select({ id: threads.id }).from(threads).where(eq(threads.id, conversationId)).limit(1);
-    if (!existingThread || existingThread.length === 0) {
-      const memoryThread = useChatStore.getState().threads.find((t) => t.id === conversationId);
-      if (memoryThread) {
-        await saveThread(memoryThread);
+  return enqueueWalWrite(async () => {
+    if (!db) return;
+    try {
+      const existingThread = await db.select({ id: threads.id }).from(threads).where(eq(threads.id, conversationId)).limit(1);
+      if (!existingThread || existingThread.length === 0) {
+        const memoryThread = useChatStore.getState().threads.find((t) => t.id === conversationId);
+        if (memoryThread) {
+          await saveThread(memoryThread);
+        }
       }
-    }
-  } catch (err) {}
+    } catch (err) {}
 
-  const row = toMessageRow(conversationId, message);
-  await db
-    .insert(messages)
-    .values(row)
-    .onConflictDoUpdate({
-      target: messages.id,
-      set: {
-        content: row.content,
-        role: row.role,
-        created_at: row.created_at,
-      },
-    });
+    const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    try {
+      const row = toMessageRow(conversationId, message);
+      await db
+        .insert(messages)
+        .values(row)
+        .onConflictDoUpdate({
+          target: messages.id,
+          set: {
+            content: row.content,
+            role: row.role,
+            created_at: row.created_at,
+          },
+        });
+    } finally {
+      const duration = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - start;
+      perfTracker.recordMetric('sqlite_insert_duration_ms', duration, 'ms');
+    }
+  });
 }
 
 /**
@@ -193,11 +240,51 @@ export async function markMessageSynced(messageId: string, serverId: string): Pr
     .where(eq(messages.id, messageId));
 }
 
-export async function saveMessages(conversationId: string, messageList: Message[]): Promise<void> {
-  if (!db) return;
-  for (const message of messageList) {
-    await saveMessage(conversationId, message);
+export async function saveMessagesBatch(conversationId: string, messageList: Message[]): Promise<void> {
+  if (!db || messageList.length === 0) return;
+  const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  try {
+    if (typeof db.transaction === 'function') {
+      await db.transaction(async (tx: any) => {
+        for (const message of messageList) {
+          const row = toMessageRow(conversationId, message);
+          await tx
+            .insert(messages)
+            .values(row)
+            .onConflictDoUpdate({
+              target: messages.id,
+              set: {
+                content: row.content,
+                role: row.role,
+                created_at: row.created_at,
+              },
+            });
+        }
+      });
+    } else {
+      for (const message of messageList) {
+        const row = toMessageRow(conversationId, message);
+        await db
+          .insert(messages)
+          .values(row)
+          .onConflictDoUpdate({
+            target: messages.id,
+            set: {
+              content: row.content,
+              role: row.role,
+              created_at: row.created_at,
+            },
+          });
+      }
+    }
+  } finally {
+    const duration = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - start;
+    perfTracker.recordMetric('sqlite_insert_duration_ms', duration, 'ms');
   }
+}
+
+export async function saveMessages(conversationId: string, messageList: Message[]): Promise<void> {
+  return saveMessagesBatch(conversationId, messageList);
 }
 
 /**
@@ -212,20 +299,32 @@ export async function replaceThreadMessages(conversationId: string, messageList:
 
 export async function loadThreads(): Promise<Thread[]> {
   if (!db) return [];
-  // Store keeps threads newest-first (createThread prepends, addMessage moves
-  // to front); mirror that ordering so hydration renders the same list.
-  const rows = await db.select().from(threads).orderBy(desc(threads.updated_at));
-  return rows.map(fromThreadRow);
+  const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  try {
+    // Store keeps threads newest-first (createThread prepends, addMessage moves
+    // to front); mirror that ordering so hydration renders the same list.
+    const rows = await db.select().from(threads).orderBy(desc(threads.updated_at));
+    return rows.map(fromThreadRow);
+  } finally {
+    const duration = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - start;
+    perfTracker.recordMetric('sqlite_query_duration_ms', duration, 'ms');
+  }
 }
 
 export async function loadMessages(conversationId: string): Promise<Message[]> {
   if (!db) return [];
-  const rows = await db
-    .select()
-    .from(messages)
-    .where(eq(messages.conversation_id, conversationId))
-    .orderBy(asc(messages.created_at));
-  return rows.map(fromMessageRow);
+  const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  try {
+    const rows = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.conversation_id, conversationId))
+      .orderBy(asc(messages.created_at));
+    return rows.map(fromMessageRow);
+  } finally {
+    const duration = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - start;
+    perfTracker.recordMetric('sqlite_query_duration_ms', duration, 'ms');
+  }
 }
 
 /**

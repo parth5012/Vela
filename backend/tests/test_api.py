@@ -500,3 +500,42 @@ def test_message_payload_validation():
     p4 = MessagePayload(thread_id="t4", message="check mail", agent="google_workspace")
     assert p4.agent == "google_workspace"
 
+
+def test_eval_thread_bypasses_experience_persistence(monkeypatch):
+    """Verify that /chat/message with eval- thread prefix bypasses Experience DB writes."""
+    from fastapi.testclient import TestClient
+    from agent.main import app, _EVAL_THREAD_HISTORY, clear_eval_thread_history
+    from db.client import DBClient
+    from unittest.mock import patch, MagicMock
+
+    monkeypatch.setenv("VELA_API_KEY", "secret-test-key")
+    headers = {"Authorization": "Bearer secret-test-key"}
+    client = TestClient(app)
+
+    eval_thread_id = "eval-thread-no-poison-999"
+    clear_eval_thread_history(eval_thread_id)
+
+    with patch.object(DBClient, "save_experience") as mock_save:
+        async def mock_events(*args, **kwargs):
+            chunk = MagicMock()
+            chunk.content = "Evaluated response content."
+            yield {"event": "on_chat_model_stream", "data": {"chunk": chunk}}
+
+        with patch("agent.main.graph.astream_events", side_effect=mock_events):
+            resp = client.post(
+                "/chat/message",
+                json={"thread_id": eval_thread_id, "message": "Secret anchor fact"},
+                headers=headers,
+            )
+            assert resp.status_code == 200
+            mock_save.assert_not_called()
+
+            # Verify eval memory retention in eval-only store
+            assert eval_thread_id in _EVAL_THREAD_HISTORY
+            history = _EVAL_THREAD_HISTORY[eval_thread_id]
+            assert len(history) == 2
+            assert history[0].content == "Secret anchor fact"
+            assert "Evaluated response content." in history[1].content
+
+    clear_eval_thread_history(eval_thread_id)
+

@@ -1,0 +1,110 @@
+name: Performance Regression Ratchet
+
+on:
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  headless-benchmark:
+    name: Headless Performance Ratchet Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm 9
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: client/pnpm-lock.yaml
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install client dependencies
+        run: |
+          pnpm --prefix client install --frozen-lockfile
+
+      - name: Run Headless Engine Benchmark Suite
+        run: |
+          pnpm --prefix client run benchmark:ci
+
+      - name: Run Ratchet Comparator with Calibration Probe
+        run: |
+          python3 -c "
+          import time, subprocess, sys
+          # Calibration probe to detect noisy CI virtual machines
+          t0 = time.perf_counter()
+          sum(i * i for i in range(2_000_000))
+          probe_ms = (time.perf_counter() - t0) * 1000
+          print(f'Runner calibration probe duration: {probe_ms:.2f} ms')
+
+          # If execution is >15% slower than standard reference (approx 100ms)
+          tolerance = 5.0
+          if probe_ms > 115.0:
+              print('::warning::Runner environment marked harness_noisy. Applying relative tolerance adjustment to 10.0%.')
+              tolerance = 10.0
+
+          cmd = [
+              sys.executable,
+              '.opencode/skills/deep-performance-engineering/scripts/ratchet.py',
+              '--baseline', 'perf-baseline.json',
+              '--current', 'results/perf-current.json',
+              '--max-regression', str(tolerance),
+              '--markdown-output', 'results/perf-report.md'
+          ]
+          res = subprocess.run(cmd)
+          sys.exit(res.returncode)
+          "
+
+      - name: Comment PR with Benchmark Report
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const reportPath = 'results/perf-report.md';
+            if (fs.existsSync(reportPath)) {
+              const body = fs.readFileSync(reportPath, 'utf8');
+              const { data: comments } = await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+              });
+              const botComment = comments.find(c => c.body.includes('Performance Ratchet Benchmark Report'));
+              if (botComment) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: botComment.id,
+                  body,
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body,
+                });
+              }
+            }

@@ -35,6 +35,7 @@ import {
   saveThreads,
   saveMessage,
   saveMessages,
+  saveMessagesBatch,
   deleteThreadLocal,
   deleteMessageLocal,
   replaceThreadMessages,
@@ -45,6 +46,7 @@ import {
   queueMessageForSync,
   markMessageSynced,
 } from '../db/chatRepository';
+import { perfTracker } from '../utils/perfTracker';
 
 describe('chatRepository (local-first chat persistence)', () => {
   beforeEach(() => {
@@ -274,6 +276,67 @@ describe('chatRepository (local-first chat persistence)', () => {
       expect(messages).toEqual([
         { id: 'm1', role: 'user', content: 'hello', created_at: '2025-06-15T15:06:40.000Z' },
       ]);
+    });
+  });
+
+  describe('saveMessagesBatch', () => {
+    it('should use transaction when db.transaction is available', async () => {
+      const txInsertMock = jest.fn().mockReturnValue({
+        values: jest.fn(() => ({
+          onConflictDoUpdate: jest.fn(async () => undefined),
+        })),
+      });
+      (db as any).transaction = jest.fn(async (cb: any) => {
+        await cb({ insert: txInsertMock });
+      });
+
+      await saveMessagesBatch('thread-1', [
+        { id: 'm1', role: 'user', content: 'hello' },
+        { id: 'm2', role: 'assistant', content: 'world' },
+      ]);
+
+      expect((db as any).transaction).toHaveBeenCalledTimes(1);
+      expect(txInsertMock).toHaveBeenCalledTimes(2);
+      delete (db as any).transaction;
+    });
+  });
+
+  describe('SQLite WAL & Performance Telemetry', () => {
+    it('should record sqlite_insert_duration_ms and sqlite_query_duration_ms metrics', async () => {
+      perfTracker.reset();
+      const valuesFn = jest.fn(() => ({
+        onConflictDoUpdate: jest.fn(async () => undefined),
+      }));
+      (db.insert as jest.Mock).mockReturnValueOnce({ values: valuesFn });
+
+      await saveMessage('thread-1', { id: 'm-perf', role: 'user', content: 'perf' });
+
+      const whereFn = jest.fn(() => ({
+        orderBy: jest.fn(async () => []),
+      }));
+      (db.select as jest.Mock).mockReturnValueOnce({
+        from: jest.fn(() => ({ where: whereFn })),
+      });
+
+      await loadMessages('thread-1');
+
+      const summary = perfTracker.flush();
+      expect(summary.sqlite_insert_duration_ms).toBeDefined();
+      expect(summary.sqlite_insert_duration_ms.count).toBeGreaterThanOrEqual(1);
+      expect(summary.sqlite_query_duration_ms).toBeDefined();
+      expect(summary.sqlite_query_duration_ms.count).toBeGreaterThanOrEqual(1);
+    });
+
+    it('should configure WAL, busy_timeout, and synchronous pragmas', () => {
+      const execSyncMock = jest.fn();
+      const mockSqlite = { execSync: execSyncMock };
+
+      const { configurePragmas } = jest.requireActual('../db/client');
+      configurePragmas(mockSqlite);
+
+      expect(execSyncMock).toHaveBeenCalledWith('PRAGMA journal_mode = WAL;');
+      expect(execSyncMock).toHaveBeenCalledWith('PRAGMA busy_timeout = 5000;');
+      expect(execSyncMock).toHaveBeenCalledWith('PRAGMA synchronous = NORMAL;');
     });
   });
 });

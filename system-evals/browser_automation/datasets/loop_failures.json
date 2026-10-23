@@ -1,0 +1,941 @@
+[
+  {
+    "id": "browser_loop_001",
+    "category": "loop_failures",
+    "task": "Submit payment on checkout form",
+    "optimal_steps": 2,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://pay.gateway.com/checkout",
+        "dom_snapshot": {
+          "title": "Checkout",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "id_attr": "pay-button"
+            }
+          ]
+        },
+        "agent_thoughts": "Click pay button to complete order.",
+        "action": "click",
+        "target": "#pay-button",
+        "value": "",
+        "status": "error",
+        "observation": "Server error 500: gateway unreachable"
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://pay.gateway.com/checkout",
+        "dom_snapshot": {
+          "title": "Checkout",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "id_attr": "pay-button"
+            }
+          ]
+        },
+        "agent_thoughts": "Retry clicking pay button.",
+        "action": "click",
+        "target": "#pay-button",
+        "value": "",
+        "status": "error",
+        "observation": "Server error 500: gateway unreachable"
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://pay.gateway.com/checkout",
+        "dom_snapshot": {
+          "title": "Checkout",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "id_attr": "pay-button"
+            }
+          ]
+        },
+        "agent_thoughts": "Retry clicking pay button third time.",
+        "action": "click",
+        "target": "#pay-button",
+        "value": "",
+        "status": "error",
+        "observation": "Server error 500: gateway unreachable"
+      }
+    ],
+    "outcome": "Failed to submit payment due to persistent 500 error",
+    "has_loop": true,
+    "loop_type": "identical_repeat",
+    "is_success": false,
+    "expected_terminal_state": {
+      "url": "https://pay.gateway.com/checkout",
+      "error_detected": true,
+      "loop_detected": true
+    }
+  },
+  {
+    "id": "browser_loop_002",
+    "category": "loop_failures",
+    "task": "Dismiss unclickable overlay cookie dialog",
+    "optimal_steps": 2,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://portal.news.com",
+        "dom_snapshot": {
+          "title": "Portal",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "div",
+              "id_attr": "cookie-banner"
+            }
+          ]
+        },
+        "agent_thoughts": "Click accept cookies button.",
+        "action": "click",
+        "target": "#cookie-accept",
+        "value": "",
+        "status": "error",
+        "observation": "ElementClickInterceptedException: element obscured"
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://portal.news.com",
+        "dom_snapshot": {
+          "title": "Portal",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "div",
+              "id_attr": "cookie-banner"
+            }
+          ]
+        },
+        "agent_thoughts": "Reattempt clicking accept button.",
+        "action": "click",
+        "target": "#cookie-accept",
+        "value": "",
+        "status": "error",
+        "observation": "ElementClickInterceptedException: element obscured"
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://portal.news.com",
+        "dom_snapshot": {
+          "title": "Portal",
+          "elements": [
+            {
+              "id": "@e0",
+              "tag": "div",
+              "id_attr": "cookie-banner"
+            }
+          ]
+        },
+        "agent_thoughts": "Reattempt clicking accept button again.",
+        "action": "click",
+        "target": "#cookie-accept",
+        "value": "",
+        "status": "error",
+        "observation": "ElementClickInterceptedException: element obscured"
+      }
+    ],
+    "outcome": "Failed to dismiss obscured cookie banner",
+    "has_loop": true,
+    "loop_type": "identical_repeat",
+    "is_success": false,
+    "expected_terminal_state": {
+      "url": "https://portal.news.com",
+      "error_detected": true,
+      "loop_detected": true
+    }
+  },
+  {
+    "id": "browser_loop_003",
+    "category": "loop_failures",
+    "task": "Download PDF invoice from disabled button",
+    "optimal_steps": 1,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://billing.service.com/invoice/99",
+        "dom_snapshot": {
+          "title": "Invoices",
+          "elements": [
+            {
+              "id": "@e2",
+              "tag": "button",
+              "id_attr": "btn-pdf-download",
+              "disabled": true
+            }
+          ]
+        },
+        "agent_thoughts": "Click PDF invoice download button.",
+        "action": "click",
+        "target": "#btn-pdf-download",
+        "value": "",
+        "status": "error",
+        "observation": "InvalidElementStateException: button is disabled"
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://billing.service.com/invoice/99",
+        "dom_snapshot": {
+          "title": "Invoices",
+          "elements": [
+            {
+              "id": "@e2",
+              "tag": "button",
+              "id_attr": "btn-pdf-download",
+              "disabled": true
+            }
+          ]
+        },
+        "agent_thoughts": "Click PDF invoice download button again.",
+        "action": "click",
+        "target": "#btn-pdf-download",
+        "value": "",
+        "status": "error",
+        "observation": "InvalidElementStateException: button is disabled"
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://billing.service.com/invoice/99",
+        "dom_snapshot": {
+          "title": "Invoices",
+          "elements": [
+            {
+              "id": "@e2",
+              "tag": "button",
+              "id_attr": "btn-pdf-download",
+              "disabled": true
+            }
+          ]
+        },
+        "agent_thoughts": "Click PDF invoice download button third time.",
+        "action": "click",
+        "target": "#btn-pdf-download",
+        "value": "",
+        "status": "error",
+        "observation": "InvalidElementStateException: button is disabled"
+      }
+    ],
+    "outcome": "Failed to trigger download on disabled button",
+    "has_loop": true,
+    "loop_type": "identical_repeat",
+    "is_success": false,
+    "expected_terminal_state": {
+      "url": "https://billing.service.com/invoice/99",
+      "error_detected": true,
+      "loop_detected": true
+    }
+  },
+  {
+    "id": "browser_loop_004",
+    "category": "loop_failures",
+    "task": "Locate specific item by oscillating sort order (A-B-A-B loop)",
+    "optimal_steps": 3,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://store.catalog.com/products",
+        "dom_snapshot": {
+          "title": "Catalog",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "selector": "#sort-asc"
+            },
+            {
+              "id": "@e2",
+              "tag": "button",
+              "selector": "#sort-desc"
+            }
+          ]
+        },
+        "agent_thoughts": "Sort by ascending price.",
+        "action": "click",
+        "target": "#sort-asc",
+        "value": "",
+        "status": "success",
+        "observation": "Sorted ascending. Target item not found."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://store.catalog.com/products?sort=asc",
+        "dom_snapshot": {
+          "title": "Catalog Asc",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "selector": "#sort-asc"
+            },
+            {
+              "id": "@e2",
+              "tag": "button",
+              "selector": "#sort-desc"
+            }
+          ]
+        },
+        "agent_thoughts": "Toggle sort to descending price.",
+        "action": "click",
+        "target": "#sort-desc",
+        "value": "",
+        "status": "success",
+        "observation": "Sorted descending. Target item not found."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://store.catalog.com/products?sort=desc",
+        "dom_snapshot": {
+          "title": "Catalog Desc",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "selector": "#sort-asc"
+            },
+            {
+              "id": "@e2",
+              "tag": "button",
+              "selector": "#sort-desc"
+            }
+          ]
+        },
+        "agent_thoughts": "Switch back to ascending price.",
+        "action": "click",
+        "target": "#sort-asc",
+        "value": "",
+        "status": "success",
+        "observation": "Sorted ascending again. Still not found."
+      },
+      {
+        "step_number": 4,
+        "page_url": "https://store.catalog.com/products?sort=asc",
+        "dom_snapshot": {
+          "title": "Catalog Asc",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "selector": "#sort-asc"
+            },
+            {
+              "id": "@e2",
+              "tag": "button",
+              "selector": "#sort-desc"
+            }
+          ]
+        },
+        "agent_thoughts": "Switch back to descending price again.",
+        "action": "click",
+        "target": "#sort-desc",
+        "value": "",
+        "status": "success",
+        "observation": "Sorted descending again. Trapped in cycle."
+      }
+    ],
+    "outcome": "Stuck in alternating sort toggle trap",
+    "has_loop": true,
+    "loop_type": "alternating_cycle",
+    "is_success": false,
+    "expected_terminal_state": {
+      "url": "https://store.catalog.com/products?sort=desc",
+      "loop_detected": true
+    }
+  },
+  {
+    "id": "browser_loop_005",
+    "category": "loop_failures",
+    "task": "Find specifications across oscillating tabs (A-B-A-B loop)",
+    "optimal_steps": 2,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://device.spec.com/phone",
+        "dom_snapshot": {
+          "title": "Specs",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "id_attr": "tab-overview"
+            },
+            {
+              "id": "@e2",
+              "tag": "button",
+              "id_attr": "tab-details"
+            }
+          ]
+        },
+        "agent_thoughts": "Inspect overview tab.",
+        "action": "click",
+        "target": "#tab-overview",
+        "value": "",
+        "status": "success",
+        "observation": "Overview displayed. Specs missing."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://device.spec.com/phone",
+        "dom_snapshot": {
+          "title": "Specs",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "id_attr": "tab-overview"
+            },
+            {
+              "id": "@e2",
+              "tag": "button",
+              "id_attr": "tab-details"
+            }
+          ]
+        },
+        "agent_thoughts": "Switch to details tab.",
+        "action": "click",
+        "target": "#tab-details",
+        "value": "",
+        "status": "success",
+        "observation": "Details displayed. Not in this panel."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://device.spec.com/phone",
+        "dom_snapshot": {
+          "title": "Specs",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "id_attr": "tab-overview"
+            },
+            {
+              "id": "@e2",
+              "tag": "button",
+              "id_attr": "tab-details"
+            }
+          ]
+        },
+        "agent_thoughts": "Switch back to overview tab.",
+        "action": "click",
+        "target": "#tab-overview",
+        "value": "",
+        "status": "success",
+        "observation": "Overview panel shown again."
+      },
+      {
+        "step_number": 4,
+        "page_url": "https://device.spec.com/phone",
+        "dom_snapshot": {
+          "title": "Specs",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "id_attr": "tab-overview"
+            },
+            {
+              "id": "@e2",
+              "tag": "button",
+              "id_attr": "tab-details"
+            }
+          ]
+        },
+        "agent_thoughts": "Switch back to details tab again.",
+        "action": "click",
+        "target": "#tab-details",
+        "value": "",
+        "status": "success",
+        "observation": "Details panel shown again. Oscillating loop."
+      }
+    ],
+    "outcome": "Stuck in alternating tab cycle",
+    "has_loop": true,
+    "loop_type": "alternating_cycle",
+    "is_success": false,
+    "expected_terminal_state": {
+      "url": "https://device.spec.com/phone",
+      "loop_detected": true
+    }
+  },
+  {
+    "id": "browser_loop_006",
+    "category": "loop_failures",
+    "task": "Pagination back-and-forth oscillation trap (A-B-A-B loop)",
+    "optimal_steps": 2,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://archive.articles.com?page=2",
+        "dom_snapshot": {
+          "title": "Archive Page 2",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "id_attr": "btn-next"
+            },
+            {
+              "id": "@e2",
+              "tag": "button",
+              "id_attr": "btn-prev"
+            }
+          ]
+        },
+        "agent_thoughts": "Click next page button.",
+        "action": "click",
+        "target": "#btn-next",
+        "value": "",
+        "status": "success",
+        "observation": "Moved to page 3."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://archive.articles.com?page=3",
+        "dom_snapshot": {
+          "title": "Archive Page 3",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "id_attr": "btn-next"
+            },
+            {
+              "id": "@e2",
+              "tag": "button",
+              "id_attr": "btn-prev"
+            }
+          ]
+        },
+        "agent_thoughts": "Click prev button.",
+        "action": "click",
+        "target": "#btn-prev",
+        "value": "",
+        "status": "success",
+        "observation": "Moved back to page 2."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://archive.articles.com?page=2",
+        "dom_snapshot": {
+          "title": "Archive Page 2",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "id_attr": "btn-next"
+            },
+            {
+              "id": "@e2",
+              "tag": "button",
+              "id_attr": "btn-prev"
+            }
+          ]
+        },
+        "agent_thoughts": "Click next page button again.",
+        "action": "click",
+        "target": "#btn-next",
+        "value": "",
+        "status": "success",
+        "observation": "Moved to page 3 again."
+      },
+      {
+        "step_number": 4,
+        "page_url": "https://archive.articles.com?page=3",
+        "dom_snapshot": {
+          "title": "Archive Page 3",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "button",
+              "id_attr": "btn-next"
+            },
+            {
+              "id": "@e2",
+              "tag": "button",
+              "id_attr": "btn-prev"
+            }
+          ]
+        },
+        "agent_thoughts": "Click prev button again.",
+        "action": "click",
+        "target": "#btn-prev",
+        "value": "",
+        "status": "success",
+        "observation": "Moved to page 2 again. Trapped in forward-backward loop."
+      }
+    ],
+    "outcome": "Stuck in forward-backward pagination loop",
+    "has_loop": true,
+    "loop_type": "alternating_cycle",
+    "is_success": false,
+    "expected_terminal_state": {
+      "url": "https://archive.articles.com?page=2",
+      "loop_detected": true
+    }
+  },
+  {
+    "id": "browser_loop_007",
+    "category": "loop_failures",
+    "task": "Inventory search filter oscillation (A-B-A-B loop)",
+    "optimal_steps": 2,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://parts.auto.com/inventory",
+        "dom_snapshot": {
+          "title": "Inventory",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "a",
+              "id_attr": "filter-instock"
+            },
+            {
+              "id": "@e2",
+              "tag": "a",
+              "id_attr": "filter-all"
+            }
+          ]
+        },
+        "agent_thoughts": "Click in-stock filter.",
+        "action": "click",
+        "target": "#filter-instock",
+        "value": "",
+        "status": "success",
+        "observation": "Filtered to in-stock only. Part not listed."
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://parts.auto.com/inventory?instock=1",
+        "dom_snapshot": {
+          "title": "Inventory In-Stock",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "a",
+              "id_attr": "filter-instock"
+            },
+            {
+              "id": "@e2",
+              "tag": "a",
+              "id_attr": "filter-all"
+            }
+          ]
+        },
+        "agent_thoughts": "Click all filter.",
+        "action": "click",
+        "target": "#filter-all",
+        "value": "",
+        "status": "success",
+        "observation": "Reset filter to all. Searching list."
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://parts.auto.com/inventory",
+        "dom_snapshot": {
+          "title": "Inventory",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "a",
+              "id_attr": "filter-instock"
+            },
+            {
+              "id": "@e2",
+              "tag": "a",
+              "id_attr": "filter-all"
+            }
+          ]
+        },
+        "agent_thoughts": "Click in-stock filter again.",
+        "action": "click",
+        "target": "#filter-instock",
+        "value": "",
+        "status": "success",
+        "observation": "Filtered in-stock again."
+      },
+      {
+        "step_number": 4,
+        "page_url": "https://parts.auto.com/inventory?instock=1",
+        "dom_snapshot": {
+          "title": "Inventory In-Stock",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "a",
+              "id_attr": "filter-instock"
+            },
+            {
+              "id": "@e2",
+              "tag": "a",
+              "id_attr": "filter-all"
+            }
+          ]
+        },
+        "agent_thoughts": "Click all filter again.",
+        "action": "click",
+        "target": "#filter-all",
+        "value": "",
+        "status": "success",
+        "observation": "Filter toggled repeatedly without finding target."
+      }
+    ],
+    "outcome": "Stuck in filter toggle loop",
+    "has_loop": true,
+    "loop_type": "alternating_cycle",
+    "is_success": false,
+    "expected_terminal_state": {
+      "url": "https://parts.auto.com/inventory",
+      "loop_detected": true
+    }
+  },
+  {
+    "id": "browser_loop_008",
+    "category": "loop_failures",
+    "task": "Slow pagination drift through repeating 3-page cycle",
+    "optimal_steps": 3,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://forum.community.org?page=1",
+        "dom_snapshot": {
+          "title": "Page 1",
+          "elements": []
+        },
+        "action": "navigate",
+        "target": "https://forum.community.org?page=2",
+        "value": "",
+        "status": "success",
+        "observation": "Loaded page 2"
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://forum.community.org?page=2",
+        "dom_snapshot": {
+          "title": "Page 2",
+          "elements": []
+        },
+        "action": "navigate",
+        "target": "https://forum.community.org?page=3",
+        "value": "",
+        "status": "success",
+        "observation": "Loaded page 3"
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://forum.community.org?page=3",
+        "dom_snapshot": {
+          "title": "Page 3",
+          "elements": []
+        },
+        "action": "navigate",
+        "target": "https://forum.community.org?page=1",
+        "value": "",
+        "status": "success",
+        "observation": "Redirected or navigated back to page 1"
+      },
+      {
+        "step_number": 4,
+        "page_url": "https://forum.community.org?page=1",
+        "dom_snapshot": {
+          "title": "Page 1",
+          "elements": []
+        },
+        "action": "navigate",
+        "target": "https://forum.community.org?page=2",
+        "value": "",
+        "status": "success",
+        "observation": "Loaded page 2 again in cyclic drift"
+      },
+      {
+        "step_number": 5,
+        "page_url": "https://forum.community.org?page=2",
+        "dom_snapshot": {
+          "title": "Page 2",
+          "elements": []
+        },
+        "action": "navigate",
+        "target": "https://forum.community.org?page=3",
+        "value": "",
+        "status": "success",
+        "observation": "Loaded page 3 again in cyclic drift"
+      }
+    ],
+    "outcome": "Stuck in 3-page cyclic pagination drift",
+    "has_loop": true,
+    "loop_type": "pagination_drift",
+    "is_success": false,
+    "expected_terminal_state": {
+      "url": "https://forum.community.org?page=3",
+      "loop_detected": true
+    }
+  },
+  {
+    "id": "browser_loop_009",
+    "category": "loop_failures",
+    "task": "Slow pagination drift across API offset boundaries",
+    "optimal_steps": 2,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://data.registry.gov/records?offset=0",
+        "dom_snapshot": {
+          "title": "Records",
+          "elements": []
+        },
+        "action": "navigate",
+        "target": "https://data.registry.gov/records?offset=20",
+        "value": "",
+        "status": "success",
+        "observation": "Offset 20"
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://data.registry.gov/records?offset=20",
+        "dom_snapshot": {
+          "title": "Records",
+          "elements": []
+        },
+        "action": "navigate",
+        "target": "https://data.registry.gov/records?offset=40",
+        "value": "",
+        "status": "success",
+        "observation": "Offset 40"
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://data.registry.gov/records?offset=40",
+        "dom_snapshot": {
+          "title": "Records",
+          "elements": []
+        },
+        "action": "navigate",
+        "target": "https://data.registry.gov/records?offset=20",
+        "value": "",
+        "status": "success",
+        "observation": "Offset drifted back to 20"
+      },
+      {
+        "step_number": 4,
+        "page_url": "https://data.registry.gov/records?offset=20",
+        "dom_snapshot": {
+          "title": "Records",
+          "elements": []
+        },
+        "action": "navigate",
+        "target": "https://data.registry.gov/records?offset=40",
+        "value": "",
+        "status": "success",
+        "observation": "Offset drifted back to 40"
+      }
+    ],
+    "outcome": "Stuck in offset query oscillation",
+    "has_loop": true,
+    "loop_type": "pagination_drift",
+    "is_success": false,
+    "expected_terminal_state": {
+      "url": "https://data.registry.gov/records?offset=40",
+      "loop_detected": true
+    }
+  },
+  {
+    "id": "browser_loop_010",
+    "category": "loop_failures",
+    "task": "Next button looping back to root archive index",
+    "optimal_steps": 2,
+    "steps": [
+      {
+        "step_number": 1,
+        "page_url": "https://media.press.org/news",
+        "dom_snapshot": {
+          "title": "News",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "a",
+              "id_attr": "btn-older"
+            }
+          ]
+        },
+        "action": "navigate",
+        "target": "https://media.press.org/news/page/2",
+        "value": "",
+        "status": "success",
+        "observation": "Navigated to https://media.press.org/news/page/2"
+      },
+      {
+        "step_number": 2,
+        "page_url": "https://media.press.org/news/page/2",
+        "dom_snapshot": {
+          "title": "News P2",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "a",
+              "id_attr": "btn-older"
+            }
+          ]
+        },
+        "action": "navigate",
+        "target": "https://media.press.org/news",
+        "value": "",
+        "status": "success",
+        "observation": "Malformed pagination redirected to https://media.press.org/news"
+      },
+      {
+        "step_number": 3,
+        "page_url": "https://media.press.org/news",
+        "dom_snapshot": {
+          "title": "News",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "a",
+              "id_attr": "btn-older"
+            }
+          ]
+        },
+        "action": "navigate",
+        "target": "https://media.press.org/news/page/2",
+        "value": "",
+        "status": "success",
+        "observation": "Navigated to https://media.press.org/news/page/2 again"
+      },
+      {
+        "step_number": 4,
+        "page_url": "https://media.press.org/news/page/2",
+        "dom_snapshot": {
+          "title": "News P2",
+          "elements": [
+            {
+              "id": "@e1",
+              "tag": "a",
+              "id_attr": "btn-older"
+            }
+          ]
+        },
+        "action": "navigate",
+        "target": "https://media.press.org/news",
+        "value": "",
+        "status": "success",
+        "observation": "Redirected back to https://media.press.org/news again"
+      }
+    ],
+    "outcome": "Stuck in cyclic pagination redirect loop",
+    "has_loop": true,
+    "loop_type": "pagination_drift",
+    "is_success": false,
+    "expected_terminal_state": {
+      "url": "https://media.press.org/news",
+      "loop_detected": true
+    }
+  }
+]

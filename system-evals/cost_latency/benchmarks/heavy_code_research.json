@@ -1,0 +1,137 @@
+[
+  {
+    "id": "cl_heavy_001",
+    "category": "heavy_code_research",
+    "dataset": "heavy_code_research",
+    "prompt": "Write a comprehensive Python implementation of a red-black tree with tests case 1.",
+    "persona": "coder",
+    "max_latency_ms": 5000,
+    "max_cost_usd": 0.05
+  },
+  {
+    "id": "cl_heavy_002",
+    "category": "heavy_code_research",
+    "dataset": "heavy_code_research",
+    "prompt": "Write a comprehensive Python implementation of a red-black tree with tests case 2.",
+    "persona": "coder",
+    "max_latency_ms": 5000,
+    "max_cost_usd": 0.05
+  },
+  {
+    "id": "cl_heavy_003",
+    "category": "heavy_code_research",
+    "dataset": "heavy_code_research",
+    "prompt": "Write a comprehensive Python implementation of a red-black tree with tests case 3.",
+    "persona": "coder",
+    "max_latency_ms": 5000,
+    "max_cost_usd": 0.05
+  },
+  {
+    "id": "cl_heavy_004",
+    "category": "heavy_code_research",
+    "dataset": "heavy_code_research",
+    "prompt": "Write a comprehensive Python implementation of a red-black tree with tests case 4.",
+    "persona": "coder",
+    "max_latency_ms": 5000,
+    "max_cost_usd": 0.05
+  },
+  {
+    "id": "cl_heavy_005",
+    "category": "heavy_code_research",
+    "dataset": "heavy_code_research",
+    "prompt": "Write a comprehensive Python implementation of a red-black tree with tests case 5.",
+    "persona": "coder",
+    "max_latency_ms": 5000,
+    "max_cost_usd": 0.05
+  },
+  {
+    "id": "cl_heavy_006",
+    "category": "heavy_code_research",
+    "dataset": "heavy_code_research",
+    "prompt": "Write a comprehensive Python implementation of a red-black tree with tests case 6.",
+    "persona": "coder",
+    "max_latency_ms": 5000,
+    "max_cost_usd": 0.05
+  },
+  {
+    "id": "cl_heavy_007",
+    "category": "heavy_code_research",
+    "dataset": "heavy_code_research",
+    "prompt": "Write a comprehensive Python implementation of a red-black tree with tests case 7.",
+    "persona": "coder",
+    "max_latency_ms": 5000,
+    "max_cost_usd": 0.05
+  },
+  {
+    "id": "cl_heavy_008",
+    "category": "heavy_code_research",
+    "dataset": "heavy_code_research",
+    "prompt": "Write a comprehensive Python implementation of a red-black tree with tests case 8.",
+    "persona": "coder",
+    "max_latency_ms": 5000,
+    "max_cost_usd": 0.05
+  },
+  {
+    "id": "cl_heavy_009",
+    "category": "heavy_code_research",
+    "dataset": "heavy_code_research",
+    "prompt": "Write a comprehensive Python implementation of a red-black tree with tests case 9.",
+    "persona": "coder",
+    "max_latency_ms": 5000,
+    "max_cost_usd": 0.05
+  },
+  {
+    "id": "cl_heavy_010",
+    "category": "heavy_code_research",
+    "dataset": "heavy_code_research",
+    "prompt": "Write a comprehensive Python implementation of a red-black tree with tests case 10.",
+    "persona": "coder",
+    "max_latency_ms": 5000,
+    "max_cost_usd": 0.05
+  },
+  {
+    "id": "cl_heavy_011",
+    "category": "heavy_code_research",
+    "dataset": "heavy_code_research",
+    "prompt": "Write a comprehensive Python implementation of a red-black tree with tests case 11.",
+    "persona": "coder",
+    "max_latency_ms": 5000,
+    "max_cost_usd": 0.05
+  },
+  {
+    "id": "cl_heavy_012",
+    "category": "heavy_code_research",
+    "dataset": "heavy_code_research",
+    "prompt": "Write a comprehensive Python implementation of a red-black tree with tests case 12.",
+    "persona": "coder",
+    "max_latency_ms": 5000,
+    "max_cost_usd": 0.05
+  },
+  {
+    "id": "cl_heavy_013",
+    "category": "heavy_code_research",
+    "dataset": "heavy_code_research",
+    "prompt": "Write a comprehensive Python implementation of a red-black tree with tests case 13.",
+    "persona": "coder",
+    "max_latency_ms": 5000,
+    "max_cost_usd": 0.05
+  },
+  {
+    "id": "cl_heavy_014",
+    "category": "heavy_code_research",
+    "dataset": "heavy_code_research",
+    "prompt": "Write a comprehensive Python implementation of a red-black tree with tests case 14.",
+    "persona": "coder",
+    "max_latency_ms": 5000,
+    "max_cost_usd": 0.05
+  },
+  {
+    "id": "cl_heavy_015",
+    "category": "heavy_code_research",
+    "dataset": "heavy_code_research",
+    "prompt": "Write a comprehensive Python implementation of a red-black tree with tests case 15.",
+    "persona": "coder",
+    "max_latency_ms": 5000,
+    "max_cost_usd": 0.05
+  }
+]

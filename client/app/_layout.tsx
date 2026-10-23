@@ -2,7 +2,7 @@ import '@stardazed/streams-text-encoding';
 import { useEffect } from 'react';
 import { useRouter, useSegments, useRootNavigationState, Slot } from 'expo-router';
 import { Drawer } from 'expo-router/drawer';
-import { ActivityIndicator, View, StyleSheet, Pressable, Text, AppState } from 'react-native';
+import { ActivityIndicator, View, StyleSheet, Pressable, Text, AppState, InteractionManager } from 'react-native';
 import { useConfigStore } from '../store/useConfigStore';
 import { checkPermission, type OSPermission } from '../utils/permissionManager';
 import { useChatStore } from '../store/useChatStore';
@@ -36,10 +36,15 @@ Notifications.setNotificationHandler({
 import { initializeDatabase } from '../db/client';
 import { wireOfflineSync, flushPendingMessages } from '../utils/offlineSync';
 import { runAgentDataBootstrap } from '../utils/seedAgents';
+import { THEME_COLORS, getAurora, hexToRgba } from '../utils/theme';
 
 function HeaderRightActions() {
   const router = useRouter();
   const segments = useSegments();
+  const theme = useConfigStore((state) => state.theme);
+  const accentColor = useConfigStore((state) => state.accentColor);
+  const colors = THEME_COLORS[theme] || THEME_COLORS.deep;
+  const aurora = getAurora(accentColor, theme);
   const isBrowserRoute = segments[0] === 'browser';
 
   const handleToggle = () => {
@@ -51,23 +56,24 @@ function HeaderRightActions() {
   };
 
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 12 }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 14, gap: 10 }}>
       <Pressable
         onPress={handleToggle}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         style={({ pressed }) => ({
           flexDirection: 'row',
           alignItems: 'center',
-          backgroundColor: isBrowserRoute ? '#312e81' : '#1e1b4b',
-          paddingHorizontal: 8,
-          paddingVertical: 4,
-          borderRadius: 6,
-          marginRight: 8,
+          backgroundColor: isBrowserRoute ? hexToRgba(aurora.acc1, 0.14) : colors.glass,
+          paddingHorizontal: 12,
+          paddingVertical: 7,
+          borderRadius: 20,
           borderWidth: 1,
-          borderColor: isBrowserRoute ? '#818cf8' : '#4f46e5',
-          opacity: pressed ? 0.7 : 1,
+          borderColor: isBrowserRoute ? aurora.acc1 : colors.glassBorder,
+          transform: [{ scale: pressed ? 0.96 : 1 }],
+          opacity: pressed ? 0.8 : 1,
         })}
       >
-        <Text style={{ color: '#e0e7ff', fontSize: 12, fontWeight: 'bold' }}>
+        <Text style={{ color: isBrowserRoute ? aurora.acc1 : colors.text, fontSize: 12, fontWeight: '600', letterSpacing: 0.3 }}>
           {isBrowserRoute ? '💬 Chat' : '🌐 Webview'}
         </Text>
       </Pressable>
@@ -91,6 +97,8 @@ export default function RootLayout() {
   // Rules of Hooks and crashes ContextNavigator on remount.
   const currentUrl = useBrowserStore((s) => s.currentUrl);
   const isBrowserVisible = useBrowserStore((s) => s.isVisible);
+  const currentTheme = useConfigStore((state) => state.theme);
+  const currentAccent = useConfigStore((state) => state.accentColor);
 
   useEffect(() => {
     if (hasHydrated && chatHasHydrated) {
@@ -98,7 +106,10 @@ export default function RootLayout() {
       if (!useChatStore.getState().activeThreadId) {
         useChatStore.getState().selectThread(null);
       }
-      (async () => {
+      // Cold startup optimization (WF-427-04): defer background data bootstrap & offline sync.
+      // Migrations must finish before anything touches the DB, otherwise a cold
+      // start queries tables that do not exist yet.
+      const task = InteractionManager.runAfterInteractions(async () => {
         try {
           await initializeDatabase();
         } catch (e) {
@@ -109,13 +120,22 @@ export default function RootLayout() {
         // store is hydrated, and listen for app foreground to flush again.
         wireOfflineSync();
         flushPendingMessages();
-      })();
+      });
+      return () => {
+        task.cancel();
+      };
     }
   }, [hasHydrated, chatHasHydrated]);
 
   useEffect(() => {
     if (hasHydrated) {
-      registerVelaBackgroundTask();
+      // Cold startup optimization (WF-427-04): defer background task registration
+      const task = InteractionManager.runAfterInteractions(() => {
+        registerVelaBackgroundTask();
+      });
+      return () => {
+        task.cancel();
+      };
     }
   }, [hasHydrated]);
 
@@ -126,20 +146,24 @@ export default function RootLayout() {
     if (!hasHydrated || !isConfigured) return;
     let refreshSub: Notifications.Subscription | null = null;
     let cancelled = false;
-    // Fire registration; on success register refresh listener. Failures are silent+logged inside util.
-    registerAndPostToken().then((token) => {
-      if (cancelled) return;
-      // Only listen for refresh if permission was granted (token obtained).
-      // If denied, listener is skipped; next app launch after grant will register.
-      if (!token) return;
-      try {
-        refreshSub = setupTokenRefreshListener();
-      } catch {
-        // silent
-      }
+    // Cold startup optimization (WF-427-04): defer FCM push registration after interactions
+    const task = InteractionManager.runAfterInteractions(() => {
+      // Fire registration; on success register refresh listener. Failures are silent+logged inside util.
+      registerAndPostToken().then((token) => {
+        if (cancelled) return;
+        // Only listen for refresh if permission was granted (token obtained).
+        // If denied, listener is skipped; next app launch after grant will register.
+        if (!token) return;
+        try {
+          refreshSub = setupTokenRefreshListener();
+        } catch {
+          // silent
+        }
+      });
     });
     return () => {
       cancelled = true;
+      task.cancel();
       try {
         refreshSub?.remove();
       } catch {
@@ -160,19 +184,21 @@ export default function RootLayout() {
 
     const selectThread = (id: string | null) => useChatStore.getState().selectThread(id);
 
-    // Cold-start: app launched from killed state via notification tap
-    Notifications.getLastNotificationResponseAsync()
-      .then((response: unknown) => {
-        if (cancelled) return;
-        const data = (response as { notification?: { request?: { content?: { data?: Record<string, string> } } } })
-          ?.notification?.request?.content?.data;
-        if (data) {
-          routeByType(data, router, selectThread);
-        }
-      })
-      .catch(() => {
-        // silent
-      });
+    // Cold-start: app launched from killed state via notification tap (deferred after first frame)
+    const task = InteractionManager.runAfterInteractions(() => {
+      Notifications.getLastNotificationResponseAsync()
+        .then((response: unknown) => {
+          if (cancelled) return;
+          const data = (response as { notification?: { request?: { content?: { data?: Record<string, string> } } } })
+            ?.notification?.request?.content?.data;
+          if (data) {
+            routeByType(data, router, selectThread);
+          }
+        })
+        .catch(() => {
+          // silent
+        });
+    });
 
     // Foreground: system banner via setNotificationHandler; listener only for logging
     foregroundSub = Notifications.addNotificationReceivedListener((notification: unknown) => {
@@ -194,6 +220,7 @@ export default function RootLayout() {
 
     return () => {
       cancelled = true;
+      task.cancel();
       try {
         foregroundSub?.remove();
       } catch {
@@ -229,14 +256,19 @@ export default function RootLayout() {
         }
       }
     };
-    // Initial check
-    checkPermissionsAndUpdateStore();
+    // Cold startup optimization (WF-427-04): defer OS permission queries after first paint
+    const task = InteractionManager.runAfterInteractions(() => {
+      checkPermissionsAndUpdateStore();
+    });
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         checkPermissionsAndUpdateStore();
       }
     });
-    return () => sub.remove();
+    return () => {
+      task.cancel();
+      sub.remove();
+    };
   }, [hasHydrated]);
 
   useEffect(() => {
@@ -273,27 +305,32 @@ export default function RootLayout() {
   const isBrowserRoute = segments[0] === 'browser';
   const shouldShowWebview = isBrowserVisible && isBrowserRoute;
 
+  const currentColors = THEME_COLORS[currentTheme] || THEME_COLORS.deep;
+  const currentAurora = getAurora(currentAccent, currentTheme);
+
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: currentColors.background }}>
       <Drawer
         drawerContent={() => <DrawerContent />}
         screenOptions={{
           drawerType: 'front',
           headerStyle: {
-            backgroundColor: '#09090b',
+            backgroundColor: currentColors.background,
+            borderBottomColor: currentColors.glassBorder,
+            borderBottomWidth: StyleSheet.hairlineWidth,
             shadowColor: 'transparent',
             elevation: 0,
           },
           headerTitleStyle: {
             fontWeight: '900',
-            color: '#818cf8',
+            color: currentAurora.acc1,
             fontSize: 16,
           },
-        headerTintColor: '#e4e4e7',
-        headerRight: () => <HeaderRightActions />,
-        drawerStyle: {
-            backgroundColor: '#09090b',
-            width: 280,
+          headerTintColor: currentColors.text,
+          headerRight: () => <HeaderRightActions />,
+          drawerStyle: {
+            backgroundColor: currentColors.background,
+            width: 290,
           },
         }}
       >
@@ -309,7 +346,7 @@ export default function RootLayout() {
             headerTitleStyle: {
               fontWeight: '900',
               letterSpacing: 3,
-              color: '#818cf8',
+              color: currentAurora.acc1,
               fontSize: 16,
             },
           }}
@@ -320,44 +357,44 @@ export default function RootLayout() {
             headerTitle: 'Settings',
             headerTitleStyle: {
               fontWeight: '600',
-              color: '#e4e4e7',
+              color: currentColors.text,
               fontSize: 16,
             },
           }}
         />
-<Drawer.Screen
-name="browser"
-options={{
-headerTitle: 'Browser',
-headerTitleStyle: {
-fontWeight: '600',
-color: '#e4e4e7',
-fontSize: 16,
-}
-}}
-/>
-<Drawer.Screen
-name="tasks"
-options={{
-headerTitle: 'Tasks',
-headerTitleStyle: {
-fontWeight: '600',
-color: '#e4e4e7',
-fontSize: 16,
-}
-}}
-/>
-<Drawer.Screen
-name="journal"
-options={{
-headerTitle: 'Journal',
-headerTitleStyle: {
-fontWeight: '600',
-color: '#e4e4e7',
-fontSize: 16,
-}
-}}
-/>
+        <Drawer.Screen
+          name="browser"
+          options={{
+            headerTitle: 'Browser',
+            headerTitleStyle: {
+              fontWeight: '600',
+              color: currentColors.text,
+              fontSize: 16,
+            },
+          }}
+        />
+        <Drawer.Screen
+          name="tasks"
+          options={{
+            headerTitle: 'Tasks',
+            headerTitleStyle: {
+              fontWeight: '600',
+              color: currentColors.text,
+              fontSize: 16,
+            },
+          }}
+        />
+        <Drawer.Screen
+          name="journal"
+          options={{
+            headerTitle: 'Journal',
+            headerTitleStyle: {
+              fontWeight: '600',
+              color: currentColors.text,
+              fontSize: 16,
+            },
+          }}
+        />
       </Drawer>
 
       {/* Persistent WebView — always mounted, visibility toggled by offscreen positioning */}

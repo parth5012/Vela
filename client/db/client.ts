@@ -8,10 +8,18 @@ const DATABASE_NAME = 'vela.db';
 
 let expoDbInstance: any = null;
 let dbInstance: any = null;
-let migrationPromise: Promise<void> | null = null;
+
+export function configurePragmas(sqliteDb: any): void {
+  if (sqliteDb && typeof sqliteDb.execSync === 'function') {
+    sqliteDb.execSync('PRAGMA journal_mode = WAL;');
+    sqliteDb.execSync('PRAGMA busy_timeout = 5000;');
+    sqliteDb.execSync('PRAGMA synchronous = NORMAL;');
+  }
+}
 
 try {
   expoDbInstance = openDatabaseSync(DATABASE_NAME);
+  configurePragmas(expoDbInstance);
   dbInstance = drizzle(expoDbInstance, { schema });
 } catch (error) {
   console.warn('[Database] Failed to open expo-sqlite database (likely in test or non-native environment).');
@@ -21,41 +29,59 @@ export const expoDb = expoDbInstance;
 export const db = dbInstance;
 export default dbInstance;
 
-function sanitizeMigrationSql(sql: string): string {
+/**
+ * Strips whitespace-only statements and trailing breakpoints.
+ * drizzle-orm's expo-sqlite migrator splits blindly on '--> statement-breakpoint',
+ * which produces empty/whitespace statements if a migration ends with a breakpoint.
+ * In expo-sqlite, preparing an empty string sets sqlite3_stmt* to NULL, causing
+ * an immediate SIGSEGV crash in exsqlite3_clear_bindings+20 during executeSync().
+ */
+export function sanitizeMigrationSql(sql: string): string {
   return sql
     .split('--> statement-breakpoint')
     .map((s) => s.trim())
     .filter((s) => s.length > 0)
-    .join('\n--> statement-breakpoint\n');
+    .join('--> statement-breakpoint\n');
 }
 
-const sanitizedMigrations = {
-  journal: migrations.journal,
-  migrations: Object.fromEntries(
-    Object.entries(migrations.migrations).map(([key, sql]) => [
-      key,
-      typeof sql === 'string' ? sanitizeMigrationSql(sql) : sql,
-    ])
-  ),
-};
+export function getSanitizedMigrations(rawMigrations: typeof migrations): typeof migrations {
+  const sanitizedBundle: Record<string, string> = {};
+  for (const [key, sql] of Object.entries(rawMigrations.migrations)) {
+    sanitizedBundle[key] = typeof sql === 'string' ? sanitizeMigrationSql(sql) : sql;
+  }
+  return {
+    ...rawMigrations,
+    migrations: sanitizedBundle as typeof rawMigrations.migrations,
+  };
+}
 
-export async function initializeDatabase(): Promise<void> {
+let initPromise: Promise<void> | null = null;
+
+export function _resetInitPromiseForTest(): void {
+  initPromise = null;
+}
+
+export function initializeDatabase(): Promise<void> {
   if (!dbInstance) {
     console.warn('[Database] Database client not initialized, skipping migrations.');
-    return;
+    return Promise.resolve();
   }
-  if (migrationPromise) {
-    return migrationPromise;
+
+  if (initPromise) {
+    return initPromise;
   }
-  migrationPromise = (async () => {
+
+  initPromise = (async () => {
     try {
-      await migrate(dbInstance, sanitizedMigrations);
+      const sanitized = getSanitizedMigrations(migrations);
+      await migrate(dbInstance, sanitized);
       console.log('[Database] Migrations applied successfully.');
     } catch (error) {
-      migrationPromise = null;
       console.error('[Database] Migration error:', error);
+      initPromise = null;
       throw error;
     }
   })();
-  return migrationPromise;
+
+  return initPromise;
 }
