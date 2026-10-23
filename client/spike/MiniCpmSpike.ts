@@ -103,46 +103,50 @@ export class MiniCpmSpikeRunner {
         const startGen = Date.now();
         let firstTokenTime: number | null = null;
 
-        const result = await this.driver.generate(
-          this.config.fixedPrompt,
-          (token: string) => {
-            if (firstTokenTime === null) {
-              firstTokenTime = Date.now();
-              ttftMs = firstTokenTime - startGen;
+        try {
+          const result = await this.driver.generate(
+            this.config.fixedPrompt,
+            (token: string) => {
+              if (firstTokenTime === null) {
+                firstTokenTime = Date.now();
+                ttftMs = firstTokenTime - startGen;
+              }
             }
+          );
+
+          const totalGenTimeMs = Math.max(1, Date.now() - startGen);
+          outputText = result.text;
+          tokensGenerated = result.tokenCount;
+          const tokensPerSec = Number(
+            ((tokensGenerated / totalGenTimeMs) * 1000).toFixed(2)
+          );
+
+          if (this.driver.getMemoryUsageMb) {
+            peakRamMb = await this.driver.getMemoryUsageMb();
+          } else {
+            peakRamMb = 1850; // default estimated RSS footprint
           }
-        );
 
-        const totalGenTimeMs = Math.max(1, Date.now() - startGen);
-        outputText = result.text;
-        tokensGenerated = result.tokenCount;
-        const tokensPerSec = Number(
-          ((tokensGenerated / totalGenTimeMs) * 1000).toFixed(2)
-        );
+          console.log(
+            `[MiniCPM-Spike] Generated ${tokensGenerated} tokens in ${totalGenTimeMs}ms (${tokensPerSec} tok/s)`
+          );
+          console.log(`[MiniCPM-Spike] TTFT: ${ttftMs}ms | Peak RAM: ${peakRamMb}MB`);
 
-        if (this.driver.getMemoryUsageMb) {
-          peakRamMb = await this.driver.getMemoryUsageMb();
-        } else {
-          peakRamMb = 1850; // default estimated RSS footprint
+          return {
+            loadTimeMs,
+            ttftMs: firstTokenTime !== null ? ttftMs : 0,
+            tokensGenerated,
+            tokensPerSec,
+            peakRamMb,
+            thermalStatus: 'nominal',
+            outputText,
+            success: true,
+          };
+        } finally {
+          await this.driver.unload().catch((unloadErr) => {
+            console.warn('[MiniCPM-Spike] Error unloading driver:', unloadErr);
+          });
         }
-
-        console.log(
-          `[MiniCPM-Spike] Generated ${tokensGenerated} tokens in ${totalGenTimeMs}ms (${tokensPerSec} tok/s)`
-        );
-        console.log(`[MiniCPM-Spike] TTFT: ${ttftMs}ms | Peak RAM: ${peakRamMb}MB`);
-
-        await this.driver.unload();
-
-        return {
-          loadTimeMs,
-          ttftMs: ttftMs || 150,
-          tokensGenerated,
-          tokensPerSec,
-          peakRamMb,
-          thermalStatus: 'nominal',
-          outputText,
-          success: true,
-        };
       }
 
       // Mock / Sim driver when no native driver is attached (e.g. CI or non-native unit test)
@@ -169,8 +173,9 @@ export class MiniCpmSpikeRunner {
         outputText,
         success: true,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[MiniCPM-Spike] Execution failure:', error);
+      const errMsg = error instanceof Error ? error.message : String(error);
       return {
         loadTimeMs,
         ttftMs: 0,
@@ -180,7 +185,7 @@ export class MiniCpmSpikeRunner {
         thermalStatus: 'nominal',
         outputText: '',
         success: false,
-        error: error?.message || String(error),
+        error: errMsg,
       };
     }
   }

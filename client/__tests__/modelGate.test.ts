@@ -5,6 +5,7 @@ import {
   verifyArtifactIntegrity,
   recoverCorruptArtifact,
   ModelDownloadGate,
+  ResumableModelDownloader,
   type DeviceCapabilityOptions,
   type ModelArtifactConfig,
 } from '../utils/modelGate';
@@ -265,6 +266,133 @@ describe('WF-05: Model Download + Device Capability Gate', () => {
       expect(outcome.ready).toBe(true);
       expect(outcome.capability.status).toBe('OK');
       expect(outcome.modelConfig.modelId).toBe('minicpm5-2b-int4');
+    });
+
+    it('enforces higher RAM and disk requirements when specified by remote model config', async () => {
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          modelId: 'large-model-int4',
+          name: 'Large Model',
+          downloadUrl: 'https://example.com/large.litertlm',
+          filename: 'large.litertlm',
+          format: 'litertlm',
+          sizeBytes: 4000000000,
+          sha256: 'abc123',
+          minRamGb: 12,
+          minStorageGb: 8,
+        }),
+      } as any);
+
+      const gate = new ModelDownloadGate({
+        capabilityOptions: {
+          ramBytes: 8 * GB, // passes default 6 GB, but fails remote 12 GB
+          freeDiskBytes: 10 * GB,
+          architecture: 'arm64-v8a',
+        },
+        remoteConfigUrl: 'https://api.vela.app/config/model',
+        fetchFn: mockFetch,
+      });
+
+      const outcome = await gate.prepareDownload();
+      expect(outcome.ready).toBe(false);
+      expect(outcome.capability.status).toBe('UNSUPPORTED');
+      expect(outcome.error).toContain('requires minimum 12 GB floor');
+    });
+  });
+
+  describe('ResumableModelDownloader Execution Flow', () => {
+    const mockModel: ModelArtifactConfig = {
+      modelId: 'minicpm5-2b-int4',
+      name: 'MiniCPM5-2B',
+      downloadUrl: 'https://example.com/model.litertlm',
+      filename: 'model.litertlm',
+      format: 'litertlm',
+      sizeBytes: 1000,
+      sha256: 'dummy_hash',
+      minRamGb: 6,
+      minStorageGb: 3,
+    };
+
+    it('manages download lifecycle with progress events and cleans up resume key upon completion', async () => {
+      const progressUpdates: any[] = [];
+      const mockStorage: Record<string, string> = {};
+
+      const mockDownloadResumable = {
+        downloadAsync: jest.fn().mockResolvedValue({ uri: '/data/models/model.litertlm', status: 200 }),
+        pauseAsync: jest.fn().mockResolvedValue({ resumeData: 'resume_token_123' }),
+        resumeAsync: jest.fn().mockResolvedValue({ uri: '/data/models/model.litertlm', status: 200 }),
+      };
+
+      const factory = jest.fn().mockImplementation((url, fileUri, opts, callback) => {
+        // simulate progress tick
+        callback({ totalBytesWritten: 500, totalBytesExpectedToWrite: 1000 });
+        return mockDownloadResumable;
+      });
+
+      const downloader = new ResumableModelDownloader({
+        modelConfig: mockModel,
+        destinationUri: '/data/models/model.litertlm',
+        onProgress: (p) => progressUpdates.push(p),
+        storage: {
+          getItem: async (key) => mockStorage[key] ?? null,
+          setItem: async (key, val) => {
+            mockStorage[key] = val;
+          },
+          removeItem: async (key) => {
+            delete mockStorage[key];
+          },
+        },
+        createDownloadResumableFn: factory,
+      });
+
+      const destination = await downloader.start();
+
+      expect(destination).toBe('/data/models/model.litertlm');
+      expect(factory).toHaveBeenCalled();
+      expect(progressUpdates.length).toBeGreaterThan(0);
+      expect(progressUpdates[0].progressPercent).toBe(50);
+      expect(downloader.getProgress().progressPercent).toBe(50);
+    });
+
+    it('pauses download, saves resume token to storage, and resumes cleanly', async () => {
+      const mockStorage: Record<string, string> = {};
+
+      const mockDownloadResumable = {
+        downloadAsync: jest.fn().mockImplementation(() => new Promise(() => {})), // stays in progress
+        pauseAsync: jest.fn().mockResolvedValue({ resumeData: 'resume_token_xyz' }),
+        resumeAsync: jest.fn().mockResolvedValue({ uri: '/data/models/model.litertlm', status: 200 }),
+      };
+
+      const factory = jest.fn().mockReturnValue(mockDownloadResumable);
+
+      const downloader = new ResumableModelDownloader({
+        modelConfig: mockModel,
+        destinationUri: '/data/models/model.litertlm',
+        storage: {
+          getItem: async (key) => mockStorage[key] ?? null,
+          setItem: async (key, val) => {
+            mockStorage[key] = val;
+          },
+          removeItem: async (key) => {
+            delete mockStorage[key];
+          },
+        },
+        createDownloadResumableFn: factory,
+      });
+
+      // Start in background
+      downloader.start();
+
+      // Pause
+      const resumeToken = await downloader.pause();
+      expect(resumeToken).toBe('resume_token_xyz');
+      expect(mockStorage['download_resume_minicpm5-2b-int4']).toBe('resume_token_xyz');
+
+      // Resume
+      const finalUri = await downloader.resume();
+      expect(finalUri).toBe('/data/models/model.litertlm');
+      expect(mockStorage['download_resume_minicpm5-2b-int4']).toBeUndefined();
     });
   });
 });
