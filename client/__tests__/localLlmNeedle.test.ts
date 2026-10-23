@@ -8,6 +8,7 @@ import {
   unloadLocalModel,
   isLocalModelLoaded,
   streamLocalLlmResponse,
+  getLocalLlmFallbackReason,
 } from '../utils/localLlm';
 import { sniffMagicBytes } from '../utils/customModelStorage';
 
@@ -133,8 +134,18 @@ describe('localLlm NeedleEngine (.cact) integration', () => {
     );
   });
 
-  it('streams response and tool calls via NeedleModule', async () => {
+  it('refuses to load a cact model when the build only has the mock stub', async () => {
+    // HAVE_NEEDLE_ENGINE=0 builds return true from init() and canned device
+    // calls from complete(); loading them would execute fake taps as real ones.
+    (NeedleModule.hasNativeLibrary as jest.Mock).mockReturnValueOnce(false);
+
     await initializeLocalModel();
+
+    expect(NeedleModule.init).not.toHaveBeenCalled();
+    expect(getLocalLlmFallbackReason()).toContain('not packaged');
+  });
+
+  it('streams response and tool calls via NeedleModule', async () => {    await initializeLocalModel();
     const generator = streamLocalLlmResponse('Read current screen');
     const tokens: string[] = [];
     for await (const token of generator) {

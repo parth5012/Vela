@@ -188,9 +188,11 @@ export interface LocalModelSpec {
  * Single source of truth for the downloadable local models.
  *
  * Every shipped model is runnable by an engine that is actually packaged:
- *  - `format: 'gguf'` → llama.cpp via the `llama.rn` native module, built from
- *    source (`rnllamaBuildFromSource=true` in android/gradle.properties).
- *    Sourced from ungated HuggingFace GGUF repos (verified gated:false).
+ *  - `format: 'gguf'` → llama.cpp via the `llama.rn` native module. The APK
+ *    packages llama.rn's prebuilt `librnllama*.so` archives (fetched and
+ *    SHA-256-verified by `scripts/fetch-llama-jni.js` in `postinstall`); no
+ *    source build is required. Sourced from ungated HuggingFace GGUF repos
+ *    (verified gated:false).
  *  - `format: 'cact'` → the static Needle engine (generation 3).
  *
  * `format: 'task'` (MediaPipe `tasks-genai` / GemmaReactNativeModule) is still
@@ -384,6 +386,14 @@ export async function initializeLocalModel(
 
   if (isCact) {
     try {
+      // A HAVE_NEEDLE_ENGINE=0 build ships a stub: init() returns true and
+      // complete() returns canned device calls. Those calls would be executed as
+      // real taps, so refuse to "load" the engine instead of mocking silently.
+      if (!NeedleModule.hasNativeLibrary()) {
+        throw new Error(
+          'Needle engine is not packaged in this build (mock fallback only); on-device automation is disabled.'
+        );
+      }
       const cleanPath = modelPath.startsWith('file://') ? modelPath.slice(7) : modelPath;
       const ctxSize = useConfigStore.getState().localContextSize || 256;
       const success = await NeedleModule.init(cleanPath, ctxSize, '', '', NEEDLE_DEVICE_TOOLS_JSON);
