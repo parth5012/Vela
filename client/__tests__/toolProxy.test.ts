@@ -195,8 +195,7 @@ describe('toolProxy parser', () => {
       spy.mockRestore();
     });
 
-    it('dispatches the flat mock shape too', async () => {
-      const content = '{"name":"device_info","arguments":{},"confidence":0.5}';
+    it('dispatches the flat mock shape too', async () => {      const content = '{"name":"device_info","arguments":{},"confidence":0.5}';
 
       const result = await parseAndExecuteTools(
         content,
@@ -208,6 +207,23 @@ describe('toolProxy parser', () => {
 
       expect(result.hasInvocations).toBe(true);
       expect(result.updatedContent).toContain('<response name="device_info">');
+    });
+
+    it('does not treat $ patterns in an observation as replacement syntax', async () => {
+      const spy = jest
+        .spyOn(cloudTools, 'executeCloudTool')
+        .mockResolvedValue({ success: true, output: 'Price is $& and $1 and $` here' });
+
+      const content = '<call name="device_info">{"target":"screen"}</call>';
+      const result = await parseAndExecuteTools(content, 'thread_123', undefined, undefined, 'local');
+
+      // `$&` / `$1` must survive verbatim; String.replace would expand them.
+      expect(result.updatedContent).toContain('Price is $& and $1 and $` here');
+      expect(result.updatedContent.indexOf('<response name="device_info">')).toBeGreaterThan(
+        result.updatedContent.indexOf('<call name="device_info">')
+      );
+
+      spy.mockRestore();
     });
 
     it('never executes a refusal envelope', async () => {

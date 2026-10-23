@@ -146,8 +146,9 @@ export async function parseAndExecuteTools(
     );
 
     const responseBlock = `<response name="${block.toolName}">\n${responseText}\n</response>`;
-    // Insert response block immediately after the matching call block
-    updatedContent = updatedContent.replace(block.fullMatch, `${block.fullMatch}\n${responseBlock}`);
+    // A function replacer keeps `$&`/`$1` in tool output literal — a string
+    // replacement would expand them into the matched call text.
+    updatedContent = updatedContent.replace(block.fullMatch, () => `${block.fullMatch}\n${responseBlock}`);
   }
 
   // No XML call: a Needle engine may have answered with its JSON envelope.
@@ -166,7 +167,7 @@ export async function parseAndExecuteTools(
       );
       updatedContent = updatedContent.replace(
         needleCall.raw,
-        `${needleCall.raw}\n<response name="${needleCall.toolName}">\n${responseText}\n</response>`
+        () => `${needleCall.raw}\n<response name="${needleCall.toolName}">\n${responseText}\n</response>`
       );
       hasInvocations = true;
     }
