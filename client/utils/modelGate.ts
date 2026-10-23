@@ -121,7 +121,8 @@ export async function evaluateDeviceCapabilities(
   const reasons: string[] = [];
   let isArchSupported = false;
 
-  if (architecture === 'arm64-v8a') {
+  const supportedArm64 = ['arm64-v8a', 'arm64', 'aarch64'];
+  if (supportedArm64.includes(architecture)) {
     isArchSupported = true;
   } else if (allowEmulator && (architecture === 'x86_64' || architecture === 'x64')) {
     isArchSupported = true;
@@ -134,16 +135,18 @@ export async function evaluateDeviceCapabilities(
   }
 
   const ramGb = (ramBytes / BYTES_PER_GB).toFixed(1);
+  const ramFloorGb = (ramFloor / BYTES_PER_GB).toFixed(0);
   if (ramBytes < ramFloor) {
     reasons.push(
-      `Insufficient RAM: device has ${ramGb} GB, requires minimum 6 GB floor for on-device inference`
+      `Insufficient RAM: device has ${ramGb} GB, requires minimum ${ramFloorGb} GB floor for on-device inference`
     );
   }
 
   const diskGb = (freeDiskBytes / BYTES_PER_GB).toFixed(1);
+  const minStorageGb = (minStorage / BYTES_PER_GB).toFixed(0);
   if (freeDiskBytes < minStorage) {
     reasons.push(
-      `Insufficient storage: ${diskGb} GB free, requires minimum 3 GB free storage`
+      `Insufficient storage: ${diskGb} GB free, requires minimum ${minStorageGb} GB free storage`
     );
   }
 
@@ -210,15 +213,14 @@ export async function fetchRemoteModelConfig(
   remoteUrl: string = 'https://api.vela.app/config/on-device-model',
   fetchFn: typeof fetch = fetch
 ): Promise<ModelArtifactConfig> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
     const response = await fetchFn(remoteUrl, {
       method: 'GET',
       headers: { Accept: 'application/json' },
       signal: controller.signal,
     });
-    clearTimeout(timeout);
 
     if (response.ok) {
       const data = await response.json();
@@ -238,6 +240,8 @@ export async function fetchRemoteModelConfig(
     }
   } catch (err) {
     console.warn('[ModelGate] Remote config fetch failed, using fallback config:', err);
+  } finally {
+    clearTimeout(timeout);
   }
 
   return DEFAULT_FALLBACK_MODEL_CONFIG;
@@ -277,20 +281,45 @@ export async function verifyArtifactIntegrity(
     return calculated.toLowerCase() === expectedSha256.toLowerCase();
   }
 
-  // Fallback hash implementation (Node environment or expo)
+  // Streaming hash implementation in Node environment (handles multi-GB files in O(1) memory)
   try {
     const fs = require('fs');
     const crypto = require('crypto');
-    if (fs.existsSync(fileUri)) {
-      const data = fs.readFileSync(fileUri);
-      const digest = crypto.createHash('sha256').update(data).digest('hex');
-      return digest.toLowerCase() === expectedSha256.toLowerCase();
+    if (fs && fs.existsSync && fs.existsSync(fileUri)) {
+      return new Promise<boolean>((resolve) => {
+        try {
+          const hash = crypto.createHash('sha256');
+          const stream = fs.createReadStream(fileUri);
+          stream.on('data', (chunk: Buffer) => hash.update(chunk));
+          stream.on('end', () => {
+            const digest = hash.digest('hex');
+            resolve(digest.toLowerCase() === expectedSha256.toLowerCase());
+          });
+          stream.on('error', (err: unknown) => {
+            console.warn('[ModelGate] File stream hashing error:', err);
+            resolve(false);
+          });
+        } catch (streamErr) {
+          console.warn('[ModelGate] Failed to create stream hasher:', streamErr);
+          resolve(false);
+        }
+      });
     }
   } catch {
     // Continue to react-native/expo
   }
 
+  // React Native / Expo environment:
+  // Guard against loading multi-gigabyte models into JS memory as Base64 to prevent OOM
   try {
+    const fileInfo = await FileSystem.getInfoAsync(fileUri);
+    if (fileInfo.exists && typeof (fileInfo as any).size === 'number' && (fileInfo as any).size > 50 * 1024 * 1024) {
+      console.warn(
+        `[ModelGate] Large artifact (${(((fileInfo as any).size ?? 0) / (1024 * 1024)).toFixed(1)} MB) requires native hashProvider to prevent JS heap exhaustion.`
+      );
+      return false;
+    }
+
     const Crypto = require('expo-crypto');
     const content = await FileSystem.readAsStringAsync(fileUri, {
       encoding: FileSystem.EncodingType.Base64,
@@ -313,8 +342,8 @@ export async function recoverCorruptArtifact(
   fileUri: string,
   modelId: string,
   storage?: {
-    deleteAsync: (uri: string, opts?: any) => Promise<any>;
-    removeItem: (key: string) => Promise<any>;
+    deleteAsync: (uri: string, opts?: { idempotent?: boolean }) => Promise<void>;
+    removeItem: (key: string) => Promise<void>;
   }
 ): Promise<{ recovered: boolean }> {
   const deleter = storage?.deleteAsync ?? FileSystem.deleteAsync;
@@ -367,11 +396,17 @@ export class ModelDownloadGate {
   }
 
   async prepareDownload(): Promise<ModelDownloadGateOutcome> {
-    const capability = await evaluateDeviceCapabilities(this.options.capabilityOptions);
     const modelConfig = await fetchRemoteModelConfig(
       this.options.remoteConfigUrl,
       this.options.fetchFn
     );
+
+    const capabilityOptions: DeviceCapabilityOptions = {
+      ramFloorBytes: modelConfig.minRamGb * BYTES_PER_GB,
+      minDiskFreeBytes: modelConfig.minStorageGb * BYTES_PER_GB,
+      ...this.options.capabilityOptions,
+    };
+    const capability = await evaluateDeviceCapabilities(capabilityOptions);
 
     if (capability.status === 'UNSUPPORTED') {
       return {
@@ -403,5 +438,168 @@ export class ModelDownloadGate {
       capability,
       modelConfig,
     };
+  }
+}
+
+export interface DownloadProgress {
+  totalBytesWritten: number;
+  totalBytesExpectedToWrite: number;
+  progressPercent: number;
+}
+
+export type DownloadProgressCallback = (progress: DownloadProgress) => void;
+
+export interface ResumableDownloaderOptions {
+  modelConfig: ModelArtifactConfig;
+  destinationUri?: string;
+  onProgress?: DownloadProgressCallback;
+  storage?: {
+    getItem: (key: string) => Promise<string | null>;
+    setItem: (key: string, value: string) => Promise<void>;
+    removeItem: (key: string) => Promise<void>;
+  };
+  createDownloadResumableFn?: (
+    url: string,
+    fileUri: string,
+    options?: any,
+    callback?: (progress: { totalBytesWritten: number; totalBytesExpectedToWrite: number }) => void,
+    resumeData?: string
+  ) => {
+    downloadAsync: () => Promise<{ uri: string; status: number } | undefined>;
+    pauseAsync: () => Promise<{ resumeData: string }>;
+    resumeAsync: () => Promise<{ uri: string; status: number } | undefined>;
+  };
+}
+
+/**
+ * Manages streaming resumable downloads for large on-device model artifacts with pause/resume support.
+ */
+export class ResumableModelDownloader {
+  private config: ModelArtifactConfig;
+  private destinationUri: string;
+  private onProgress?: DownloadProgressCallback;
+  private storage: {
+    getItem: (key: string) => Promise<string | null>;
+    setItem: (key: string, value: string) => Promise<void>;
+    removeItem: (key: string) => Promise<void>;
+  };
+  private createDownloadResumableFn: any;
+  private downloadInstance: any = null;
+  private isDownloading: boolean = false;
+  private lastProgress: DownloadProgress = {
+    totalBytesWritten: 0,
+    totalBytesExpectedToWrite: 0,
+    progressPercent: 0,
+  };
+
+  constructor(options: ResumableDownloaderOptions) {
+    this.config = options.modelConfig;
+    this.destinationUri =
+      options.destinationUri ??
+      `${FileSystem.documentDirectory ?? '/data/models/'}${this.config.filename}`;
+    this.onProgress = options.onProgress;
+    this.storage = options.storage ?? AsyncStorage;
+    this.createDownloadResumableFn =
+      options.createDownloadResumableFn ?? FileSystem.createDownloadResumable;
+  }
+
+  get resumeKey(): string {
+    return `download_resume_${this.config.modelId}`;
+  }
+
+  getProgress(): DownloadProgress {
+    return this.lastProgress;
+  }
+
+  async start(): Promise<string> {
+    this.isDownloading = true;
+    const savedResumeData = await this.storage.getItem(this.resumeKey);
+
+    const progressHandler = ({
+      totalBytesWritten,
+      totalBytesExpectedToWrite,
+    }: {
+      totalBytesWritten: number;
+      totalBytesExpectedToWrite: number;
+    }) => {
+      const expected = totalBytesExpectedToWrite > 0 ? totalBytesExpectedToWrite : this.config.sizeBytes;
+      const percent = expected > 0 ? Math.min(100, Math.round((totalBytesWritten / expected) * 100)) : 0;
+      this.lastProgress = {
+        totalBytesWritten,
+        totalBytesExpectedToWrite: expected,
+        progressPercent: percent,
+      };
+      this.onProgress?.(this.lastProgress);
+    };
+
+    this.downloadInstance = this.createDownloadResumableFn(
+      this.config.downloadUrl,
+      this.destinationUri,
+      {},
+      progressHandler,
+      savedResumeData ?? undefined
+    );
+
+    try {
+      const result = await this.downloadInstance.downloadAsync();
+      await this.storage.removeItem(this.resumeKey);
+      this.isDownloading = false;
+      return result?.uri ?? this.destinationUri;
+    } catch (err) {
+      this.isDownloading = false;
+      throw err;
+    }
+  }
+
+  async pause(): Promise<string | null> {
+    if (this.isDownloading && !this.downloadInstance) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+
+    if (!this.downloadInstance || !this.isDownloading) {
+      return null;
+    }
+
+    try {
+      const snapshot = await this.downloadInstance.pauseAsync();
+      if (snapshot?.resumeData) {
+        await this.storage.setItem(this.resumeKey, snapshot.resumeData);
+        return snapshot.resumeData;
+      }
+    } catch (err) {
+      console.warn('[ResumableModelDownloader] Pause failed:', err);
+    } finally {
+      this.isDownloading = false;
+    }
+    return null;
+  }
+
+  async resume(): Promise<string> {
+    if (!this.downloadInstance) {
+      return this.start();
+    }
+
+    this.isDownloading = true;
+    try {
+      const result = await this.downloadInstance.resumeAsync();
+      await this.storage.removeItem(this.resumeKey);
+      this.isDownloading = false;
+      return result?.uri ?? this.destinationUri;
+    } catch (err) {
+      this.isDownloading = false;
+      throw err;
+    }
+  }
+
+  async cancel(): Promise<void> {
+    if (this.downloadInstance && this.isDownloading) {
+      try {
+        await this.downloadInstance.pauseAsync();
+      } catch {
+        // Ignore error on abort
+      }
+    }
+    this.isDownloading = false;
+    await this.storage.removeItem(this.resumeKey);
   }
 }
