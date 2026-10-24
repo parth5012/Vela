@@ -1,9 +1,12 @@
+import * as Device from 'expo-device';
+import { Platform } from 'react-native';
 import {
   evaluateDeviceCapabilities,
   fetchRemoteModelConfig,
   checkNetworkDownloadAllowed,
   verifyArtifactIntegrity,
   recoverCorruptArtifact,
+  detectCpuArchitecture,
   DEFAULT_FALLBACK_MODEL_CONFIG,
   ModelDownloadGate,
   ResumableModelDownloader,
@@ -125,6 +128,33 @@ describe('WF-05: Model Download + Device Capability Gate', () => {
       expect(result.canRunOnDevice).toBe(false);
       expect(result.reasons.some((r) => r.includes('Unable to determine free storage'))).toBe(true);
     });
+
+    it('fails closed with an unsupported sentinel when CPU architecture detection is unavailable', () => {
+      const originalOS = Object.getOwnPropertyDescriptor(Platform, 'OS');
+      const originalDeviceArch = Object.getOwnPropertyDescriptor(
+        Device,
+        'supportedCpuArchitectures'
+      );
+      const originalArch = Object.getOwnPropertyDescriptor(process, 'arch');
+      Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true });
+      Object.defineProperty(Device, 'supportedCpuArchitectures', {
+        value: null,
+        configurable: true,
+      });
+      Object.defineProperty(process, 'arch', { value: undefined, configurable: true });
+
+      try {
+        // Expo documents supportedCpuArchitectures as null when detection fails;
+        // the gate must not assume arm64 for an unverified ABI.
+        expect(detectCpuArchitecture()).toBe('unknown');
+      } finally {
+        if (originalOS) Object.defineProperty(Platform, 'OS', originalOS);
+        if (originalDeviceArch) {
+          Object.defineProperty(Device, 'supportedCpuArchitectures', originalDeviceArch);
+        }
+        if (originalArch) Object.defineProperty(process, 'arch', originalArch);
+      }
+    });
   });
 
   describe('Dynamic Remote Model Config (Never Hardcoded)', () => {
@@ -197,6 +227,29 @@ describe('WF-05: Model Download + Device Capability Gate', () => {
         '05b78bb57dd5ded8a76907cc953cbc57d6261ee9fa66fbfca21ae677a897da45'
       );
       expect(DEFAULT_FALLBACK_MODEL_CONFIG.sizeBytes).toBe(1553670064);
+    });
+
+    it('rejects remote configs that weaken the documented 6 GB RAM / 3 GB storage floors', async () => {
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          modelId: 'weak-floor-model',
+          name: 'Weak Floor Model',
+          downloadUrl: 'https://cdn.example.com/models/weak.litertlm',
+          filename: 'weak.litertlm',
+          format: 'litertlm',
+          sizeBytes: 1000,
+          sha256: 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2',
+          minRamGb: 1,
+          minStorageGb: 1,
+        }),
+      } as any);
+
+      const config = await fetchRemoteModelConfig('https://api.vela.app/config/weak', mockFetch);
+
+      expect(config).toBe(DEFAULT_FALLBACK_MODEL_CONFIG);
+      expect(config.minRamGb).toBe(6);
+      expect(config.minStorageGb).toBe(3);
     });
   });
 
@@ -436,6 +489,41 @@ describe('WF-05: Model Download + Device Capability Gate', () => {
       expect(outcome.capability.status).toBe('UNSUPPORTED');
       expect(outcome.error).toContain('requires minimum 12 GB floor');
     });
+
+    it('cannot weaken documented floors through caller-provided capabilityOptions', async () => {
+      const gate = new ModelDownloadGate({
+        capabilityOptions: {
+          ramBytes: 4 * GB, // below the documented 6 GB floor
+          freeDiskBytes: 2 * GB, // below the documented 3 GB floor
+          architecture: 'arm64-v8a',
+          ramFloorBytes: 1 * GB, // attempted weakening of the floor
+          minDiskFreeBytes: 1 * GB, // attempted weakening of the floor
+        },
+      });
+
+      const outcome = await gate.prepareDownload();
+
+      expect(outcome.ready).toBe(false);
+      expect(outcome.capability.status).toBe('UNSUPPORTED');
+      expect(outcome.error).toContain('minimum 6 GB floor');
+    });
+
+    it('still enforces higher caller-provided RAM floors', async () => {
+      const gate = new ModelDownloadGate({
+        capabilityOptions: {
+          ramBytes: 8 * GB,
+          freeDiskBytes: 10 * GB,
+          architecture: 'arm64-v8a',
+          ramFloorBytes: 10 * GB,
+        },
+      });
+
+      const outcome = await gate.prepareDownload();
+
+      expect(outcome.ready).toBe(false);
+      expect(outcome.capability.status).toBe('UNSUPPORTED');
+      expect(outcome.error).toContain('requires minimum 10 GB floor');
+    });
   });
 
   describe('ResumableModelDownloader Execution Flow', () => {
@@ -564,6 +652,68 @@ describe('WF-05: Model Download + Device Capability Gate', () => {
       expect(result).toBeNull();
       // Resume token must NOT be purged
       expect(mockStorage['download_resume_minicpm5-2b-int4']).toBe('saved_token_456');
+    });
+
+    it('honors a pause requested while start() is still loading resume state', async () => {
+      const mockDownloadResumable = {
+        downloadAsync: jest.fn().mockImplementation(() => new Promise(() => {})),
+        pauseAsync: jest.fn().mockResolvedValue({ resumeData: 'late_pause_token' }),
+        resumeAsync: jest.fn().mockResolvedValue(undefined),
+      };
+      const factory = jest.fn().mockReturnValue(mockDownloadResumable);
+
+      const downloader = new ResumableModelDownloader({
+        modelConfig: mockModel,
+        destinationUri: '/data/models/model.litertlm',
+        storage: {
+          // Slow storage read: no download instance exists for the first 50 ms
+          getItem: jest
+            .fn()
+            .mockImplementation(() => new Promise((resolve) => setTimeout(() => resolve(null), 50))),
+          setItem: jest.fn().mockResolvedValue(undefined),
+          removeItem: jest.fn().mockResolvedValue(undefined),
+        },
+        createDownloadResumableFn: factory,
+      });
+
+      const startPromise = downloader.start();
+      const pausePromise = downloader.pause();
+
+      const resumeToken = await pausePromise;
+
+      expect(resumeToken).toBe('late_pause_token');
+      expect(mockDownloadResumable.pauseAsync).toHaveBeenCalled();
+      void startPromise;
+    });
+
+    it('honors a cancel requested while start() is still loading resume state', async () => {
+      const mockDownloadResumable = {
+        downloadAsync: jest.fn().mockImplementation(() => new Promise(() => {})),
+        pauseAsync: jest.fn().mockResolvedValue({ resumeData: 'cancelled_token' }),
+        resumeAsync: jest.fn().mockResolvedValue(undefined),
+      };
+      const factory = jest.fn().mockReturnValue(mockDownloadResumable);
+      const removeItem = jest.fn().mockResolvedValue(undefined);
+
+      const downloader = new ResumableModelDownloader({
+        modelConfig: mockModel,
+        destinationUri: '/data/models/model.litertlm',
+        storage: {
+          getItem: jest
+            .fn()
+            .mockImplementation(() => new Promise((resolve) => setTimeout(() => resolve(null), 50))),
+          setItem: jest.fn().mockResolvedValue(undefined),
+          removeItem,
+        },
+        createDownloadResumableFn: factory,
+      });
+
+      const startPromise = downloader.start();
+      await downloader.cancel();
+
+      expect(mockDownloadResumable.pauseAsync).toHaveBeenCalled();
+      expect(removeItem).toHaveBeenCalledWith('download_resume_minicpm5-2b-int4');
+      void startPromise;
     });
   });
 });
