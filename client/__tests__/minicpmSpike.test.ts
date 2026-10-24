@@ -68,4 +68,28 @@ describe('MiniCPM5-2B Prototype Spike Harness (WF-02)', () => {
     expect(result.outputText).toBe('Gravity pulls.');
     expect(result.peakRamMb).toBe(1820);
   });
+
+  it('keeps a successful generation result when unload throws synchronously', async () => {
+    const mockDriver: NativeInferenceDriver = {
+      init: jest.fn().mockResolvedValue(true),
+      generate: jest.fn().mockImplementation(async (_prompt, onToken) => {
+        onToken('ok');
+        return { text: 'ok', tokenCount: 1 };
+      }),
+      // Synchronous throw (not a rejected promise): the finally block must not
+      // let it override the successful generation result.
+      unload: jest.fn(() => {
+        throw new Error('sync unload failure');
+      }) as unknown as NativeInferenceDriver['unload'],
+      getMemoryUsageMb: jest.fn().mockResolvedValue(1200),
+    };
+
+    const runner = new MiniCpmSpikeRunner(DEFAULT_SPIKE_CONFIG, mockDriver);
+    const result = await runner.runSpike(
+      '/data/local/tmp/MiniCPM5-2B_int4.litertlm'
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.outputText).toBe('ok');
+  });
 });

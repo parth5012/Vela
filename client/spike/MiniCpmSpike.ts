@@ -143,9 +143,13 @@ export class MiniCpmSpikeRunner {
             success: true,
           };
         } finally {
-          await this.driver.unload().catch((unloadErr) => {
+          try {
+            await this.driver.unload();
+          } catch (unloadErr) {
+            // A synchronous throw from unload() must not override the
+            // successful generation result held by this block's return.
             console.warn('[MiniCPM-Spike] Error unloading driver:', unloadErr);
-          });
+          }
         }
       }
 
