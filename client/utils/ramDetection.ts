@@ -2,7 +2,7 @@ import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import StableDiffusionNative from '../modules/stable-diffusion';
 
-export type ModelRecommendationStatus = 'recommended' | 'borderline' | 'unsupported';
+export type ModelRecommendationStatus = 'recommended' | 'borderline' | 'unsupported' | 'unknown';
 
 export type GpuVendor = 'adreno' | 'mali' | 'xclipse' | 'tensor' | 'unknown';
 export type GpuBackend = 'opencl' | 'vulkan' | 'cpu';

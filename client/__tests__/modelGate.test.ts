@@ -904,5 +904,114 @@ describe('WF-05: Model Download + Device Capability Gate', () => {
 
       expect(deleteFileFn).not.toHaveBeenCalled();
     });
+
+    it('treats a transport completion that lands during cancel() as cancelled', async () => {
+      // cancel() calls pauseAsync() and waits on it before it finishes
+      // cleanup. If the transport resolves downloadAsync() with a completed
+      // URI during that pauseAsync() window, start() must still report the
+      // download as cancelled (null), not success — checked via
+      // cancelRequested, since isDownloading is also already false here.
+      let resolveDownload!: (v: { uri: string; status: number }) => void;
+      const mockDownloadResumable = {
+        downloadAsync: jest.fn().mockImplementation(() => new Promise((res) => {
+          resolveDownload = res;
+        })),
+        pauseAsync: jest.fn().mockImplementation(async () => {
+          // Transport "completes" concurrently with the pause request.
+          resolveDownload({ uri: '/data/models/model.litertlm', status: 200 });
+          return { resumeData: 'cancelled-token' };
+        }),
+        resumeAsync: jest.fn().mockResolvedValue(undefined),
+      };
+      const factory = jest.fn().mockReturnValue(mockDownloadResumable);
+      const removeItem = jest.fn().mockResolvedValue(undefined);
+
+      const downloader = new ResumableModelDownloader({
+        modelConfig: mockModel,
+        destinationUri: '/data/models/model.litertlm',
+        storage: {
+          getItem: jest.fn().mockResolvedValue(null),
+          setItem: jest.fn().mockResolvedValue(undefined),
+          removeItem,
+        },
+        createDownloadResumableFn: factory,
+      });
+
+      const startPromise = downloader.start();
+      // Let initialization finish so the transfer is in flight.
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await downloader.cancel();
+      const startResult = await startPromise;
+
+      expect(startResult).toBeNull();
+    });
+
+    it('does not let a cancelled cleanup delete a newly started download', async () => {
+      // cancel() releases the isDownloading guard before its removeItem/delete
+      // awaits. A start() issued in that window must not have its fresh
+      // transfer deleted by the older cancel()'s cleanup.
+      let rejectRead!: (e: Error) => void;
+      let pauseSettled!: () => void;
+      const pauseGate = new Promise<void>((resolve) => {
+        pauseSettled = resolve;
+      });
+
+      const mockDownloadResumable = {
+        downloadAsync: jest.fn().mockResolvedValue({ uri: '/data/models/model.litertlm', status: 200 }),
+        pauseAsync: jest.fn().mockImplementation(() => pauseGate),
+        resumeAsync: jest.fn().mockResolvedValue(undefined),
+      };
+      const factory = jest.fn().mockReturnValue(mockDownloadResumable);
+      const deleteFileFn = jest.fn().mockResolvedValue(undefined);
+      let readCount = 0;
+      const storage = {
+        getItem: jest.fn().mockImplementation(() => {
+          readCount += 1;
+          // First download's init is gated; the fresh download resolves.
+          return readCount === 1
+            ? new Promise((_, reject) => {
+                rejectRead = reject;
+              })
+            : Promise.resolve(null);
+        }),
+        setItem: jest.fn().mockResolvedValue(undefined),
+        removeItem: jest.fn().mockResolvedValue(undefined),
+      };
+
+      const downloader = new ResumableModelDownloader({
+        modelConfig: mockModel,
+        destinationUri: '/data/models/model.litertlm',
+        storage,
+        createDownloadResumableFn: factory,
+        deleteFileFn,
+      });
+
+      // First download begins initialization (slow read).
+      const firstStart = downloader.start();
+      // Cancel during init; it waits on initPromise (which the first start
+      // also awaits).
+      const cancelPromise = downloader.cancel();
+      // First start observes the cancel before the transfer, releases guard.
+      rejectRead(new Error('storage read failed'));
+      await expect(firstStart).rejects.toThrow('storage read failed');
+
+      // A cancel that is still cleaning up must refuse a fresh start for the
+      // whole cleanup (the gate is held), so its cleanup pass can never delete
+      // a transfer it does not own.
+      const freshStart = downloader.start();
+      pauseSettled();
+      await cancelPromise;
+      expect(await freshStart).toBeNull();
+      expect(deleteFileFn).not.toHaveBeenCalled();
+
+      // After the cancel fully settles the gate drops, so a genuine retry
+      // succeeds and its artifact is never deleted.
+      const destination = await downloader.start();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(destination).toBe('/data/models/model.litertlm');
+      expect(deleteFileFn).not.toHaveBeenCalled();
+    });
   });
 });

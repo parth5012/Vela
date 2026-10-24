@@ -241,7 +241,22 @@ export default function LocalAiScreen() {
     }
   };
 
+  const ramUnknown = detectedRamBytes !== null && detectedRamBytes <= 0;
+  // When RAM is genuinely unreadable (production device, totalMemory denied),
+  // don't fabricate a recommendation by substituting a simulated 6 GB value.
+  const modelStatus = (modelName: string): 'recommended' | 'borderline' | 'unsupported' | 'unknown' =>
+    ramUnknown
+      ? 'unknown'
+      : getModelStatusForRam(modelName, detectedRamBytes || 6 * 1024 * 1024 * 1024);
+
   const handleApplyRecommendation = () => {
+    if (ramUnknown) {
+      Alert.alert(
+        'RAM Unavailable',
+        "We couldn't read your device's total memory, so no configuration is recommended. Pick a model manually below."
+      );
+      return;
+    }
     if (detectedRamBytes) {
       const rec = getOptimalSettingsForRam(detectedRamBytes);
       setLocalModelName(rec.modelName);
@@ -508,19 +523,29 @@ export default function LocalAiScreen() {
       {detectedRamBytes !== null && !localConfigAutoApplied && (
         <Card>
           <Label>RAM Auto-Configuration</Label>
-          <Text style={{ color: colors.text, fontSize: sizes.text, fontWeight: '600', marginBottom: 4 }}>
-            System detected {(detectedRamBytes / (1024 ** 3)).toFixed(1)} GB of physical memory.
-          </Text>
-          <Text style={{ color: colors.textMuted, fontSize: sizes.sub, lineHeight: 16, marginBottom: 12 }}>
-            Recommended configuration:
-            {"\n"}• Model: {getOptimalSettingsForRam(detectedRamBytes).modelName}
-            {"\n"}• Context window: {getOptimalSettingsForRam(detectedRamBytes).contextSize} tokens
-            {"\n"}• Max outputs: {getOptimalSettingsForRam(detectedRamBytes).maxTokens} tokens
-          </Text>
-          <PrimaryButton
-            label="Apply Recommended Settings"
-            onPress={handleApplyRecommendation}
-          />
+          {ramUnknown ? (
+            <Text style={{ color: colors.textMuted, fontSize: sizes.sub, lineHeight: 16 }}>
+              We couldn't read your device's total memory, so no configuration is
+              recommended. You can still pick a model manually below — the download
+              gate will confirm your device actually supports it.
+            </Text>
+          ) : (
+            <>
+              <Text style={{ color: colors.text, fontSize: sizes.text, fontWeight: '600', marginBottom: 4 }}>
+                System detected {(detectedRamBytes! / (1024 ** 3)).toFixed(1)} GB of physical memory.
+              </Text>
+              <Text style={{ color: colors.textMuted, fontSize: sizes.sub, lineHeight: 16, marginBottom: 12 }}>
+                Recommended configuration:
+                {"\n"}• Model: {getOptimalSettingsForRam(detectedRamBytes!).modelName}
+                {"\n"}• Context window: {getOptimalSettingsForRam(detectedRamBytes!).contextSize} tokens
+                {"\n"}• Max outputs: {getOptimalSettingsForRam(detectedRamBytes!).maxTokens} tokens
+              </Text>
+              <PrimaryButton
+                label="Apply Recommended Settings"
+                onPress={handleApplyRecommendation}
+              />
+            </>
+          )}
         </Card>
       )}
 
@@ -545,13 +570,16 @@ export default function LocalAiScreen() {
         </View>
         {LOCAL_MODELS.filter((model) => {
           if (showUnsupportedModels) return true;
-          const status = getModelStatusForRam(model.name, detectedRamBytes || 6 * 1024 * 1024 * 1024);
-          return status !== 'unsupported';
+          return modelStatus(model.name) !== 'unsupported';
         }).map((model) => {
           const isSelected = localModelName === model.name;
           const isDownloaded = downloadedModels[model.name];
-          const status = getModelStatusForRam(model.name, detectedRamBytes || 6 * 1024 * 1024 * 1024);
-          const statusColor = status === 'recommended' ? '#10b981' : (status === 'borderline' ? '#fb923c' : '#ef4444');
+          const status = modelStatus(model.name);
+          const statusColor =
+            status === 'recommended' ? '#10b981'
+            : status === 'borderline' ? '#fb923c'
+            : status === 'unknown' ? '#94a3b8'
+            : '#ef4444';
           const statusText = status.charAt(0).toUpperCase() + status.slice(1);
           const isActiveDownloading = isSelected && localModelDownloadProgress !== null;
           return (
@@ -973,7 +1001,9 @@ export default function LocalAiScreen() {
         <Label>RAM</Label>
         {detectedRamBytes !== null && (
           <Text style={{ color: colors.text, fontSize: sizes.sub, fontWeight: '700', marginBottom: 6 }}>
-            Device RAM: {(detectedRamBytes / (1024 ** 3)).toFixed(1)} GB
+            {detectedRamBytes > 0
+              ? `Device RAM: ${(detectedRamBytes / (1024 ** 3)).toFixed(1)} GB`
+              : "Device RAM: unavailable — couldn't read total memory"}
           </Text>
         )}
         <Text style={{ color: colors.textMuted, fontSize: sizes.sub, lineHeight: 16 }}>

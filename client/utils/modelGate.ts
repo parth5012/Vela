@@ -522,6 +522,8 @@ export class ResumableModelDownloader {
   private cancelRequested: boolean = false;
   /** True while a transfer has bytes on disk that a cancel() must clean up. */
   private hasPartialArtifact: boolean = false;
+  /** True from the moment cancel() is called until its cleanup fully settles. */
+  private cancelInProgress: boolean = false;
   private lastProgress: DownloadProgress = {
     totalBytesWritten: 0,
     totalBytesExpectedToWrite: 0,
@@ -553,10 +555,12 @@ export class ResumableModelDownloader {
   }
 
   async start(): Promise<string | null> {
-    if (this.isDownloading) {
+    if (this.isDownloading || this.cancelInProgress) {
       // Re-entrancy guard: a second start()/resume() during an in-flight
       // download would overwrite downloadInstance and run two concurrent
-      // downloads to the same destination (file corruption risk).
+      // downloads to the same destination (file corruption risk). A cancel
+      // that is still cleaning up also holds the gate, so its cleanup can
+      // never delete a freshly started transfer.
       return null;
     }
     this.isDownloading = true;
@@ -582,10 +586,11 @@ export class ResumableModelDownloader {
     try {
       this.hasPartialArtifact = true;
       const result = await this.downloadInstance.downloadAsync();
-      // cancel()/pause() landing mid-flight flips isDownloading to false;
-      // honor that even if the transport reports a completed URI, so a
-      // cancelled download is never reported as success.
-      const wasRevoked = !this.isDownloading;
+      // cancel()/pause() landing mid-flight revokes the run. Check
+      // cancelRequested too: a transport completion that lands while cancel()
+      // is awaiting pauseAsync() would otherwise be reported as success even
+      // though isDownloading was already flipped to false.
+      const wasRevoked = this.cancelRequested || !this.isDownloading;
       this.isDownloading = false;
       if (wasRevoked || !result || !result.uri) {
         // Paused or cancelled by caller; retain resume token in storage
@@ -655,20 +660,24 @@ export class ResumableModelDownloader {
   }
 
   async resume(): Promise<string | null> {
-    if (this.isDownloading) {
-      // Re-entrancy guard: a download (or its initialization) is already in
-      // flight; a concurrent resumeAsync() on the same instance is unsafe.
+    if (this.isDownloading || this.cancelInProgress) {
+      // Re-entrancy guard: a download (or its initialization, or a cancel
+      // still cleaning up) is already in flight; a concurrent resumeAsync()
+      // on the same instance is unsafe and could race the cancel's cleanup.
       return null;
     }
     if (!this.downloadInstance) {
       return this.start();
     }
 
+    // A prior cancel() must not block this fresh resume(); clear it before
+    // the run so revocation only reflects cancellations issued mid-flight.
+    this.cancelRequested = false;
     this.isDownloading = true;
     try {
       this.hasPartialArtifact = true;
       const result = await this.downloadInstance.resumeAsync();
-      const wasRevoked = !this.isDownloading;
+      const wasRevoked = this.cancelRequested || !this.isDownloading;
       this.isDownloading = false;
       if (wasRevoked || !result || !result.uri) {
         // Paused or cancelled by caller; retain resume token in storage
@@ -684,31 +693,40 @@ export class ResumableModelDownloader {
   }
 
   async cancel(): Promise<void> {
-    // Set synchronously (before any await) so start()'s post-init check can
-    // observe the cancellation and skip the transfer entirely.
+    // Mark the gate synchronously so a concurrent start()/resume() is refused
+    // for the whole of this cancellation, including cleanup. Releasing the
+    // guard before cleanup finished is what allowed a fresh download to be
+    // deleted by an older cancel()'s cleanup pass.
+    this.cancelInProgress = true;
     this.cancelRequested = true;
-    if (this.initPromise) {
-      await this.initPromise.catch(() => undefined);
-    }
-    if (this.downloadInstance && this.isDownloading) {
-      try {
-        await this.downloadInstance.pauseAsync();
-      } catch {
-        // Ignore error on abort
+    try {
+      if (this.initPromise) {
+        await this.initPromise.catch(() => undefined);
       }
-    }
-    this.isDownloading = false;
-    await this.storage.removeItem(this.resumeKey);
-    if (this.hasPartialArtifact) {
-      // The resume token is gone, so a partial artifact can never be resumed;
-      // delete it instead of orphaning gigabytes of model data on the device.
-      this.hasPartialArtifact = false;
-      try {
-        await this.deleteFileFn(this.destinationUri);
-      } catch (err) {
-        // Best-effort cleanup: a failed delete must not make cancel() throw.
-        console.warn('[ResumableModelDownloader] Failed to delete partial artifact:', err);
+      if (this.downloadInstance && this.isDownloading) {
+        try {
+          await this.downloadInstance.pauseAsync();
+        } catch {
+          // Ignore error on abort
+        }
       }
+      this.isDownloading = false;
+      await this.storage.removeItem(this.resumeKey);
+      // Clean up the partial artifact for the transfer this cancel revoked.
+      // A fresh download can only start after cancelInProgress drops in the
+      // finally below, i.e. after this delete settles — so it can never be
+      // the target of this cleanup pass.
+      if (this.hasPartialArtifact) {
+        this.hasPartialArtifact = false;
+        try {
+          await this.deleteFileFn(this.destinationUri);
+        } catch (err) {
+          // Best-effort cleanup: a failed delete must not make cancel() throw.
+          console.warn('[ResumableModelDownloader] Failed to delete partial artifact:', err);
+        }
+      }
+    } finally {
+      this.cancelInProgress = false;
     }
   }
 }
