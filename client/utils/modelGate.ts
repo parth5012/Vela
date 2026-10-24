@@ -20,6 +20,9 @@ export const DEFAULT_RAM_FLOOR_BYTES = 6 * BYTES_PER_GB;
 export const DEFAULT_RAM_RECOMMENDED_BYTES = 8 * BYTES_PER_GB;
 export const DEFAULT_MIN_STORAGE_FREE_BYTES = 3 * BYTES_PER_GB;
 
+const MIN_RAM_FLOOR_GB = DEFAULT_RAM_FLOOR_BYTES / BYTES_PER_GB;
+const MIN_STORAGE_FLOOR_GB = DEFAULT_MIN_STORAGE_FREE_BYTES / BYTES_PER_GB;
+
 export type DeviceCapabilityStatus = 'OK' | 'DEGRADED' | 'UNSUPPORTED';
 
 export interface DeviceCapabilityOptions {
@@ -80,7 +83,8 @@ export function detectCpuArchitecture(): string {
     if (process.arch === 'x64') return 'x86_64';
     return process.arch;
   }
-  return 'arm64-v8a';
+  // Fail closed: an undetectable ABI must not be assumed to be arm64.
+  return 'unknown';
 }
 
 /**
@@ -236,8 +240,24 @@ export async function fetchRemoteModelConfig(
       const isValidSize = typeof data?.sizeBytes === 'number' && data.sizeBytes > 0;
       const isValidFormat = ['litertlm', 'task', 'gguf', 'cact'].includes(data?.format);
       const isValidModelId = typeof data?.modelId === 'string' && data.modelId.trim().length > 0;
+      const isValidRamFloor =
+        data?.minRamGb === undefined ||
+        data?.minRamGb === null ||
+        (typeof data.minRamGb === 'number' && data.minRamGb >= MIN_RAM_FLOOR_GB);
+      const isValidStorageFloor =
+        data?.minStorageGb === undefined ||
+        data?.minStorageGb === null ||
+        (typeof data.minStorageGb === 'number' && data.minStorageGb >= MIN_STORAGE_FLOOR_GB);
 
-      if (isValidModelId && isValidHttps && isValidSize && isValidHex64 && isValidFormat) {
+      if (
+        isValidModelId &&
+        isValidHttps &&
+        isValidSize &&
+        isValidHex64 &&
+        isValidFormat &&
+        isValidRamFloor &&
+        isValidStorageFloor
+      ) {
         return {
           modelId: data.modelId,
           name: data.name || data.modelId,
@@ -246,8 +266,11 @@ export async function fetchRemoteModelConfig(
           format: data.format,
           sizeBytes: data.sizeBytes,
           sha256: data.sha256,
-          minRamGb: typeof data.minRamGb === 'number' && data.minRamGb > 0 ? data.minRamGb : 6,
-          minStorageGb: typeof data.minStorageGb === 'number' && data.minStorageGb > 0 ? data.minStorageGb : 3,
+          minRamGb: typeof data.minRamGb === 'number' && data.minRamGb > 0 ? data.minRamGb : MIN_RAM_FLOOR_GB,
+          minStorageGb:
+            typeof data.minStorageGb === 'number' && data.minStorageGb > 0
+              ? data.minStorageGb
+              : MIN_STORAGE_FLOOR_GB,
         };
       } else {
         console.warn('[ModelGate] Remote config validation failed, using fallback config:', data);
@@ -394,10 +417,22 @@ export class ModelDownloadGate {
       this.options.fetchFn
     );
 
+    const callerCapabilityOptions = this.options.capabilityOptions ?? {};
+    // Effective floors are the highest of the model config, the documented
+    // defaults, and caller overrides: remote payloads and callers can raise
+    // requirements but never weaken the hard 6 GB / 3 GB floors.
     const capabilityOptions: DeviceCapabilityOptions = {
-      ramFloorBytes: modelConfig.minRamGb * BYTES_PER_GB,
-      minDiskFreeBytes: modelConfig.minStorageGb * BYTES_PER_GB,
-      ...this.options.capabilityOptions,
+      ...callerCapabilityOptions,
+      ramFloorBytes: Math.max(
+        modelConfig.minRamGb * BYTES_PER_GB,
+        DEFAULT_RAM_FLOOR_BYTES,
+        callerCapabilityOptions.ramFloorBytes ?? 0
+      ),
+      minDiskFreeBytes: Math.max(
+        modelConfig.minStorageGb * BYTES_PER_GB,
+        DEFAULT_MIN_STORAGE_FREE_BYTES,
+        callerCapabilityOptions.minDiskFreeBytes ?? 0
+      ),
     };
     const capability = await evaluateDeviceCapabilities(capabilityOptions);
 
@@ -478,6 +513,7 @@ export class ResumableModelDownloader {
   };
   private createDownloadResumableFn: any;
   private downloadInstance: any = null;
+  private initPromise: Promise<void> | null = null;
   private isDownloading: boolean = false;
   private lastProgress: DownloadProgress = {
     totalBytesWritten: 0,
@@ -506,6 +542,29 @@ export class ResumableModelDownloader {
 
   async start(): Promise<string | null> {
     this.isDownloading = true;
+    this.initPromise = this.initializeDownload();
+    try {
+      await this.initPromise;
+    } finally {
+      this.initPromise = null;
+    }
+
+    try {
+      const result = await this.downloadInstance.downloadAsync();
+      this.isDownloading = false;
+      if (!result || !result.uri) {
+        // Paused or cancelled by caller; retain resume token in storage
+        return null;
+      }
+      await this.storage.removeItem(this.resumeKey);
+      return result.uri;
+    } catch (err) {
+      this.isDownloading = false;
+      throw err;
+    }
+  }
+
+  private async initializeDownload(): Promise<void> {
     const savedResumeData = await this.storage.getItem(this.resumeKey);
 
     const progressHandler = ({
@@ -532,25 +591,13 @@ export class ResumableModelDownloader {
       progressHandler,
       savedResumeData ?? undefined
     );
-
-    try {
-      const result = await this.downloadInstance.downloadAsync();
-      this.isDownloading = false;
-      if (!result || !result.uri) {
-        // Paused or cancelled by caller; retain resume token in storage
-        return null;
-      }
-      await this.storage.removeItem(this.resumeKey);
-      return result.uri;
-    } catch (err) {
-      this.isDownloading = false;
-      throw err;
-    }
   }
 
   async pause(): Promise<string | null> {
-    if (this.isDownloading && !this.downloadInstance) {
-      await new Promise((resolve) => setTimeout(resolve, 20));
+    if (this.initPromise) {
+      // Deterministically wait for download initialization instead of a fixed
+      // sleep, so a pause issued during start() is never silently dropped.
+      await this.initPromise.catch(() => undefined);
     }
 
     if (!this.downloadInstance || !this.isDownloading) {
@@ -593,6 +640,9 @@ export class ResumableModelDownloader {
   }
 
   async cancel(): Promise<void> {
+    if (this.initPromise) {
+      await this.initPromise.catch(() => undefined);
+    }
     if (this.downloadInstance && this.isDownloading) {
       try {
         await this.downloadInstance.pauseAsync();
