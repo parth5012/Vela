@@ -71,12 +71,22 @@ jest.mock('../utils/ramDetection', () => {
 });
 
 describe('LocalAiScreen RAM Display (fail-closed detectRamBytes)', () => {
+  // Track the mounted renderer so it unsubscribes from the store between
+  // tests; otherwise a leftover instance re-runs its RAM effect during the
+  // next test's clearConfig() and pollutes detectRamBytes call assertions.
+  let mounted: renderer.ReactTestRenderer | undefined;
+
   beforeEach(async () => {
     jest.clearAllMocks();
     await AsyncStorage.clear();
     act(() => {
       useConfigStore.getState().clearConfig();
     });
+  });
+
+  afterEach(() => {
+    mounted?.unmount();
+    mounted = undefined;
   });
 
   it('requests RAM with allowEmulator so the display never shows 0.0 GB', async () => {
@@ -87,6 +97,7 @@ describe('LocalAiScreen RAM Display (fail-closed detectRamBytes)', () => {
       component = renderer.create(<LocalAiScreen />);
       await new Promise((resolve) => setTimeout(resolve, 50));
     });
+    mounted = component;
 
     expect(detectRamBytes).toHaveBeenCalledWith({ allowEmulator: true });
 
@@ -98,6 +109,31 @@ describe('LocalAiScreen RAM Display (fail-closed detectRamBytes)', () => {
       .replace(/\s+/g, ' ');
     expect(combinedText).toContain('Device RAM: 6.0 GB');
     expect(combinedText).not.toContain('Device RAM: 0.0 GB');
+  });
+
+  it('does not simulate 6 GB RAM on a production Android build', async () => {
+    const { detectRamBytes } = require('../utils/ramDetection');
+    const { Platform } = require('react-native');
+
+    const originalDev = (global as { __DEV__?: boolean }).__DEV__;
+    const originalOs = (Platform as { OS?: string }).OS;
+    // Simulate a release Android build where the display must not lie about RAM.
+    (global as { __DEV__?: boolean }).__DEV__ = false;
+    (Platform as { OS?: string }).OS = 'android';
+
+    try {
+      let component: renderer.ReactTestRenderer | undefined;
+      await act(async () => {
+        component = renderer.create(<LocalAiScreen />);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+      mounted = component;
+
+      expect(detectRamBytes).toHaveBeenCalledWith({ allowEmulator: false });
+    } finally {
+      (global as { __DEV__?: boolean }).__DEV__ = originalDev;
+      (Platform as { OS?: string }).OS = originalOs;
+    }
   });
 });
 

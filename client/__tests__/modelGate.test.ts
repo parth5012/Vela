@@ -711,9 +711,198 @@ describe('WF-05: Model Download + Device Capability Gate', () => {
       const startPromise = downloader.start();
       await downloader.cancel();
 
-      expect(mockDownloadResumable.pauseAsync).toHaveBeenCalled();
+      // New cancel-during-init semantics: the transfer is never started for an
+      // abandoned request, so there is nothing to pause — but the resume token
+      // is still cleared so no stale state survives the cancellation.
+      expect(mockDownloadResumable.downloadAsync).not.toHaveBeenCalled();
+      expect(mockDownloadResumable.pauseAsync).not.toHaveBeenCalled();
       expect(removeItem).toHaveBeenCalledWith('download_resume_minicpm5-2b-int4');
       void startPromise;
+    });
+
+    it('ignores a second start() while a download is already in flight', async () => {
+      const mockDownloadResumable = {
+        downloadAsync: jest.fn().mockImplementation(() => new Promise(() => {})),
+        pauseAsync: jest.fn().mockResolvedValue(undefined),
+        resumeAsync: jest.fn().mockResolvedValue(undefined),
+      };
+      const factory = jest.fn().mockReturnValue(mockDownloadResumable);
+
+      const downloader = new ResumableModelDownloader({
+        modelConfig: mockModel,
+        destinationUri: '/data/models/model.litertlm',
+        storage: {
+          getItem: jest.fn().mockResolvedValue(null),
+          setItem: jest.fn().mockResolvedValue(undefined),
+          removeItem: jest.fn().mockResolvedValue(undefined),
+        },
+        createDownloadResumableFn: factory,
+      });
+
+      const firstStart = downloader.start();
+      const secondResult = await downloader.start();
+
+      expect(secondResult).toBeNull();
+      expect(factory).toHaveBeenCalledTimes(1);
+      void firstStart;
+    });
+
+    it('ignores a resume() while a download is already in flight', async () => {
+      const mockDownloadResumable = {
+        downloadAsync: jest.fn().mockImplementation(() => new Promise(() => {})),
+        pauseAsync: jest.fn().mockResolvedValue(undefined),
+        resumeAsync: jest.fn().mockResolvedValue({ uri: '/data/models/model.litertlm', status: 200 }),
+      };
+      const factory = jest.fn().mockReturnValue(mockDownloadResumable);
+
+      const downloader = new ResumableModelDownloader({
+        modelConfig: mockModel,
+        destinationUri: '/data/models/model.litertlm',
+        storage: {
+          getItem: jest.fn().mockResolvedValue(null),
+          setItem: jest.fn().mockResolvedValue(undefined),
+          removeItem: jest.fn().mockResolvedValue(undefined),
+        },
+        createDownloadResumableFn: factory,
+      });
+
+      const startPromise = downloader.start();
+      // Let initialization finish so downloadInstance exists and is in flight.
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const resumeResult = await downloader.resume();
+
+      expect(resumeResult).toBeNull();
+      expect(mockDownloadResumable.resumeAsync).not.toHaveBeenCalled();
+      void startPromise;
+    });
+
+    it('never starts the transfer when cancel() is issued during initialization', async () => {
+      const mockDownloadResumable = {
+        downloadAsync: jest.fn().mockResolvedValue({ uri: '/data/models/model.litertlm', status: 200 }),
+        pauseAsync: jest.fn().mockResolvedValue({ resumeData: 'unused' }),
+        resumeAsync: jest.fn().mockResolvedValue(undefined),
+      };
+      const factory = jest.fn().mockReturnValue(mockDownloadResumable);
+      const removeItem = jest.fn().mockResolvedValue(undefined);
+      const deleteFileFn = jest.fn().mockResolvedValue(undefined);
+
+      const downloader = new ResumableModelDownloader({
+        modelConfig: mockModel,
+        destinationUri: '/data/models/model.litertlm',
+        storage: {
+          // Slow storage read: cancel() lands while initialization is pending.
+          getItem: jest
+            .fn()
+            .mockImplementation(() => new Promise((resolve) => setTimeout(() => resolve(null), 50))),
+          setItem: jest.fn().mockResolvedValue(undefined),
+          removeItem,
+        },
+        createDownloadResumableFn: factory,
+        deleteFileFn,
+      });
+
+      const startPromise = downloader.start();
+      await downloader.cancel();
+
+      // The transfer must never begin for a download cancelled during init,
+      // and no cleanup of a (non-existent) partial artifact is needed.
+      expect(mockDownloadResumable.downloadAsync).not.toHaveBeenCalled();
+      expect(removeItem).toHaveBeenCalledWith('download_resume_minicpm5-2b-int4');
+      expect(deleteFileFn).not.toHaveBeenCalled();
+      await expect(startPromise).resolves.toBeNull();
+    });
+
+    it('unblocks start() after initialization fails', async () => {
+      let failNextRead = true;
+      const mockDownloadResumable = {
+        downloadAsync: jest.fn().mockResolvedValue({ uri: '/data/models/model.litertlm', status: 200 }),
+        pauseAsync: jest.fn().mockResolvedValue(undefined),
+        resumeAsync: jest.fn().mockResolvedValue(undefined),
+      };
+      const factory = jest.fn().mockReturnValue(mockDownloadResumable);
+
+      const downloader = new ResumableModelDownloader({
+        modelConfig: mockModel,
+        destinationUri: '/data/models/model.litertlm',
+        storage: {
+          getItem: jest.fn().mockImplementation(() => {
+            if (failNextRead) {
+              failNextRead = false;
+              return Promise.reject(new Error('storage read failed'));
+            }
+            return Promise.resolve(null);
+          }),
+          setItem: jest.fn().mockResolvedValue(undefined),
+          removeItem: jest.fn().mockResolvedValue(undefined),
+        },
+        createDownloadResumableFn: factory,
+      });
+
+      await expect(downloader.start()).rejects.toThrow('storage read failed');
+
+      const retryResult = await downloader.start();
+      expect(retryResult).toBe('/data/models/model.litertlm');
+    });
+
+    it('cancel() deletes the partial artifact during an active download', async () => {
+      const mockDownloadResumable = {
+        downloadAsync: jest.fn().mockImplementation(() => new Promise(() => {})),
+        pauseAsync: jest.fn().mockResolvedValue(undefined),
+        resumeAsync: jest.fn().mockResolvedValue(undefined),
+      };
+      const factory = jest.fn().mockReturnValue(mockDownloadResumable);
+      const deleteFileFn = jest.fn().mockResolvedValue(undefined);
+
+      const downloader = new ResumableModelDownloader({
+        modelConfig: mockModel,
+        destinationUri: '/data/models/model.litertlm',
+        storage: {
+          getItem: jest.fn().mockResolvedValue(null),
+          setItem: jest.fn().mockResolvedValue(undefined),
+          removeItem: jest.fn().mockResolvedValue(undefined),
+        },
+        createDownloadResumableFn: factory,
+        deleteFileFn,
+      });
+
+      const startPromise = downloader.start();
+      // Let initialization finish so the transfer is actually in flight.
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await downloader.cancel();
+
+      expect(deleteFileFn).toHaveBeenCalledWith('/data/models/model.litertlm');
+      void startPromise;
+    });
+
+    it('cancel() does not delete a completed artifact', async () => {
+      const mockDownloadResumable = {
+        downloadAsync: jest.fn().mockResolvedValue({ uri: '/data/models/model.litertlm', status: 200 }),
+        pauseAsync: jest.fn().mockResolvedValue(undefined),
+        resumeAsync: jest.fn().mockResolvedValue(undefined),
+      };
+      const factory = jest.fn().mockReturnValue(mockDownloadResumable);
+      const deleteFileFn = jest.fn().mockResolvedValue(undefined);
+
+      const downloader = new ResumableModelDownloader({
+        modelConfig: mockModel,
+        destinationUri: '/data/models/model.litertlm',
+        storage: {
+          getItem: jest.fn().mockResolvedValue(null),
+          setItem: jest.fn().mockResolvedValue(undefined),
+          removeItem: jest.fn().mockResolvedValue(undefined),
+        },
+        createDownloadResumableFn: factory,
+        deleteFileFn,
+      });
+
+      const destination = await downloader.start();
+      expect(destination).toBe('/data/models/model.litertlm');
+
+      await downloader.cancel();
+
+      expect(deleteFileFn).not.toHaveBeenCalled();
     });
   });
 });

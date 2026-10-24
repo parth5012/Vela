@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, Alert, StyleSheet, TextInput, Modal, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, Alert, StyleSheet, TextInput, Modal, ScrollView, ActivityIndicator, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
 import { useConfigStore } from '../../store/useConfigStore';
@@ -135,10 +135,12 @@ export default function LocalAiScreen() {
 
   useEffect(() => {
     if (detectedRamBytes === null) {
-      // Display-only call site: allowEmulator keeps the settings readout sane
-      // (6 GB simulation on web/unknown memory) while the download gate keeps
-      // failing closed via evaluateDeviceCapabilities.
-      detectRamBytes({ allowEmulator: true }).then((bytes) => {
+      // Display-only call site: the 6 GB simulation is allowed only in dev
+      // builds and on web, where no real device download is possible. On a
+      // production native build the readout must stay honest (fail-closed to
+      // 0.0 GB when totalMemory is unreadable) so it cannot claim 6.0 GB
+      // while evaluateDeviceCapabilities fails the device as UNSUPPORTED.
+      detectRamBytes({ allowEmulator: __DEV__ || Platform.OS === 'web' }).then((bytes) => {
         if (isMounted.current) {
           setDetectedRamBytes(bytes);
         }
