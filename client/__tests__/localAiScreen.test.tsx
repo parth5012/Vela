@@ -85,8 +85,12 @@ describe('LocalAiScreen RAM Display (fail-closed detectRamBytes)', () => {
   });
 
   afterEach(() => {
-    mounted?.unmount();
-    mounted = undefined;
+    if (mounted) {
+      act(() => {
+        mounted!.unmount();
+      });
+      mounted = undefined;
+    }
   });
 
   it('requests RAM with allowEmulator so the display never shows 0.0 GB', async () => {
@@ -130,6 +134,49 @@ describe('LocalAiScreen RAM Display (fail-closed detectRamBytes)', () => {
       mounted = component;
 
       expect(detectRamBytes).toHaveBeenCalledWith({ allowEmulator: false });
+    } finally {
+      (global as { __DEV__?: boolean }).__DEV__ = originalDev;
+      (Platform as { OS?: string }).OS = originalOs;
+    }
+  });
+
+  it('hides the recommendation card and explains unknown RAM instead of simulating 6 GB', async () => {
+    const { detectRamBytes } = require('../utils/ramDetection');
+    // Production native build: allowEmulator is false, so the detection mock
+    // returns 0 (totalMemory unreadable) — RAM is genuinely unknown.
+    const { Platform } = require('react-native');
+    const originalDev = (global as { __DEV__?: boolean }).__DEV__;
+    const originalOs = (Platform as { OS?: string }).OS;
+    (global as { __DEV__?: boolean }).__DEV__ = false;
+    (Platform as { OS?: string }).OS = 'android';
+
+    try {
+      let component: renderer.ReactTestRenderer | undefined;
+      await act(async () => {
+        component = renderer.create(<LocalAiScreen />);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+      mounted = component;
+      expect(detectRamBytes).toHaveBeenCalledWith({ allowEmulator: false });
+
+      const allText = () =>
+        component!.root
+          .findAllByType('Text' as any)
+          .map((n) => n.props.children)
+          .flat()
+          .join(' ')
+          .replace(/\s+/g, ' ');
+
+      // RAM readout stays honest: no simulated value, and it says so.
+      expect(allText()).toContain("Device RAM: unavailable — couldn't read total memory");
+      expect(allText()).not.toContain('Device RAM: 6.0 GB');
+      // No recommendation is fabricated from a simulated 6 GB value.
+      expect(allText()).not.toContain('Recommended configuration');
+      expect(allText()).not.toContain('System detected');
+      // The user is told the reading is unavailable rather than shown silence.
+      expect(allText()).toMatch(/couldn't read your device's total memory/i);
+      // Model rows are labeled Unknown instead of recommended/borderline.
+      expect(allText()).toContain('Unknown');
     } finally {
       (global as { __DEV__?: boolean }).__DEV__ = originalDev;
       (Platform as { OS?: string }).OS = originalOs;
