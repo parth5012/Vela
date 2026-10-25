@@ -47,15 +47,26 @@ async function* drainTokenStream(
   onToken: ((token: string) => void) | undefined,
   deadline: number,
   timeoutMessage: string,
-  waitOnce: () => Promise<void>
+  waitOnce: () => Promise<void>,
+  signal?: AbortSignal
 ): AsyncGenerator<string, void, unknown> {
   while (true) {
+    if (signal?.aborted) {
+      return;
+    }
+
     while (queue.length > 0) {
+      if (signal?.aborted) {
+        return;
+      }
       const token = queue.shift() as string;
       onToken?.(token);
       yield token;
     }
 
+    if (signal?.aborted) {
+      return;
+    }
     if (state.failure) throw state.failure;
     if (state.finished) break;
 
@@ -64,6 +75,9 @@ async function* drainTokenStream(
     }
 
     await waitOnce();
+    if (signal?.aborted) {
+      return;
+    }
   }
 }
 
@@ -594,8 +608,13 @@ export async function unloadLocalModel(): Promise<void> {
  */
 export async function* streamLocalLlmResponse(
   prompt: string,
-  onToken?: (token: string) => void
+  onToken?: (token: string) => void,
+  signal?: AbortSignal
 ): AsyncGenerator<string, void, unknown> {
+  if (signal?.aborted) {
+    return;
+  }
+
   if (isLocalLlmDown) {
     throw new Error('Local LLM is down/unavailable.');
   }
@@ -612,19 +631,39 @@ export async function* streamLocalLlmResponse(
 
   if (!useFallback && isCactModel) {
     let sub: any = null;
+    let onAbort: (() => void) | null = null;
+    let timerId: NodeJS.Timeout | null = null;
     try {
+      if (signal?.aborted) {
+        return;
+      }
+
       const queue: string[] = [];
       const state: TokenStreamState = { finished: false, failure: null };
       let hasReceivedStreamTokens = false;
       let wake: (() => void) | null = null;
 
       const notify = () => {
+        if (timerId) {
+          clearTimeout(timerId);
+          timerId = null;
+        }
         if (wake) {
           const w = wake;
           wake = null;
           w();
         }
       };
+
+      onAbort = () => {
+        sub?.remove?.();
+        sub = null;
+        notify();
+      };
+
+      if (signal) {
+        signal.addEventListener('abort', onAbort, { once: true });
+      }
 
       // #295 F2: the native side now emits exactly one payload event per
       // completion, but a stale/legacy build may still send `token` and then
@@ -637,6 +676,12 @@ export async function* streamLocalLlmResponse(
       const sameText = (a: string, b: string) => b.trim() !== '' && a.trim() === b.trim();
 
       sub = NeedleModule.addListener((event: NeedleStreamEvent) => {
+        if (signal?.aborted) {
+          sub?.remove?.();
+          sub = null;
+          notify();
+          return;
+        }
         if (event.type === 'token' && event.token) {
           hasReceivedStreamTokens = true;
           if (!sameText(event.token, lastPayload)) {
@@ -676,12 +721,14 @@ export async function* streamLocalLlmResponse(
         NEEDLE_DEVICE_TOOLS_JSON,
         useConfigStore.getState().localMaxTokens || 128
       ).then((res) => {
+        if (signal?.aborted) return;
         if (!hasReceivedStreamTokens && queue.length === 0 && res.text) {
           queue.push(res.text);
         }
         state.finished = true;
         notify();
       }).catch((err) => {
+        if (signal?.aborted) return;
         state.failure = err;
         notify();
       });
@@ -689,8 +736,12 @@ export async function* streamLocalLlmResponse(
       const deadline = Date.now() + NATIVE_STREAM_TIMEOUT_MS;
       const waitOnce = () =>
         new Promise<void>((resolve) => {
+          if (signal?.aborted) {
+            resolve();
+            return;
+          }
           wake = resolve;
-          setTimeout(notify, 250);
+          timerId = setTimeout(notify, 250);
         });
 
       yield* drainTokenStream(
@@ -699,32 +750,75 @@ export async function* streamLocalLlmResponse(
         onToken,
         deadline,
         `Needle streaming timed out after ${NATIVE_STREAM_TIMEOUT_MS / 1000}s`,
-        waitOnce
+        waitOnce,
+        signal
       );
 
       return;
     } catch (error: any) {
+      if (signal?.aborted) {
+        return;
+      }
       const reason = error?.message || String(error);
       console.warn('Needle streaming failed, using mock fallback:', reason);
       useFallback = true;
       localLlmFallbackReason = reason;
     } finally {
+      if (onAbort && signal) {
+        signal.removeEventListener('abort', onAbort);
+      }
+      if (timerId) {
+        clearTimeout(timerId);
+        timerId = null;
+      }
       sub?.remove?.();
+      sub = null;
     }
   }
 
   // ---- llama.cpp engine (GGUF): stream via llama.rn completion callback ----
   if (!useFallback && llamaContext) {
+    let onAbort: (() => void) | null = null;
+    let timerId: NodeJS.Timeout | null = null;
     try {
+      if (signal?.aborted) {
+        try {
+          llamaContext.stopCompletion?.();
+        } catch {}
+        return;
+      }
+
       const queue: string[] = [];
       const state: TokenStreamState = { finished: false, failure: null };
       let wake: (() => void) | null = null;
 
       const notify = () => {
+        if (timerId) {
+          clearTimeout(timerId);
+          timerId = null;
+        }
         const w = wake;
         wake = null;
         w?.();
       };
+
+      onAbort = () => {
+        try {
+          llamaContext?.stopCompletion?.();
+        } catch {}
+        notify();
+      };
+
+      if (signal) {
+        signal.addEventListener('abort', onAbort, { once: true });
+      }
+
+      if (signal?.aborted) {
+        try {
+          llamaContext.stopCompletion?.();
+        } catch {}
+        return;
+      }
 
       const completionPromise = llamaContext.completion(
         {
@@ -736,6 +830,13 @@ export async function* streamLocalLlmResponse(
           stop: ['<|im_end|>', '<|endoftext|>', '<|eot_id|>', '<|end_of_text|>', '</s>'],
         },
         (data) => {
+          if (signal?.aborted) {
+            try {
+              llamaContext?.stopCompletion?.();
+            } catch {}
+            notify();
+            return;
+          }
           if (data?.token) {
             queue.push(data.token);
           }
@@ -749,6 +850,7 @@ export async function* streamLocalLlmResponse(
           notify();
         },
         (error) => {
+          if (signal?.aborted) return;
           state.failure = error instanceof Error ? error : new Error(String(error));
           state.finished = true;
           notify();
@@ -758,8 +860,12 @@ export async function* streamLocalLlmResponse(
       const deadline = Date.now() + NATIVE_STREAM_TIMEOUT_MS;
       const waitOnce = () =>
         new Promise<void>((resolve) => {
+          if (signal?.aborted) {
+            resolve();
+            return;
+          }
           wake = resolve;
-          setTimeout(notify, 250);
+          timerId = setTimeout(notify, 250);
         });
 
       yield* drainTokenStream(
@@ -768,22 +874,39 @@ export async function* streamLocalLlmResponse(
         onToken,
         deadline,
         `Native streaming timed out after ${NATIVE_STREAM_TIMEOUT_MS / 1000}s`,
-        waitOnce
+        waitOnce,
+        signal
       );
 
       return;
     } catch (error: any) {
+      if (signal?.aborted) {
+        return;
+      }
       const reason = error?.message || String(error);
       console.warn('llama.rn streaming failed, using mock fallback:', reason);
       useFallback = true;
       localLlmFallbackReason = reason;
+    } finally {
+      if (onAbort && signal) {
+        signal.removeEventListener('abort', onAbort);
+      }
+      if (timerId) {
+        clearTimeout(timerId);
+        timerId = null;
+      }
     }
   }
 
   // Attempt using Native module streaming function if not in fallback mode
   if (!useFallback && GemmaNative && typeof GemmaNative.streamLlmResponse === 'function') {
     let subscription: { remove: () => void } | null = null;
+    let onAbort: (() => void) | null = null;
+    let timerId: NodeJS.Timeout | null = null;
     try {
+      if (signal?.aborted) {
+        return;
+      }
       // Tokens arrive as events, not callbacks: an RN bridge Callback can only
       // fire once, and a second invocation aborts the process on the New
       // Architecture ("Callback arg cannot be called more than once").
@@ -794,12 +917,32 @@ export async function* streamLocalLlmResponse(
       let wake: (() => void) | null = null;
 
       const notify = () => {
+        if (timerId) {
+          clearTimeout(timerId);
+          timerId = null;
+        }
         const w = wake;
         wake = null;
         w?.();
       };
 
+      onAbort = () => {
+        subscription?.remove();
+        subscription = null;
+        notify();
+      };
+
+      if (signal) {
+        signal.addEventListener('abort', onAbort, { once: true });
+      }
+
       subscription = emitter.addListener(GEMMA_STREAM_EVENT, (event: GemmaStreamEvent) => {
+        if (signal?.aborted) {
+          subscription?.remove();
+          subscription = null;
+          notify();
+          return;
+        }
         if (event?.type === 'token') {
           if (event.token) {
             queue.push(event.token);
@@ -820,8 +963,12 @@ export async function* streamLocalLlmResponse(
       const deadline = Date.now() + NATIVE_STREAM_TIMEOUT_MS;
       const waitOnce = () =>
         new Promise<void>((resolve) => {
+          if (signal?.aborted) {
+            resolve();
+            return;
+          }
           wake = resolve;
-          setTimeout(notify, 250);
+          timerId = setTimeout(notify, 250);
         });
 
       // Wait for events via the shared drain loop rather than polling hot.
@@ -831,17 +978,29 @@ export async function* streamLocalLlmResponse(
         onToken,
         deadline,
         `Native streaming timed out after ${NATIVE_STREAM_TIMEOUT_MS / 1000}s`,
-        waitOnce
+        waitOnce,
+        signal
       );
 
       return;
     } catch (error: any) {
+      if (signal?.aborted) {
+        return;
+      }
       const reason = error?.message || String(error);
       console.warn('Native local LLM streaming failed, using mock fallback:', reason);
       useFallback = true;
       localLlmFallbackReason = reason;
     } finally {
+      if (onAbort && signal) {
+        signal.removeEventListener('abort', onAbort);
+      }
+      if (timerId) {
+        clearTimeout(timerId);
+        timerId = null;
+      }
       subscription?.remove();
+      subscription = null;
     }
   }
 
@@ -850,10 +1009,28 @@ export async function* streamLocalLlmResponse(
   const words = responseText.split(' ');
 
   for (let i = 0; i < words.length; i++) {
+    if (signal?.aborted) return;
     const token = words[i] + (i === words.length - 1 ? '' : ' ');
     // Realistic delay simulating local inference token emission
     const delay = process.env.NODE_ENV === 'test' ? 10 : 80;
-    await new Promise((resolve) => setTimeout(resolve, delay));
+    await new Promise<void>((resolve) => {
+      let onAbort: (() => void) | null = null;
+      const timeoutId = setTimeout(() => {
+        if (onAbort && signal) {
+          signal.removeEventListener('abort', onAbort);
+        }
+        resolve();
+      }, delay);
+      if (signal) {
+        onAbort = () => {
+          clearTimeout(timeoutId);
+          resolve();
+        };
+        signal.addEventListener('abort', onAbort, { once: true });
+      }
+    });
+
+    if (signal?.aborted) return;
 
     if (onToken) {
       onToken(token);
