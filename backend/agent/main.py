@@ -66,6 +66,56 @@ def create_background_task(coro):
     task.add_done_callback(BACKGROUND_TASKS.discard)
     return task
 
+
+class ActiveStreamTurn:
+    def __init__(self, producer_task: asyncio.Task, persist_once, release_once):
+        self.producer_task = producer_task
+        self.persist_once = persist_once
+        self.release_once = release_once
+
+    @property
+    def task(self) -> asyncio.Task:
+        return self.producer_task
+
+    def cancel(self) -> bool:
+        return self.producer_task.cancel()
+
+    def done(self) -> bool:
+        return self.producer_task.done()
+
+    def __getattr__(self, name: str):
+        return getattr(self.producer_task, name)
+
+    def __getitem__(self, key: str):
+        if key in ("producer_task", "task"):
+            return self.producer_task
+        if key == "persist_once":
+            return self.persist_once
+        if key == "release_once":
+            return self.release_once
+        raise KeyError(key)
+
+
+# In-memory registry mapping normalized thread IDs to active producer tasks and turn states.
+# Note: last-wins per thread ID — a second POST /chat/message on the same thread
+# overwrites the turn (inherent to the design).
+ACTIVE_STREAM_TASKS: dict[str, ActiveStreamTurn] = {}
+_active_tasks_lock: asyncio.Lock | None = None
+_active_tasks_lock_loop = None
+
+
+def _get_active_tasks_lock() -> asyncio.Lock:
+    global _active_tasks_lock, _active_tasks_lock_loop
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if _active_tasks_lock is None or _active_tasks_lock_loop != loop:
+        _active_tasks_lock = asyncio.Lock()
+        _active_tasks_lock_loop = loop
+    return _active_tasks_lock
+
+
 def _safe_set_event(task_data: dict) -> None:
     """Safely sets an asyncio.Event across threads using call_soon_threadsafe on its loop."""
     event = task_data.get("event")
@@ -574,6 +624,8 @@ async def chat_message(payload: MessagePayload):
         experience_id = None
         persisted = False
         released = False
+        producer_task = None
+        turn = None
 
         def _release_once(reason: str) -> None:
             nonlocal released
@@ -701,6 +753,20 @@ async def chat_message(payload: MessagePayload):
                         logger.error("Failed to trigger webview session evaluation", error=str(ex))
 
             producer_task = create_background_task(producer())
+            turn = ActiveStreamTurn(
+                producer_task=producer_task,
+                persist_once=_persist_once,
+                release_once=_release_once,
+            )
+            lock = _get_active_tasks_lock()
+            async with lock:
+                ACTIVE_STREAM_TASKS[normalized_id] = turn
+
+            def _on_task_done(_):
+                if ACTIVE_STREAM_TASKS.get(normalized_id) is turn:
+                    ACTIVE_STREAM_TASKS.pop(normalized_id, None)
+
+            producer_task.add_done_callback(_on_task_done)
 
             try:
                 while True:
@@ -792,6 +858,8 @@ async def chat_message(payload: MessagePayload):
                 # Release semaphore as soon as streaming is complete so new streams
                 # can start while post-processing (DB writes, title generation) happens.
                 _release_once("streaming-complete")
+                if producer_task is not None and producer_task.done() and ACTIVE_STREAM_TASKS.get(normalized_id) is turn:
+                    ACTIVE_STREAM_TASKS.pop(normalized_id, None)
 
             # Success path: update the owned Experience row by ID (never the
             # "latest" row). Shielded so a late disconnect cannot drop it.
@@ -832,6 +900,8 @@ async def chat_message(payload: MessagePayload):
                 await _persist_once("error-path")
             except BaseException:
                 pass
+            if producer_task is not None and producer_task.done() and ACTIVE_STREAM_TASKS.get(normalized_id) is turn:
+                ACTIVE_STREAM_TASKS.pop(normalized_id, None)
             raise
 
     return StreamingResponse(
@@ -934,6 +1004,23 @@ def truncate_thread(thread_id: str, payload: TruncatePayload):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.post("/chat/threads/{thread_id}/stop", dependencies=[Depends(verify_api_key)])
+async def stop_thread(thread_id: str):
+    normalized_id = normalize_thread_id(thread_id)
+    lock = _get_active_tasks_lock()
+    async with lock:
+        turn = ACTIVE_STREAM_TASKS.get(normalized_id)
+        if turn is None or turn.done():
+            ACTIVE_STREAM_TASKS.pop(normalized_id, None)
+            return {"status": "idle", "thread_id": thread_id}
+        ACTIVE_STREAM_TASKS.pop(normalized_id, None)
+
+    turn.cancel()
+    await turn.persist_once("owner-abort")
+    turn.release_once("owner-abort")
+    logger.info("Thread streaming stopped by owner", thread_id=normalized_id)
+    return {"status": "stopped", "thread_id": thread_id}
 
 
 class ClientOAuthPayload(BaseModel):

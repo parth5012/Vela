@@ -539,3 +539,235 @@ def test_eval_thread_bypasses_experience_persistence(monkeypatch):
 
     clear_eval_thread_history(eval_thread_id)
 
+
+@pytest.mark.asyncio
+async def test_stop_thread_cancels_stream_releases_semaphore_and_persists_partial(monkeypatch):
+    import asyncio
+    import uuid
+
+    from httpx import ASGITransport, AsyncClient
+    from langchain_core.messages import AIMessageChunk
+
+    import agent.main as m
+    from agent import concurrency
+    from db.client import DBClient
+    from db.models import Conversation, Experience
+    from db.session import get_db_session
+
+    monkeypatch.setenv("VELA_API_KEY", "secret-test-key")
+    headers = {"Authorization": "Bearer secret-test-key"}
+
+    concurrency._semaphore = None
+    sem = concurrency.get_stream_semaphore()
+    limit = sem._value
+
+    thread_id = f"test-stop-{uuid.uuid4()}"
+    norm_id = m.normalize_thread_id(thread_id)
+
+    with get_db_session() as session:
+        DBClient(session).create_client_conversation(
+            title="Stop Endpoint Test",
+            agent="personal assistant",
+            conversation_id=norm_id,
+            source="android_client",
+        )
+
+    producer_started = asyncio.Event()
+    producer_cancelled = asyncio.Event()
+
+    async def slow_stream(*args, **kwargs):
+        try:
+            yield {
+                "event": "on_chat_model_stream",
+                "metadata": {"langgraph_node": "chatbot"},
+                "data": {"chunk": AIMessageChunk(content="partial text stream ")},
+            }
+            producer_started.set()
+            await asyncio.sleep(10)
+            yield {
+                "event": "on_chat_model_stream",
+                "metadata": {"langgraph_node": "chatbot"},
+                "data": {"chunk": AIMessageChunk(content="should not be reached")},
+            }
+        except asyncio.CancelledError:
+            producer_cancelled.set()
+            raise
+
+    try:
+        async with AsyncClient(transport=ASGITransport(app=m.app), base_url="http://test") as client:
+            # 1. Verify auth enforcement on /stop endpoint
+            resp_no_auth = await client.post(f"/chat/threads/{thread_id}/stop")
+            assert resp_no_auth.status_code == 403
+
+            resp_bad_auth = await client.post(
+                f"/chat/threads/{thread_id}/stop",
+                headers={"Authorization": "Bearer bad-key"},
+            )
+            assert resp_bad_auth.status_code == 401
+
+            # 2. Idle stop when no stream is running
+            resp_idle = await client.post(f"/chat/threads/{thread_id}/stop", headers=headers)
+            assert resp_idle.status_code == 200
+            assert resp_idle.json() == {"status": "idle", "thread_id": thread_id}
+
+            # 3. Start streaming with slow_stream
+            stream_received = []
+
+            async def consume_stream():
+                async with client.stream(
+                    "POST",
+                    "/chat/message",
+                    json={"thread_id": thread_id, "message": "hello stop test", "agent": "personal assistant"},
+                    headers=headers,
+                ) as resp:
+                    assert resp.status_code == 200
+                    async for line in resp.aiter_lines():
+                        if line:
+                            stream_received.append(line)
+
+            with patch.object(m.graph, "astream_events", side_effect=slow_stream):
+                stream_task = asyncio.create_task(consume_stream())
+
+                # Wait for producer to start and yield the first token
+                await asyncio.wait_for(producer_started.wait(), timeout=5.0)
+
+                # Concurrency semaphore acquired during streaming
+                assert sem._value < limit
+
+                # 4. Call /stop endpoint
+                resp_stop = await client.post(f"/chat/threads/{thread_id}/stop", headers=headers)
+                assert resp_stop.status_code == 200
+                assert resp_stop.json() == {"status": "stopped", "thread_id": thread_id}
+
+                # 5. Verify producer cancelled and stream task finished
+                await asyncio.wait_for(stream_task, timeout=5.0)
+                assert producer_cancelled.is_set()
+
+                # Semaphore released
+                assert sem._value == limit
+
+                # Verify partial text persisted to DB
+                with get_db_session() as session:
+                    exps = session.query(Experience).filter_by(conversation_id=norm_id).all()
+                    assert len(exps) == 1
+                    assert "partial text stream" in (exps[0].agent_response or "")
+                    assert "should not be reached" not in (exps[0].agent_response or "")
+
+                # 6. Verify calling /stop again returns idle
+                resp_idle_again = await client.post(f"/chat/threads/{thread_id}/stop", headers=headers)
+                assert resp_idle_again.status_code == 200
+                assert resp_idle_again.json() == {"status": "idle", "thread_id": thread_id}
+    finally:
+        for t in list(m.BACKGROUND_TASKS):
+            if not t.done():
+                t.cancel()
+        concurrency._semaphore = None
+        with get_db_session() as session:
+            from db.models import SyncMessage
+            session.query(SyncMessage).filter_by(conversation_id=norm_id).delete(synchronize_session=False)
+            session.query(Experience).filter_by(conversation_id=norm_id).delete(synchronize_session=False)
+            session.query(Conversation).filter_by(id=norm_id).delete(synchronize_session=False)
+
+
+@pytest.mark.asyncio
+async def test_passive_disconnect_preserves_background_producer_and_stop_cancels(monkeypatch):
+    """Preserve commit 481a466a intent: passive disconnect keeps background producer running,
+    and a subsequent POST /chat/threads/{id}/stop still finds the turn in ACTIVE_STREAM_TASKS
+    and cancels it.
+    """
+    import asyncio
+    import uuid
+
+    from httpx import ASGITransport, AsyncClient
+    from langchain_core.messages import AIMessageChunk
+
+    import agent.main as m
+    from agent import concurrency
+    from db.client import DBClient
+    from db.models import Conversation, Experience, SyncMessage
+    from db.session import get_db_session
+
+    monkeypatch.setenv("VELA_API_KEY", "secret-test-key")
+    headers = {"Authorization": "Bearer secret-test-key"}
+
+    concurrency._semaphore = None
+    sem = concurrency.get_stream_semaphore()
+    limit = sem._value
+
+    thread_id = f"test-disc-stop-{uuid.uuid4()}"
+    norm_id = m.normalize_thread_id(thread_id)
+
+    with get_db_session() as session:
+        DBClient(session).create_client_conversation(
+            title="Disconnect Then Stop Test",
+            agent="personal assistant",
+            conversation_id=norm_id,
+            source="android_client",
+        )
+
+    producer_started = asyncio.Event()
+    producer_cancelled = asyncio.Event()
+
+    async def slow_stream(*args, **kwargs):
+        try:
+            yield {
+                "event": "on_chat_model_stream",
+                "metadata": {"langgraph_node": "chatbot"},
+                "data": {"chunk": AIMessageChunk(content="chunk before disconnect ")},
+            }
+            producer_started.set()
+            await asyncio.sleep(10)
+            yield {
+                "event": "on_chat_model_stream",
+                "metadata": {"langgraph_node": "chatbot"},
+                "data": {"chunk": AIMessageChunk(content="should not be reached")},
+            }
+        except asyncio.CancelledError:
+            producer_cancelled.set()
+            raise
+
+    try:
+        with patch.object(m.graph, "astream_events", side_effect=slow_stream):
+            resp = await m.chat_message(
+                m.MessagePayload(thread_id=thread_id, message="hello disconnect stop", agent="personal assistant")
+            )
+            it = resp.body_iterator
+            first = await it.__anext__()
+            assert "chunk before disconnect" in first
+            await producer_started.wait()
+
+            # Passive client disconnect: simulate client dropping the SSE generator
+            await it.aclose()
+            await asyncio.sleep(0.1)
+
+            # Commit 481a466a preservation: producer task continues running in background
+            assert not producer_cancelled.is_set()
+            assert norm_id in m.ACTIVE_STREAM_TASKS
+            assert not m.ACTIVE_STREAM_TASKS[norm_id].done()
+
+            # Subsequent POST /chat/threads/{id}/stop finds the active turn and cancels it
+            async with AsyncClient(transport=ASGITransport(app=m.app), base_url="http://test") as client:
+                stop_resp = await client.post(f"/chat/threads/{thread_id}/stop", headers=headers)
+                assert stop_resp.status_code == 200
+                assert stop_resp.json() == {"status": "stopped", "thread_id": thread_id}
+
+            await asyncio.wait_for(producer_cancelled.wait(), timeout=5.0)
+            assert producer_cancelled.is_set()
+
+            # Semaphore is released
+            assert sem._value == limit
+
+            # Subsequent stop returns idle
+            async with AsyncClient(transport=ASGITransport(app=m.app), base_url="http://test") as client:
+                idle_resp = await client.post(f"/chat/threads/{thread_id}/stop", headers=headers)
+                assert idle_resp.status_code == 200
+                assert idle_resp.json() == {"status": "idle", "thread_id": thread_id}
+    finally:
+        for t in list(m.BACKGROUND_TASKS):
+            if not t.done():
+                t.cancel()
+        concurrency._semaphore = None
+        with get_db_session() as session:
+            session.query(SyncMessage).filter_by(conversation_id=norm_id).delete(synchronize_session=False)
+            session.query(Experience).filter_by(conversation_id=norm_id).delete(synchronize_session=False)
+            session.query(Conversation).filter_by(id=norm_id).delete(synchronize_session=False)
