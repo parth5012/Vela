@@ -105,6 +105,10 @@ export async function streamCloudResponse(options: StreamCloudOptions): Promise<
     signal,
   } = options;
 
+  if (signal?.aborted) {
+    return;
+  }
+
   if (!apiKey || !apiKey.trim()) {
     const err = new CloudProviderError(
       'auth',
