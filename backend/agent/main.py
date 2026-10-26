@@ -68,10 +68,27 @@ def create_background_task(coro):
 
 
 class ActiveStreamTurn:
-    def __init__(self, producer_task: asyncio.Task, persist_once, release_once):
+    def __init__(
+        self,
+        producer_task: asyncio.Task,
+        persist_once,
+        release_once,
+        persisted_getter=None,
+        stream_generation: int | None = None,
+    ):
         self.producer_task = producer_task
         self.persist_once = persist_once
         self.release_once = release_once
+        self.persisted_getter = persisted_getter
+        self.stream_generation = stream_generation
+
+    def is_persisted(self) -> bool:
+        if self.persisted_getter is not None:
+            try:
+                return bool(self.persisted_getter())
+            except Exception:
+                return False
+        return False
 
     @property
     def task(self) -> asyncio.Task:
@@ -93,6 +110,12 @@ class ActiveStreamTurn:
             return self.persist_once
         if key == "release_once":
             return self.release_once
+        if key == "persisted_getter":
+            return self.persisted_getter
+        if key == "is_persisted":
+            return self.is_persisted
+        if key == "stream_generation":
+            return self.stream_generation
         raise KeyError(key)
 
 
@@ -515,6 +538,23 @@ async def register_device_token(payload: DeviceTokenPayload):
 @app.delete("/chat/threads/{thread_id}", dependencies=[Depends(verify_api_key)])
 def delete_thread(thread_id: str):
     normalized_id = normalize_thread_id(thread_id)
+    turn = ACTIVE_STREAM_TASKS.get(normalized_id)
+    if turn is not None:
+        try:
+            loop = turn.producer_task.get_loop()
+        except Exception:
+            loop = None
+
+        def _cancel_and_cleanup():
+            turn.producer_task.cancel()
+            if ACTIVE_STREAM_TASKS.get(normalized_id) is turn:
+                ACTIVE_STREAM_TASKS.pop(normalized_id, None)
+
+        if loop and loop.is_running():
+            loop.call_soon_threadsafe(_cancel_and_cleanup)
+        else:
+            _cancel_and_cleanup()
+
     try:
         with get_db_session() as session:
             client = DBClient(session)
@@ -548,11 +588,17 @@ class TruncatePayload(BaseModel):
     upto_message_id: str
 
 
+class StopPayload(BaseModel):
+    stream_generation: int | None = None
+    streamGeneration: int | None = None
+
+
 class MessagePayload(BaseModel):
     thread_id: str
     message: str
     agent: str = Field(default="personal assistant", validation_alias=AliasChoices("agent", "persona"))
     google_access_token: str | None = None
+    stream_generation: int | None = Field(default=None, validation_alias=AliasChoices("stream_generation", "streamGeneration"))
 
 
 from agent.concurrency import get_stream_semaphore
@@ -577,6 +623,11 @@ def _persist_sse_turn_sync(
     if not experience_id or not conversation_id:
         return False
     with get_db_session() as session:
+        conv = session.query(Conversation).filter_by(id=conversation_id).first()
+        if conv is None:
+            logger.info("Conversation deleted before persist; skipping turn persist", conversation_id=conversation_id)
+            return False
+
         exp = session.query(Experience).filter_by(id=experience_id).first()
         if exp is None:
             # Turn-start row missing — write a replacement so the turn is
@@ -593,8 +644,7 @@ def _persist_sse_turn_sync(
                 exp.agent_response = full_response
             found = True
 
-        conv = session.query(Conversation).filter_by(id=conversation_id).first()
-        if conv is not None and conv.source == "android_client" and full_response:
+        if conv.source == "android_client" and full_response:
             sync_msg = SyncMessage(
                 id=generate_ulid(),
                 conversation_id=conversation_id,
@@ -626,6 +676,9 @@ async def chat_message(payload: MessagePayload):
         released = False
         producer_task = None
         turn = None
+
+        def _is_persisted() -> bool:
+            return persisted
 
         def _release_once(reason: str) -> None:
             nonlocal released
@@ -732,6 +785,7 @@ async def chat_message(payload: MessagePayload):
                         await queue.put(event)
                 except asyncio.CancelledError:
                     logger.info("Graph execution stream cancelled by client request")
+                    await queue.put({"__cancelled__": True})
                     # Do not raise or queue; exit cleanly
                 except Exception as e:
                     await queue.put(e)
@@ -757,6 +811,8 @@ async def chat_message(payload: MessagePayload):
                 producer_task=producer_task,
                 persist_once=_persist_once,
                 release_once=_release_once,
+                persisted_getter=_is_persisted,
+                stream_generation=payload.stream_generation,
             )
             lock = _get_active_tasks_lock()
             async with lock:
@@ -768,6 +824,7 @@ async def chat_message(payload: MessagePayload):
 
             producer_task.add_done_callback(_on_task_done)
 
+            aborted = False
             try:
                 while True:
                     try:
@@ -778,6 +835,10 @@ async def chat_message(payload: MessagePayload):
                         continue
 
                     if event is None:
+                        break
+                    if isinstance(event, dict) and event.get("__cancelled__"):
+                        aborted = True
+                        yield f"data: {json.dumps({'type': 'thread_stopped', 'thread_id': payload.thread_id})}\n\n"
                         break
                     if isinstance(event, Exception):
                         logger.error("Error in graph execution stream", error=str(event))
@@ -861,34 +922,39 @@ async def chat_message(payload: MessagePayload):
                 if producer_task is not None and producer_task.done() and ACTIVE_STREAM_TASKS.get(normalized_id) is turn:
                     ACTIVE_STREAM_TASKS.pop(normalized_id, None)
 
-            # Success path: update the owned Experience row by ID (never the
-            # "latest" row). Shielded so a late disconnect cannot drop it.
-            await _persist_once("stream-complete")
+            if not aborted:
+                # Success path: update the owned Experience row by ID (never the
+                # "latest" row). Shielded so a late disconnect cannot drop it.
+                await _persist_once("stream-complete")
 
-            # Retain turn in eval-only memory store if this is an eval thread
-            if is_eval and full_response:
-                turn_pair = [
-                    HumanMessage(content=initial_message),
-                    AIMessage(content=full_response),
-                ]
-                _EVAL_THREAD_HISTORY.setdefault(eval_key, []).extend(turn_pair)
-                if eval_key != normalized_id:
-                    _EVAL_THREAD_HISTORY[normalized_id] = _EVAL_THREAD_HISTORY[eval_key]
+                # Retain turn in eval-only memory store if this is an eval thread
+                if is_eval and full_response:
+                    turn_pair = [
+                        HumanMessage(content=initial_message),
+                        AIMessage(content=full_response),
+                    ]
+                    _EVAL_THREAD_HISTORY.setdefault(eval_key, []).extend(turn_pair)
+                    if eval_key != normalized_id:
+                        _EVAL_THREAD_HISTORY[normalized_id] = _EVAL_THREAD_HISTORY[eval_key]
 
-            # Generate a dynamic title if thread title is 'New Chat'
-            if thread_title == "New Chat":
-                # new_title = payload.message[:30] + "..." if len(payload.message) > 30 else payload.message
-                response = await asyncio.to_thread(get_title, initial_message)
-                new_title = str(response.content) if hasattr(response, "content") else str(response)
-                with get_db_session() as session:
-                    client = DBClient(session)
-                    client.update_conversation_title(thread_uuid, new_title)
-                title_to_send = new_title
+                # Generate a dynamic title if thread title is 'New Chat'
+                if thread_title == "New Chat":
+                    if is_eval:
+                        new_title = payload.message.strip()[:30] or "Chat"
+                    else:
+                        response = await asyncio.to_thread(get_title, initial_message)
+                        new_title = str(response.content) if hasattr(response, "content") else str(response)
+                        with get_db_session() as session:
+                            client = DBClient(session)
+                            client.update_conversation_title(thread_uuid, new_title)
+                    title_to_send = new_title
+                else:
+                    title_to_send = thread_title
+
+                # Send final completed event
+                yield f"data: {json.dumps({'type': 'done', 'thread_title': title_to_send, 'agent': thread_agent})}\n\n"
             else:
-                title_to_send = thread_title
-
-            # Send final completed event
-            yield f"data: {json.dumps({'type': 'done', 'thread_title': title_to_send, 'agent': thread_agent})}\n\n"
+                await _persist_once("owner-abort-consumer")
         except BaseException:
             # Release the semaphore exactly once if streaming failed before
             # the inner finally above (e.g. setup failure, GeneratorExit on
@@ -1006,19 +1072,68 @@ def truncate_thread(thread_id: str, payload: TruncatePayload):
 
 
 @app.post("/chat/threads/{thread_id}/stop", dependencies=[Depends(verify_api_key)])
-async def stop_thread(thread_id: str):
+async def stop_thread(
+    thread_id: str,
+    payload: StopPayload | None = None,
+    stream_generation: int | None = None,
+):
     normalized_id = normalize_thread_id(thread_id)
+
+    body_gen = None
+    if payload is not None:
+        if (
+            payload.stream_generation is not None
+            and payload.streamGeneration is not None
+            and payload.stream_generation != payload.streamGeneration
+        ):
+            raise HTTPException(status_code=400, detail="Conflicting stream_generation values")
+        body_gen = (
+            payload.stream_generation
+            if payload.stream_generation is not None
+            else payload.streamGeneration
+        )
+
+    if body_gen is not None and stream_generation is not None and body_gen != stream_generation:
+        raise HTTPException(status_code=400, detail="Conflicting stream_generation values")
+
+    target_generation = body_gen if body_gen is not None else stream_generation
+
     lock = _get_active_tasks_lock()
     async with lock:
         turn = ACTIVE_STREAM_TASKS.get(normalized_id)
         if turn is None or turn.done():
             ACTIVE_STREAM_TASKS.pop(normalized_id, None)
             return {"status": "idle", "thread_id": thread_id}
+
+        if (
+            target_generation is not None
+            and turn.stream_generation is not None
+            and target_generation != turn.stream_generation
+        ):
+            return {"status": "idle", "thread_id": thread_id}
+
         ACTIVE_STREAM_TASKS.pop(normalized_id, None)
 
     turn.cancel()
-    await turn.persist_once("owner-abort")
-    turn.release_once("owner-abort")
+    try:
+        try:
+            await asyncio.wait_for(asyncio.shield(turn.producer_task), timeout=10.0)
+        except (asyncio.CancelledError, asyncio.TimeoutError):
+            pass
+        except Exception:
+            pass
+
+        poll_interval = 0.05
+        max_wait = 3.0
+        elapsed = 0.0
+        while not turn.is_persisted() and elapsed < max_wait:
+            await asyncio.sleep(poll_interval)
+            elapsed += poll_interval
+
+        await turn.persist_once("owner-abort")
+    finally:
+        turn.release_once("owner-abort")
+
     logger.info("Thread streaming stopped by owner", thread_id=normalized_id)
     return {"status": "stopped", "thread_id": thread_id}
 

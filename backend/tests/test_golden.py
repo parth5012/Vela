@@ -111,6 +111,7 @@ def test_golden_jsonl_schema():
 def test_golden_case_execution(case: dict[str, Any], monkeypatch: pytest.MonkeyPatch):
     """Execute each golden dataset case with mocked providers and assert dual-oracle correctness."""
     monkeypatch.setenv("VELA_API_KEY", "test-golden-key")
+    monkeypatch.setenv("GOOGLE_API_KEY", "")
     headers = {"Authorization": "Bearer test-golden-key"}
 
     case_id = case["id"]
