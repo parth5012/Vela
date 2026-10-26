@@ -35,6 +35,7 @@ export interface StreamController {
   abortAll(opts?: StreamStopOptions): Promise<void>;
   appendChunk(threadId: string, chunk: string): void;
   cleanup(threadId: string): void;
+  flush(threadId: string): void;
 }
 
 interface StreamEntry {
@@ -92,11 +93,7 @@ export class StreamControllerImpl implements StreamController {
 
   private finalizeThread(threadId: string, entry?: StreamEntry): void {
     // 3. Flush pending tokens immediately via useChatStore.getState().appendToken
-    const pending = this.pendingTokens[threadId];
-    if (pending) {
-      useChatStore.getState().appendToken(threadId, pending);
-    }
-    delete this.pendingTokens[threadId];
+    this.flush(threadId);
 
     // 4. Apply healXmlTags to the last assistant message
     const threadMsgs = useChatStore.getState().messages[threadId] || [];
@@ -257,6 +254,14 @@ export class StreamControllerImpl implements StreamController {
     this.finalizeThread(threadId, entry);
   }
 
+  flush(threadId: string): void {
+    const pending = this.pendingTokens[threadId];
+    if (pending) {
+      useChatStore.getState().appendToken(threadId, pending);
+    }
+    delete this.pendingTokens[threadId];
+  }
+
   async abortAll(opts?: StreamStopOptions): Promise<void> {
     const threadIds = new Set<string>([
       ...this.abortControllers.keys(),
@@ -280,3 +285,4 @@ export const isStreaming = streamController.isStreaming.bind(streamController);
 export const abortAll = streamController.abortAll.bind(streamController);
 export const appendChunk = streamController.appendChunk.bind(streamController);
 export const cleanup = streamController.cleanup.bind(streamController);
+export const flush = streamController.flush.bind(streamController);
