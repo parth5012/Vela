@@ -129,6 +129,78 @@ describe('StreamController', () => {
       expect((firstSignal as AbortSignal | null)?.aborted).toBe(true);
       expect((secondSignal as AbortSignal | null)?.aborted).toBe(false);
     });
+
+    it('preserves newly added placeholder across duplicate startStream and appends token to it', async () => {
+      const store = useChatStore.getState();
+      store.createThread('Test Thread', 'thread-dup-turn');
+      // Turn 1 setup
+      store.addMessage('thread-dup-turn', {
+        id: 'turn1-user',
+        role: 'user',
+        content: 'Turn 1 query',
+      });
+      store.addMessage('thread-dup-turn', {
+        id: 'turn1-assistant',
+        role: 'assistant',
+        content: 'Turn 1 response',
+      });
+
+      let firstSignal: AbortSignal | null = null;
+      const firstStreamPromise = controller.startStream('thread-dup-turn', async (signal) => {
+        firstSignal = signal;
+        await new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }));
+      });
+
+      await Promise.resolve();
+      expect(controller.isStreaming('thread-dup-turn')).toBe(true);
+
+      // Caller optimistically appends the NEW turn's user message + empty assistant placeholder BEFORE startStream
+      store.addMessage('thread-dup-turn', {
+        id: 'turn2-user',
+        role: 'user',
+        content: 'Turn 2 query',
+      });
+      store.addMessage('thread-dup-turn', {
+        id: 'turn2-assistant',
+        role: 'assistant',
+        content: '',
+      });
+
+      let secondSignal: AbortSignal | null = null;
+      let resolveSecondRunner: () => void;
+      const secondRunnerGate = new Promise<void>((r) => {
+        resolveSecondRunner = r;
+      });
+
+      const secondStreamPromise = controller.startStream('thread-dup-turn', async (signal) => {
+        secondSignal = signal;
+        await secondRunnerGate;
+      });
+
+      // Allow Turn 2 to execute: stops Turn 1, sets up Turn 2 stream
+      await Promise.resolve();
+      await firstStreamPromise;
+
+      expect((firstSignal as AbortSignal | null)?.aborted).toBe(true);
+      expect((secondSignal as AbortSignal | null)?.aborted).toBe(false);
+
+      // Assert new placeholder survives (not pruned by previous stream's stop)
+      const messages = useChatStore.getState().messages['thread-dup-turn'];
+      expect(messages).toHaveLength(4);
+      expect(messages[3].id).toBe('turn2-assistant');
+      expect(messages[3].role).toBe('assistant');
+      expect(messages[3].content).toBe('');
+
+      // Using real store: appendToken onto the new turn lands on that assistant message after previous stream's finalize ran
+      useChatStore.getState().appendToken('thread-dup-turn', 'First chunk of turn 2');
+      const updatedMessages = useChatStore.getState().messages['thread-dup-turn'];
+      expect(updatedMessages).toHaveLength(4);
+      expect(updatedMessages[3].id).toBe('turn2-assistant');
+      expect(updatedMessages[3].content).toBe('First chunk of turn 2');
+
+      resolveSecondRunner!();
+      await secondStreamPromise;
+    });
   });
 
   describe('stopStream', () => {
@@ -230,6 +302,91 @@ describe('StreamController', () => {
       seedThread('thread-fail', 'content');
 
       await expect(controller.stopStream('thread-fail')).resolves.not.toThrow();
+    });
+
+    it('does not send backend stop fetch in server mode when notifyBackend is false, but still aborts and finalizes', async () => {
+      useConfigStore.setState({
+        connectionMode: 'server',
+        apiUrl: 'https://api.vela.local',
+        apiKey: 'secret-token-123',
+      });
+      seedThread('thread-server-no-notify', 'content');
+
+      let signalCaptured: AbortSignal | null = null;
+      const streamPromise = controller.startStream('thread-server-no-notify', async (signal) => {
+        signalCaptured = signal;
+        await new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }));
+      });
+
+      await Promise.resolve();
+      expect(controller.isStreaming('thread-server-no-notify')).toBe(true);
+
+      await controller.stopStream('thread-server-no-notify', { notifyBackend: false });
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect((signalCaptured as AbortSignal | null)?.aborted).toBe(true);
+      expect(controller.isStreaming('thread-server-no-notify')).toBe(false);
+      expect(useChatStore.getState().isThreadStreaming('thread-server-no-notify')).toBe(false);
+
+      await streamPromise;
+    });
+
+    it('sends current stream_generation in server mode stop fetch body, increasing monotonically across startStreams and cleanups', async () => {
+      useConfigStore.setState({
+        connectionMode: 'server',
+        apiUrl: 'https://api.vela.local',
+        apiKey: 'secret-token-123',
+      });
+      seedThread('thread-gen', 'content');
+
+      // First stream
+      let s1: AbortSignal | null = null;
+      const p1 = controller.startStream('thread-gen', async (signal) => {
+        s1 = signal;
+        await new Promise((r) => signal.addEventListener('abort', r, { once: true }));
+      });
+      await Promise.resolve();
+
+      // Second stream on same thread stops first stream
+      let s2: AbortSignal | null = null;
+      const p2 = controller.startStream('thread-gen', async (signal) => {
+        s2 = signal;
+        await new Promise((r) => signal.addEventListener('abort', r, { once: true }));
+      });
+      await Promise.resolve();
+      await p1;
+
+      // Stop call from stopping stream 1
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const call1 = fetchMock.mock.calls[0];
+      expect(JSON.parse(call1[1].body)).toEqual({ stream_generation: 1 });
+
+      // Stop stream 2 explicitly
+      await controller.stopStream('thread-gen');
+      await p2;
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      const call2 = fetchMock.mock.calls[1];
+      expect(JSON.parse(call2[1].body)).toEqual({ stream_generation: 2 });
+
+      // Clean up thread
+      controller.cleanup('thread-gen');
+
+      // Third stream after cleanup starts at generation 3
+      fetchMock.mockClear();
+      let s3: AbortSignal | null = null;
+      const p3 = controller.startStream('thread-gen', async (signal) => {
+        s3 = signal;
+        await new Promise((r) => signal.addEventListener('abort', r, { once: true }));
+      });
+      await Promise.resolve();
+
+      await controller.stopStream('thread-gen');
+      await p3;
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const call3 = fetchMock.mock.calls[0];
+      expect(JSON.parse(call3[1].body)).toEqual({ stream_generation: 3 });
     });
 
     it('prunes empty assistant placeholder when stopped before content arrives', async () => {
@@ -375,6 +532,30 @@ describe('StreamController', () => {
       expect(useChatStore.getState().messages['thread-all-3']).toHaveLength(1);
 
       await Promise.all([p1, p2]);
+    });
+
+    it('forwards notifyBackend: false option to each thread stop', async () => {
+      useConfigStore.setState({
+        connectionMode: 'server',
+        apiUrl: 'https://api.vela.local',
+        apiKey: 'secret-token-123',
+      });
+      seedThread('thread-abortall-server', 'content');
+
+      let sig: AbortSignal | null = null;
+      const p = controller.startStream('thread-abortall-server', async (signal) => {
+        sig = signal;
+        await new Promise((r) => signal.addEventListener('abort', r, { once: true }));
+      });
+      await Promise.resolve();
+
+      await controller.abortAll({ notifyBackend: false });
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect((sig as AbortSignal | null)?.aborted).toBe(true);
+      expect(controller.isStreaming('thread-abortall-server')).toBe(false);
+
+      await p;
     });
   });
 
