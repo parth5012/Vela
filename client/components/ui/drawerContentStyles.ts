@@ -152,9 +152,14 @@ export const styles = StyleSheet.create({
     marginRight: 8,
     gap: 3,
   },
+  threadTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   threadTitle: {
     fontSize: 14,
-    flex: 1,
+    flexShrink: 1,
     letterSpacing: 0.2,
   },
   threadTimestamp: {

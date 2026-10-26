@@ -19,6 +19,12 @@ import {
 import type { SkillId } from '../utils/skillPrompts';
 import { DEFAULT_AGENT_ID } from '../utils/agents';
 import { stripReasoning } from '../utils/reasoning';
+import type { StreamController } from '../utils/streamController';
+
+// Lazy resolver to avoid circular dependency between useChatStore and streamController
+function getStreamController(): StreamController {
+  return require('../utils/streamController').streamController;
+}
 
 // Trailing debounce (ms) for persisting streaming assistant content: tokens
 // arrive frequently during a stream, so we only write the final content once
@@ -166,8 +172,20 @@ export const useChatStore = create<ChatState>()(
       },
       selectThread: (id) => set({ activeThreadId: id }),
       deleteThread: (id) => {
+        getStreamController().stopStream(id).catch(() => {});
+        if (persistDebounceTimers[id]) {
+          clearTimeout(persistDebounceTimers[id]);
+          delete persistDebounceTimers[id];
+        }
+
         const config = useConfigStore.getState();
         const doLocalDelete = () => {
+          getStreamController().stopStream(id).catch(() => {});
+          if (persistDebounceTimers[id]) {
+            clearTimeout(persistDebounceTimers[id]);
+            delete persistDebounceTimers[id];
+          }
+
           set((state) => {
             const nextThreads = state.threads.filter((t) => t.id !== id);
             // Blank-chat guard lives in the fetch above (backend 500 keeps
@@ -422,6 +440,11 @@ export const useChatStore = create<ChatState>()(
       },
       isThreadStreaming: (threadId) => get().streamingThreadIds.has(threadId),
       clearStore: () => {
+        getStreamController().abortAll().catch(() => {});
+        Object.keys(persistDebounceTimers).forEach((id) => {
+          clearTimeout(persistDebounceTimers[id]);
+          delete persistDebounceTimers[id];
+        });
         set({ threads: [], activeThreadId: null, messages: {}, streamingThreadIds: new Set() });
         clearChatLocal().catch(() => {});
       },
