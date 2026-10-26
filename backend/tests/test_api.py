@@ -771,3 +771,361 @@ async def test_passive_disconnect_preserves_background_producer_and_stop_cancels
             session.query(SyncMessage).filter_by(conversation_id=norm_id).delete(synchronize_session=False)
             session.query(Experience).filter_by(conversation_id=norm_id).delete(synchronize_session=False)
             session.query(Conversation).filter_by(id=norm_id).delete(synchronize_session=False)
+
+
+@pytest.mark.asyncio
+async def test_stop_thread_generation_scoping(monkeypatch):
+    """Test stream_generation scoping on /chat/message and /stop:
+    - mismatch returns status: idle and leaves active stream running
+    - match cancels the active stream
+    - conflicting stream_generation values return 400
+    """
+    import asyncio
+    import uuid
+    from unittest.mock import patch
+
+    from httpx import ASGITransport, AsyncClient
+    from langchain_core.messages import AIMessageChunk
+
+    import agent.main as m
+    from agent import concurrency
+    from db.client import DBClient
+    from db.models import Conversation, Experience, SyncMessage
+    from db.session import get_db_session
+
+    monkeypatch.setenv("VELA_API_KEY", "secret-test-key")
+    headers = {"Authorization": "Bearer secret-test-key"}
+
+    concurrency._semaphore = None
+    thread_id = f"test-gen-stop-{uuid.uuid4()}"
+    norm_id = m.normalize_thread_id(thread_id)
+
+    with get_db_session() as session:
+        DBClient(session).create_client_conversation(
+            title="Gen Scoping Test",
+            agent="personal assistant",
+            conversation_id=norm_id,
+            source="android_client",
+        )
+
+    producer_started = asyncio.Event()
+    producer_cancelled = asyncio.Event()
+
+    async def slow_stream(*args, **kwargs):
+        try:
+            yield {
+                "event": "on_chat_model_stream",
+                "metadata": {"langgraph_node": "chatbot"},
+                "data": {"chunk": AIMessageChunk(content="gen test stream ")},
+            }
+            producer_started.set()
+            await asyncio.sleep(10)
+            yield {
+                "event": "on_chat_model_stream",
+                "metadata": {"langgraph_node": "chatbot"},
+                "data": {"chunk": AIMessageChunk(content="should not be reached")},
+            }
+        except asyncio.CancelledError:
+            producer_cancelled.set()
+            raise
+
+    try:
+        async with AsyncClient(transport=ASGITransport(app=m.app), base_url="http://test") as client:
+            # Check conflicting payload returns 400
+            resp_conflict = await client.post(
+                f"/chat/threads/{thread_id}/stop",
+                json={"stream_generation": 1, "streamGeneration": 2},
+                headers=headers,
+            )
+            assert resp_conflict.status_code == 400
+
+            stream_received = []
+
+            async def consume_stream():
+                async with client.stream(
+                    "POST",
+                    "/chat/message",
+                    json={
+                        "thread_id": thread_id,
+                        "message": "hello generation test",
+                        "agent": "personal assistant",
+                        "stream_generation": 1,
+                    },
+                    headers=headers,
+                ) as resp:
+                    assert resp.status_code == 200
+                    async for line in resp.aiter_lines():
+                        if line:
+                            stream_received.append(line)
+
+            with patch.object(m.graph, "astream_events", side_effect=slow_stream):
+                stream_task = asyncio.create_task(consume_stream())
+                await asyncio.wait_for(producer_started.wait(), timeout=5.0)
+
+                # Stop with mismatching generation (2 != 1) -> idle, stream continues
+                resp_mismatch = await client.post(
+                    f"/chat/threads/{thread_id}/stop",
+                    json={"stream_generation": 2},
+                    headers=headers,
+                )
+                assert resp_mismatch.status_code == 200
+                assert resp_mismatch.json() == {"status": "idle", "thread_id": thread_id}
+                assert not producer_cancelled.is_set()
+                assert not stream_task.done()
+
+                # Stop with matching generation (1 == 1) -> stopped
+                resp_match = await client.post(
+                    f"/chat/threads/{thread_id}/stop",
+                    json={"stream_generation": 1},
+                    headers=headers,
+                )
+                assert resp_match.status_code == 200
+                assert resp_match.json() == {"status": "stopped", "thread_id": thread_id}
+
+                await asyncio.wait_for(stream_task, timeout=5.0)
+                assert producer_cancelled.is_set()
+    finally:
+        for t in list(m.BACKGROUND_TASKS):
+            if not t.done():
+                t.cancel()
+        concurrency._semaphore = None
+        with get_db_session() as session:
+            session.query(SyncMessage).filter_by(conversation_id=norm_id).delete(synchronize_session=False)
+            session.query(Experience).filter_by(conversation_id=norm_id).delete(synchronize_session=False)
+            session.query(Conversation).filter_by(id=norm_id).delete(synchronize_session=False)
+
+
+@pytest.mark.asyncio
+async def test_stop_thread_backlog_tail_persisted_and_sse_stopped_event(monkeypatch):
+    """Test backlog tail persistence and SSE event contract:
+    - Producer queues multiple chunks before blocking.
+    - /stop cancels producer.
+    - All queued chunks are streamed and persisted in Experience.agent_response.
+    - SSE stream yields type: thread_stopped and NO type: done or title event.
+    """
+    import asyncio
+    import json
+    import uuid
+    from unittest.mock import patch
+
+    from httpx import ASGITransport, AsyncClient
+    from langchain_core.messages import AIMessageChunk
+
+    import agent.main as m
+    from agent import concurrency
+    from db.client import DBClient
+    from db.models import Conversation, Experience, SyncMessage
+    from db.session import get_db_session
+
+    monkeypatch.setenv("VELA_API_KEY", "secret-test-key")
+    headers = {"Authorization": "Bearer secret-test-key"}
+
+    concurrency._semaphore = None
+    thread_id = f"test-backlog-{uuid.uuid4()}"
+    norm_id = m.normalize_thread_id(thread_id)
+
+    with get_db_session() as session:
+        DBClient(session).create_client_conversation(
+            title="New Chat",
+            agent="personal assistant",
+            conversation_id=norm_id,
+            source="android_client",
+        )
+
+    chunks_queued = asyncio.Event()
+    producer_cancelled = asyncio.Event()
+
+    async def fast_then_slow_stream(*args, **kwargs):
+        try:
+            # Yield several chunks quickly into the queue
+            yield {
+                "event": "on_chat_model_stream",
+                "metadata": {"langgraph_node": "chatbot"},
+                "data": {"chunk": AIMessageChunk(content="chunk_alpha ")},
+            }
+            yield {
+                "event": "on_chat_model_stream",
+                "metadata": {"langgraph_node": "chatbot"},
+                "data": {"chunk": AIMessageChunk(content="chunk_beta ")},
+            }
+            yield {
+                "event": "on_chat_model_stream",
+                "metadata": {"langgraph_node": "chatbot"},
+                "data": {"chunk": AIMessageChunk(content="chunk_gamma ")},
+            }
+            chunks_queued.set()
+            await asyncio.sleep(10)
+            yield {
+                "event": "on_chat_model_stream",
+                "metadata": {"langgraph_node": "chatbot"},
+                "data": {"chunk": AIMessageChunk(content="should_never_reach")},
+            }
+        except asyncio.CancelledError:
+            producer_cancelled.set()
+            raise
+
+    try:
+        async with AsyncClient(transport=ASGITransport(app=m.app), base_url="http://test") as client:
+            stream_received = []
+
+            async def consume_stream():
+                async with client.stream(
+                    "POST",
+                    "/chat/message",
+                    json={"thread_id": thread_id, "message": "hello backlog", "agent": "personal assistant"},
+                    headers=headers,
+                ) as resp:
+                    assert resp.status_code == 200
+                    async for line in resp.aiter_lines():
+                        if line:
+                            stream_received.append(line)
+
+            with patch.object(m.graph, "astream_events", side_effect=fast_then_slow_stream):
+                stream_task = asyncio.create_task(consume_stream())
+
+                # Wait until producer has queued all 3 chunks
+                await asyncio.wait_for(chunks_queued.wait(), timeout=5.0)
+                await asyncio.sleep(0.05)
+
+                # Stop the thread
+                resp_stop = await client.post(f"/chat/threads/{thread_id}/stop", headers=headers)
+                assert resp_stop.status_code == 200
+                assert resp_stop.json() == {"status": "stopped", "thread_id": thread_id}
+
+                await asyncio.wait_for(stream_task, timeout=5.0)
+                assert producer_cancelled.is_set()
+
+                # Verify SSE lines: should contain thread_stopped event and NOT done event
+                parsed_events = []
+                for line in stream_received:
+                    if line.startswith("data: "):
+                        parsed_events.append(json.loads(line[6:].strip()))
+
+                types = [ev.get("type") for ev in parsed_events]
+                assert "thread_stopped" in types
+                assert "done" not in types
+
+                stopped_event = next(ev for ev in parsed_events if ev.get("type") == "thread_stopped")
+                assert stopped_event.get("thread_id") == thread_id
+
+                # Verify DB persistence includes ALL queued chunks in agent_response
+                with get_db_session() as session:
+                    exps = session.query(Experience).filter_by(conversation_id=norm_id).all()
+                    assert len(exps) == 1
+                    saved_text = exps[0].agent_response or ""
+                    assert "chunk_alpha " in saved_text
+                    assert "chunk_beta " in saved_text
+                    assert "chunk_gamma " in saved_text
+                    assert "should_never_reach" not in saved_text
+    finally:
+        for t in list(m.BACKGROUND_TASKS):
+            if not t.done():
+                t.cancel()
+        concurrency._semaphore = None
+        with get_db_session() as session:
+            session.query(SyncMessage).filter_by(conversation_id=norm_id).delete(synchronize_session=False)
+            session.query(Experience).filter_by(conversation_id=norm_id).delete(synchronize_session=False)
+            session.query(Conversation).filter_by(id=norm_id).delete(synchronize_session=False)
+
+
+@pytest.mark.asyncio
+async def test_delete_thread_cancels_running_producer_and_avoids_fk_error(monkeypatch):
+    """Test DELETE /chat/threads/{thread_id} with active stream:
+    - Cancels running producer task.
+    - Deletes conversation and cascades.
+    - No FK IntegrityError is raised when finalize/persist runs on deleted conversation.
+    """
+    import asyncio
+    import uuid
+    from unittest.mock import patch
+
+    from httpx import ASGITransport, AsyncClient
+    from langchain_core.messages import AIMessageChunk
+
+    import agent.main as m
+    from agent import concurrency
+    from db.client import DBClient
+    from db.models import Conversation, Experience, SyncMessage
+    from db.session import get_db_session
+
+    monkeypatch.setenv("VELA_API_KEY", "secret-test-key")
+    headers = {"Authorization": "Bearer secret-test-key"}
+
+    concurrency._semaphore = None
+    thread_id = f"test-del-stream-{uuid.uuid4()}"
+    norm_id = m.normalize_thread_id(thread_id)
+
+    with get_db_session() as session:
+        DBClient(session).create_client_conversation(
+            title="Delete Active Stream Test",
+            agent="personal assistant",
+            conversation_id=norm_id,
+            source="android_client",
+        )
+
+    producer_started = asyncio.Event()
+    producer_cancelled = asyncio.Event()
+
+    async def slow_stream(*args, **kwargs):
+        try:
+            yield {
+                "event": "on_chat_model_stream",
+                "metadata": {"langgraph_node": "chatbot"},
+                "data": {"chunk": AIMessageChunk(content="delete test stream ")},
+            }
+            producer_started.set()
+            await asyncio.sleep(10)
+            yield {
+                "event": "on_chat_model_stream",
+                "metadata": {"langgraph_node": "chatbot"},
+                "data": {"chunk": AIMessageChunk(content="should not be reached")},
+            }
+        except asyncio.CancelledError:
+            producer_cancelled.set()
+            raise
+
+    try:
+        async with AsyncClient(transport=ASGITransport(app=m.app), base_url="http://test") as client:
+            stream_received = []
+
+            async def consume_stream():
+                async with client.stream(
+                    "POST",
+                    "/chat/message",
+                    json={"thread_id": thread_id, "message": "hello delete test", "agent": "personal assistant"},
+                    headers=headers,
+                ) as resp:
+                    assert resp.status_code == 200
+                    async for line in resp.aiter_lines():
+                        if line:
+                            stream_received.append(line)
+
+            with patch.object(m.graph, "astream_events", side_effect=slow_stream):
+                stream_task = asyncio.create_task(consume_stream())
+                await asyncio.wait_for(producer_started.wait(), timeout=5.0)
+
+                assert norm_id in m.ACTIVE_STREAM_TASKS
+
+                # Call DELETE /chat/threads/{thread_id}
+                del_resp = await client.delete(f"/chat/threads/{thread_id}", headers=headers)
+                assert del_resp.status_code == 200
+                assert del_resp.json() == {"status": "success"}
+
+                # Producer should be cancelled and stream should terminate cleanly
+                await asyncio.wait_for(producer_cancelled.wait(), timeout=5.0)
+                await asyncio.wait_for(stream_task, timeout=5.0)
+
+                # Thread should be deleted from DB
+                with get_db_session() as session:
+                    conv = session.query(Conversation).filter_by(id=norm_id).first()
+                    assert conv is None
+    finally:
+        for t in list(m.BACKGROUND_TASKS):
+            if not t.done():
+                t.cancel()
+        concurrency._semaphore = None
+        with get_db_session() as session:
+            session.query(SyncMessage).filter_by(conversation_id=norm_id).delete(synchronize_session=False)
+            session.query(Experience).filter_by(conversation_id=norm_id).delete(synchronize_session=False)
+            session.query(Conversation).filter_by(id=norm_id).delete(synchronize_session=False)
+
