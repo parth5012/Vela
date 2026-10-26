@@ -4,7 +4,9 @@
  *         placeholder pruning, AbortController lifecycle, and backend /stop dispatch.
  * Responsibilities:
  *  - Manage AbortController instances per thread.
- *  - Accumulate raw token chunks and flush them to useChatStore on a 100ms throttle interval.
+ *  - Accumulate raw token chunks and flush them on a 100ms throttle interval,
+ *    diverting to useActiveStreamStore when the WF-455 display overlay targets
+ *    the thread's last message (zero persisted-store writes while streaming).
  *  - On stream stop/cleanup: flush pending tokens, heal unclosed XML tags with healXmlTags,
  *    prune empty or reasoning-only assistant placeholders, and clear interval timers.
  *  - In server connection mode: dispatch non-blocking, timeout-bounded POST /chat/threads/{id}/stop.
@@ -18,6 +20,7 @@
 
 import { useChatStore } from '../store/useChatStore';
 import { useConfigStore } from '../store/useConfigStore';
+import { useActiveStreamStore } from '../store/useActiveStreamStore';
 import { healXmlTags } from './xmlHealer';
 import { stripReasoning } from './reasoning';
 
@@ -35,6 +38,7 @@ export interface StreamController {
   abortAll(opts?: StreamStopOptions): Promise<void>;
   appendChunk(threadId: string, chunk: string): void;
   cleanup(threadId: string): void;
+  flush(threadId: string): void;
 }
 
 interface StreamEntry {
@@ -75,6 +79,24 @@ export class StreamControllerImpl implements StreamController {
   private pendingTokens: Record<string, string> = {};
   private streamGenerations: Record<string, number> = {};
 
+  /**
+   * WF-455 display fast-path bridge. While the UI overlay (useActiveStreamStore)
+   * is streaming into this thread's last message, deliver pending tokens there —
+   * per-chunk display buffer, zero useChatStore (persisted) writes during the
+   * stream. Otherwise commit directly to useChatStore. This mirrors the legacy
+   * ChatScreen appendToken wrapper so both write paths stay coherent.
+   */
+  private deliverTokens(threadId: string, pending: string): void {
+    const activeStream = useActiveStreamStore.getState();
+    const threadMsgs = useChatStore.getState().messages[threadId] || [];
+    const lastMsg = threadMsgs.length > 0 ? threadMsgs[threadMsgs.length - 1] : null;
+    if (activeStream.isStreaming && lastMsg && activeStream.streamingMessageId === lastMsg.id) {
+      activeStream.appendChunk(pending);
+    } else {
+      useChatStore.getState().appendToken(threadId, pending);
+    }
+  }
+
   private ensureThrottleTimer(threadId: string): void {
     if (this.throttleTimers[threadId]) return;
     this.throttleTimers[threadId] = setInterval(() => {
@@ -84,26 +106,38 @@ export class StreamControllerImpl implements StreamController {
       }
       const pending = this.pendingTokens[threadId];
       if (pending) {
-        useChatStore.getState().appendToken(threadId, pending);
+        this.deliverTokens(threadId, pending);
         this.pendingTokens[threadId] = '';
       }
     }, THROTTLE_INTERVAL_MS);
   }
 
   private finalizeThread(threadId: string, entry?: StreamEntry): void {
-    // 3. Flush pending tokens immediately via useChatStore.getState().appendToken
-    const pending = this.pendingTokens[threadId];
-    if (pending) {
-      useChatStore.getState().appendToken(threadId, pending);
-    }
-    delete this.pendingTokens[threadId];
+    // 3. Flush pending tokens immediately (divert-aware; see deliverTokens)
+    this.flush(threadId);
 
-    // 4. Apply healXmlTags to the last assistant message
+    // 3b. WF-455 fast-path fold: if the display overlay buffer holds this
+    // stream's text, capture it once and reset the overlay so the full
+    // content lands in useChatStore exactly at stream end.
+    const activeStream = useActiveStreamStore.getState();
+    const preFoldMsgs = useChatStore.getState().messages[threadId] || [];
+    const preFoldLast = preFoldMsgs.length > 0 ? preFoldMsgs[preFoldMsgs.length - 1] : null;
+    let finalContent = '';
+    if (
+      activeStream.isStreaming &&
+      preFoldLast &&
+      activeStream.streamingMessageId === preFoldLast.id
+    ) {
+      finalContent = activeStream.resetStream();
+    }
+
+    // 4. Apply healXmlTags to the last assistant message (overlay text wins)
     const threadMsgs = useChatStore.getState().messages[threadId] || [];
     if (threadMsgs.length > 0) {
       const last = threadMsgs[threadMsgs.length - 1];
       if (last.role === 'assistant') {
-        const healed = healXmlTags(last.content || '');
+        const rawContent = finalContent || last.content || '';
+        const healed = healXmlTags(rawContent);
         if (healed !== last.content) {
           const updatedHistory = [...threadMsgs.slice(0, -1), { ...last, content: healed }];
           useChatStore.setState((s) => ({
@@ -257,6 +291,14 @@ export class StreamControllerImpl implements StreamController {
     this.finalizeThread(threadId, entry);
   }
 
+  flush(threadId: string): void {
+    const pending = this.pendingTokens[threadId];
+    if (pending) {
+      this.deliverTokens(threadId, pending);
+    }
+    delete this.pendingTokens[threadId];
+  }
+
   async abortAll(opts?: StreamStopOptions): Promise<void> {
     const threadIds = new Set<string>([
       ...this.abortControllers.keys(),
@@ -280,3 +322,4 @@ export const isStreaming = streamController.isStreaming.bind(streamController);
 export const abortAll = streamController.abortAll.bind(streamController);
 export const appendChunk = streamController.appendChunk.bind(streamController);
 export const cleanup = streamController.cleanup.bind(streamController);
+export const flush = streamController.flush.bind(streamController);

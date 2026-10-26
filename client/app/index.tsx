@@ -32,12 +32,12 @@ import MessageRow from '../components/chat/MessageRow';
 import BubbleFooter from '../components/chat/BubbleFooter';
 import DateDividerPill from '../components/chat/DateDividerPill';
 import { buildChatFeedItems, type ChatFeedItem } from '../utils/chatFeed';
-import { ensureThrottleTimer, runServerStream } from '../utils/serverStream';
+import { runServerStream } from '../utils/serverStream';
+import { streamController } from '../utils/streamController';
 import CollapsibleBlock from '../components/chat/CollapsibleBlock';
 import { getCachedParse } from '../utils/parseCache';
 import SourceCard from '../components/chat/SourceCard';
 import { styles } from '../styles/indexStyles';
-import { healXmlTags } from '../utils/xmlHealer';
 import { useRouter } from 'expo-router';
 import { useBrowserStore } from '../store/useBrowserStore';
 import { useGoogleAuthStore } from '../store/useGoogleAuthStore';
@@ -78,7 +78,8 @@ const generateUUID = () => {
 };
 
 import { resolveAgentPrompt, resolveNewThreadAgent } from '../utils/agents';
-import { overlayRemoteAgents } from '../db/agentRepository';
+import { overlayRemoteAgents, getCachedAgents } from '../db/agentRepository';
+import { saveMessages } from '../db/chatRepository';
 import { useAgents } from '../hooks/useAgents';
 import { useMessageActions } from '../hooks/useMessageActions';
 import { generateUlid } from '../utils/syncIds';
@@ -103,6 +104,130 @@ const generateId = (_prefix: string) => {
   // `sync_pull`'s `id > cursor ORDER BY id` sort by type first and skip rows
   // across pages (finding-009). See utils/syncIds.ts.
   return generateUlid();
+};
+
+// Shared implementation of the local prompt compiling, token streaming, and tool execution
+export const streamLocalResponse = async (threadId: string, userQuery: string, historyList: Message[]) => {
+  try {
+    await streamController.startStream(threadId, async (signal) => {
+      try {
+        if (signal.aborted) return;
+        await initializeLocalModel();
+        if (signal.aborted) return;
+
+        let currentHistory = [...historyList];
+        let hasMoreIterations = true;
+        let iterationCount = 0;
+
+        while (hasMoreIterations && iterationCount < 5) {
+          if (signal.aborted) return;
+          iterationCount++;
+          hasMoreIterations = false;
+
+          const activeThread = useChatStore.getState().threads.find((t) => t.id === threadId);
+          const selectedAgentId = activeThread?.agent || 'personal assistant';
+          const agents = getCachedAgents();
+          const agentPrompt = resolveAgentPrompt(selectedAgentId, agents);
+
+          // Inject active skill prompt if set (standalone mode)
+          const threadSkill = activeThread?.active_skill as SkillId | undefined;
+          let skillAugmented = threadSkill && SKILL_PROMPTS[threadSkill]
+            ? `${agentPrompt}\n\n# Active Skill Instructions\n${SKILL_PROMPTS[threadSkill]}`
+            : agentPrompt;
+
+          const localToolsBlock = buildLocalPromptBlock();
+          if (localToolsBlock) {
+            skillAugmented = `${skillAugmented}\n\n# Available Tools\n${localToolsBlock}`;
+          }
+
+          const { localModelName, apiUrl, apiKey, connectionMode } = useConfigStore.getState();
+
+          // 2. Compile prompt using LLM native chat template
+          const compiledPrompt = compileLocalPrompt({
+            systemPrompt: skillAugmented,
+            history: currentHistory,
+            query: userQuery,
+            compactInstructions: "Format calls as <call name=\"tool\">PARAMS</call>.",
+            toolDeclarations: filterAvailable('local').map((t) => t.name),
+            modelName: localModelName,
+          });
+
+          // 3. Stream response from local inference engine
+          const STREAM_TIMEOUT_MS = 120000; // 2 minutes max per iteration
+          const streamStartTime = Date.now();
+
+          const generator = streamLocalLlmResponse(
+            compiledPrompt,
+            (token) => {
+              if (!signal.aborted) {
+                streamController.appendChunk(threadId, token);
+              }
+            },
+            signal
+          );
+
+          try {
+            for await (const _ of generator) {
+              if (signal.aborted) break;
+              if (Date.now() - streamStartTime > STREAM_TIMEOUT_MS) {
+                console.warn('[streamLocalResponse] Stream timeout reached, forcing stop');
+                break;
+              }
+            }
+          } catch (genError: any) {
+            if (signal.aborted) return;
+            console.warn('[streamLocalResponse] Generator error:', genError);
+          }
+
+          if (signal.aborted) return;
+
+          // Flush any pending token chunks before checking tools
+          streamController.flush(threadId);
+
+          // 4. Check if generated content contains tool invocation requests
+          const currentMessagesSnapshot = useChatStore.getState().messages[threadId] || [];
+          const lastMessageSnapshot = currentMessagesSnapshot[currentMessagesSnapshot.length - 1];
+
+          if (lastMessageSnapshot && lastMessageSnapshot.role === 'assistant') {
+            if (signal.aborted) return;
+
+            const { hasInvocations, updatedContent } = await parseAndExecuteTools(
+              lastMessageSnapshot.content,
+              threadId,
+              apiUrl,
+              apiKey,
+              connectionMode
+            );
+
+            if (signal.aborted) return;
+
+            if (hasInvocations) {
+              // Update local message state with response content directly without going through guarded setHistory
+              const updatedLastMessage = { ...lastMessageSnapshot, content: updatedContent };
+              const updatedHistory = [...currentMessagesSnapshot.slice(0, -1), updatedLastMessage];
+              useChatStore.setState((s) => ({
+                messages: {
+                  ...s.messages,
+                  [threadId]: updatedHistory,
+                },
+              }));
+              saveMessages(threadId, updatedHistory).catch(() => {});
+
+              // Fetch latest history and loop back for another model reasoning pass
+              currentHistory = updatedHistory;
+              hasMoreIterations = true;
+            }
+          }
+        }
+      } catch (e: any) {
+        if (signal.aborted) return;
+        console.error("[Local Stream Error]:", e);
+        streamController.appendChunk(threadId, `\n\n⚠️ **Local Inference Error:** ${e?.message || 'Inference engine failed.'}`);
+      }
+    });
+  } catch (e: any) {
+    console.error('[streamLocalResponse] Error:', e);
+  }
 };
 
 export default function ChatScreen() {
@@ -197,51 +322,6 @@ export default function ChatScreen() {
   }, []);
   const agentBarHeight = React.useRef(new Animated.Value(58)).current;
 
-  const pendingTokensMapRef = React.useRef<Record<string, string>>({});
-  const throttleTimersRef = React.useRef<Record<string, any>>({});
-  const abortControllersRef = React.useRef<Record<string, AbortController>>({});
-
-  const cleanUpThrottleAndHeal = useCallback((threadId: string) => {
-    if (throttleTimersRef.current[threadId]) {
-      clearInterval(throttleTimersRef.current[threadId]);
-      delete throttleTimersRef.current[threadId];
-    }
-
-    const activeStream = useActiveStreamStore.getState();
-    const threadMsgs = useChatStore.getState().messages[threadId] || [];
-    const lastMsg = threadMsgs.length > 0 ? threadMsgs[threadMsgs.length - 1] : null;
-    const isTargetOfActiveStream =
-      activeStream.isStreaming && Boolean(lastMsg && activeStream.streamingMessageId === lastMsg.id);
-
-    // Flush any leftover tokens into active stream store or chat store
-    if (pendingTokensMapRef.current[threadId]) {
-      if (isTargetOfActiveStream) {
-        useActiveStreamStore.getState().appendChunk(pendingTokensMapRef.current[threadId]);
-      } else {
-        useChatStore.getState().appendToken(threadId, pendingTokensMapRef.current[threadId]);
-      }
-    }
-    // FIX-3: always drop the buffer entry (even when empty) so a later
-    // tick cannot resurrect work for a finished thread.
-    delete pendingTokensMapRef.current[threadId];
-
-    // Reset stream and capture final accumulated content if matching
-    let finalContent = '';
-    if (isTargetOfActiveStream) {
-      finalContent = useActiveStreamStore.getState().resetStream();
-    }
-
-    // Heal XML tags and commit once to useChatStore and SQLite
-    if (threadMsgs.length > 0) {
-      const last = threadMsgs[threadMsgs.length - 1];
-      if (last.role === 'assistant') {
-        const rawContent = finalContent || last.content;
-        const healed = healXmlTags(rawContent);
-        useChatStore.getState().updateLastMessageContent(threadId, healed);
-      }
-    }
-  }, []);
-
   const handleScroll = useCallback((event: any) => {
     const currentOffset = event.nativeEvent.contentOffset.y;
     const diff = currentOffset - lastOffsetY.current;
@@ -290,53 +370,19 @@ export default function ChatScreen() {
 
   React.useEffect(() => {
     return () => {
-      Object.values(abortControllersRef.current).forEach((controller) => {
-        controller.abort();
-      });
-      // FIX-3: unmount clears ALL throttle timers AND pending token buffers.
-      Object.keys(throttleTimersRef.current).forEach((key) => {
-        clearInterval(throttleTimersRef.current[key]);
-        delete throttleTimersRef.current[key];
-      });
-      Object.keys(pendingTokensMapRef.current).forEach((key) => {
-        delete pendingTokensMapRef.current[key];
-      });
+      streamController.abortAll();
     };
   }, []);
 
-  // FIX-3: backgrounding mid-stream must not sustain CPU. When the app
-  // leaves `active`, flush + clear every throttle interval and mark all
-  // streaming threads stopped.
+  // Backgrounding mid-stream aborts all active streams.
   React.useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state !== 'active') {
-        const ids = new Set([
-          ...Object.keys(throttleTimersRef.current),
-          ...Object.keys(abortControllersRef.current),
-        ]);
-        ids.forEach((id) => {
-          abortControllersRef.current[id]?.abort();
-          delete abortControllersRef.current[id];
-          cleanUpThrottleAndHeal(id);
-          // Same blank-chat guard as manual Stop: never leave an aborted
-          // thread with zero visible messages.
-          const cur = useChatStore.getState().messages[id] || [];
-          const hadEmpty = cur.length > 0 && cur[cur.length - 1]?.role === 'assistant' && !(cur[cur.length - 1]?.content || '').trim();
-          useChatStore.getState().removeLastEmptyAssistant(id);
-          if (hadEmpty) {
-            useChatStore.getState().addMessage(id, {
-              id: generateId('msg_assistant'),
-              role: 'assistant',
-              content: '⏹️ Stopped — app went to background. Your message is kept above. Tap Send again to retry.',
-              created_at: new Date().toISOString(),
-            });
-          }
-          setStreamingThread(id, false);
-        });
+        streamController.abortAll();
       }
     });
     return () => sub.remove();
-  }, [cleanUpThrottleAndHeal, setStreamingThread]);
+  }, []);
 
   // #357: server mode overlays the remote agent list onto the local rows by
   // id, so locally-created agents are never dropped. Standalone (local/cloud)
@@ -567,255 +613,120 @@ export default function ChatScreen() {
     }));
   }, []);
 
-  const handleMessageLongPress = useCallback((msg: Message) => {
-    if (!isCurrentThreadStreaming) {
-      setActiveMenuMessage(msg);
-    }
-  }, [isCurrentThreadStreaming]);
-
-  // Shared implementation of the local prompt compiling, token streaming, and tool execution
-  const streamLocalResponse = async (threadId: string, userQuery: string, historyList: Message[]) => {
-    try {
-      // 1. Initialize local model if not yet loaded
-      await initializeLocalModel();
-
-      let currentHistory = [...historyList];
-      let hasMoreIterations = true;
-      let iterationCount = 0;
-      let generatorCompleted = false;
-
-      while (hasMoreIterations && iterationCount < 5) {
-        iterationCount++;
-        hasMoreIterations = false;
-
-        const activeThread = threads.find((t) => t.id === threadId);
-        const selectedAgentId = activeThread?.agent || 'personal assistant';
-        const agentPrompt = resolveAgentPrompt(selectedAgentId, agents);
-
-        // Inject active skill prompt if set (standalone mode)
-        const threadSkill = activeThread?.active_skill as SkillId | undefined;
-        let skillAugmented = threadSkill && SKILL_PROMPTS[threadSkill]
-          ? `${agentPrompt}\n\n# Active Skill Instructions\n${SKILL_PROMPTS[threadSkill]}`
-          : agentPrompt;
-
-        const localToolsBlock = buildLocalPromptBlock();
-        if (localToolsBlock) {
-          skillAugmented = `${skillAugmented}\n\n# Available Tools\n${localToolsBlock}`;
-        }
-
-        // 2. Compile prompt using LLM native chat template
-        const compiledPrompt = compileLocalPrompt({
-          systemPrompt: skillAugmented,
-          history: currentHistory,
-          query: userQuery,
-          compactInstructions: "Format calls as <call name=\"tool\">PARAMS</call>.",
-          toolDeclarations: filterAvailable('local').map((t) => t.name),
-          modelName: localModelName,
-        });
-
-        // 3. Setup throttle timer
-        ensureThrottleTimer(threadId, throttleTimersRef, pendingTokensMapRef, appendToken, cleanUpThrottleAndHeal);
-
-        // 4. Stream response from local inference engine
-        // Add a safety timeout so streaming always stops even if the generator hangs
-        const STREAM_TIMEOUT_MS = 120000; // 2 minutes max per iteration
-        const streamStartTime = Date.now();
-        generatorCompleted = false;
-
-        const generator = streamLocalLlmResponse(compiledPrompt, (token) => {
-          pendingTokensMapRef.current[threadId] = (pendingTokensMapRef.current[threadId] || '') + token;
-        });
-
-        try {
-          for await (const _ of generator) {
-            // Tokens are captured inside callback & throttle timer
-            // Safety check: stop if we've been streaming too long
-            if (Date.now() - streamStartTime > STREAM_TIMEOUT_MS) {
-              console.warn('[streamLocalResponse] Stream timeout reached, forcing stop');
-              break;
-            }
-          }
-          generatorCompleted = true;
-        } catch (genError: any) {
-          console.warn('[streamLocalResponse] Generator error:', genError);
-        }
-
-        // Clean up throttle and apply healing
-        cleanUpThrottleAndHeal(threadId);
-    useChatStore.getState().removeLastEmptyAssistant(threadId);
-
-        // Mark streaming as complete for this iteration
-        setStreamingThread(threadId, false);
-
-        // 5. Check if generated content contains tool invocation requests
-        const currentMessagesSnapshot = useChatStore.getState().messages[threadId] || [];
-        const lastMessageSnapshot = currentMessagesSnapshot[currentMessagesSnapshot.length - 1];
-
-        if (lastMessageSnapshot && lastMessageSnapshot.role === 'assistant') {
-          const { hasInvocations, updatedContent } = await parseAndExecuteTools(
-            lastMessageSnapshot.content,
-            threadId,
-            apiUrl,
-            apiKey,
-            connectionMode
-          );
-
-          if (hasInvocations) {
-            // Update local message state with response content
-            const updatedHistory = [...currentMessagesSnapshot.slice(0, -1), { ...lastMessageSnapshot, content: updatedContent }];
-            setHistory(threadId, updatedHistory);
-
-            // Fetch latest history and loop back for another model reasoning pass
-            currentHistory = updatedHistory;
-            hasMoreIterations = true;
-
-            // Re-enable streaming state for the next iteration
-            setStreamingThread(threadId, true);
-          }
-        }
-      }
-
-      // Final cleanup: ensure streaming state is always set to false
-      if (generatorCompleted || !hasMoreIterations) {
-        setStreamingThread(threadId, false);
-        cleanUpThrottleAndHeal(threadId);
-    useChatStore.getState().removeLastEmptyAssistant(threadId);
-      }
-    } catch (e: any) {
-      console.error("[Local Stream Error]:", e);
-      appendToken(threadId, `\n\n⚠️ **Local Inference Error:** ${e?.message || 'Inference engine failed.'}`);
-    } finally {
-      // Guaranteed cleanup: always stop streaming and flush remaining tokens
-      setStreamingThread(threadId, false);
-      cleanUpThrottleAndHeal(threadId);
-    useChatStore.getState().removeLastEmptyAssistant(threadId);
-      // Ensure any remaining pending tokens are flushed
-      if (pendingTokensMapRef.current[threadId]) {
-        appendToken(threadId, pendingTokensMapRef.current[threadId]);
-        delete pendingTokensMapRef.current[threadId];
-      }
-    }
-  };
-
   const streamCloudChatResponse = async (
     threadId: string,
     historyList: Message[]
   ) => {
-    const config = useConfigStore.getState();
-    const provider = config.activeCloudProvider || 'gemini';
-    const providerConfig = config.cloudProviders?.[provider];
-    const apiKey = config.cloudApiKeys?.[provider] || '';
-
-    const activeThread = threads.find((t) => t.id === threadId);
-    const selectedAgentId = activeThread?.agent || 'personal assistant';
-    const activeAgent = agents.find((candidate) => candidate.id === selectedAgentId);
-    const agentPrompt = resolveAgentPrompt(selectedAgentId, agents);
-
-    // Inject active skill prompt if set (standalone mode)
-    const cloudThreadSkill = activeThread?.active_skill as SkillId | undefined;
-    const cloudSkillAugmented = cloudThreadSkill && SKILL_PROMPTS[cloudThreadSkill]
-      ? `${agentPrompt}\n\n# Active Skill Instructions\n${SKILL_PROMPTS[cloudThreadSkill]}`
-      : agentPrompt;
-
-    const controller = new AbortController();
-    abortControllersRef.current[threadId] = controller;
-
-    const systemPromptToUse = config.systemPromptEnabled === false ? undefined : cloudSkillAugmented;
-
-    const contextMessages = buildContextMessages(historyList, {
-      maxMessages: config.contextCompression ? 30 : 100,
-    });
-
-    const cloudTools = buildVercelCloudTools(
-      {},
-      {
-        evaluateSafety,
-        memoryStore: {
-          saveMemory: (_convId, fact) => saveMemory(threadId, fact),
-          deleteMemory: (_convId, fact) => deleteMemory(threadId, fact),
-        },
-      },
-      {
-        onToolCall: (call) => {
-          if (pendingTokensMapRef.current[threadId]) {
-            appendToken(threadId, pendingTokensMapRef.current[threadId]);
-            pendingTokensMapRef.current[threadId] = '';
-          }
-          appendToken(threadId, `\n\n🔧 *Executing ${call.toolName}...*\n`);
-        },
-        onToolResult: (res) => {
-          if (!res.result?.success) {
-            if (pendingTokensMapRef.current[threadId]) {
-              appendToken(threadId, pendingTokensMapRef.current[threadId]);
-              pendingTokensMapRef.current[threadId] = '';
-            }
-            appendToken(threadId, `\n⚠️ *Tool output: ${res.result?.output}*\n`);
-          }
-        },
-      }
-    );
-
     try {
-      await streamCloudResponse({
-        provider,
-        apiKey,
-        model: activeAgent?.model?.trim() || providerConfig?.model || 'gemini-1.5-flash',
-        baseUrl: providerConfig?.baseUrl,
-        systemPrompt: systemPromptToUse,
-        temperature: config.temperature,
-        maxTokens: config.maxTokens,
-        messages: contextMessages,
-        tools: cloudTools,
-        signal: controller.signal,
-        onToken: (chunk) => {
-          pendingTokensMapRef.current[threadId] = (pendingTokensMapRef.current[threadId] || '') + chunk;
-          ensureThrottleTimer(threadId, throttleTimersRef, pendingTokensMapRef, appendToken, cleanUpThrottleAndHeal);
-        },
-        onDone: () => {
-          setStreamingThread(threadId, false);
-          delete abortControllersRef.current[threadId];
-          cleanUpThrottleAndHeal(threadId);
-          useChatStore.getState().removeLastEmptyAssistant(threadId);
-        },
-        onError: (error: any) => {
-          setStreamingThread(threadId, false);
-          delete abortControllersRef.current[threadId];
-          cleanUpThrottleAndHeal(threadId);
-          useChatStore.getState().removeLastEmptyAssistant(threadId);
-          const errText = `⚠️ **[${provider.toUpperCase()} Error]** ${error?.message || 'Cloud inference failed.'}`;
-          const cur = useChatStore.getState().messages[threadId] || [];
-          const last = cur[cur.length - 1];
-          if (last?.role === 'assistant') {
-            appendToken(threadId, `\n\n${errText}`);
-          } else {
-            addMessage(threadId, {
-              id: generateId('msg_assistant'),
-              role: 'assistant',
-              content: errText,
-              created_at: new Date().toISOString(),
-            });
-          }
-        },
+      await streamController.startStream(threadId, async (signal) => {
+      const config = useConfigStore.getState();
+      const provider = config.activeCloudProvider || 'gemini';
+      const providerConfig = config.cloudProviders?.[provider];
+      const apiKey = config.cloudApiKeys?.[provider] || '';
+
+      const activeThread = threads.find((t) => t.id === threadId);
+      const selectedAgentId = activeThread?.agent || 'personal assistant';
+      const activeAgent = agents.find((candidate) => candidate.id === selectedAgentId);
+      const agentPrompt = resolveAgentPrompt(selectedAgentId, agents);
+
+      // Inject active skill prompt if set (standalone mode)
+      const cloudThreadSkill = activeThread?.active_skill as SkillId | undefined;
+      const cloudSkillAugmented = cloudThreadSkill && SKILL_PROMPTS[cloudThreadSkill]
+        ? `${agentPrompt}\n\n# Active Skill Instructions\n${SKILL_PROMPTS[cloudThreadSkill]}`
+        : agentPrompt;
+
+      const systemPromptToUse = config.systemPromptEnabled === false ? undefined : cloudSkillAugmented;
+
+      const contextMessages = buildContextMessages(historyList, {
+        maxMessages: config.contextCompression ? 30 : 100,
       });
-    } catch (e: any) {
-      console.error('[Cloud Stream Error]:', e);
-      setStreamingThread(threadId, false);
-      delete abortControllersRef.current[threadId];
-      cleanUpThrottleAndHeal(threadId);
-      useChatStore.getState().removeLastEmptyAssistant(threadId);
-      const errText = `⚠️ **[${provider.toUpperCase()} Error]** ${e?.message || 'Cloud inference failed.'}`;
-      const cur = useChatStore.getState().messages[threadId] || [];
-      const last = cur[cur.length - 1];
-      if (last?.role === 'assistant') {
-        appendToken(threadId, `\n\n${errText}`);
-      } else {
-        addMessage(threadId, {
-          id: generateId('msg_assistant'),
-          role: 'assistant',
-          content: errText,
-          created_at: new Date().toISOString(),
+
+      const cloudTools = buildVercelCloudTools(
+        {},
+        {
+          evaluateSafety,
+          memoryStore: {
+            saveMemory: (_convId, fact) => saveMemory(threadId, fact),
+            deleteMemory: (_convId, fact) => deleteMemory(threadId, fact),
+          },
+        },
+        {
+          onToolCall: (call) => {
+            if (signal.aborted) {
+              const err = new Error('AbortError');
+              err.name = 'AbortError';
+              throw err;
+            }
+            streamController.appendChunk(threadId, `\n\n🔧 *Executing ${call.toolName}...*\n`);
+          },
+          onToolResult: (res) => {
+            if (signal.aborted) {
+              const err = new Error('AbortError');
+              err.name = 'AbortError';
+              throw err;
+            }
+            if (!res.result?.success) {
+              streamController.appendChunk(threadId, `\n⚠️ *Tool output: ${res.result?.output}*\n`);
+            }
+          },
+        }
+      );
+
+      try {
+        await streamCloudResponse({
+          provider,
+          apiKey,
+          model: activeAgent?.model?.trim() || providerConfig?.model || 'gemini-1.5-flash',
+          baseUrl: providerConfig?.baseUrl,
+          systemPrompt: systemPromptToUse,
+          temperature: config.temperature,
+          maxTokens: config.maxTokens,
+          messages: contextMessages,
+          tools: cloudTools,
+          signal,
+          onToken: (chunk) => {
+            if (!signal.aborted) {
+              streamController.appendChunk(threadId, chunk);
+            }
+          },
+          onDone: () => {},
+          onError: (error: any) => {
+            if (signal.aborted) return;
+            const errText = `⚠️ **[${provider.toUpperCase()} Error]** ${error?.message || 'Cloud inference failed.'}`;
+            const cur = useChatStore.getState().messages[threadId] || [];
+            const last = cur[cur.length - 1];
+            if (last?.role === 'assistant') {
+              appendToken(threadId, `\n\n${errText}`);
+            } else {
+              addMessage(threadId, {
+                id: generateId('msg_assistant'),
+                role: 'assistant',
+                content: errText,
+                created_at: new Date().toISOString(),
+              });
+            }
+          },
         });
+      } catch (e: any) {
+        if (signal.aborted || e?.name === 'AbortError') return;
+        console.error('[Cloud Stream Error]:', e);
+        const errText = `⚠️ **[${provider.toUpperCase()} Error]** ${e?.message || 'Cloud inference failed.'}`;
+        const cur = useChatStore.getState().messages[threadId] || [];
+        const last = cur[cur.length - 1];
+        if (last?.role === 'assistant') {
+          appendToken(threadId, `\n\n${errText}`);
+        } else {
+          addMessage(threadId, {
+            id: generateId('msg_assistant'),
+            role: 'assistant',
+            content: errText,
+            created_at: new Date().toISOString(),
+          });
+        }
       }
+    });
+    } catch (e: any) {
+      console.error('[streamCloudChatResponse] Error:', e);
     }
   };
 
@@ -826,26 +737,7 @@ export default function ChatScreen() {
     // cleared on send, so requiring text here would make "Stop" unreachable.
     if (isCurrentThreadStreaming) {
       Keyboard.dismiss();
-      if (abortControllersRef.current[activeThreadId]) {
-        abortControllersRef.current[activeThreadId].abort();
-        delete abortControllersRef.current[activeThreadId];
-      }
-      cleanUpThrottleAndHeal(activeThreadId);
-      // Blank-chat guard: abort skips onError (signal.aborted), so an empty
-      // assistant placeholder would be deleted leaving a bare user msg or an
-      // empty thread. Keep a visible Stopped bubble instead of blank.
-      const preStop = useChatStore.getState().messages[activeThreadId] || [];
-      const hadEmptyAssistant = preStop.length > 0 && preStop[preStop.length - 1]?.role === 'assistant' && !(preStop[preStop.length - 1]?.content || '').trim();
-      useChatStore.getState().removeLastEmptyAssistant(activeThreadId);
-      if (hadEmptyAssistant) {
-        addMessage(activeThreadId, {
-          id: generateId('msg_assistant'),
-          role: 'assistant',
-          content: '⏹️ Stopped — stream was aborted. Your message is kept above. Tap Send again to retry.',
-          created_at: new Date().toISOString(),
-        });
-      }
-      setStreamingThread(activeThreadId, false);
+      await streamController.stopStream(activeThreadId);
       return;
     }
 
@@ -906,36 +798,34 @@ export default function ChatScreen() {
     const syncDuration = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - syncStart;
     perfTracker.recordMetric('sync_blocking_invariant_ms', syncDuration, 'ms');
 
-    if (isLocalMode) {
-      await streamLocalResponse(activeThreadId, userText, [...originalHistory, { id: userMsgId, role: 'user', content: userText }]);
-      return;
+    try {
+      if (isLocalMode) {
+        await streamLocalResponse(activeThreadId, userText, [...originalHistory, { id: userMsgId, role: 'user', content: userText }]);
+        return;
+      }
+
+      if (connectionMode === 'cloud') {
+        await streamCloudChatResponse(activeThreadId, [...originalHistory, { id: userMsgId, role: 'user', content: userText }]);
+        return;
+      }
+
+      const activeThread = threads.find((t) => t.id === activeThreadId);
+      const selectedAgent = activeThread?.agent || 'personal assistant';
+
+      await runServerStream({
+        apiUrl,
+        apiKey,
+        threadId: activeThreadId,
+        prompt: userText,
+        agent: selectedAgent,
+        syncUserEntry: { id: userMsgId, role: 'user', content: userText, created_at: nowIso },
+        threads,
+        setThreads,
+        setAuthRequired,
+      });
+    } catch (err: any) {
+      console.error('[handleSend] Stream error:', err);
     }
-
-    if (connectionMode === 'cloud') {
-      await streamCloudChatResponse(activeThreadId, [...originalHistory, { id: userMsgId, role: 'user', content: userText }]);
-      return;
-    }
-
-    const activeThread = threads.find((t) => t.id === activeThreadId);
-    const selectedAgent = activeThread?.agent || 'personal assistant';
-
-    await runServerStream({
-      apiUrl,
-      apiKey,
-      threadId: activeThreadId,
-      prompt: userText,
-      agent: selectedAgent,
-      syncUserEntry: { id: userMsgId, role: 'user', content: userText, created_at: nowIso },
-      threads,
-      abortControllers: abortControllersRef,
-      throttleTimers: throttleTimersRef,
-      pendingTokens: pendingTokensMapRef,
-      appendToken,
-      setStreamingThread,
-      setThreads,
-      setAuthRequired,
-      cleanUpThrottleAndHeal,
-    });
   }, [
     input,
     isCurrentThreadStreaming,
@@ -948,7 +838,6 @@ export default function ChatScreen() {
     setStreamingThread,
     appendToken,
     setThreads,
-    cleanUpThrottleAndHeal,
     isLocalMode,
     connectionMode,
     triggerAutoScroll,
@@ -995,41 +884,39 @@ export default function ChatScreen() {
     useActiveStreamStore.getState().startStream(assistantMsgId);
     setStreamingThread(activeThreadId, true);
 
-    if (isLocalMode) {
-      await streamLocalResponse(activeThreadId, userPrompt, [...originalHistoryForRegen, { id: generateId('msg_user'), role: 'user', content: userPrompt }]);
-      return;
+    try {
+      if (isLocalMode) {
+        await streamLocalResponse(activeThreadId, userPrompt, [...originalHistoryForRegen, { id: generateId('msg_user'), role: 'user', content: userPrompt }]);
+        return;
+      }
+
+      if (connectionMode === 'cloud') {
+        await streamCloudChatResponse(activeThreadId, [...originalHistoryForRegen, { id: generateId('msg_user'), role: 'user', content: userPrompt }]);
+        return;
+      }
+
+      // Get the active thread agent
+      const regenerateAgent = threads.find((t) => t.id === activeThreadId)?.agent || 'personal assistant';
+
+      await runServerStream({
+        apiUrl,
+        apiKey,
+        threadId: activeThreadId,
+        prompt: userPrompt,
+        agent: regenerateAgent,
+        syncUserEntry: {
+          id: threadMsgs[userIndex]?.id || generateId('msg_user'),
+          role: 'user',
+          content: userPrompt,
+          created_at: threadMsgs[userIndex]?.created_at,
+        },
+        threads,
+        setThreads,
+        setAuthRequired,
+      });
+    } catch (err: any) {
+      console.error('[handleRegenerate] Stream error:', err);
     }
-
-    if (connectionMode === 'cloud') {
-      await streamCloudChatResponse(activeThreadId, [...originalHistoryForRegen, { id: generateId('msg_user'), role: 'user', content: userPrompt }]);
-      return;
-    }
-
-    // Get the active thread agent
-    const regenerateAgent = threads.find((t) => t.id === activeThreadId)?.agent || 'personal assistant';
-
-    await runServerStream({
-      apiUrl,
-      apiKey,
-      threadId: activeThreadId,
-      prompt: userPrompt,
-      agent: regenerateAgent,
-      syncUserEntry: {
-        id: threadMsgs[userIndex]?.id || generateId('msg_user'),
-        role: 'user',
-        content: userPrompt,
-        created_at: threadMsgs[userIndex]?.created_at,
-      },
-      threads,
-      abortControllers: abortControllersRef,
-      throttleTimers: throttleTimersRef,
-      pendingTokens: pendingTokensMapRef,
-      appendToken,
-      setStreamingThread,
-      setThreads,
-      setAuthRequired,
-      cleanUpThrottleAndHeal,
-    });
   }, [
     isCurrentThreadStreaming,
     activeThreadId,
@@ -1042,7 +929,6 @@ export default function ChatScreen() {
     setStreamingThread,
     appendToken,
     setThreads,
-    cleanUpThrottleAndHeal,
     isLocalMode,
     connectionMode,
   ]);
@@ -1125,32 +1011,30 @@ export default function ChatScreen() {
     setStreamingThread(newThreadId, true);
     triggerAutoScroll();
 
-    if (isLocalMode) {
-      await streamLocalResponse(newThreadId, textToSend.trim(), [{ id: userMsgId, role: 'user', content: textToSend.trim() }]);
-      return;
-    }
+    try {
+      if (isLocalMode) {
+        await streamLocalResponse(newThreadId, textToSend.trim(), [{ id: userMsgId, role: 'user', content: textToSend.trim() }]);
+        return;
+      }
 
-    if (connectionMode === 'cloud') {
-      await streamCloudChatResponse(newThreadId, [{ id: userMsgId, role: 'user', content: textToSend.trim() }]);
-      return;
-    }
+      if (connectionMode === 'cloud') {
+        await streamCloudChatResponse(newThreadId, [{ id: userMsgId, role: 'user', content: textToSend.trim() }]);
+        return;
+      }
 
-    await runServerStream({
-      apiUrl,
-      apiKey,
-      threadId: newThreadId,
-      prompt: textToSend.trim(),
-      agent,
-      syncUserEntry: { id: userMsgId, role: 'user', content: textToSend.trim(), created_at: nowIso },
-      abortControllers: abortControllersRef,
-      throttleTimers: throttleTimersRef,
-      pendingTokens: pendingTokensMapRef,
-      appendToken,
-      setStreamingThread,
-      setThreads,
-      setAuthRequired,
-      cleanUpThrottleAndHeal,
-    });
+      await runServerStream({
+        apiUrl,
+        apiKey,
+        threadId: newThreadId,
+        prompt: textToSend.trim(),
+        agent,
+        syncUserEntry: { id: userMsgId, role: 'user', content: textToSend.trim(), created_at: nowIso },
+        setThreads,
+        setAuthRequired,
+      });
+    } catch (err: any) {
+      console.error('[handleSendWelcome] Stream error:', err);
+    }
   }, [
     apiUrl,
     apiKey,
@@ -1158,7 +1042,6 @@ export default function ChatScreen() {
     addMessage,
     appendToken,
     setStreamingThread,
-    cleanUpThrottleAndHeal,
     isLocalMode,
     connectionMode,
     triggerAutoScroll,
@@ -1167,12 +1050,16 @@ export default function ChatScreen() {
 
   const handleSendPress = () => {
     // While streaming, the button acts as "Stop" — handleSend owns the abort path.
+    if (isCurrentThreadStreaming && activeThreadId) {
+      streamController.stopStream(activeThreadId);
+      return;
+    }
     if (activeThreadId) {
-      handleSend();
+      handleSend().catch((err) => console.error('[handleSendPress] error:', err));
       return;
     }
     if (!input.trim()) return;
-    handleSendWelcome(input);
+    handleSendWelcome(input).catch((err) => console.error('[handleSendPress] error:', err));
   };
 
 
@@ -1476,7 +1363,7 @@ export default function ChatScreen() {
                     showRaw={showRawMap[message.id]}
                     isStreamingMessage={isStreamingThis}
                     inViewport={true}
-                    onLongPress={handleMessageLongPress}
+                    onLongPress={() => !isCurrentThreadStreaming && setActiveMenuMessage(message)}
                     onCopyText={handleCopyText}
                     renderSegment={renderSegment}
                     actionBar={actionBar}

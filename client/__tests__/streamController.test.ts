@@ -493,6 +493,23 @@ describe('StreamController', () => {
     });
   });
 
+  describe('flush', () => {
+    it('immediately flushes buffered tokens to the assistant message without waiting for timer', () => {
+      seedThread('thread-flush', 'Hello');
+      useChatStore.getState().setStreamingThread('thread-flush', true);
+
+      controller.appendChunk('thread-flush', ' World');
+      expect(useChatStore.getState().messages['thread-flush'][1].content).toBe('Hello');
+
+      controller.flush('thread-flush');
+      expect(useChatStore.getState().messages['thread-flush'][1].content).toBe('Hello World');
+
+      // Advancing timer does not double-append
+      jest.advanceTimersByTime(200);
+      expect(useChatStore.getState().messages['thread-flush'][1].content).toBe('Hello World');
+    });
+  });
+
   describe('abortAll', () => {
     it('aborts every active stream across all threads', async () => {
       seedThread('thread-all-1', '');
