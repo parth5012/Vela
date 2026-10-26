@@ -21,16 +21,26 @@ import { useConfigStore } from '../store/useConfigStore';
 import { healXmlTags } from './xmlHealer';
 import { stripReasoning } from './reasoning';
 
+export interface StreamStopOptions {
+  notifyBackend?: boolean;
+}
+
 export interface StreamController {
   /**
    * Contract: runner must honor the AbortSignal; appendChunk after stop is voided.
    */
   startStream(threadId: string, runner: (signal: AbortSignal) => Promise<void>): Promise<void>;
-  stopStream(threadId: string): Promise<void>;
+  stopStream(threadId: string, opts?: StreamStopOptions): Promise<void>;
   isStreaming(threadId: string): boolean;
-  abortAll(): Promise<void>;
+  abortAll(opts?: StreamStopOptions): Promise<void>;
   appendChunk(threadId: string, chunk: string): void;
   cleanup(threadId: string): void;
+}
+
+interface StreamEntry {
+  controller: AbortController;
+  placeholderAssistantId: string | null;
+  generation: number;
 }
 
 const BACKEND_STOP_TIMEOUT_MS = 3000;
@@ -60,8 +70,10 @@ async function fetchWithTimeout(
 
 export class StreamControllerImpl implements StreamController {
   private abortControllers = new Map<string, AbortController>();
+  private activeEntries = new Map<string, StreamEntry>();
   private throttleTimers: Record<string, ReturnType<typeof setInterval>> = {};
   private pendingTokens: Record<string, string> = {};
+  private streamGenerations: Record<string, number> = {};
 
   private ensureThrottleTimer(threadId: string): void {
     if (this.throttleTimers[threadId]) return;
@@ -78,7 +90,7 @@ export class StreamControllerImpl implements StreamController {
     }, THROTTLE_INTERVAL_MS);
   }
 
-  private finalizeThread(threadId: string): void {
+  private finalizeThread(threadId: string, entry?: StreamEntry): void {
     // 3. Flush pending tokens immediately via useChatStore.getState().appendToken
     const pending = this.pendingTokens[threadId];
     if (pending) {
@@ -115,23 +127,26 @@ export class StreamControllerImpl implements StreamController {
     if (currentMsgs.length > 0) {
       const lastMsg = currentMsgs[currentMsgs.length - 1];
       if (lastMsg.role === 'assistant') {
-        const stripped = stripReasoning(lastMsg.content || '', false).trim();
-        if (!stripped) {
-          if ((lastMsg.content || '').trim() !== '') {
-            useChatStore.setState((s) => {
-              const cur = s.messages[threadId] || [];
-              if (cur.length === 0) return {};
-              const l = cur[cur.length - 1];
-              if (l.id !== lastMsg.id) return {};
-              return {
-                messages: {
-                  ...s.messages,
-                  [threadId]: [...cur.slice(0, -1), { ...l, content: '' }],
-                },
-              };
-            });
+        const expectedPlaceholderId = entry ? entry.placeholderAssistantId : lastMsg.id;
+        if (expectedPlaceholderId && lastMsg.id === expectedPlaceholderId) {
+          const stripped = stripReasoning(lastMsg.content || '', false).trim();
+          if (!stripped) {
+            if ((lastMsg.content || '').trim() !== '') {
+              useChatStore.setState((s) => {
+                const cur = s.messages[threadId] || [];
+                if (cur.length === 0) return {};
+                const l = cur[cur.length - 1];
+                if (l.id !== lastMsg.id) return {};
+                return {
+                  messages: {
+                    ...s.messages,
+                    [threadId]: [...cur.slice(0, -1), { ...l, content: '' }],
+                  },
+                };
+              });
+            }
+            useChatStore.getState().removeLastEmptyAssistant(threadId);
           }
-          useChatStore.getState().removeLastEmptyAssistant(threadId);
         }
       }
     }
@@ -148,7 +163,20 @@ export class StreamControllerImpl implements StreamController {
       await this.stopStream(threadId);
     }
 
+    this.streamGenerations[threadId] = (this.streamGenerations[threadId] ?? 0) + 1;
+    const generation = this.streamGenerations[threadId];
+
+    const threadMsgs = useChatStore.getState().messages[threadId] || [];
+    const lastAssistant = [...threadMsgs].reverse().find((m) => m.role === 'assistant') ?? null;
+    const placeholderAssistantId = lastAssistant?.id ?? null;
+
     const controller = new AbortController();
+    const entry: StreamEntry = {
+      controller,
+      placeholderAssistantId,
+      generation,
+    };
+    this.activeEntries.set(threadId, entry);
     this.abortControllers.set(threadId, controller);
     useChatStore.getState().setStreamingThread(threadId, true);
 
@@ -166,8 +194,13 @@ export class StreamControllerImpl implements StreamController {
     }
   }
 
-  async stopStream(threadId: string): Promise<void> {
+  async stopStream(threadId: string, opts?: StreamStopOptions): Promise<void> {
+    const notifyBackend = opts?.notifyBackend ?? true;
+
     // 1. Abort local AbortController in registry for threadId
+    const entry = this.activeEntries.get(threadId);
+    this.activeEntries.delete(threadId);
+
     const controller = this.abortControllers.get(threadId);
     if (controller) {
       controller.abort();
@@ -176,8 +209,13 @@ export class StreamControllerImpl implements StreamController {
 
     // 2. If Server mode: send non-blocking fetch (${apiUrl}/chat/threads/${threadId}/stop) to notify backend
     const { connectionMode, apiUrl, apiKey } = useConfigStore.getState();
-    if (connectionMode === 'server' && apiUrl && apiKey) {
+    if (connectionMode === 'server' && notifyBackend && apiUrl && apiKey) {
       const normalizedUrl = normalizeUrl(apiUrl);
+      const generation = entry?.generation ?? this.streamGenerations[threadId];
+      const body = JSON.stringify(
+        generation !== undefined ? { stream_generation: generation } : {}
+      );
+
       fetchWithTimeout(
         `${normalizedUrl}/chat/threads/${threadId}/stop`,
         {
@@ -186,6 +224,7 @@ export class StreamControllerImpl implements StreamController {
             'Authorization': `Bearer ${apiKey.trim()}`,
             'Content-Type': 'application/json',
           },
+          body,
         },
         BACKEND_STOP_TIMEOUT_MS
       ).catch((err) => {
@@ -194,7 +233,7 @@ export class StreamControllerImpl implements StreamController {
     }
 
     // 3 - 7. Flush tokens, heal tags, clear timers, prune empty placeholder, setStreamingThread false
-    this.finalizeThread(threadId);
+    this.finalizeThread(threadId, entry);
   }
 
   isStreaming(threadId: string): boolean {
@@ -212,17 +251,20 @@ export class StreamControllerImpl implements StreamController {
   }
 
   cleanup(threadId: string): void {
+    const entry = this.activeEntries.get(threadId);
+    this.activeEntries.delete(threadId);
     this.abortControllers.delete(threadId);
-    this.finalizeThread(threadId);
+    this.finalizeThread(threadId, entry);
   }
 
-  async abortAll(): Promise<void> {
+  async abortAll(opts?: StreamStopOptions): Promise<void> {
     const threadIds = new Set<string>([
       ...this.abortControllers.keys(),
+      ...this.activeEntries.keys(),
       ...Object.keys(this.throttleTimers),
       ...useChatStore.getState().streamingThreadIds,
     ]);
-    await Promise.all(Array.from(threadIds).map((id) => this.stopStream(id)));
+    await Promise.all(Array.from(threadIds).map((id) => this.stopStream(id, opts)));
   }
 }
 
