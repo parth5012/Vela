@@ -38,7 +38,7 @@ jest.mock('../db/client', () => {
       delete: mockDelete,
       update: mockUpdate,
     },
-    initializeDatabase: jest.fn(),
+    initializeDatabase: jest.fn(async () => {}),
     expoDb: {},
     default: {
       select: mockSelect,

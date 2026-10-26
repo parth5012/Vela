@@ -52,7 +52,7 @@ jest.mock('../db/client', () => {
       execSync: jest.fn(),
     },
     configurePragmas: jest.fn(),
-    initializeDatabase: jest.fn(),
+    initializeDatabase: jest.fn(async () => {}),
     default: {},
   };
 });
@@ -397,6 +397,63 @@ describe('Headless CI Engine Benchmark Suite (18-Metric Ratchet Lane 1)', () => 
       },
     };
 
+    // ---- Pretty terminal report ----
+    const metricRows = Object.entries(metricsOutput.metrics).map(([name, m]: [string, any]) => {
+      const pass = m.lower_is_better ? m.value <= m.target : m.value >= m.target;
+      return { name, value: m.value, unit: m.unit, target: m.target, pass };
+    });
+    const colName = Math.max(28, ...metricRows.map((r) => r.name.length));
+    const header = `${'Metric'.padEnd(colName)}  ${'Value'.padStart(8)}  ${'Target'.padStart(8)}  Status`;
+    const divider = '-'.repeat(header.length);
+    console.log('\n' + '='.repeat(header.length));
+    console.log('  Performance Ratchet Report  (18-Metric Lane 1)');
+    console.log('='.repeat(header.length));
+    console.log(header);
+    console.log(divider);
+    for (const r of metricRows) {
+      const val = String(r.value).padStart(8);
+      const tgt = String(r.target).padStart(8);
+      const status = r.pass ? 'PASS' : 'FAIL';
+      console.log(`${r.name.padEnd(colName)}  ${val}  ${tgt}  ${status}`);
+    }
+    console.log(divider);
+    const failedCount = metricRows.filter((r) => !r.pass).length;
+    console.log(`Result: ${metricRows.length - failedCount}/${metricRows.length} metrics within target${failedCount ? '  (' + failedCount + ' FAIL)' : ''}`);
+    console.log('='.repeat(header.length) + '\n');
+
+    // ---- Markdown report ----
+    const mdLines: string[] = [];
+    mdLines.push('# Performance Ratchet Benchmark Report');
+    mdLines.push('');
+    mdLines.push(`Generated: ${metricsOutput.timestamp}`);
+    mdLines.push(`Runtime: ${metricsOutput.environment.runtime} on ${metricsOutput.environment.os}`);
+    mdLines.push('');
+    mdLines.push('| Metric | Value | Target | Status |');
+    mdLines.push('|---|---:|---:|:---:|');
+    for (const r of metricRows) {
+      mdLines.push(`| ${r.name} | ${r.value} ${r.unit} | ${r.target} | ${r.pass ? 'PASS' : 'FAIL'} |`);
+    }
+    mdLines.push('');
+    mdLines.push(`**Result:** ${metricRows.length - failedCount}/${metricRows.length} metrics within target.`);
+    const mdReport = mdLines.join('\n') + '\n';
+
+    // ---- HTML report ----
+    const htmlReport =
+      '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Perf Ratchet Report</title>' +
+      '<style>body{font-family:system-ui,sans-serif;margin:2rem;color:#111}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:.5rem .75rem;text-align:left}th{background:#f4f4f4}tr.pass td:last-child{color:#1a7f37;font-weight:600}tr.fail td:last-child{color:#cf222e;font-weight:600}.ok{color:#1a7f37}.bad{color:#cf222e}</style></head><body>' +
+      '<h1>Performance Ratchet Benchmark Report</h1>' +
+      `<p><strong>Generated:</strong> ${metricsOutput.timestamp} &nbsp; <strong>Runtime:</strong> ${metricsOutput.environment.runtime}</p>` +
+      '<table><thead><tr><th>Metric</th><th>Value</th><th>Target</th><th>Status</th></tr></thead><tbody>' +
+      metricRows
+        .map(
+          (r) =>
+            `<tr class="${r.pass ? 'pass' : 'fail'}"><td>${r.name}</td><td>${r.value} ${r.unit}</td><td>${r.target}</td><td>${r.pass ? 'PASS' : 'FAIL'}</td></tr>`
+        )
+        .join('') +
+      '</tbody></table>' +
+      `<p><strong>Result:</strong> <span class="${failedCount ? 'bad' : 'ok'}">${metricRows.length - failedCount}/${metricRows.length} metrics within target.</span></p>` +
+      '</body></html>';
+
     // Output to results/perf-current.json
     const rootDir = path.resolve(__dirname, '../../');
     const resultsDir = path.join(rootDir, 'results');
@@ -407,6 +464,10 @@ describe('Headless CI Engine Benchmark Suite (18-Metric Ratchet Lane 1)', () => 
     const currentPath = path.join(resultsDir, 'perf-current.json');
     fs.writeFileSync(currentPath, JSON.stringify(metricsOutput, null, 2), 'utf-8');
     expect(fs.existsSync(currentPath)).toBe(true);
+
+    // Write markdown + html reports
+    fs.writeFileSync(path.join(resultsDir, 'perf-report.md'), mdReport, 'utf-8');
+    fs.writeFileSync(path.join(resultsDir, 'perf-report.html'), htmlReport, 'utf-8');
 
     // If baseline does not exist yet, write perf-baseline.json
     const baselinePath = path.join(rootDir, 'perf-baseline.json');

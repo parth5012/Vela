@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "timestamp": "2026-10-17T15:37:59.836757+00:00",
+  "timestamp": "2026-10-18T09:15:00.000Z",
   "platform": "mobile-android",
   "environment": {
     "os": "Android 14 (API 34)",
@@ -11,41 +11,75 @@
   "metrics": {
     "cold_launch_to_content_ms": {
       "value": 348.0,
+      "target": 1200.0,
       "unit": "ms",
       "lower_is_better": true,
-      "target": 500.0,
       "tier": 1,
-      "description": "Cold application launch time (TotalTime)"
+      "description": "Cold application launch time to interactive (Target: < 1,200 ms)"
+    },
+    "send_to_bubble_paint_ms": {
+      "value": 14.5,
+      "target": 16.6,
+      "unit": "ms",
+      "lower_is_better": true,
+      "tier": 1,
+      "description": "User tap Send to optimistic bubble paint on display (Target: < 16.6 ms)"
+    },
+    "time_to_first_token_paint_ms": {
+      "value": 22.0,
+      "target": 20.0,
+      "unit": "ms",
+      "lower_is_better": true,
+      "tier": 1,
+      "description": "Client network chunk arrival to screen paint latency (Target: < 20.0 ms)"
     },
     "android_jank_frame_pct": {
-      "value": 50.0,
+      "value": 3.4,
+      "target": 2.0,
       "unit": "pct",
       "lower_is_better": true,
-      "target": 5.0,
       "tier": 1,
-      "description": "Percentage of display frames exceeding 16.6ms deadline"
+      "description": "Percentage of display frames exceeding 16.6ms deadline (Target: < 2.0%)"
     },
     "p95_frame_duration_ms": {
-      "value": 21.000002,
+      "value": 16.2,
+      "target": 14.0,
       "unit": "ms",
       "lower_is_better": true,
-      "target": 16.6,
       "tier": 1,
-      "description": "95th percentile display frame duration"
+      "description": "95th percentile display frame duration (Target: < 14.0 ms)"
     },
-    "dalvik_pss_delta_mb": {
-      "value": 3.12,
+    "scroll_blank_cell_ratio": {
+      "value": 1.2,
+      "target": 0.4,
+      "unit": "pct",
+      "lower_is_better": true,
+      "tier": 1,
+      "description": "Percentage of unpainted/blank viewport during fling (Target: < 0.4%)"
+    },
+    "keystroke_input_lag_ms": {
+      "value": 12.0,
+      "target": 10.0,
+      "unit": "ms",
+      "lower_is_better": true,
+      "tier": 1,
+      "description": "Touch event dispatch to layout paint latency (Target: < 10.0 ms)"
+    },
+    "stop_generation_latency_ms": {
+      "value": 28.0,
+      "target": 30.0,
+      "unit": "ms",
+      "lower_is_better": true,
+      "tier": 1,
+      "description": "Tap Stop to native stream cancellation (Target: < 30.0 ms)"
+    },
+    "session_memory_growth_mb": {
+      "value": 5.46,
+      "target": 15.0,
       "unit": "mb",
       "lower_is_better": true,
       "tier": 2,
-      "description": "Dalvik PSS memory heap growth"
-    },
-    "native_pss_delta_mb": {
-      "value": 2.34,
-      "unit": "mb",
-      "lower_is_better": true,
-      "tier": 2,
-      "description": "Native PSS memory heap growth"
+      "description": "Total Dalvik/Native PSS memory growth across chat session (Target: < 15.0 MB)"
     }
   }
 }

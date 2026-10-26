@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "timestamp": "2026-10-17T15:43:29.891Z",
+  "timestamp": "2026-10-26T06:43:05.254Z",
   "platform": "mobile-android",
   "environment": {
     "os": "win32",
@@ -10,11 +10,13 @@
   },
   "metrics": {
     "stream_render_commits": {
-      "value": 6,
+      "value": 10,
       "unit": "commits",
       "lower_is_better": true,
+      "target": 10,
       "tier": 1,
-      "description": "Total React commits during streaming updates"
+      "lane": 1,
+      "description": "Total React commits during streaming updates (T3 Chat target <= 10)"
     },
     "redundant_cell_rerenders": {
       "value": 0,
@@ -22,51 +24,71 @@
       "lower_is_better": true,
       "target": 0,
       "tier": 1,
-      "description": "Historical cell re-render count during stream (must be 0)"
+      "lane": 1,
+      "description": "Historical cell re-render count during stream (T3 Chat target = 0)"
     },
     "stream_total_parse_ms": {
-      "value": 1.74,
+      "value": 0.63,
       "unit": "ms",
       "lower_is_better": true,
+      "target": 5,
       "tier": 1,
-      "description": "Cumulative AST parse duration across 250 tokens"
+      "lane": 1,
+      "description": "Cumulative AST parse duration across 250 tokens (< 5.0ms)"
     },
     "parse_quadratic_ratio": {
-      "value": 1.91,
+      "value": 1.96,
       "unit": "ratio",
       "lower_is_better": true,
       "target": 2.5,
       "tier": 1,
+      "lane": 1,
       "description": "Scaling ratio total_parse(250) / total_parse(125) (< 2.5)"
     },
     "js_event_loop_lag_ms": {
       "value": 0,
       "unit": "ms",
       "lower_is_better": true,
+      "target": 4,
       "tier": 1,
-      "description": "JavaScript event-loop delay under active streaming load"
+      "lane": 1,
+      "description": "JavaScript event-loop delay under active streaming load (< 4.0ms)"
     },
     "sqlite_insert_duration_ms": {
       "value": 0,
       "unit": "ms",
       "lower_is_better": true,
+      "target": 3,
       "tier": 2,
-      "description": "SQLite insert duration (p50)"
+      "lane": 1,
+      "description": "SQLite insert duration p50 (WhatsApp target < 3.0ms)"
     },
     "sqlite_query_duration_ms": {
-      "value": 1,
+      "value": 0,
       "unit": "ms",
       "lower_is_better": true,
+      "target": 5,
       "tier": 2,
-      "description": "SQLite 30-message history query duration (p50)"
+      "lane": 1,
+      "description": "SQLite 30-message history query duration p50 (< 5.0ms)"
+    },
+    "sqlite_write_batch_efficiency": {
+      "value": 1,
+      "unit": "writes",
+      "lower_is_better": true,
+      "target": 5,
+      "tier": 2,
+      "lane": 1,
+      "description": "SQLite write batch count during 250-token stream (target <= 5 writes)"
     },
     "sync_blocking_invariant_ms": {
       "value": 0,
       "unit": "ms",
       "lower_is_better": true,
-      "target": 16.6,
+      "target": 4,
       "tier": 1,
-      "description": "Synchronous dispatch delay before optimistic state commit"
+      "lane": 1,
+      "description": "Synchronous dispatch delay before optimistic state commit (WhatsApp target < 4.0ms)"
     }
   }
 }

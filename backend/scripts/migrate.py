@@ -15,8 +15,8 @@ backend_dir = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(backend_dir))
 
 # Load .env
-load_dotenv(backend_dir / ".env")
-load_dotenv(backend_dir.parent / ".env")
+load_dotenv(backend_dir / ".env", encoding="utf-8")
+load_dotenv(backend_dir.parent / ".env", encoding="utf-8")
 
 from db.session import engine, ensure_prod_schema
 from sqlalchemy import inspect, text
