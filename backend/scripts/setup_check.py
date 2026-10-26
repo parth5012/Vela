@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 def check_env_file():
     """Check that .env exists and has required variables."""
     from dotenv import load_dotenv
-    load_dotenv()
+    load_dotenv(encoding="utf-8")
 
     required = {
         "GOOGLE_API_KEY": "Gemini API key (https://aistudio.google.com/apikey)",
@@ -48,7 +48,7 @@ def check_database_connection():
     """Verify the database is reachable and has required tables."""
     from sqlalchemy import create_engine, inspect, text
     from dotenv import load_dotenv
-    load_dotenv()
+    load_dotenv(encoding="utf-8")
 
     db_url = os.getenv("DATABASE_URL")
     if not db_url or db_url.startswith("your_"):
@@ -85,7 +85,7 @@ def check_database_connection():
 def check_llm_provider():
     """Verify at least one LLM provider is configured and reachable."""
     from dotenv import load_dotenv
-    load_dotenv()
+    load_dotenv(encoding="utf-8")
 
     google_key = os.getenv("GOOGLE_API_KEY")
     if google_key and not google_key.startswith("your_"):

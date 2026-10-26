@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, Session
 
-load_dotenv()
+load_dotenv(encoding="utf-8")
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 IS_TESTING = "pytest" in sys.modules or "unittest" in sys.modules or os.getenv("PYTEST_CURRENT_TEST") is not None
