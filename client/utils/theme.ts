@@ -262,3 +262,6 @@ export const FONT_SIZES = {
     logo: 38,
   },
 };
+
+export type FontSizes = (typeof FONT_SIZES)[keyof typeof FONT_SIZES];
+

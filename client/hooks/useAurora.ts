@@ -13,3 +13,6 @@ export function useAurora() {
   const aurora = getAurora(accentColor, theme);
   return { colors, sizes, aurora };
 }
+
+export type AuroraTheme = ReturnType<typeof useAurora>['aurora'];
+

@@ -28,6 +28,7 @@ import { useChatStore, Message, Thread } from '../store/useChatStore';
 import { useAurora } from '../hooks/useAurora';
 import RichText from '../components/chat/RichText';
 import MessageItem from '../components/chat/MessageItem';
+import MessageRow from '../components/chat/MessageRow';
 import BubbleFooter from '../components/chat/BubbleFooter';
 import DateDividerPill from '../components/chat/DateDividerPill';
 import { buildChatFeedItems } from '../utils/chatFeed';
@@ -565,6 +566,12 @@ export default function ChatScreen() {
       [msgId]: !prev[msgId]
     }));
   }, []);
+
+  const handleMessageLongPress = useCallback((msg: Message) => {
+    if (!isCurrentThreadStreaming) {
+      setActiveMenuMessage(msg);
+    }
+  }, [isCurrentThreadStreaming]);
 
   // Shared implementation of the local prompt compiling, token streaming, and tool execution
   const streamLocalResponse = async (threadId: string, userQuery: string, historyList: Message[]) => {
@@ -1399,17 +1406,23 @@ export default function ChatScreen() {
               updateCellsBatchingPeriod={50}
               initialNumToRender={6}
               renderItem={({ item }) => {
+                // getCachedParse(message.content, isUser) delegated to memoized MessageRow (WF-455-03)
                 if (item.type === 'date_divider') {
-                  return <DateDividerPill label={item.label} colors={colors} />;
+                  return (
+                    <MessageRow
+                      key={item.id}
+                      item={item}
+                      colors={colors}
+                      sizes={sizes}
+                      aurora={aurora}
+                      isStreamingMessage={false}
+                    />
+                  );
                 }
                 const message = item.message;
                 const isUser = message.role === 'user';
                 const showActionBar = activeMenuMessage?.id === message.id;
                 const isStreamingThis = !isUser && isCurrentThreadStreaming && activeMessages[activeMessages.length - 1]?.id === message.id;
-
-                // Hooks are illegal inside this callback (plain function, not a
-                // component) — use the module-level cache instead of useMemo.
-                const { segments, headerSegments, bubbleContent, sources } = getCachedParse(message.content, isUser);
 
                 const compilingIndicator = isStreamingThis ? (
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12, gap: 4 }}>
@@ -1454,10 +1467,9 @@ export default function ChatScreen() {
                 ) : null;
 
                 return (
-                  <MessageItem
+                  <MessageRow
                     key={message.id}
-                    message={message}
-                    isUser={isUser}
+                    item={item}
                     colors={colors}
                     sizes={sizes}
                     aurora={aurora}
@@ -1465,14 +1477,11 @@ export default function ChatScreen() {
                     isLocalMode={isLocalMode}
                     agentName={agents.find(p => p.id === currentAgentId)?.name || 'Vela'}
                     showRaw={showRawMap[message.id]}
-                    isStreaming={isStreamingThis}
+                    isStreamingMessage={isStreamingThis}
                     inViewport={true}
-                    onLongPress={() => !isCurrentThreadStreaming && setActiveMenuMessage(message)}
+                    onLongPress={handleMessageLongPress}
                     onCopyText={handleCopyText}
                     renderSegment={renderSegment}
-                    headerSegments={headerSegments}
-                    bubbleContent={bubbleContent}
-                    sources={sources}
                     actionBar={actionBar}
                     compilingIndicator={compilingIndicator}
                   />
