@@ -1129,3 +1129,192 @@ async def test_delete_thread_cancels_running_producer_and_avoids_fk_error(monkey
             session.query(Experience).filter_by(conversation_id=norm_id).delete(synchronize_session=False)
             session.query(Conversation).filter_by(id=norm_id).delete(synchronize_session=False)
 
+
+
+@pytest.mark.asyncio
+async def test_overlapping_message_cancels_previous_turn_and_frees_slot(monkeypatch):
+    """CodeRabbit CR1 (PR #486): a second /chat/message on the same thread must
+    cancel the first turn's producer — otherwise the first turn is unregistered
+    (last-wins overwrite) and can never be stopped, leaking its semaphore slot.
+    """
+    import asyncio
+    import uuid
+    from unittest.mock import patch
+
+    from httpx import ASGITransport, AsyncClient
+    from langchain_core.messages import AIMessageChunk
+
+    import agent.main as m
+    from agent import concurrency
+    from db.client import DBClient
+    from db.session import get_db_session
+
+    monkeypatch.setenv("VELA_API_KEY", "secret-test-key")
+    headers = {"Authorization": "Bearer secret-test-key"}
+
+    concurrency._semaphore = None
+    sem = concurrency.get_stream_semaphore()
+    limit = sem._value
+
+    thread_id = f"test-overlap-{uuid.uuid4()}"
+    norm_id = m.normalize_thread_id(thread_id)
+
+    with get_db_session() as session:
+        DBClient(session).create_client_conversation(
+            title="Overlapping Start Test",
+            agent="personal assistant",
+            conversation_id=norm_id,
+            source="android_client",
+        )
+
+    first_started = asyncio.Event()
+    first_cancelled = asyncio.Event()
+    call_index = 0
+
+    async def per_call_stream(*args, **kwargs):
+        nonlocal call_index
+        call_index += 1
+        this_call = call_index
+        try:
+            yield {
+                "event": "on_chat_model_stream",
+                "metadata": {"langgraph_node": "chatbot"},
+                "data": {"chunk": AIMessageChunk(content=f"call{this_call} ")},
+            }
+            if this_call == 1:
+                first_started.set()
+                # First call blocks forever until cancelled by the overlap fix
+                await asyncio.sleep(30)
+                yield {
+                    "event": "on_chat_model_stream",
+                    "metadata": {"langgraph_node": "chatbot"},
+                    "data": {"chunk": AIMessageChunk(content="never")},
+                }
+        except asyncio.CancelledError:
+            if this_call == 1:
+                first_cancelled.set()
+            raise
+
+    try:
+        async with AsyncClient(transport=ASGITransport(app=m.app), base_url="http://test") as client:
+            with patch.object(m.graph, "astream_events", side_effect=per_call_stream):
+
+                async def consume_stream():
+                    async with client.stream(
+                        "POST",
+                        "/chat/message",
+                        json={"thread_id": thread_id, "message": "overlap", "agent": "personal assistant"},
+                        headers=headers,
+                    ) as resp:
+                        assert resp.status_code == 200
+                        async for _line in resp.aiter_lines():
+                            pass
+
+                task1 = asyncio.create_task(consume_stream())
+                await asyncio.wait_for(first_started.wait(), timeout=5.0)
+
+                task2 = asyncio.create_task(consume_stream())
+
+                # The second registration must cancel the first producer.
+                await asyncio.wait_for(first_cancelled.wait(), timeout=5.0)
+
+                await asyncio.wait_for(
+                    asyncio.gather(task1, task2, return_exceptions=True), timeout=10.0
+                )
+
+        # Both turns released their semaphore slots.
+        assert sem._value == limit
+    finally:
+        m.ACTIVE_STREAM_TASKS.clear()
+
+
+@pytest.mark.asyncio
+async def test_stop_endpoint_awaits_inflight_persist_write(monkeypatch):
+    """CodeRabbit CR2 (PR #486): the persisted flag means 'persist started', not
+    'persist finished'. /stop must not return before the shielded DB write has
+    completed — a client GETting the thread right after stop would read an empty
+    agent_response.
+    """
+    import asyncio
+    import threading
+    import uuid
+
+    from httpx import ASGITransport, AsyncClient
+    from langchain_core.messages import AIMessageChunk
+
+    import agent.main as m
+    from db.client import DBClient
+    from db.session import get_db_session
+
+    monkeypatch.setenv("VELA_API_KEY", "secret-test-key")
+    headers = {"Authorization": "Bearer secret-test-key"}
+
+    thread_id = f"test-persist-wait-{uuid.uuid4()}"
+    norm_id = m.normalize_thread_id(thread_id)
+
+    with get_db_session() as session:
+        DBClient(session).create_client_conversation(
+            title="Persist Wait Test",
+            agent="personal assistant",
+            conversation_id=norm_id,
+            source="android_client",
+        )
+
+    producer_started = asyncio.Event()
+    write_started = threading.Event()
+    write_finished = threading.Event()
+
+    real_persist = m._persist_sse_turn_sync
+
+    def tracked_persist(*args, **kwargs):
+        write_started.set()
+        import time
+
+        time.sleep(0.3)
+        result = real_persist(*args, **kwargs)
+        write_finished.set()
+        return result
+
+    async def slow_stream(*args, **kwargs):
+        try:
+            yield {
+                "event": "on_chat_model_stream",
+                "metadata": {"langgraph_node": "chatbot"},
+                "data": {"chunk": AIMessageChunk(content="persist wait stream ")},
+            }
+            producer_started.set()
+            await asyncio.sleep(10)
+        except asyncio.CancelledError:
+            raise
+
+    try:
+        async with AsyncClient(transport=ASGITransport(app=m.app), base_url="http://test") as client:
+            with (
+                patch.object(m, "_persist_sse_turn_sync", side_effect=tracked_persist),
+                patch.object(m.graph, "astream_events", side_effect=slow_stream),
+            ):
+                async def consume_stream():
+                    async with client.stream(
+                        "POST",
+                        "/chat/message",
+                        json={"thread_id": thread_id, "message": "persist wait", "agent": "personal assistant"},
+                        headers=headers,
+                    ) as resp:
+                        assert resp.status_code == 200
+                        async for _line in resp.aiter_lines():
+                            pass
+
+                stream_task = asyncio.create_task(consume_stream())
+                await asyncio.wait_for(producer_started.wait(), timeout=5.0)
+
+                resp_stop = await client.post(f"/chat/threads/{thread_id}/stop", headers=headers)
+                assert resp_stop.status_code == 200
+                assert resp_stop.json() == {"status": "stopped", "thread_id": thread_id}
+
+                # The stop response must not precede the DB write that the
+                # consumer kicked off.
+                assert write_finished.is_set(), "/stop returned before the in-flight persist finished"
+
+                await asyncio.wait_for(stream_task, timeout=5.0)
+    finally:
+        m.ACTIVE_STREAM_TASKS.clear()

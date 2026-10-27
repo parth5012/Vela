@@ -691,6 +691,8 @@ async def chat_message(payload: MessagePayload):
                 pass
             logger.info("Semaphore released", thread_id=normalized_id, reason=reason)
 
+        persist_future: asyncio.Future | None = None
+
         async def _persist_once(reason: str) -> None:
             """Shielded exactly-once turn persistence.
 
@@ -698,13 +700,18 @@ async def chat_message(payload: MessagePayload):
             asyncio.shield(), so a client disconnect (cancel/close) cannot
             drop the Experience/SyncMessage rows: the thread keeps running
             to commit even if the waiter is cancelled.
+
+            The write is tracked via a shared Future so later callers (e.g.
+            the /stop endpoint's fallback persist) await the actual
+            completion of a write that is already in flight — `persisted`
+            True only means the write started, not that it finished.
             """
-            nonlocal persisted
-            if persisted or not experience_id:
-                return
-            persisted = True
-            try:
-                await asyncio.shield(
+            nonlocal persisted, persist_future
+            if persist_future is None:
+                if persisted or not experience_id:
+                    return
+                persisted = True
+                persist_future = asyncio.ensure_future(
                     asyncio.to_thread(
                         _persist_sse_turn_sync,
                         experience_id,
@@ -713,6 +720,8 @@ async def chat_message(payload: MessagePayload):
                         full_response,
                     )
                 )
+            try:
+                await asyncio.shield(persist_future)
                 logger.info("Experience turn persisted", conversation_id=normalized_id, reason=reason)
             except BaseException as e:
                 logger.error("Failed to persist experience turn", error=str(e))
@@ -816,6 +825,13 @@ async def chat_message(payload: MessagePayload):
             )
             lock = _get_active_tasks_lock()
             async with lock:
+                # A second /chat/message on the same thread must cancel the
+                # previous unfinished turn before the last-wins overwrite,
+                # otherwise the first producer becomes unregistered and can
+                # never be stopped (leaks its semaphore slot + token spend).
+                previous = ACTIVE_STREAM_TASKS.get(normalized_id)
+                if previous is not None and not previous.done():
+                    previous.cancel()
                 ACTIVE_STREAM_TASKS[normalized_id] = turn
 
             def _on_task_done(_):
