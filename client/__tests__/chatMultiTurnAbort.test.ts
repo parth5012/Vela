@@ -46,6 +46,14 @@ jest.mock('../utils/toolProxy', () => ({
   parseAndExecuteTools: jest.fn(),
 }));
 
+jest.mock('../utils/providers', () => ({
+  streamCloudResponse: jest.fn(),
+}));
+
+jest.mock('../utils/cloudTools', () => ({
+  buildVercelCloudTools: jest.fn(),
+}));
+
 import { useChatStore } from '../store/useChatStore';
 import { useConfigStore } from '../store/useConfigStore';
 import { streamController } from '../utils/streamController';
@@ -53,7 +61,14 @@ import { runServerStream } from '../utils/serverStream';
 import * as sseModule from '../utils/sse';
 import { streamLocalLlmResponse } from '../utils/localLlm';
 import { parseAndExecuteTools } from '../utils/toolProxy';
-import { streamLocalResponse } from '../app/index';
+import { streamLocalResponse, streamCloudChatResponse } from '../app/index';
+import { buildVercelCloudTools } from '../utils/cloudTools';
+import { streamCloudResponse } from '../utils/providers';
+
+type CapturedToolCallbacks = {
+  onToolCall: (call: { toolName: string }) => void;
+  onToolResult: (res: { result: any }) => void;
+};
 
 describe('Multi-turn tool loop abortion & streamController delegation', () => {
   beforeEach(() => {
@@ -227,37 +242,74 @@ describe('Multi-turn tool loop abortion & streamController delegation', () => {
     });
   });
 
-  describe('Cloud tool execution abort', () => {
-    it('throws AbortError on onToolCall if signal is aborted', () => {
-      const controller = new AbortController();
-      controller.abort();
-      const signal = controller.signal;
+  describe('Cloud tool execution abort (drives the REAL streamCloudChatResponse)', () => {
+    let capturedCallbacks: CapturedToolCallbacks;
 
-      const onToolCall = (call: { toolName: string }) => {
-        if (signal.aborted) {
-          const err = new Error('AbortError');
-          err.name = 'AbortError';
-          throw err;
+    const setupCloudThread = (threadId: string) => {
+      useChatStore.getState().createThread('Cloud Abort', threadId);
+      useChatStore.getState().addMessage(threadId, {
+        id: 'msg-user',
+        role: 'user',
+        content: 'Check the weather in Paris',
+      });
+      useChatStore.getState().addMessage(threadId, {
+        id: 'msg-asst',
+        role: 'assistant',
+        content: '',
+      });
+      // Capture the REAL onToolCall/onToolResult guards from app/index.tsx.
+      (buildVercelCloudTools as jest.Mock).mockImplementation(
+        (_first: any, _second: any, callbacks: CapturedToolCallbacks) => {
+          capturedCallbacks = callbacks;
+          return { vercel: true } as any;
         }
-      };
+      );
+    };
 
-      expect(() => onToolCall({ toolName: 'testTool' })).toThrow('AbortError');
+    it('aborts on real onToolCall when the stream is stopped mid-flight and emits no error bubble', async () => {
+      const threadId = 'thread-cloud-abort-call';
+      setupCloudThread(threadId);
+
+      (streamCloudResponse as jest.Mock).mockImplementation(async () => {
+        // Simulate the user tapping Stop while the cloud stream is mid-flight.
+        await streamController.stopStream(threadId);
+        // The REAL guard captured from index.tsx must now refuse tool execution.
+        expect(() => capturedCallbacks.onToolCall({ toolName: 'get_weather' })).toThrow('AbortError');
+      });
+
+      await streamCloudChatResponse(threadId, []);
+
+      expect(streamCloudResponse).toHaveBeenCalledTimes(1);
+      const messages = useChatStore.getState().messages[threadId] || [];
+      for (const msg of messages) {
+        expect(msg.content).not.toContain('⚠️');
+        expect(msg.content).not.toContain('[GEMINI Error]');
+      }
+      expect(streamController.isStreaming(threadId)).toBe(false);
     });
 
-    it('throws AbortError on onToolResult if signal is aborted', () => {
-      const controller = new AbortController();
-      controller.abort();
-      const signal = controller.signal;
+    it('aborts on real onToolResult after tool call but keeps pre-abort content and emits no error bubble', async () => {
+      const threadId = 'thread-cloud-abort-result';
+      setupCloudThread(threadId);
 
-      const onToolResult = (res: { result: any }) => {
-        if (signal.aborted) {
-          const err = new Error('AbortError');
-          err.name = 'AbortError';
-          throw err;
-        }
-      };
+      (streamCloudResponse as jest.Mock).mockImplementation(async () => {
+        // Tool call lands while still streaming → real guard appends the marker.
+        capturedCallbacks.onToolCall({ toolName: 'get_weather' });
+        // Then the user stops, and the REAL guard blocks the tool result.
+        await streamController.stopStream(threadId);
+        expect(() => capturedCallbacks.onToolResult({ result: { success: true } })).toThrow('AbortError');
+      });
 
-      expect(() => onToolResult({ result: { success: true } })).toThrow('AbortError');
+      await streamCloudChatResponse(threadId, []);
+
+      expect(streamCloudResponse).toHaveBeenCalledTimes(1);
+      const contents = (useChatStore.getState().messages[threadId] || [])
+        .map((m: any) => m.content)
+        .join('\n');
+      expect(contents).toContain('Executing get_weather');
+      expect(contents).not.toContain('⚠️');
+      expect(contents).not.toContain('[GEMINI Error]');
+      expect(streamController.isStreaming(threadId)).toBe(false);
     });
   });
 

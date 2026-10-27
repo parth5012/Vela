@@ -34,6 +34,7 @@ export type ServerStreamParams = {
 export async function runServerStream(p: ServerStreamParams): Promise<void> {
   await streamController.startStream(p.threadId, async (signal) => {
     try {
+      const streamGeneration = streamController.getGeneration(p.threadId);
       await streamAgentResponse(
         p.apiUrl,
         p.apiKey,
@@ -62,7 +63,10 @@ export async function runServerStream(p: ServerStreamParams): Promise<void> {
           if (provider === 'google' && p.threadId) {
             p.setAuthRequired((prev) => ({ ...prev, [p.threadId]: true }));
           }
-        }
+        },
+        undefined,
+        undefined,
+        streamGeneration
       );
     } catch (err: any) {
       if (signal.aborted) return;
