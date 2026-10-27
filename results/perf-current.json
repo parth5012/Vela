@@ -1,12 +1,12 @@
 {
   "version": "1.0.0",
-  "timestamp": "2026-10-26T06:43:05.254Z",
+  "timestamp": "2026-10-27T16:37:13.088Z",
   "platform": "mobile-android",
   "environment": {
-    "os": "win32",
+    "os": "linux",
     "device": "CI / Headless Engine",
     "build_type": "release",
-    "runtime": "Node v26.7.0 / Jest"
+    "runtime": "Node v26.8.2 / Jest"
   },
   "metrics": {
     "stream_render_commits": {
@@ -16,7 +16,7 @@
       "target": 10,
       "tier": 1,
       "lane": 1,
-      "description": "Total React commits during streaming updates (T3 Chat target <= 10)"
+      "description": "Total React commits during streaming updates (Target: <= 10 commits via RAF batching)"
     },
     "redundant_cell_rerenders": {
       "value": 0,
@@ -25,34 +25,34 @@
       "target": 0,
       "tier": 1,
       "lane": 1,
-      "description": "Historical cell re-render count during stream (T3 Chat target = 0)"
+      "description": "Historical cell re-render count during stream (Target: strictly 0)"
     },
     "stream_total_parse_ms": {
-      "value": 0.63,
+      "value": 1.05,
       "unit": "ms",
-      "lower_is_better": true,
-      "target": 5,
-      "tier": 1,
-      "lane": 1,
-      "description": "Cumulative AST parse duration across 250 tokens (< 5.0ms)"
-    },
-    "parse_quadratic_ratio": {
-      "value": 1.96,
-      "unit": "ratio",
       "lower_is_better": true,
       "target": 2.5,
       "tier": 1,
       "lane": 1,
-      "description": "Scaling ratio total_parse(250) / total_parse(125) (< 2.5)"
+      "description": "Cumulative AST parse duration across 250 tokens (Target: < 2.5 ms)"
+    },
+    "parse_quadratic_ratio": {
+      "value": 1.92,
+      "unit": "ratio",
+      "lower_is_better": true,
+      "target": 2.2,
+      "tier": 1,
+      "lane": 1,
+      "description": "Scaling ratio total_parse(250) / total_parse(125) (Target: < 2.20 ratio)"
     },
     "js_event_loop_lag_ms": {
-      "value": 0,
+      "value": 1,
       "unit": "ms",
       "lower_is_better": true,
       "target": 4,
       "tier": 1,
       "lane": 1,
-      "description": "JavaScript event-loop delay under active streaming load (< 4.0ms)"
+      "description": "JavaScript event-loop delay under active streaming load (Target: < 4.0 ms)"
     },
     "sqlite_insert_duration_ms": {
       "value": 0,
@@ -61,16 +61,16 @@
       "target": 3,
       "tier": 2,
       "lane": 1,
-      "description": "SQLite insert duration p50 (WhatsApp target < 3.0ms)"
+      "description": "SQLite insert duration p50 in WAL mode (Target: < 3.0 ms)"
     },
     "sqlite_query_duration_ms": {
-      "value": 0,
+      "value": 1,
       "unit": "ms",
       "lower_is_better": true,
       "target": 5,
       "tier": 2,
       "lane": 1,
-      "description": "SQLite 30-message history query duration p50 (< 5.0ms)"
+      "description": "SQLite 30-message history query duration p50 (Target: < 5.0 ms)"
     },
     "sqlite_write_batch_efficiency": {
       "value": 1,
@@ -79,7 +79,7 @@
       "target": 5,
       "tier": 2,
       "lane": 1,
-      "description": "SQLite write batch count during 250-token stream (target <= 5 writes)"
+      "description": "SQLite write batch count during 250-token stream (Target: <= 5 writes)"
     },
     "sync_blocking_invariant_ms": {
       "value": 0,
@@ -88,7 +88,7 @@
       "target": 4,
       "tier": 1,
       "lane": 1,
-      "description": "Synchronous dispatch delay before optimistic state commit (WhatsApp target < 4.0ms)"
+      "description": "Synchronous dispatch delay before optimistic state commit (Target: < 4.0 ms)"
     }
   }
 }
