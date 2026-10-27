@@ -102,4 +102,28 @@ describe('buildChatFeedItems', () => {
     expect(divider.id).toBe(`divider-${divider.dateKey}`);
     expect(second.find((i) => i.type === 'date_divider')!.id).toBe(divider.id);
   });
+
+  it('maps correctly to FlashList recycling item types and keys', () => {
+    const messages: Message[] = [
+      makeMessage('a', localIso(2026, 9, 21, 9, 0)),
+      { id: 'b', role: 'assistant', content: 'assistant reply', created_at: localIso(2026, 9, 21, 9, 5) },
+      { id: 'c', role: 'user', content: 'another user query', created_at: localIso(2026, 9, 21, 9, 10) },
+    ];
+    const items = buildChatFeedItems(messages);
+
+    const getItemType = (item: ChatFeedItem) =>
+      item.type === 'date_divider' ? 'date_divider' : item.message.role;
+    const keyExtractor = (item: ChatFeedItem) =>
+      item.type === 'date_divider' ? item.id : item.message.id;
+
+    // Verify all keys are non-empty and unique
+    const keys = items.map(keyExtractor);
+    expect(new Set(keys).size).toBe(items.length);
+
+    // Verify item types
+    const types = items.map(getItemType);
+    expect(types).toContain('date_divider');
+    expect(types).toContain('user');
+    expect(types).toContain('assistant');
+  });
 });
