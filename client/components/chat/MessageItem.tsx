@@ -147,6 +147,7 @@ function MessageItemBase({
             createdAt={message.created_at}
             isUser={isUser}
             isStreaming={isStreaming}
+            inViewport={inViewport}
             aurora={aurora}
             colors={colors}
           />
