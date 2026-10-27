@@ -23,6 +23,11 @@ function looksLikeMath(inner: string): boolean {
 }
 
 function parseNonCode(text: string): ContentSegment[] {
+  if (!text) return [];
+  if (text.indexOf('$') === -1) {
+    return [{ type: 'markdown', content: text }];
+  }
+
   // Match block math $$...$$ and inline math $...$ (avoiding normal currency and empty $)
   const regex = /(\$\$[\s\S]*?\$\$|\$(?!\s)[^\$\n]*?[^\s\$]\$(?!\d))/g;
   const parts = text.split(regex);
@@ -80,6 +85,7 @@ export function clearBlockCache(): void {
   lastPrefix = '';
   lastPrefixSegs = [];
   lastStreamLength = 0;
+  clearIncrementalCache();
 }
 
 function getCachedBlock(key: string): ContentSegment[] | undefined {
@@ -137,12 +143,19 @@ export function splitMarkdownBlocks(text: string): { completed: string[]; active
   return { completed, active };
 }
 
+const FENCE_SPLIT_REGEX = /(```[\s\S]*?(?:```|$))/g;
+
 export function parseContentDirect(text: string): ContentSegment[] {
   if (!text) return [];
 
+  // Fast path: no code blocks and no math delimiters
+  if (text.indexOf('`') === -1 && text.indexOf('$') === -1) {
+    return [{ type: 'markdown', content: text }];
+  }
+
   // FIX-2: strip fenced code blocks before matching so `$` inside code never
   // becomes LaTeX — code chunks stay verbatim markdown.
-  const chunks = text.split(/(```[\s\S]*?(?:```|$))/g);
+  const chunks = text.split(FENCE_SPLIT_REGEX);
 
   const out: ContentSegment[] = [];
   for (const chunk of chunks) {
@@ -157,6 +170,10 @@ export function parseContentDirect(text: string): ContentSegment[] {
 }
 
 export function findLastBlockBoundary(text: string, startFrom: number = 0): number {
+  if (text.indexOf('\n\n', startFrom) === -1 && text.indexOf('\r\n\r\n', startFrom) === -1) {
+    return startFrom;
+  }
+
   let lastBoundary = startFrom;
   let inCode = false;
   let inMath = false;
@@ -203,57 +220,91 @@ export function findLastBlockBoundary(text: string, startFrom: number = 0): numb
 }
 
 export function parseContentIncremental(text: string): ContentSegment[] {
+  return parseContentIncrementalFast(text);
+}
+
+let cachedPrefixText = '';
+let cachedPrefixSegments: ContentSegment[] = [];
+let cachedStreamLength = 0;
+
+export function clearIncrementalCache(): void {
+  cachedPrefixText = '';
+  cachedPrefixSegments = [];
+  cachedStreamLength = 0;
+}
+
+export function concatSegments(prefix: ContentSegment[], suffix: ContentSegment[]): ContentSegment[] {
+  const pLen = prefix.length;
+  const sLen = suffix.length;
+  if (pLen === 0) return suffix;
+  if (sLen === 0) return prefix;
+  const lastPrefix = prefix[pLen - 1];
+  const firstSuffix = suffix[0];
+  if (
+    lastPrefix.type === 'markdown' &&
+    firstSuffix.type === 'markdown' &&
+    !firstSuffix.content.startsWith('```') &&
+    !lastPrefix.content.startsWith('```')
+  ) {
+    const merged: ContentSegment = {
+      type: 'markdown',
+      content: lastPrefix.content + firstSuffix.content,
+    };
+    const out = new Array<ContentSegment>(pLen + sLen - 1);
+    for (let i = 0; i < pLen - 1; i++) {
+      out[i] = prefix[i];
+    }
+    out[pLen - 1] = merged;
+    for (let j = 1; j < sLen; j++) {
+      out[pLen - 1 + j] = suffix[j];
+    }
+    return out;
+  }
+  return prefix.concat(suffix);
+}
+
+export function parseContentIncrementalFast(text: string): ContentSegment[] {
   if (!text) return [];
 
-  const isExtending =
-    lastPrefix.length > 0 &&
-    (text.length >= lastStreamLength
-      ? text.charCodeAt(0) === lastPrefix.charCodeAt(0) &&
-        text.charCodeAt(lastPrefix.length - 1) === lastPrefix.charCodeAt(lastPrefix.length - 1)
-      : text.startsWith(lastPrefix));
+  const cLen = cachedPrefixText.length;
+  if (cLen > 0) {
+    const isExtending =
+      text.length >= cachedStreamLength &&
+      text.charCodeAt(0) === cachedPrefixText.charCodeAt(0) &&
+      text.charCodeAt(cLen - 1) === cachedPrefixText.charCodeAt(cLen - 1);
 
-  lastStreamLength = text.length;
-
-  const searchStart = isExtending ? lastPrefix.length : 0;
-  const splitIdx = findLastBlockBoundary(text, searchStart);
-  if (splitIdx === 0) {
-    return parseContentDirect(text);
-  }
-
-  let prefixSegs: ContentSegment[] | undefined;
-
-  if (isExtending && splitIdx === lastPrefix.length) {
-    prefixSegs = lastPrefixSegs;
-  } else {
-    const completedPrefix = text.slice(0, splitIdx);
-    if (isExtending && completedPrefix.startsWith(lastPrefix)) {
-      // Incremental prefix extension: parse only the newly completed delta
-      const delta = completedPrefix.slice(lastPrefix.length);
-      const deltaSegs = parseContentDirect(delta);
-      prefixSegs = lastPrefixSegs.concat(deltaSegs);
-      lastPrefix = completedPrefix;
-      lastPrefixSegs = prefixSegs;
-      setCachedBlock(completedPrefix, prefixSegs);
-    } else {
-      prefixSegs = getCachedBlock(completedPrefix);
-      if (!prefixSegs) {
-        prefixSegs = parseContentDirect(completedPrefix);
-        setCachedBlock(completedPrefix, prefixSegs);
-      }
-      lastPrefix = completedPrefix;
-      lastPrefixSegs = prefixSegs;
+    if (!isExtending && !text.startsWith(cachedPrefixText)) {
+      cachedPrefixText = '';
+      cachedPrefixSegments = [];
     }
   }
+  cachedStreamLength = text.length;
 
-  const activeBlock = text.slice(splitIdx);
-  if (activeBlock.length === 0) {
-    return prefixSegs;
+  const lastBoundary = findLastBlockBoundary(text, cachedPrefixText.length);
+
+  // If text advances past cached prefix and has a stable block boundary
+  if (lastBoundary > cachedPrefixText.length) {
+    const deltaText = text.slice(cachedPrefixText.length, lastBoundary);
+    const deltaSegments = parseContentDirect(deltaText);
+
+    cachedPrefixSegments = concatSegments(cachedPrefixSegments, deltaSegments);
+    cachedPrefixText = text.slice(0, lastBoundary);
   }
 
-  const activeSegs = parseContentDirect(activeBlock);
-  return prefixSegs.concat(activeSegs);
+  // Parse only the active streaming suffix
+  const suffixText = text.slice(cachedPrefixText.length);
+  let suffixSegments: ContentSegment[];
+  if (suffixText.length === 0) {
+    suffixSegments = [];
+  } else if (suffixText.indexOf('$') === -1) {
+    suffixSegments = [{ type: 'markdown', content: suffixText }];
+  } else {
+    suffixSegments = parseContentDirect(suffixText);
+  }
+
+  return concatSegments(cachedPrefixSegments, suffixSegments);
 }
 
 export function parseContent(text: string): ContentSegment[] {
-  return parseContentIncremental(text);
+  return parseContentIncrementalFast(text);
 }
