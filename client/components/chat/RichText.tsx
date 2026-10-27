@@ -61,6 +61,31 @@ export default function RichText({
       const lang = node.info || '';
 
       if (lang.toLowerCase().trim() === 'mermaid') {
+        if (isStreaming) {
+          return (
+            <View
+              key={node.key}
+              testID="streaming-mermaid-placeholder"
+              style={[
+                styles.codeBlockWrapper,
+                styles.streamingMermaidWrapper,
+                { backgroundColor: colors.codeBg || colors.background, borderColor: colors.border },
+              ]}
+            >
+              <View style={[styles.codeBlockHeader, { borderBottomColor: colors.border, backgroundColor: 'rgba(0, 0, 0, 0.25)' }]}>
+                <Text style={[styles.codeBlockLang, { color: accentHex }]}>
+                  MERMAID (STREAMING…)
+                </Text>
+              </View>
+              <ScrollView horizontal={true} showsHorizontalScrollIndicator={false} style={{ width: '100%' }} contentContainerStyle={{ flexGrow: 1 }}>
+                <Text style={[styles.codeText, { color: colors.textMuted, fontSize: sizes.text - 1, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }]}>
+                  {codeText.replace(/\n$/, '')}
+                </Text>
+              </ScrollView>
+            </View>
+          );
+        }
+
         const Mermaid = getMermaidRenderer();
         return (
           <Mermaid
@@ -121,7 +146,7 @@ export default function RichText({
         </View>
       );
     }
-  }), [theme, fontSize, accentColor, colors, sizes]);
+  }), [theme, fontSize, accentColor, colors, sizes, accentHex, isStreaming]);
 
   const dynamicMarkdownStyles = useMemo(() => ({
     body: {
@@ -254,6 +279,34 @@ export default function RichText({
         if (segment.type === 'markdown') {
           return <Markdown key={index} rules={rules} style={dynamicMarkdownStyles as any}>{segment.content}</Markdown>;
         } else if (segment.type === 'latex-inline') {
+          if (isStreaming) {
+            return (
+              <View
+                key={index}
+                testID="streaming-latex-inline"
+                style={[
+                  styles.streamingMathBadge,
+                  {
+                    backgroundColor: colors.codeBg || 'rgba(0, 0, 0, 0.25)',
+                    borderColor: colors.glassBorder || colors.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.streamingMathText,
+                    {
+                      color: colors.codeFg || accentHex,
+                      fontSize: sizes.text - 1,
+                      fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+                    },
+                  ]}
+                >
+                  {`$${segment.content}$`}
+                </Text>
+              </View>
+            );
+          }
           const Latex = getLatexRenderer();
           return (
             <Latex
@@ -263,6 +316,35 @@ export default function RichText({
             />
           );
         } else if (segment.type === 'latex-block') {
+          if (isStreaming) {
+            return (
+              <View
+                key={index}
+                testID="streaming-latex-block"
+                style={[
+                  styles.streamingMathBlock,
+                  {
+                    backgroundColor: colors.codeBg || 'rgba(0, 0, 0, 0.25)',
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.streamingMathText,
+                    {
+                      color: colors.codeFg || accentHex,
+                      fontSize: sizes.text,
+                      fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+                      textAlign: 'center',
+                    },
+                  ]}
+                >
+                  {`$$\n${segment.content}\n$$`}
+                </Text>
+              </View>
+            );
+          }
           const Latex = getLatexRenderer();
           return (
             <Latex
@@ -315,5 +397,27 @@ const styles = StyleSheet.create({
   codeText: {
     padding: 14,
     lineHeight: 20,
+  },
+  streamingMathBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    marginVertical: 2,
+    alignSelf: 'flex-start',
+  },
+  streamingMathBlock: {
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginVertical: 8,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+  },
+  streamingMathText: {
+    fontWeight: '500',
+  },
+  streamingMermaidWrapper: {
+    opacity: 0.9,
   },
 });

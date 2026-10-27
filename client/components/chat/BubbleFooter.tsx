@@ -14,6 +14,7 @@ export interface BubbleFooterProps {
   createdAt?: string;
   isUser: boolean;
   isStreaming?: boolean;
+  inViewport?: boolean;
   aurora: AuroraGradient;
   colors: ThemeColors;
 }
@@ -22,11 +23,12 @@ export default function BubbleFooter({
   createdAt,
   isUser,
   isStreaming = false,
+  inViewport = true,
   aurora,
   colors,
 }: BubbleFooterProps) {
   const formatted = formatTimestamp(createdAt);
-  const showDot = Boolean(isStreaming && !isUser && formatted !== null);
+  const showDot = Boolean(isStreaming && !isUser && formatted !== null && inViewport);
   const pulse = useRef(new Animated.Value(0.4)).current;
 
   useEffect(() => {

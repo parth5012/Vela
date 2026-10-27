@@ -12,12 +12,17 @@ import { WebView } from 'react-native-webview';
 interface LatexRendererProps {
   formula: string;
   displayMode?: boolean;
+  isStreaming?: boolean;
 }
 
 const SCRIPT_CLOSE_REGEX = /<\/script/gi;
 const LT_REGEX = /</g;
 
-export default function LatexRenderer({ formula, displayMode = false }: LatexRendererProps) {
+export default function LatexRenderer({
+  formula,
+  displayMode = false,
+  isStreaming = false,
+}: LatexRendererProps) {
   const [height, setHeight] = useState(displayMode ? 60 : 30);
   const [hasError, setHasError] = useState(false);
 
@@ -106,9 +111,12 @@ export default function LatexRenderer({ formula, displayMode = false }: LatexRen
 
   const webViewSource = useMemo(() => ({ html: htmlContent }), [htmlContent]);
 
-  if (Platform.OS === 'web' || hasError) {
+  if (Platform.OS === 'web' || hasError || isStreaming) {
     return (
-      <View style={[styles.fallbackContainer, displayMode && styles.blockPadding]}>
+      <View
+        testID="latex-deferred-fallback"
+        style={[styles.fallbackContainer, displayMode && styles.blockPadding]}
+      >
         <Text style={styles.fallbackText}>
           {displayMode ? `$$\n${formula}\n$$` : `$${formula}$`}
         </Text>

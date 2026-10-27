@@ -9,6 +9,7 @@ interface MermaidRendererProps {
   theme?: 'deep' | 'slate' | 'cyberpunk' | 'nordic' | 'dracula' | 'oled';
   fontSize?: 'small' | 'medium' | 'large';
   accentColor?: 'indigo' | 'emerald' | 'rose' | 'amber' | 'violet' | 'pink' | 'orange' | 'blue';
+  isStreaming?: boolean;
 }
 
 const LT_REGEX = /</g;
@@ -19,6 +20,7 @@ export default function MermaidRenderer({
   theme = 'deep',
   fontSize = 'medium',
   accentColor = 'indigo',
+  isStreaming = false,
 }: MermaidRendererProps) {
   const [activeTab, setActiveTab] = useState<'diagram' | 'source'>('diagram');
   const [height, setHeight] = useState(180);
@@ -136,14 +138,17 @@ export default function MermaidRenderer({
 
   const webViewSource = useMemo(() => ({ html: htmlContent }), [htmlContent]);
 
-  // Fallback for Web targets where WebView is unavailable
-  if (Platform.OS === 'web') {
+  // Fallback for Web targets where WebView is unavailable, or during active streaming
+  if (Platform.OS === 'web' || isStreaming) {
     return renderSourceView();
   }
 
   function renderSourceView() {
     return (
-      <View style={[styles.codeBlockWrapper, { backgroundColor: colors.background, borderColor: colors.border }]}>
+      <View
+        testID="mermaid-source-view"
+        style={[styles.codeBlockWrapper, { backgroundColor: colors.background, borderColor: colors.border }]}
+      >
         {hasError && (
           <View style={styles.errorBanner}>
             <Text style={styles.errorText}>⚠️ Mermaid render failed. Showing source view.</Text>
