@@ -228,6 +228,147 @@ export const streamLocalResponse = async (threadId: string, userQuery: string, h
   }
 };
 
+// Shared implementation of cloud model prompt compiling, token streaming, and tool execution
+export const streamCloudChatResponse = async (
+  threadId: string,
+  historyList: Message[]
+) => {
+  try {
+    await streamController.startStream(threadId, async (signal) => {
+      const config = useConfigStore.getState();
+      const provider = config.activeCloudProvider || 'gemini';
+      const providerConfig = config.cloudProviders?.[provider];
+      const apiKey = config.cloudApiKeys?.[provider] || '';
+
+      const threads = useChatStore.getState().threads;
+      const activeThread = threads.find((t) => t.id === threadId);
+      const selectedAgentId = activeThread?.agent || 'personal assistant';
+      const agents = getCachedAgents();
+      const activeAgent = agents.find((candidate) => candidate.id === selectedAgentId);
+      const agentPrompt = resolveAgentPrompt(selectedAgentId, agents);
+
+      // Inject active skill prompt if set (standalone mode)
+      const cloudThreadSkill = activeThread?.active_skill as SkillId | undefined;
+      const cloudSkillAugmented = cloudThreadSkill && SKILL_PROMPTS[cloudThreadSkill]
+        ? `${agentPrompt}\n\n# Active Skill Instructions\n${SKILL_PROMPTS[cloudThreadSkill]}`
+        : agentPrompt;
+
+      const systemPromptToUse = config.systemPromptEnabled === false ? undefined : cloudSkillAugmented;
+
+      const contextMessages = buildContextMessages(historyList, {
+        maxMessages: config.contextCompression ? 30 : 100,
+      });
+
+      const cloudTools = buildVercelCloudTools(
+        {},
+        {
+          evaluateSafety,
+          memoryStore: {
+            saveMemory: (_convId, fact) => saveMemory(threadId, fact),
+            deleteMemory: (_convId, fact) => deleteMemory(threadId, fact),
+          },
+        },
+        {
+          onToolCall: (call) => {
+            if (signal.aborted) {
+              const err = new Error('AbortError');
+              err.name = 'AbortError';
+              throw err;
+            }
+            streamController.appendChunk(threadId, `\n\n🔧 *Executing ${call.toolName}...*\n`);
+          },
+          onToolResult: (res) => {
+            if (signal.aborted) {
+              const err = new Error('AbortError');
+              err.name = 'AbortError';
+              throw err;
+            }
+            if (!res.result?.success) {
+              streamController.appendChunk(threadId, `\n⚠️ *Tool output: ${res.result?.output}*\n`);
+            }
+          },
+        }
+      );
+
+      try {
+        await streamCloudResponse({
+          provider,
+          apiKey,
+          model: activeAgent?.model?.trim() || providerConfig?.model || 'gemini-1.5-flash',
+          baseUrl: providerConfig?.baseUrl,
+          systemPrompt: systemPromptToUse,
+          temperature: config.temperature,
+          maxTokens: config.maxTokens,
+          messages: contextMessages,
+          tools: cloudTools,
+          signal,
+          onToken: (chunk) => {
+            if (!signal.aborted) {
+              streamController.appendChunk(threadId, chunk);
+            }
+          },
+          onDone: () => {},
+          onError: (error: any) => {
+            if (signal.aborted) return;
+            const errText = `⚠️ **[${provider.toUpperCase()} Error]** ${error?.message || 'Cloud inference failed.'}`;
+            const cur = useChatStore.getState().messages[threadId] || [];
+            const last = cur[cur.length - 1];
+            if (last?.role === 'assistant') {
+              useChatStore.getState().appendToken(threadId, `\n\n${errText}`);
+            } else {
+              useChatStore.getState().addMessage(threadId, {
+                id: generateId('msg_assistant'),
+                role: 'assistant',
+                content: errText,
+                created_at: new Date().toISOString(),
+              });
+            }
+          },
+        });
+      } catch (e: any) {
+        if (signal.aborted || e?.name === 'AbortError') return;
+        console.error('[Cloud Stream Error]:', e);
+        const errText = `⚠️ **[${provider.toUpperCase()} Error]** ${e?.message || 'Cloud inference failed.'}`;
+        const cur = useChatStore.getState().messages[threadId] || [];
+        const last = cur[cur.length - 1];
+        if (last?.role === 'assistant') {
+          useChatStore.getState().appendToken(threadId, `\n\n${errText}`);
+        } else {
+          useChatStore.getState().addMessage(threadId, {
+            id: generateId('msg_assistant'),
+            role: 'assistant',
+            content: errText,
+            created_at: new Date().toISOString(),
+          });
+        }
+      }
+    });
+  } catch (e: any) {
+    console.error('[streamCloudChatResponse] Error:', e);
+  }
+};
+
+export function handleSendPressAction(params: {
+  isCurrentThreadStreaming: boolean;
+  activeThreadId: string | null;
+  input: string;
+  onStop: (threadId: string) => void | Promise<void>;
+  onSend: () => void | Promise<void>;
+  onSendWelcome: (input: string) => void | Promise<void>;
+}): void {
+  // While streaming, the button acts as "Stop" — onStop owns the abort path.
+  if (params.isCurrentThreadStreaming && params.activeThreadId) {
+    params.onStop(params.activeThreadId);
+    return;
+  }
+  if (params.activeThreadId) {
+    Promise.resolve(params.onSend()).catch((err) => console.error('[handleSendPress] error:', err));
+    return;
+  }
+  if (!params.input.trim()) return;
+  Promise.resolve(params.onSendWelcome(params.input)).catch((err) => console.error('[handleSendPress] error:', err));
+}
+
 export default function ChatScreen() {
   const router = useRouter();
   const executedDeviceToolsRef = React.useRef(new Set());
@@ -358,15 +499,16 @@ export default function ChatScreen() {
 
   React.useEffect(() => {
     return () => {
-      streamController.abortAll();
+      // Unmount cleanup must not destructively abort server producer (map #480 locked decision / 481a466a)
+      streamController.abortAll({ notifyBackend: false });
     };
   }, []);
 
-  // Backgrounding mid-stream aborts all active streams.
+  // Backgrounding mid-stream aborts local streams without cancelling server producer (map #480 locked decision / 481a466a)
   React.useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state !== 'active') {
-        streamController.abortAll();
+        streamController.abortAll({ notifyBackend: false });
       }
     });
     return () => sub.remove();
@@ -600,123 +742,6 @@ export default function ChatScreen() {
       [msgId]: !prev[msgId]
     }));
   }, []);
-
-  const streamCloudChatResponse = async (
-    threadId: string,
-    historyList: Message[]
-  ) => {
-    try {
-      await streamController.startStream(threadId, async (signal) => {
-      const config = useConfigStore.getState();
-      const provider = config.activeCloudProvider || 'gemini';
-      const providerConfig = config.cloudProviders?.[provider];
-      const apiKey = config.cloudApiKeys?.[provider] || '';
-
-      const activeThread = threads.find((t) => t.id === threadId);
-      const selectedAgentId = activeThread?.agent || 'personal assistant';
-      const activeAgent = agents.find((candidate) => candidate.id === selectedAgentId);
-      const agentPrompt = resolveAgentPrompt(selectedAgentId, agents);
-
-      // Inject active skill prompt if set (standalone mode)
-      const cloudThreadSkill = activeThread?.active_skill as SkillId | undefined;
-      const cloudSkillAugmented = cloudThreadSkill && SKILL_PROMPTS[cloudThreadSkill]
-        ? `${agentPrompt}\n\n# Active Skill Instructions\n${SKILL_PROMPTS[cloudThreadSkill]}`
-        : agentPrompt;
-
-      const systemPromptToUse = config.systemPromptEnabled === false ? undefined : cloudSkillAugmented;
-
-      const contextMessages = buildContextMessages(historyList, {
-        maxMessages: config.contextCompression ? 30 : 100,
-      });
-
-      const cloudTools = buildVercelCloudTools(
-        {},
-        {
-          evaluateSafety,
-          memoryStore: {
-            saveMemory: (_convId, fact) => saveMemory(threadId, fact),
-            deleteMemory: (_convId, fact) => deleteMemory(threadId, fact),
-          },
-        },
-        {
-          onToolCall: (call) => {
-            if (signal.aborted) {
-              const err = new Error('AbortError');
-              err.name = 'AbortError';
-              throw err;
-            }
-            streamController.appendChunk(threadId, `\n\n🔧 *Executing ${call.toolName}...*\n`);
-          },
-          onToolResult: (res) => {
-            if (signal.aborted) {
-              const err = new Error('AbortError');
-              err.name = 'AbortError';
-              throw err;
-            }
-            if (!res.result?.success) {
-              streamController.appendChunk(threadId, `\n⚠️ *Tool output: ${res.result?.output}*\n`);
-            }
-          },
-        }
-      );
-
-      try {
-        await streamCloudResponse({
-          provider,
-          apiKey,
-          model: activeAgent?.model?.trim() || providerConfig?.model || 'gemini-1.5-flash',
-          baseUrl: providerConfig?.baseUrl,
-          systemPrompt: systemPromptToUse,
-          temperature: config.temperature,
-          maxTokens: config.maxTokens,
-          messages: contextMessages,
-          tools: cloudTools,
-          signal,
-          onToken: (chunk) => {
-            if (!signal.aborted) {
-              streamController.appendChunk(threadId, chunk);
-            }
-          },
-          onDone: () => {},
-          onError: (error: any) => {
-            if (signal.aborted) return;
-            const errText = `⚠️ **[${provider.toUpperCase()} Error]** ${error?.message || 'Cloud inference failed.'}`;
-            const cur = useChatStore.getState().messages[threadId] || [];
-            const last = cur[cur.length - 1];
-            if (last?.role === 'assistant') {
-              appendToken(threadId, `\n\n${errText}`);
-            } else {
-              addMessage(threadId, {
-                id: generateId('msg_assistant'),
-                role: 'assistant',
-                content: errText,
-                created_at: new Date().toISOString(),
-              });
-            }
-          },
-        });
-      } catch (e: any) {
-        if (signal.aborted || e?.name === 'AbortError') return;
-        console.error('[Cloud Stream Error]:', e);
-        const errText = `⚠️ **[${provider.toUpperCase()} Error]** ${e?.message || 'Cloud inference failed.'}`;
-        const cur = useChatStore.getState().messages[threadId] || [];
-        const last = cur[cur.length - 1];
-        if (last?.role === 'assistant') {
-          appendToken(threadId, `\n\n${errText}`);
-        } else {
-          addMessage(threadId, {
-            id: generateId('msg_assistant'),
-            role: 'assistant',
-            content: errText,
-            created_at: new Date().toISOString(),
-          });
-        }
-      }
-    });
-    } catch (e: any) {
-      console.error('[streamCloudChatResponse] Error:', e);
-    }
-  };
 
   const handleSend = useCallback(async () => {
     if (!activeThreadId) return;
@@ -1034,17 +1059,16 @@ export default function ChatScreen() {
   ]);
 
   const handleSendPress = () => {
-    // While streaming, the button acts as "Stop" — handleSend owns the abort path.
-    if (isCurrentThreadStreaming && activeThreadId) {
-      streamController.stopStream(activeThreadId);
-      return;
-    }
-    if (activeThreadId) {
-      handleSend().catch((err) => console.error('[handleSendPress] error:', err));
-      return;
-    }
-    if (!input.trim()) return;
-    handleSendWelcome(input).catch((err) => console.error('[handleSendPress] error:', err));
+    handleSendPressAction({
+      isCurrentThreadStreaming,
+      activeThreadId,
+      input,
+      onStop: (threadId) => {
+        streamController.stopStream(threadId);
+      },
+      onSend: handleSend,
+      onSendWelcome: handleSendWelcome,
+    });
   };
 
 

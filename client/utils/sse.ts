@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import { stripReasoning, EMPTY_RESPONSE_ERROR_HINT } from './reasoning';
 import { withRetry, isTransientError } from './retry';
+import { streamController } from './streamController';
 
 const normalizeUrl = (rawUrl: string): string => {
   let formattedUrl = (rawUrl || '').trim();
@@ -25,7 +26,8 @@ async function executeStreamRequest(
   signal?: AbortSignal,
   agent?: string,
   onAuthRequired?: (provider: string) => void,
-  timeoutMs: number = DEFAULT_TIMEOUT_MS
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+  streamGeneration?: number
 ): Promise<void> {
   // Create a timeout controller to abort the request if it takes too long
   let resetTimeout: () => void = () => {};
@@ -63,11 +65,20 @@ async function executeStreamRequest(
 
     console.log('[streamAgentResponse] Sending request to:', `${formattedUrl}/chat/message`, 'agent:', requestAgent);
 
-    const requestBody = JSON.stringify({
+    const effectiveGeneration = streamGeneration !== undefined
+      ? streamGeneration
+      : (streamController.getGeneration ? streamController.getGeneration(threadId) : undefined);
+
+    const bodyObj: Record<string, any> = {
       thread_id: threadId,
       message,
       agent: requestAgent,
-    });
+    };
+    if (effectiveGeneration !== undefined && effectiveGeneration > 0) {
+      bodyObj.stream_generation = effectiveGeneration;
+    }
+
+    const requestBody = JSON.stringify(bodyObj);
     resetTimeout = () => {
       clearTimeout(timeoutId);
       timeoutId = setTimeout(() => {
@@ -154,6 +165,9 @@ async function executeStreamRequest(
               handleStreamEnd(parsed.thread_title);
               console.log('[streamAgentResponse] Stream complete, total chunks:', chunkCount);
               return;
+            } else if (parsed.type === 'thread_stopped') {
+              console.log('[streamAgentResponse] Stream stopped by server');
+              return;
             } else if (parsed.type === 'error') {
               onError(new Error(parsed.message || 'Unknown server error'));
               return;
@@ -187,6 +201,9 @@ async function executeStreamRequest(
               handleDelta(parsed.delta);
             } else if (parsed.type === 'done') {
               handleStreamEnd(parsed.thread_title);
+              return;
+            } else if (parsed.type === 'thread_stopped') {
+              console.log('[streamAgentResponse] Stream stopped by server');
               return;
             } else if (parsed.type === 'error') {
               onError(new Error(parsed.message || 'Unknown server error'));
@@ -225,7 +242,8 @@ export async function streamAgentResponse(
   agent?: string,
   onAuthRequired?: (provider: string) => void,
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
-  retryOptions?: StreamAgentResponseOptions
+  retryOptions?: StreamAgentResponseOptions,
+  streamGeneration?: number
 ): Promise<void> {
   let emittedAny = false;
   const trackedOnChunk = (chunk: string) => {
@@ -247,7 +265,8 @@ export async function streamAgentResponse(
           signal,
           agent,
           onAuthRequired,
-          timeoutMs
+          timeoutMs,
+          streamGeneration
         ),
       {
         signal,

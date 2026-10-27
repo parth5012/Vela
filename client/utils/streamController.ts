@@ -36,6 +36,10 @@ export interface StreamController {
   appendChunk(threadId: string, chunk: string): void;
   cleanup(threadId: string): void;
   flush(threadId: string): void;
+  /**
+   * Monotonic turn generation per thread (exposed per lower layer's design for generation scoping).
+   */
+  getGeneration(threadId: string): number;
 }
 
 interface StreamEntry {
@@ -262,6 +266,10 @@ export class StreamControllerImpl implements StreamController {
     delete this.pendingTokens[threadId];
   }
 
+  getGeneration(threadId: string): number {
+    return this.streamGenerations[threadId] ?? 0;
+  }
+
   async abortAll(opts?: StreamStopOptions): Promise<void> {
     const threadIds = new Set<string>([
       ...this.abortControllers.keys(),
@@ -286,3 +294,5 @@ export const abortAll = streamController.abortAll.bind(streamController);
 export const appendChunk = streamController.appendChunk.bind(streamController);
 export const cleanup = streamController.cleanup.bind(streamController);
 export const flush = streamController.flush.bind(streamController);
+// Exposed per lower layer's design: monotonic turn generation per thread
+export const getGeneration = streamController.getGeneration.bind(streamController);
