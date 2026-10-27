@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system/legacy';
 import MessageOptionsModal from '../components/ui/MessageOptionsModal';
 import MarkdownViewerOverlay from '../components/ui/MarkdownViewerOverlay';
+import { useActiveStreamStore } from '../store/useActiveStreamStore';
 import { useConfigStore } from '../store/useConfigStore';
 import type { ConnectionMode } from '../store/useConfigStore';
 import { useChatStore, Message, Thread } from '../store/useChatStore';
@@ -141,7 +142,17 @@ export default function ChatScreen() {
   const setThreadSkill = useChatStore((state) => state.setThreadSkill);
   const createThread = useChatStore((state) => state.createThread);
   const addMessage = useChatStore((state) => state.addMessage);
-  const appendToken = useChatStore((state) => state.appendToken);
+  const rawAppendToken = useChatStore((state) => state.appendToken);
+  const appendToken = useCallback((threadId: string, token: string) => {
+    const activeStream = useActiveStreamStore.getState();
+    const threadMsgs = useChatStore.getState().messages[threadId] || [];
+    const lastMsg = threadMsgs.length > 0 ? threadMsgs[threadMsgs.length - 1] : null;
+    if (activeStream.isStreaming && lastMsg && activeStream.streamingMessageId === lastMsg.id) {
+      activeStream.appendChunk(token);
+    } else {
+      rawAppendToken(threadId, token);
+    }
+  }, [rawAppendToken]);
   const setThreads = useChatStore((state) => state.setThreads);
   const setHistory = useChatStore((state) => state.setHistory);
   const branchThread = useChatStore((state) => state.branchThread);
@@ -195,27 +206,40 @@ export default function ChatScreen() {
       delete throttleTimersRef.current[threadId];
     }
 
-    // Flush any leftover tokens
+    const activeStream = useActiveStreamStore.getState();
+    const threadMsgs = useChatStore.getState().messages[threadId] || [];
+    const lastMsg = threadMsgs.length > 0 ? threadMsgs[threadMsgs.length - 1] : null;
+    const isTargetOfActiveStream =
+      activeStream.isStreaming && Boolean(lastMsg && activeStream.streamingMessageId === lastMsg.id);
+
+    // Flush any leftover tokens into active stream store or chat store
     if (pendingTokensMapRef.current[threadId]) {
-      appendToken(threadId, pendingTokensMapRef.current[threadId]);
+      if (isTargetOfActiveStream) {
+        useActiveStreamStore.getState().appendChunk(pendingTokensMapRef.current[threadId]);
+      } else {
+        useChatStore.getState().appendToken(threadId, pendingTokensMapRef.current[threadId]);
+      }
     }
     // FIX-3: always drop the buffer entry (even when empty) so a later
     // tick cannot resurrect work for a finished thread.
     delete pendingTokensMapRef.current[threadId];
 
-    // Heal XML tags
-    const threadMsgs = useChatStore.getState().messages[threadId] || [];
+    // Reset stream and capture final accumulated content if matching
+    let finalContent = '';
+    if (isTargetOfActiveStream) {
+      finalContent = useActiveStreamStore.getState().resetStream();
+    }
+
+    // Heal XML tags and commit once to useChatStore and SQLite
     if (threadMsgs.length > 0) {
       const last = threadMsgs[threadMsgs.length - 1];
       if (last.role === 'assistant') {
-        const healed = healXmlTags(last.content);
-        if (healed !== last.content) {
-          const updatedHistory = [...threadMsgs.slice(0, -1), { ...last, content: healed }];
-          setHistory(threadId, updatedHistory);
-        }
+        const rawContent = finalContent || last.content;
+        const healed = healXmlTags(rawContent);
+        useChatStore.getState().updateLastMessageContent(threadId, healed);
       }
     }
-  }, [appendToken, setHistory]);
+  }, []);
 
   const handleScroll = useCallback((event: any) => {
     const currentOffset = event.nativeEvent.contentOffset.y;
@@ -868,6 +892,7 @@ export default function ChatScreen() {
       created_at: nowIso,
     });
 
+    useActiveStreamStore.getState().startStream(assistantMsgId);
     setStreamingThread(activeThreadId, true);
     triggerAutoScroll();
 
@@ -960,6 +985,7 @@ export default function ChatScreen() {
       created_at: new Date().toISOString(),
     });
 
+    useActiveStreamStore.getState().startStream(assistantMsgId);
     setStreamingThread(activeThreadId, true);
 
     if (isLocalMode) {
@@ -1088,6 +1114,7 @@ export default function ChatScreen() {
       created_at: nowIso,
     });
 
+    useActiveStreamStore.getState().startStream(assistantMsgId);
     setStreamingThread(newThreadId, true);
     triggerAutoScroll();
 
