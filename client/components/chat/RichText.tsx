@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { View, StyleSheet, Platform, Text, Pressable, ScrollView } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import Markdown from 'react-native-markdown-display';
-import { parseContent, parseContentIncremental } from '../../utils/latexExtractor';
+import { parseContent, parseContentIncremental, parseContentIncrementalFast } from '../../utils/latexExtractor';
 import { perfTracker } from '../../utils/perfTracker';
 import { THEME_COLORS, FONT_SIZES, ACCENT_COLORS } from '../../utils/theme';
 
@@ -48,7 +48,7 @@ export default function RichText({
 }: RichTextProps) {
   const segments = useMemo(() => {
     return perfTracker.measureMarkdownParse(content, () =>
-      isStreaming ? parseContentIncremental(content) : parseContent(content)
+      isStreaming ? parseContentIncrementalFast(content) : parseContent(content)
     );
   }, [content, isStreaming]);
   const colors = colorsOverride || THEME_COLORS[theme] || THEME_COLORS.deep;
