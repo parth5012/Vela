@@ -4,7 +4,6 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TextInput,
   Pressable,
   KeyboardAvoidingView,
@@ -16,6 +15,7 @@ import {
   Animated,
   Modal,
 } from 'react-native';
+import { FlashList, type FlashListRef, type FlashListProps } from '@shopify/flash-list';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -31,7 +31,7 @@ import MessageItem from '../components/chat/MessageItem';
 import MessageRow from '../components/chat/MessageRow';
 import BubbleFooter from '../components/chat/BubbleFooter';
 import DateDividerPill from '../components/chat/DateDividerPill';
-import { buildChatFeedItems } from '../utils/chatFeed';
+import { buildChatFeedItems, type ChatFeedItem } from '../utils/chatFeed';
 import { ensureThrottleTimer, runServerStream } from '../utils/serverStream';
 import CollapsibleBlock from '../components/chat/CollapsibleBlock';
 import { getCachedParse } from '../utils/parseCache';
@@ -184,14 +184,14 @@ export default function ChatScreen() {
   const accentHex = aurora.acc1;
 
   // Refs
-  const flatListRef = React.useRef<FlatList | null>(null);
+  const flashListRef = React.useRef<FlashListRef<ChatFeedItem> | null>(null);
   const lastOffsetY = React.useRef(0);
   const isAgentBarVisible = React.useRef(true);
 
   const triggerAutoScroll = useCallback(() => {
     if (lastOffsetY.current < 120) {
       setTimeout(() => {
-        flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+        flashListRef.current?.scrollToOffset({ offset: 0, animated: true });
       }, 50);
     }
   }, []);
@@ -1390,21 +1390,18 @@ export default function ChatScreen() {
               </Text>
             </View>
           ) : (
-            <FlatList
-              ref={flatListRef}
+            <FlashList
+              ref={flashListRef}
               data={reversedChatItems}
               inverted
+              getItemType={(item) => (item.type === 'date_divider' ? 'date_divider' : item.message.role)}
+              estimatedItemSize={110}
+              drawDistance={Platform.OS === 'android' ? 300 : 250}
+              keyExtractor={(item) => (item.type === 'date_divider' ? item.id : item.message.id)}
               onScroll={handleScroll}
               scrollEventThrottle={16}
               contentContainerStyle={styles.messagesList}
-              keyExtractor={(item) => item.type === 'date_divider' ? item.id : item.message.id}
-              removeClippedSubviews={false}
-              maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
-              getItemLayout={undefined}
-              windowSize={5}
-              maxToRenderPerBatch={5}
-              updateCellsBatchingPeriod={50}
-              initialNumToRender={6}
+              keyboardShouldPersistTaps="handled"
               renderItem={({ item }) => {
                 // getCachedParse(message.content, isUser) delegated to memoized MessageRow (WF-455-03)
                 if (item.type === 'date_divider') {
