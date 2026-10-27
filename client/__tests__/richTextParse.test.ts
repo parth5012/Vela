@@ -89,13 +89,13 @@ describe('Incremental Block Markdown AST Caching', () => {
       return totalParse250 / Math.max(0.01, totalParse125);
     };
 
-    // Take median of 3 passes to filter out CPU scheduling jitter
+    // Take median of 5 passes to filter out CPU scheduling jitter
     const ratios: number[] = [];
-    for (let pass = 0; pass < 3; pass++) {
+    for (let pass = 0; pass < 5; pass++) {
       ratios.push(measurePass());
     }
     ratios.sort((a, b) => a - b);
-    const quadraticRatio = ratios[1]; // median
+    const quadraticRatio = ratios[2]; // median
 
     // Sub-quadratic invariant: ratio of total CPU parse duration for 2x tokens must be < 3.5 (strictly sub-quadratic O(N), not O(N^2) which scales 4.0+)
     expect(quadraticRatio).toBeLessThan(3.5);
