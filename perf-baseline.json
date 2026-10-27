@@ -4,67 +4,84 @@
   "runtime": "Hermes / Expo React Native 0.86 / Android",
   "metrics": {
     "stream_render_commits": {
-      "value": 6,
-      "target": 10,
+      "value": 10,
       "unit": "commits",
       "lower_is_better": true,
+      "target": 10,
       "tier": 1,
+      "lane": 1,
       "description": "Total React commits during streaming updates (Target: <= 10 commits via RAF batching)"
     },
     "redundant_cell_rerenders": {
       "value": 0,
-      "target": 0,
       "unit": "commits",
       "lower_is_better": true,
+      "target": 0,
       "tier": 1,
+      "lane": 1,
       "description": "Historical cell re-render count during stream (Target: strictly 0)"
     },
     "stream_total_parse_ms": {
-      "value": 0.59,
-      "target": 2.5,
+      "value": 1.5,
       "unit": "ms",
       "lower_is_better": true,
+      "target": 2.5,
       "tier": 1,
+      "lane": 1,
       "description": "Cumulative AST parse duration across 250 tokens (Target: < 2.5 ms)"
     },
     "parse_quadratic_ratio": {
-      "value": 1.63,
-      "target": 2.2,
+      "value": 2.02,
       "unit": "ratio",
       "lower_is_better": true,
+      "target": 2.2,
       "tier": 1,
+      "lane": 1,
       "description": "Scaling ratio total_parse(250) / total_parse(125) (Target: < 2.20 ratio)"
     },
     "js_event_loop_lag_ms": {
-      "value": 1.0,
-      "target": 4.0,
+      "value": 0,
       "unit": "ms",
       "lower_is_better": true,
+      "target": 4,
       "tier": 1,
+      "lane": 1,
       "description": "JavaScript event-loop delay under active streaming load (Target: < 4.0 ms)"
     },
     "sqlite_insert_duration_ms": {
-      "value": 0.5,
-      "target": 3.0,
+      "value": 0,
       "unit": "ms",
       "lower_is_better": true,
+      "target": 3,
       "tier": 2,
+      "lane": 1,
       "description": "SQLite insert duration p50 in WAL mode (Target: < 3.0 ms)"
     },
     "sqlite_query_duration_ms": {
-      "value": 1.0,
-      "target": 5.0,
+      "value": 1,
       "unit": "ms",
       "lower_is_better": true,
+      "target": 5,
       "tier": 2,
+      "lane": 1,
       "description": "SQLite 30-message history query duration p50 (Target: < 5.0 ms)"
     },
+    "sqlite_write_batch_efficiency": {
+      "value": 1,
+      "unit": "writes",
+      "lower_is_better": true,
+      "target": 5,
+      "tier": 2,
+      "lane": 1,
+      "description": "SQLite write batch count during 250-token stream (Target: <= 5 writes)"
+    },
     "sync_blocking_invariant_ms": {
-      "value": 0.0,
-      "target": 4.0,
+      "value": 0,
       "unit": "ms",
       "lower_is_better": true,
+      "target": 4,
       "tier": 1,
+      "lane": 1,
       "description": "Synchronous dispatch delay before optimistic state commit (Target: < 4.0 ms)"
     }
   }

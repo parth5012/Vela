@@ -292,12 +292,19 @@ describe('Headless CI Engine Benchmark Suite (18-Metric Ratchet Lane 1)', () => 
     const medianSyncBlocking = Number(trimmedMedian(syncBlockingRuns).toFixed(2));
 
     // Assert Invariants
-    expect(medianRedundant).toBe(0);
-    expect(medianRatio).toBeLessThan(2.5);
-    expect(medianSyncBlocking).toBeLessThan(4.0);
+    // Invariant 1: stream_render_commits <= 15 (Target <= 10 commits via frame batching)
     expect(medianCommits).toBeLessThanOrEqual(10);
+    // Invariant 2: redundant_cell_rerenders == 0 (strictly 0 history cell re-renders)
+    expect(medianRedundant).toBe(0);
+    // Invariant 3: stream_total_parse_ms <= 3.0 across 250 tokens (< 2.5ms target)
+    expect(medianParseMs).toBeLessThanOrEqual(3.0);
+    // Invariant 4: parse_quadratic_ratio = total_parse(250) / total_parse(125) < 2.5 (sub-linear scaling)
+    expect(medianRatio).toBeLessThan(2.5);
+    // Invariant 5: sync_blocking_invariant_ms < 16.6 (< 4.0ms target: optimistic action paints within 1 frame)
+    expect(medianSyncBlocking).toBeLessThan(4.0);
+
+    // Supporting invariants
     expect(medianLagMs).toBeLessThan(4.0);
-    expect(medianParseMs).toBeLessThan(5.0);
     expect(medianSqliteInsert).toBeLessThan(3.0);
     expect(medianSqliteQuery).toBeLessThan(5.0);
     expect(medianSqliteWriteBatch).toBeLessThanOrEqual(5);
@@ -320,7 +327,7 @@ describe('Headless CI Engine Benchmark Suite (18-Metric Ratchet Lane 1)', () => 
           target: 10,
           tier: 1,
           lane: 1,
-          description: 'Total React commits during streaming updates (T3 Chat target <= 10)',
+          description: 'Total React commits during streaming updates (Target: <= 10 commits via RAF batching)',
         },
         redundant_cell_rerenders: {
           value: medianRedundant,
@@ -329,25 +336,25 @@ describe('Headless CI Engine Benchmark Suite (18-Metric Ratchet Lane 1)', () => 
           target: 0,
           tier: 1,
           lane: 1,
-          description: 'Historical cell re-render count during stream (T3 Chat target = 0)',
+          description: 'Historical cell re-render count during stream (Target: strictly 0)',
         },
         stream_total_parse_ms: {
           value: medianParseMs,
           unit: 'ms',
           lower_is_better: true,
-          target: 5.0,
+          target: 2.5,
           tier: 1,
           lane: 1,
-          description: 'Cumulative AST parse duration across 250 tokens (< 5.0ms)',
+          description: 'Cumulative AST parse duration across 250 tokens (Target: < 2.5 ms)',
         },
         parse_quadratic_ratio: {
           value: medianRatio,
           unit: 'ratio',
           lower_is_better: true,
-          target: 2.5,
+          target: 2.2,
           tier: 1,
           lane: 1,
-          description: 'Scaling ratio total_parse(250) / total_parse(125) (< 2.5)',
+          description: 'Scaling ratio total_parse(250) / total_parse(125) (Target: < 2.20 ratio)',
         },
         js_event_loop_lag_ms: {
           value: medianLagMs,
@@ -356,7 +363,7 @@ describe('Headless CI Engine Benchmark Suite (18-Metric Ratchet Lane 1)', () => 
           target: 4.0,
           tier: 1,
           lane: 1,
-          description: 'JavaScript event-loop delay under active streaming load (< 4.0ms)',
+          description: 'JavaScript event-loop delay under active streaming load (Target: < 4.0 ms)',
         },
         sqlite_insert_duration_ms: {
           value: medianSqliteInsert,
@@ -365,7 +372,7 @@ describe('Headless CI Engine Benchmark Suite (18-Metric Ratchet Lane 1)', () => 
           target: 3.0,
           tier: 2,
           lane: 1,
-          description: 'SQLite insert duration p50 (WhatsApp target < 3.0ms)',
+          description: 'SQLite insert duration p50 in WAL mode (Target: < 3.0 ms)',
         },
         sqlite_query_duration_ms: {
           value: medianSqliteQuery,
@@ -374,7 +381,7 @@ describe('Headless CI Engine Benchmark Suite (18-Metric Ratchet Lane 1)', () => 
           target: 5.0,
           tier: 2,
           lane: 1,
-          description: 'SQLite 30-message history query duration p50 (< 5.0ms)',
+          description: 'SQLite 30-message history query duration p50 (Target: < 5.0 ms)',
         },
         sqlite_write_batch_efficiency: {
           value: medianSqliteWriteBatch,
@@ -383,7 +390,7 @@ describe('Headless CI Engine Benchmark Suite (18-Metric Ratchet Lane 1)', () => 
           target: 5,
           tier: 2,
           lane: 1,
-          description: 'SQLite write batch count during 250-token stream (target <= 5 writes)',
+          description: 'SQLite write batch count during 250-token stream (Target: <= 5 writes)',
         },
         sync_blocking_invariant_ms: {
           value: medianSyncBlocking,
@@ -392,7 +399,7 @@ describe('Headless CI Engine Benchmark Suite (18-Metric Ratchet Lane 1)', () => 
           target: 4.0,
           tier: 1,
           lane: 1,
-          description: 'Synchronous dispatch delay before optimistic state commit (WhatsApp target < 4.0ms)',
+          description: 'Synchronous dispatch delay before optimistic state commit (Target: < 4.0 ms)',
         },
       },
     };
