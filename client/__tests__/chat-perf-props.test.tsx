@@ -1,19 +1,56 @@
 ﻿// @ts-nocheck
 import React from 'react';
 import renderer, { act } from 'react-test-renderer';
-import { FlatList, Pressable, Text } from 'react-native';
+import { FlatList } from 'react-native';
 import { streamController } from '../utils/streamController';
+import { handleSendPressAction } from '../app/index';
 
-jest.mock('../utils/streamController', () => ({
-  streamController: {
-    stopStream: jest.fn(async () => {}),
-    startStream: jest.fn(async () => {}),
-    abortAll: jest.fn(async () => {}),
-    appendChunk: jest.fn(),
-    isStreaming: jest.fn(() => false),
-    cleanup: jest.fn(),
-    flush: jest.fn(),
-  },
+jest.mock('@react-native-async-storage/async-storage', () =>
+  require('@react-native-async-storage/async-storage/jest/async-storage-mock')
+);
+
+jest.mock('expo-secure-store', () => ({
+  getItemAsync: jest.fn(async () => null),
+  setItemAsync: jest.fn(async () => {}),
+  deleteItemAsync: jest.fn(async () => {}),
+}));
+
+jest.mock('expo-router', () => ({
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn() }),
+}));
+
+jest.mock('../db/client', () => ({
+  db: null,
+  expoDb: null,
+  initializeDatabase: jest.fn(async () => {}),
+  default: null,
+}));
+
+jest.mock('../db/chatRepository', () => ({
+  saveThread: jest.fn(async () => {}),
+  saveThreads: jest.fn(async () => {}),
+  saveMessage: jest.fn(async () => {}),
+  saveMessages: jest.fn(async () => {}),
+  deleteThreadLocal: jest.fn(async () => {}),
+  deleteMessageLocal: jest.fn(async () => {}),
+  replaceThreadMessages: jest.fn(async () => {}),
+  hydrateChatFromLocalDb: jest.fn(async () => {}),
+  clearChatLocal: jest.fn(async () => {}),
+  queueMessageForSync: jest.fn(async () => {}),
+  isLocalDbAvailable: jest.fn(() => false),
+}));
+
+jest.mock('../utils/localLlm', () => ({
+  initializeLocalModel: jest.fn(async () => {}),
+  streamLocalLlmResponse: jest.fn(),
+  isLocalLlmDown: jest.fn(() => false),
+  isStoredModelUsable: jest.fn(async () => true),
+  localModelStorageKey: jest.fn(),
+  LOCAL_MODELS: {},
+}));
+
+jest.mock('../utils/toolProxy', () => ({
+  parseAndExecuteTools: jest.fn(),
 }));
 
 describe('ChatFlatList performance props', () => {
@@ -59,119 +96,56 @@ describe('ChatFlatList performance props', () => {
   });
 });
 
-describe('ChatSendButton stream toggle and stopStream', () => {
+describe('handleSendPressAction (real Send/Stop dispatch used by ChatScreen)', () => {
+  let stopSpy: jest.SpyInstance;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    // Spy (not replace) the REAL streamController so the dispatch path stays real.
+    stopSpy = jest.spyOn(streamController, 'stopStream').mockResolvedValue(undefined as never);
   });
 
-  const ChatSendButton = ({
-    isCurrentThreadStreaming,
-    input,
-    activeThreadId,
-  }: {
-    isCurrentThreadStreaming: boolean;
-    input: string;
-    activeThreadId: string;
-  }) => {
-    const handleSendPress = () => {
-      if (isCurrentThreadStreaming && activeThreadId) {
-        streamController.stopStream(activeThreadId);
-        return;
-      }
+  const dispatch = (overrides: Partial<Parameters<typeof handleSendPressAction>[0]> = {}) => {
+    const params = {
+      isCurrentThreadStreaming: false,
+      activeThreadId: 'thread-1',
+      input: '',
+      onStop: (threadId: string) => streamController.stopStream(threadId),
+      onSend: jest.fn(),
+      onSendWelcome: jest.fn(),
+      ...overrides,
     };
-
-    return React.createElement(
-      Pressable,
-      {
-        testID: 'send-button',
-        onPress: handleSendPress,
-        disabled: !isCurrentThreadStreaming && !input.trim(),
-        accessibilityRole: 'button',
-        accessibilityLabel: isCurrentThreadStreaming ? 'Stop generating' : 'Send message',
-      },
-      React.createElement(Text, null, isCurrentThreadStreaming ? 'Stop' : 'Send')
-    );
+    handleSendPressAction(params as any);
+    return params;
   };
 
-  it('renders Send button when not streaming and disables it when input is empty', async () => {
-    let tree: any;
-    await act(async () => {
-      tree = renderer.create(
-        React.createElement(ChatSendButton, {
-          isCurrentThreadStreaming: false,
-          input: '',
-          activeThreadId: 'thread-1',
-        })
-      );
-    });
-
-    const button = tree.root.findByProps({ testID: 'send-button' });
-    expect(button.props.accessibilityLabel).toBe('Send message');
-    expect(button.props.disabled).toBe(true);
-
-    const text = button.findByType(Text);
-    expect(text.props.children).toBe('Send');
-  });
-
-  it('renders Send button enabled when not streaming and input is non-empty', async () => {
-    let tree: any;
-    await act(async () => {
-      tree = renderer.create(
-        React.createElement(ChatSendButton, {
-          isCurrentThreadStreaming: false,
-          input: 'Hello',
-          activeThreadId: 'thread-1',
-        })
-      );
-    });
-
-    const button = tree.root.findByProps({ testID: 'send-button' });
-    expect(button.props.accessibilityLabel).toBe('Send message');
-    expect(button.props.disabled).toBe(false);
-
-    const text = button.findByType(Text);
-    expect(text.props.children).toBe('Send');
-  });
-
-  it('toggles Send button to Stop during stream, not disabled even if input is empty', async () => {
-    let tree: any;
-    await act(async () => {
-      tree = renderer.create(
-        React.createElement(ChatSendButton, {
-          isCurrentThreadStreaming: true,
-          input: '',
-          activeThreadId: 'thread-1',
-        })
-      );
-    });
-
-    const button = tree.root.findByProps({ testID: 'send-button' });
-    expect(button.props.accessibilityLabel).toBe('Stop generating');
-    expect(button.props.disabled).toBe(false);
-
-    const text = button.findByType(Text);
-    expect(text.props.children).toBe('Stop');
-  });
-
-  it('tapping Stop calls streamController.stopStream with activeThreadId', async () => {
-    let tree: any;
-    await act(async () => {
-      tree = renderer.create(
-        React.createElement(ChatSendButton, {
-          isCurrentThreadStreaming: true,
-          input: '',
-          activeThreadId: 'thread-xyz',
-        })
-      );
-    });
-
-    const button = tree.root.findByProps({ testID: 'send-button' });
-    await act(async () => {
-      button.props.onPress();
-    });
-
+  it('dispatches stopStream via the REAL streamController when streaming, even with empty input', async () => {
+    const params = dispatch({ isCurrentThreadStreaming: true, activeThreadId: 'thread-xyz', input: '' });
+    expect(params.onSend).not.toHaveBeenCalled();
+    expect(params.onSendWelcome).not.toHaveBeenCalled();
     expect(streamController.stopStream).toHaveBeenCalledTimes(1);
     expect(streamController.stopStream).toHaveBeenCalledWith('thread-xyz');
+  });
+
+  it('forwards handleSend (not stop) when not streaming and thread is active', () => {
+    const params = dispatch({ isCurrentThreadStreaming: false, activeThreadId: 'thread-1', input: 'Hello' });
+    expect(streamController.stopStream).not.toHaveBeenCalled();
+    expect(params.onSend).toHaveBeenCalledTimes(1);
+    expect(params.onSendWelcome).not.toHaveBeenCalled();
+  });
+
+  it('routes empty-thread sends to onSendWelcome only when input is non-empty', () => {
+    const params = dispatch({ isCurrentThreadStreaming: false, activeThreadId: null, input: 'New chat!' });
+    expect(streamController.stopStream).not.toHaveBeenCalled();
+    expect(params.onSend).not.toHaveBeenCalled();
+    expect(params.onSendWelcome).toHaveBeenCalledWith('New chat!');
+  });
+
+  it('ignores empty input when starting a brand-new thread', () => {
+    const params = dispatch({ isCurrentThreadStreaming: false, activeThreadId: null, input: '   ' });
+    expect(params.onSendWelcome).not.toHaveBeenCalled();
+    expect(params.onSend).not.toHaveBeenCalled();
+    expect(streamController.stopStream).not.toHaveBeenCalled();
   });
 });
 
