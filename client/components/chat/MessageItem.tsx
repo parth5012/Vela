@@ -4,6 +4,7 @@ import RichText from './RichText';
 import BubbleFooter from './BubbleFooter';
 import SourceCard from './SourceCard';
 import type { Message } from '../../store/useChatStore';
+import { useActiveStreamStore } from '../../store/useActiveStreamStore';
 
 export interface MessageItemProps {
   message: Message;
@@ -56,6 +57,11 @@ function MessageItemBase({
   compilingIndicator,
   testID,
 }: MessageItemProps) {
+  const streamingText = useActiveStreamStore((s) =>
+    isStreaming && s.streamingMessageId === message.id ? s.streamingText : ''
+  );
+  const effectiveContent = isStreaming && streamingText ? streamingText : message.content;
+
   return (
     <View
       testID={testID || `message-item-${message.id}`}
@@ -96,7 +102,7 @@ function MessageItemBase({
             </Text>
           ) : showRaw ? (
             <Text style={[styles.rawText, { color: colors.text, fontSize: sizes.text }]}>
-              {message.content}
+              {effectiveContent}
             </Text>
           ) : !inViewport ? (
             // Lightweight virtualization: off-screen cell unmounts rich AST parser
@@ -105,11 +111,11 @@ function MessageItemBase({
               numberOfLines={4}
               style={[styles.virtualizedText, { color: colors.textMuted, fontSize: sizes.text }]}
             >
-              {message.content}
+              {effectiveContent}
             </Text>
           ) : bubbleContent.length === 0 ? (
             <RichText
-              content={message.content || '…'}
+              content={effectiveContent || '…'}
               colors={colors}
               sizes={sizes}
               accentHex={accentHex}

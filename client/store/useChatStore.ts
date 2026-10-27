@@ -130,6 +130,7 @@ interface ChatState {
   setThreadSkill: (threadId: string, skillId: SkillId | null) => void;
   addMessage: (threadId: string, message: Message) => void;
   appendToken: (threadId: string, token: string) => void;
+  updateLastMessageContent: (threadId: string, content: string) => void;
   removeLastEmptyAssistant: (threadId: string) => void;
   setThreads: (threads: Thread[]) => void;
   setHistory: (threadId: string, history: Message[]) => void;
@@ -253,6 +254,31 @@ export const useChatStore = create<ChatState>()(
           };
         });
         scheduleMessagePersist(threadId);
+      },
+      updateLastMessageContent: (threadId, content) => {
+        const sanitizedContent = stripReasoning(content, false);
+        set((state) => {
+          const current = state.messages[threadId] || [];
+          if (current.length === 0) return {};
+          const last = current[current.length - 1];
+          if (last.role !== 'assistant') return {};
+          const updatedLast = { ...last, content: sanitizedContent };
+          return {
+            messages: {
+              ...state.messages,
+              [threadId]: [...current.slice(0, -1), updatedLast],
+            },
+          };
+        });
+        if (persistDebounceTimers[threadId]) {
+          clearTimeout(persistDebounceTimers[threadId]);
+          delete persistDebounceTimers[threadId];
+        }
+        const currentList = get().messages[threadId] || [];
+        const lastMsg = currentList[currentList.length - 1];
+        if (lastMsg) {
+          saveMessage(threadId, lastMsg).catch(() => {});
+        }
       },
   removeLastEmptyAssistant: (threadId) =>
     set((state) => {
