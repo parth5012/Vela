@@ -121,27 +121,32 @@ export class StreamControllerImpl implements StreamController {
     this.flush(threadId);
 
     // 3b. WF-455 fast-path fold: if the display overlay buffer holds this
-    // stream's text, capture it once and reset the overlay so the full
-    // content lands in useChatStore exactly at stream end.
+    // stream's text, commit it through updateLastMessageContent — it
+    // sanitizes, clears the persist debounce, and saves to SQLite right
+    // away. Diverted tokens bypass appendToken's scheduleMessagePersist,
+    // so this fold is the only durable write for fast-path streams.
     const activeStream = useActiveStreamStore.getState();
     const preFoldMsgs = useChatStore.getState().messages[threadId] || [];
     const preFoldLast = preFoldMsgs.length > 0 ? preFoldMsgs[preFoldMsgs.length - 1] : null;
-    let finalContent = '';
     if (
       activeStream.isStreaming &&
       preFoldLast &&
       activeStream.streamingMessageId === preFoldLast.id
     ) {
-      finalContent = activeStream.resetStream();
+      const finalContent = activeStream.resetStream();
+      useChatStore.getState().updateLastMessageContent(
+        threadId,
+        healXmlTags(finalContent || preFoldLast.content || '')
+      );
     }
 
-    // 4. Apply healXmlTags to the last assistant message (overlay text wins)
+    // 4. Apply healXmlTags to the last assistant message (non-overlay streams;
+    // their tokens already scheduled a persist via appendToken)
     const threadMsgs = useChatStore.getState().messages[threadId] || [];
     if (threadMsgs.length > 0) {
       const last = threadMsgs[threadMsgs.length - 1];
       if (last.role === 'assistant') {
-        const rawContent = finalContent || last.content || '';
-        const healed = healXmlTags(rawContent);
+        const healed = healXmlTags(last.content || '');
         if (healed !== last.content) {
           const updatedHistory = [...threadMsgs.slice(0, -1), { ...last, content: healed }];
           useChatStore.setState((s) => ({
