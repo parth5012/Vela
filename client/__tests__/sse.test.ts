@@ -1,4 +1,5 @@
 import { streamAgentResponse } from '../utils/sse';
+import { reset, snapshot } from '../utils/metrics';
 
 describe('streamAgentResponse', () => {
   let originalFetch: any;
@@ -480,5 +481,247 @@ describe('streamAgentResponse', () => {
     expect(callCount).toBe(1); // exactly 1 attempt, no retry
     expect(chunks).toEqual(['Partial output']); // chunk emitted exactly once
     expect(error?.message).toContain('Network request failed');
+  });
+});
+
+describe('streamAgentResponse metrics (WF-501)', () => {
+  let originalFetch: any;
+
+  beforeAll(() => {
+    originalFetch = (globalThis as any).fetch;
+  });
+
+  afterAll(() => {
+    (globalThis as any).fetch = originalFetch;
+  });
+
+  beforeEach(() => {
+    reset();
+  });
+
+  interface StreamScript {
+    /** Encoded SSE segments to deliver, one per read() call. */
+    segments?: string[];
+    /** Error thrown by read() after `segments` are exhausted. */
+    readError?: Error;
+    /** Non-ok HTTP response instead of a stream. */
+    httpStatus?: number;
+  }
+
+  const mockFetchStream = (script: StreamScript) => {
+    (globalThis as any).fetch = jest.fn().mockImplementation(() => {
+      if (script.httpStatus !== undefined) {
+        return Promise.resolve({
+          ok: false,
+          status: script.httpStatus,
+          text: () => Promise.resolve(''),
+        });
+      }
+      const mockStream = {
+        getReader() {
+          let i = 0;
+          const segments = script.segments ?? [];
+          return {
+            async read() {
+              if (i >= segments.length) {
+                if (script.readError) throw script.readError;
+                return { value: undefined, done: true };
+              }
+              const value = new TextEncoder().encode(segments[i]);
+              i++;
+              return { value, done: false };
+            },
+          };
+        },
+      };
+      return Promise.resolve({ ok: true, body: mockStream });
+    });
+  };
+
+  it('records attempt/success counters and transport metrics on a successful stream', async () => {
+    const segments = [
+      'data: {"type": "content", "delta": "Hello"}\n\n',
+      'data: {"type": "done", "thread_title": "Greeting"}\n\n',
+    ];
+    mockFetchStream({ segments });
+    const transportBytes = segments.reduce(
+      (sum, s) => sum + new TextEncoder().encode(s).length,
+      0
+    );
+    const bodyBytes = new TextEncoder().encode(
+      JSON.stringify({ thread_id: 'thread-1', message: 'hi', agent: 'personal assistant' })
+    ).length;
+
+    const chunks: string[] = [];
+    let completed = false;
+    let title = '';
+
+    await streamAgentResponse(
+      'http://localhost',
+      'key',
+      'thread-1',
+      'hi',
+      (chunk) => chunks.push(chunk),
+      (t) => { completed = true; title = t || ''; },
+      () => {}
+    );
+
+    expect(chunks).toEqual(['Hello']);
+    expect(completed).toBe(true);
+    expect(title).toBe('Greeting');
+
+    const snap = snapshot();
+    expect(snap.counters['sse.attempts']).toBe(1);
+    expect(snap.counters['sse.successes']).toBe(1);
+    expect(snap.counters['sse.failures.http_error']).toBeUndefined();
+
+    // One sample per attempt for each transport metric.
+    expect(snap.stats['sse.request_bytes']).toMatchObject({ count: 1, max: bodyBytes });
+    expect(snap.stats['sse.bytes_received']).toMatchObject({ count: 1, max: transportBytes });
+    expect(snap.stats['sse.chunk_count']).toMatchObject({ count: 1, max: 2 });
+    expect(snap.stats['sse.ttfc']).toMatchObject({ count: 1 });
+    expect(snap.stats['sse.idle_gap_max']).toMatchObject({ count: 1 });
+    expect(snap.stats['sse.turn_duration']).toMatchObject({ count: 1 });
+  });
+
+  it('records a failure counter with error type on an HTTP error (no retry)', async () => {
+    mockFetchStream({ httpStatus: 500 });
+
+    let errorOccurred = false;
+    await streamAgentResponse(
+      'http://localhost',
+      'key',
+      'thread-1',
+      'hi',
+      () => {},
+      () => {},
+      () => { errorOccurred = true; },
+      undefined,
+      undefined,
+      undefined,
+      90000,
+      { maxRetries: 0, sleepFn: jest.fn().mockResolvedValue(undefined) }
+    );
+
+    expect(errorOccurred).toBe(true);
+
+    const snap = snapshot();
+    expect(snap.counters['sse.attempts']).toBe(1);
+    expect(snap.counters['sse.failures.http_error']).toBe(1);
+    expect(snap.counters['sse.successes']).toBeUndefined();
+
+    // Attempt metrics are still recorded for the failed attempt (counts only).
+    expect(snap.stats['sse.request_bytes']).toMatchObject({
+      count: 1,
+      max: new TextEncoder().encode(
+        JSON.stringify({ thread_id: 'thread-1', message: 'hi', agent: 'personal assistant' })
+      ).length,
+    });
+    expect(snap.stats['sse.bytes_received']).toMatchObject({ count: 1, max: 0 });
+    expect(snap.stats['sse.chunk_count']).toMatchObject({ count: 1, max: 0 });
+    expect(snap.stats['sse.ttfc']).toMatchObject({ count: 1 });
+    expect(snap.stats['sse.idle_gap_max']).toMatchObject({ count: 1 });
+    expect(snap.stats['sse.turn_duration']).toMatchObject({ count: 1 });
+  });
+
+  it('counts one failure per attempt across retries and a success on the final attempt', async () => {
+    let callCount = 0;
+    (globalThis as any).fetch = jest.fn().mockImplementation(() => {
+      callCount++;
+      if (callCount <= 2) {
+        return Promise.resolve({
+          ok: false,
+          status: 503,
+          text: () => Promise.resolve('Service Unavailable'),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        body: {
+          getReader() {
+            let i = 0;
+            const segments = ['data: {"type": "content", "delta": "OK!"}\n', 'data: {"type": "done"}\n'];
+            return {
+              async read() {
+                if (i >= segments.length) return { value: undefined, done: true };
+                const value = new TextEncoder().encode(segments[i]);
+                i++;
+                return { value, done: false };
+              },
+            };
+          },
+        },
+      });
+    });
+
+    await streamAgentResponse(
+      'http://localhost',
+      'key',
+      'thread-1',
+      'hi',
+      () => {},
+      () => {},
+      () => {},
+      undefined,
+      undefined,
+      undefined,
+      90000,
+      { maxRetries: 2, sleepFn: jest.fn().mockResolvedValue(undefined) }
+    );
+
+    expect(callCount).toBe(3);
+
+    const snap = snapshot();
+    expect(snap.counters['sse.attempts']).toBe(3);
+    expect(snap.counters['sse.failures.http_error']).toBe(2);
+    expect(snap.counters['sse.successes']).toBe(1);
+  });
+
+  it('records a failure counter with error type when the server emits an error event', async () => {
+    mockFetchStream({ segments: ['data: {"type": "error", "message": "boom"}\n\n'] });
+
+    let errorOccurred = false;
+    await streamAgentResponse(
+      'http://localhost',
+      'key',
+      'thread-1',
+      'hi',
+      () => {},
+      () => {},
+      () => { errorOccurred = true; }
+    );
+
+    expect(errorOccurred).toBe(true);
+
+    const snap = snapshot();
+    expect(snap.counters['sse.attempts']).toBe(1);
+    expect(snap.counters['sse.failures.server_error']).toBe(1);
+    expect(snap.counters['sse.successes']).toBeUndefined();
+  });
+
+  it('records a failure counter with error type when the body stream is unreadable', async () => {
+    (globalThis as any).fetch = jest.fn().mockImplementation(() => {
+      return Promise.resolve({ ok: true, body: null });
+    });
+
+    let errorOccurred = false;
+    let errorMessage = '';
+    await streamAgentResponse(
+      'http://localhost',
+      'key',
+      'thread-1',
+      'hi',
+      () => {},
+      () => {},
+      (err) => { errorOccurred = true; errorMessage = err.message; }
+    );
+
+    expect(errorOccurred).toBe(true);
+    expect(errorMessage).toBe('Response body is not readable');
+
+    const snap = snapshot();
+    expect(snap.counters['sse.attempts']).toBe(1);
+    expect(snap.counters['sse.failures.network_error']).toBe(1);
+    expect(snap.counters['sse.successes']).toBeUndefined();
   });
 });
