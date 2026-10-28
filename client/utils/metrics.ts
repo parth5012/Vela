@@ -73,17 +73,17 @@ class MetricsBuffer {
     this.samples = [];
   }
 
-  /** Restore persisted samples without re-applying the cap faithfully ordered. */
-  restore(loaded: MetricSample[]): void {
-    this.samples.push(...loaded);
+  /** Restore persisted samples ahead of any in-session samples; cap re-applied. */
+  prepend(loaded: MetricSample[]): void {
+    this.samples.unshift(...loaded);
+    while (this.samples.length > MAX_METRIC_SAMPLES) {
+      this.samples.shift();
+    }
   }
 }
 
 // Single shared buffer used by all helper handles.
 const buffer = new MetricsBuffer();
-
-/** Pending timer start values keyed by metric name. */
-const pendingTimers = new Map<string, number>();
 
 function sample(name: string, kind: MetricKind, value: number): void {
   buffer.add({ name, kind, value });
@@ -118,17 +118,17 @@ export interface TimerHandle {
 }
 
 export function timer(name: string): TimerHandle {
+  let startedAt: number | null = null;
   return {
     start(): void {
-      pendingTimers.set(name, nowMs());
+      startedAt = nowMs();
     },
     stop(): number | null {
-      const startedAt = pendingTimers.get(name);
-      if (startedAt === undefined) {
+      if (startedAt === null) {
         return null;
       }
-      pendingTimers.delete(name);
       const duration = Math.max(0, nowMs() - startedAt);
+      startedAt = null;
       sample(name, 'timer', duration);
       return duration;
     },
@@ -214,20 +214,18 @@ export async function load(): Promise<void> {
             typeof s === 'object' &&
             typeof (s as MetricSample).name === 'string' &&
             isValidNumber((s as MetricSample).value) &&
-            isValidFloatKind((s as MetricSample).kind)
+            isValidMetricKind((s as MetricSample).kind)
         )
     );
-    buffer.restore(valid);
-    buffer.list().splice(0, Math.max(0, buffer.list().length - MAX_METRIC_SAMPLES));
+    buffer.prepend(valid);
   }
 }
 
-function isValidFloatKind(kind: unknown): kind is MetricKind {
+function isValidMetricKind(kind: unknown): kind is MetricKind {
   return kind === 'counter' || kind === 'timer' || kind === 'histogram';
 }
 
 /** Clears the in-memory buffer and pending timers. Storage is untouched. */
 export function reset(): void {
   buffer.clear();
-  pendingTimers.clear();
 }
