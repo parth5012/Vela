@@ -22,6 +22,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import MessageOptionsModal from '../components/ui/MessageOptionsModal';
 import MarkdownViewerOverlay from '../components/ui/MarkdownViewerOverlay';
 import { useActiveStreamStore } from '../store/useActiveStreamStore';
+import { healXmlTags } from '../utils/xmlHealer';
 import { useConfigStore } from '../store/useConfigStore';
 import type { ConnectionMode } from '../store/useConfigStore';
 import { useChatStore, Message, Thread } from '../store/useChatStore';
@@ -316,7 +317,7 @@ export const streamCloudChatResponse = async (
             const cur = useChatStore.getState().messages[threadId] || [];
             const last = cur[cur.length - 1];
             if (last?.role === 'assistant') {
-              useChatStore.getState().appendToken(threadId, `\n\n${errText}`);
+              streamController.appendChunk(threadId, `\n\n${errText}`);
             } else {
               useChatStore.getState().addMessage(threadId, {
                 id: generateId('msg_assistant'),
@@ -334,7 +335,7 @@ export const streamCloudChatResponse = async (
         const cur = useChatStore.getState().messages[threadId] || [];
         const last = cur[cur.length - 1];
         if (last?.role === 'assistant') {
-          useChatStore.getState().appendToken(threadId, `\n\n${errText}`);
+          streamController.appendChunk(threadId, `\n\n${errText}`);
         } else {
           useChatStore.getState().addMessage(threadId, {
             id: generateId('msg_assistant'),
@@ -409,17 +410,33 @@ export default function ChatScreen() {
   const setThreadSkill = useChatStore((state) => state.setThreadSkill);
   const createThread = useChatStore((state) => state.createThread);
   const addMessage = useChatStore((state) => state.addMessage);
-  const rawAppendToken = useChatStore((state) => state.appendToken);
-  const appendToken = useCallback((threadId: string, token: string) => {
+  // WF-455 overlay lifecycle: fold any stale overlay text into its owning
+  // message BEFORE starting a new overlay stream. Without this, a second
+  // thread's startStream would wipe the first stream's diverted tokens
+  // (cross-thread background streaming edge).
+  const beginStreamOverlay = useCallback((messageId: string) => {
     const activeStream = useActiveStreamStore.getState();
-    const threadMsgs = useChatStore.getState().messages[threadId] || [];
-    const lastMsg = threadMsgs.length > 0 ? threadMsgs[threadMsgs.length - 1] : null;
-    if (activeStream.isStreaming && lastMsg && activeStream.streamingMessageId === lastMsg.id) {
-      activeStream.appendChunk(token);
-    } else {
-      rawAppendToken(threadId, token);
+    if (
+      activeStream.isStreaming &&
+      activeStream.streamingMessageId &&
+      activeStream.streamingMessageId !== messageId &&
+      activeStream.streamingText.trim() !== ''
+    ) {
+      const staleId = activeStream.streamingMessageId;
+      const allMsgs = useChatStore.getState().messages;
+      for (const [tid, msgs] of Object.entries(allMsgs)) {
+        const stale = msgs.find((m) => m.id === staleId);
+        if (stale && stale.role === 'assistant') {
+          useChatStore.getState().updateLastMessageContent(
+            tid,
+            healXmlTags((stale.content || '') + activeStream.streamingText)
+          );
+          break;
+        }
+      }
     }
-  }, [rawAppendToken]);
+    activeStream.startStream(messageId);
+  }, []);
   const setThreads = useChatStore((state) => state.setThreads);
   const setHistory = useChatStore((state) => state.setHistory);
   const branchThread = useChatStore((state) => state.branchThread);
@@ -748,6 +765,12 @@ export default function ChatScreen() {
     handleShowInfo,
   } = useMessageActions();
 
+  const handleMessageLongPress = useCallback((msg: Message) => {
+    if (!isCurrentThreadStreaming) {
+      setActiveMenuMessage(msg);
+    }
+  }, [isCurrentThreadStreaming]);
+
   const toggleRaw = useCallback((msgId: string) => {
     setShowRawMap(prev => ({
       ...prev,
@@ -816,7 +839,7 @@ export default function ChatScreen() {
       created_at: nowIso,
     });
 
-    useActiveStreamStore.getState().startStream(assistantMsgId);
+    beginStreamOverlay(assistantMsgId);
     setStreamingThread(activeThreadId, true);
     triggerAutoScroll();
 
@@ -861,7 +884,7 @@ export default function ChatScreen() {
     threads,
     addMessage,
     setStreamingThread,
-    appendToken,
+    beginStreamOverlay,
     setThreads,
     isLocalMode,
     connectionMode,
@@ -906,7 +929,7 @@ export default function ChatScreen() {
       created_at: new Date().toISOString(),
     });
 
-    useActiveStreamStore.getState().startStream(assistantMsgId);
+    beginStreamOverlay(assistantMsgId);
     setStreamingThread(activeThreadId, true);
 
     try {
@@ -952,7 +975,7 @@ export default function ChatScreen() {
     truncateThreadHistory,
     addMessage,
     setStreamingThread,
-    appendToken,
+    beginStreamOverlay,
     setThreads,
     isLocalMode,
     connectionMode,
@@ -1032,7 +1055,7 @@ export default function ChatScreen() {
       created_at: nowIso,
     });
 
-    useActiveStreamStore.getState().startStream(assistantMsgId);
+    beginStreamOverlay(assistantMsgId);
     setStreamingThread(newThreadId, true);
     triggerAutoScroll();
 
@@ -1065,7 +1088,7 @@ export default function ChatScreen() {
     apiKey,
     createThread,
     addMessage,
-    appendToken,
+    beginStreamOverlay,
     setStreamingThread,
     isLocalMode,
     connectionMode,
@@ -1387,7 +1410,7 @@ export default function ChatScreen() {
                     showRaw={showRawMap[message.id]}
                     isStreamingMessage={isStreamingThis}
                     inViewport={true}
-                    onLongPress={() => !isCurrentThreadStreaming && setActiveMenuMessage(message)}
+                    onLongPress={handleMessageLongPress}
                     onCopyText={handleCopyText}
                     renderSegment={renderSegment}
                     actionBar={actionBar}
