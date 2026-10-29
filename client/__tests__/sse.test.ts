@@ -172,6 +172,8 @@ describe('streamAgentResponse', () => {
     let completed = false;
     let title = '';
 
+    reset();
+
     (globalThis as any).fetch = jest.fn().mockImplementation(() => {
       const mockStream = {
         getReader() {
@@ -209,6 +211,13 @@ describe('streamAgentResponse', () => {
     expect(chunks).toEqual(['Hello']);
     expect(completed).toBe(true);
     expect(title).toBe('Finished');
+
+    // WF-501: a stream whose final done event arrives via the EOF buffer must be
+    // counted as a success, not misrecorded under sse.failures.other.
+    const snap = snapshot();
+    expect(snap.counters['sse.attempts']).toBe(1);
+    expect(snap.counters['sse.successes']).toBe(1);
+    expect(snap.counters['sse.failures.other']).toBeUndefined();
   });
 
   it('should strip <think> reasoning blocks from stream and assembly', async () => {
@@ -619,7 +628,9 @@ describe('streamAgentResponse metrics (WF-501)', () => {
     });
     expect(snap.stats['sse.bytes_received']).toMatchObject({ count: 1, max: 0 });
     expect(snap.stats['sse.chunk_count']).toMatchObject({ count: 1, max: 0 });
-    expect(snap.stats['sse.ttfc']).toMatchObject({ count: 1 });
+    // TTFC is only recorded when at least one byte was received; this attempt
+    // failed with an HTTP error before any bytes arrived, so no TTFC sample.
+    expect(snap.stats['sse.ttfc']).toBeUndefined();
     expect(snap.stats['sse.idle_gap_max']).toMatchObject({ count: 1 });
     expect(snap.stats['sse.turn_duration']).toMatchObject({ count: 1 });
   });
