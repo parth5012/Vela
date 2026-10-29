@@ -1,3 +1,4 @@
+import json
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, AsyncMock
@@ -35,36 +36,34 @@ def test_endpoints_require_api_key_auth(monkeypatch):
     assert resp.status_code == 200
 
 
-def test_conversation_rest_endpoints(monkeypatch):
-    monkeypatch.setenv("VELA_API_KEY", "secret-test-key")
-    from fastapi.testclient import TestClient
-    from agent.main import app
-    client = TestClient(app)
-    headers = {"Authorization": "Bearer secret-test-key"}
-    
-    # 1. Check get threads
-    resp = client.get("/chat/threads", headers=headers)
+def test_conversation_rest_endpoints(deterministic_app):
+    # 1. Check get threads returns seeded threads
+    resp = deterministic_app.get("/chat/threads")
     assert resp.status_code == 200
-    initial_length = len(resp.json())
+    threads = resp.json()
+    assert len(threads) >= 2
+    thread_ids = [t["id"] for t in threads]
+    assert deterministic_app.seeded_data.thread_id in thread_ids
 
     # 2. Check get thread history for non-existent thread returns 500 or 404
-    resp = client.get("/chat/threads/non-existent-uuid", headers=headers)
+    resp = deterministic_app.get("/chat/threads/non-existent-uuid")
     assert resp.status_code == 500 or resp.status_code == 404
 
 
-def test_streaming_chat_message(monkeypatch):
-    monkeypatch.setenv("VELA_API_KEY", "secret-test-key")
-    from fastapi.testclient import TestClient
-    from agent.main import app
-    client = TestClient(app)
-    
-    headers = {"Authorization": "Bearer secret-test-key"}
-    payload = {"thread_id": "conv-123", "message": "Verify math $1+1=2$"}
-    
-    # We will test sending a message
-    with client.stream("POST", "/chat/message", json=payload, headers=headers) as response:
+def test_streaming_chat_message(deterministic_app):
+    deterministic_app.provider.add_turn(["Verify math ", "$1+1=2$"])
+    payload = {"thread_id": deterministic_app.seeded_data.thread_id, "message": "Verify math $1+1=2$"}
+
+    with deterministic_app.stream("POST", "/chat/message", json=payload) as response:
         assert response.status_code == 200
         assert "text/event-stream" in response.headers["content-type"]
+        events = [line for line in response.iter_lines() if line.startswith("data: ")]
+        deltas = [
+            json.loads(line[6:]).get("delta", "")
+            for line in events
+            if "type" in json.loads(line[6:]) and json.loads(line[6:])["type"] == "content"
+        ]
+        assert "".join(deltas) == "Verify math $1+1=2$"
 
 
 def test_streaming_chat_message_with_personas(monkeypatch):
@@ -260,51 +259,37 @@ def test_branch_and_truncate_endpoints(monkeypatch):
 #    mock_close.assert_called_once()
 
 
-def test_conversation_pinning_endpoints(monkeypatch):
-    monkeypatch.setenv("VELA_API_KEY", "secret-test-key")
-    from fastapi.testclient import TestClient
-    from agent.main import app
-    from db.session import get_db_session
-    from db.client import DBClient
+def test_conversation_pinning_endpoints(deterministic_app):
+    thread_id = deterministic_app.seeded_data.thread_id
 
-    client = TestClient(app)
-    headers = {"Authorization": "Bearer secret-test-key"}
-
-    # 1. Create a thread directly in db first so we have a valid conversation ID to patch
-    with get_db_session() as session:
-        db_client = DBClient(session)
-        conv = db_client.create_client_conversation(title="Test Pinned Thread")
-        thread_id = conv.id
-        session.commit()
-
-    # 2. Check get threads has is_pinned=False
-    resp = client.get("/chat/threads", headers=headers)
+    # 1. Check get threads has is_pinned=False for seeded thread
+    resp = deterministic_app.get("/chat/threads")
     assert resp.status_code == 200
     threads = resp.json()
     my_thread = next((t for t in threads if t["id"] == thread_id), None)
     assert my_thread is not None
     assert my_thread["is_pinned"] is False
 
-    # 3. Patch the thread to be pinned
-    patch_resp = client.patch(f"/chat/threads/{thread_id}", json={"is_pinned": True}, headers=headers)
+    # 2. Patch the thread to be pinned
+    patch_resp = deterministic_app.patch(f"/chat/threads/{thread_id}", json={"is_pinned": True})
     assert patch_resp.status_code == 200
     assert patch_resp.json()["status"] == "success"
     assert patch_resp.json()["is_pinned"] is True
 
-    # 4. Check get threads has is_pinned=True
-    resp = client.get("/chat/threads", headers=headers)
+    # 3. Check get threads has is_pinned=True
+    resp = deterministic_app.get("/chat/threads")
     assert resp.status_code == 200
     threads = resp.json()
     my_thread = next((t for t in threads if t["id"] == thread_id), None)
     assert my_thread["is_pinned"] is True
 
-    # 5. Patch title and check
-    patch_resp = client.patch(f"/chat/threads/{thread_id}", json={"title": "Updated Title via Patch"}, headers=headers)
+    # 4. Patch title and check
+    patch_resp = deterministic_app.patch(f"/chat/threads/{thread_id}", json={"title": "Updated Title via Patch"})
     assert patch_resp.status_code == 200
     assert patch_resp.json()["title"] == "Updated Title via Patch"
 
-    # 6. Unpin client-side and check database updates
-    patch_resp = client.patch(f"/chat/threads/{thread_id}", json={"is_pinned": False}, headers=headers)
+    # 5. Unpin client-side and check database updates
+    patch_resp = deterministic_app.patch(f"/chat/threads/{thread_id}", json={"is_pinned": False})
     assert patch_resp.status_code == 200
     assert patch_resp.json()["is_pinned"] is False
 
@@ -501,41 +486,35 @@ def test_message_payload_validation():
     assert p4.agent == "google_workspace"
 
 
-def test_eval_thread_bypasses_experience_persistence(monkeypatch):
+def test_eval_thread_bypasses_experience_persistence(deterministic_app):
     """Verify that /chat/message with eval- thread prefix bypasses Experience DB writes."""
-    from fastapi.testclient import TestClient
-    from agent.main import app, _EVAL_THREAD_HISTORY, clear_eval_thread_history
+    from agent.main import _EVAL_THREAD_HISTORY, clear_eval_thread_history
     from db.client import DBClient
-    from unittest.mock import patch, MagicMock
-
-    monkeypatch.setenv("VELA_API_KEY", "secret-test-key")
-    headers = {"Authorization": "Bearer secret-test-key"}
-    client = TestClient(app)
+    from unittest.mock import patch
 
     eval_thread_id = "eval-thread-no-poison-999"
     clear_eval_thread_history(eval_thread_id)
 
+    deterministic_app.provider.add_turn(["Evaluated response content."])
+
     with patch.object(DBClient, "save_experience") as mock_save:
-        async def mock_events(*args, **kwargs):
-            chunk = MagicMock()
-            chunk.content = "Evaluated response content."
-            yield {"event": "on_chat_model_stream", "data": {"chunk": chunk}}
-
-        with patch("agent.main.graph.astream_events", side_effect=mock_events):
-            resp = client.post(
-                "/chat/message",
-                json={"thread_id": eval_thread_id, "message": "Secret anchor fact"},
-                headers=headers,
-            )
+        with deterministic_app.stream(
+            "POST",
+            "/chat/message",
+            json={"thread_id": eval_thread_id, "message": "Secret anchor fact"},
+        ) as resp:
             assert resp.status_code == 200
-            mock_save.assert_not_called()
+            lines = list(resp.iter_lines())
+            assert any("Evaluated response content." in line for line in lines)
 
-            # Verify eval memory retention in eval-only store
-            assert eval_thread_id in _EVAL_THREAD_HISTORY
-            history = _EVAL_THREAD_HISTORY[eval_thread_id]
-            assert len(history) == 2
-            assert history[0].content == "Secret anchor fact"
-            assert "Evaluated response content." in history[1].content
+        mock_save.assert_not_called()
+
+        # Verify eval memory retention in eval-only store
+        assert eval_thread_id in _EVAL_THREAD_HISTORY
+        history = _EVAL_THREAD_HISTORY[eval_thread_id]
+        assert len(history) == 2
+        assert history[0].content == "Secret anchor fact"
+        assert "Evaluated response content." in history[1].content
 
     clear_eval_thread_history(eval_thread_id)
 

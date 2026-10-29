@@ -73,7 +73,40 @@ class FallbackEmbeddings(Embeddings):
         raise RuntimeError("All embedding providers failed.")
 
 
+_LLM_PROVIDER_OVERRIDE = None
+_EMBEDDINGS_OVERRIDE = None
+
+
+def set_llm_provider(provider):
+    """Set a global override for get_llm() in tests."""
+    global _LLM_PROVIDER_OVERRIDE
+    _LLM_PROVIDER_OVERRIDE = provider
+
+
+def reset_llm_provider():
+    """Reset the global LLM provider override."""
+    global _LLM_PROVIDER_OVERRIDE
+    _LLM_PROVIDER_OVERRIDE = None
+
+
+def set_embeddings_provider(provider):
+    """Set a global override for get_embeddings() in tests."""
+    global _EMBEDDINGS_OVERRIDE
+    _EMBEDDINGS_OVERRIDE = provider
+
+
+def reset_embeddings_provider():
+    """Reset the global embeddings override."""
+    global _EMBEDDINGS_OVERRIDE
+    _EMBEDDINGS_OVERRIDE = None
+
+
 def get_llm():
+    if _LLM_PROVIDER_OVERRIDE is not None:
+        if callable(_LLM_PROVIDER_OVERRIDE) and not hasattr(_LLM_PROVIDER_OVERRIDE, "bind_tools"):
+            return _LLM_PROVIDER_OVERRIDE()
+        return _LLM_PROVIDER_OVERRIDE
+
     google_api_key = os.getenv("GOOGLE_API_KEY", "")
     primary_llm = ChatGoogleGenerativeAI(
         model="gemini-2.5-flash",
@@ -126,6 +159,11 @@ def get_llm():
 
 
 def get_embeddings():
+    if _EMBEDDINGS_OVERRIDE is not None:
+        if callable(_EMBEDDINGS_OVERRIDE) and not hasattr(_EMBEDDINGS_OVERRIDE, "embed_query"):
+            return _EMBEDDINGS_OVERRIDE()
+        return _EMBEDDINGS_OVERRIDE
+
     google_api_key = os.getenv("GOOGLE_API_KEY", "")
     primary_emb = GoogleGenerativeAIEmbeddings(
         model="models/gemini-embedding-2",
