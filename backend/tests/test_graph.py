@@ -6,33 +6,13 @@ from unittest.mock import patch, MagicMock
 from langchain_core.messages import AIMessage
 
 @pytest.mark.asyncio
-@patch("agent.graph.get_db_session")
-@patch("agent.graph.get_llm")
-async def test_supervisor_routing_to_end(mock_get_llm, mock_get_db):
-    # Mock DB Session
-    mock_session = MagicMock()
-    mock_get_db.return_value.__enter__.return_value = mock_session
-    mock_conv = MagicMock()
-    mock_conv.active_skill = None
-    mock_session.query().filter_by().first.return_value = mock_conv
-
-    # Mock LLM invoke returning a mock message with content="chatbot"
-    mock_llm = MagicMock()
-    mock_llm.invoke.return_value = AIMessage(content='{"intent": "none", "skill_name": null}')
-    
-    # Mock for chatbot_node async invoke
-    mock_bound_llm = MagicMock()
-    async def mock_ainvoke(*args, **kwargs):
-        return AIMessage(content="Hello from mock chatbot!")
-    mock_bound_llm.ainvoke = mock_ainvoke
-    mock_llm.bind_tools.return_value = mock_bound_llm
-    
-    mock_get_llm.return_value = mock_llm
+async def test_supervisor_routing_to_end(fake_provider, seeded_db):
+    fake_provider.add_turn("Hello from mock chatbot!")
 
     inputs = {
         "messages": [HumanMessage(content="Hello assistant!")],
         "telegram_chat_id": 999,
-        "db_conv_id": "conv-999",
+        "db_conv_id": seeded_db.thread_id,
         "relevant_memories": [],
         "next_node": ""
     }

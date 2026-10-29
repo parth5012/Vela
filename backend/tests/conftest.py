@@ -127,3 +127,41 @@ def cleanup_test_db():
             os.remove(db_file)
         except Exception as e:
             print(f"Failed to remove test database file {db_file}: {e}")
+
+
+@pytest.fixture
+def fake_provider():
+    """Fixture returning a fresh FakeProvider wired into utils.llm."""
+    from agent.testing.provider import FakeProvider
+    from utils.llm import reset_llm_provider, set_llm_provider
+
+    provider = FakeProvider()
+    set_llm_provider(provider)
+    try:
+        yield provider
+    finally:
+        reset_llm_provider()
+
+
+@pytest.fixture
+def seeded_db():
+    """Fixture resetting and seeding DB with deterministic state."""
+    from agent.testing.db import seed_db
+
+    data = seed_db(reset=True)
+    yield data
+
+
+@pytest.fixture
+def deterministic_app(fake_provider, seeded_db):
+    """FastAPI TestClient with FakeProvider, fixed API key, frozen clock and seeded DB."""
+    from agent.testing.harness import DeterministicHarness
+
+    harness = DeterministicHarness(provider=fake_provider, seed=False)
+    client = harness.start()
+    client.seeded_data = seeded_db
+    try:
+        yield client
+    finally:
+        harness.stop()
+

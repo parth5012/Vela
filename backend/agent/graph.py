@@ -75,6 +75,10 @@ Example response format:
                 intent = data.get("intent")
                 skill_name = data.get("skill_name")
                 parsed = True
+    except RuntimeError as e:
+        if "script exhausted" in str(e).lower():
+            raise
+        logger.error("Failed to query or parse supervisor LLM classification, falling back to heuristics", error=str(e))
     except Exception as e:
         logger.error("Failed to query or parse supervisor LLM classification, falling back to heuristics", error=str(e))
 
@@ -163,7 +167,14 @@ async def chatbot_node(state: AgentState) -> dict:
     user_msg = next((m for m in reversed(state["messages"]) if isinstance(m, HumanMessage)), None)
     user_message = user_msg.content if user_msg else ""
     
-    if api_key and not api_key.startswith("your_"):
+    has_provider_override = False
+    try:
+        from utils.llm import _LLM_PROVIDER_OVERRIDE
+        has_provider_override = _LLM_PROVIDER_OVERRIDE is not None
+    except Exception:
+        pass
+
+    if has_provider_override or (api_key and not api_key.startswith("your_")):
         try:
             # Resolve tools from the active agent's registry entry
             agent_id = state.get("agent") or "personal assistant"
@@ -208,6 +219,10 @@ async def chatbot_node(state: AgentState) -> dict:
                     response_msg += chunk
             else:
                 response_msg = AIMessage(content="")
+        except RuntimeError as e:
+            if "script exhausted" in str(e).lower():
+                raise
+            response_msg = AIMessage(content=f"Error invoking LLM: {str(e)}")
         except Exception as e:
             response_msg = AIMessage(content=f"Error invoking LLM: {str(e)}")
     else:
