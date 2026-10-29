@@ -112,7 +112,7 @@ async function executeStreamRequest(
     }
 
     const requestBody = JSON.stringify(bodyObj);
-    record('sse.request_bytes', new TextEncoder().encode(requestBody).length);
+    record('sse.request_bytes', typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(requestBody).length : requestBody.length);
     resetTimeout = () => {
       clearTimeout(timeoutId);
       timeoutId = setTimeout(() => {
@@ -207,6 +207,7 @@ async function executeStreamRequest(
               handleDelta(parsed.delta);
             } else if (parsed.type === 'done') {
               handleStreamEnd(parsed.thread_title);
+              succeeded = true;
               console.log('[streamAgentResponse] Stream complete, total chunks:', chunkCount);
               return;
             } else if (parsed.type === 'thread_stopped') {
@@ -275,7 +276,10 @@ async function executeStreamRequest(
   } finally {
     clearTimeout(timeoutId);
     // Per-attempt transport metrics (WF-501); recorded for success and error paths.
-    ttfc.stop();
+    // TTFC only counts as time-to-FIRST-CHUNK when at least one byte arrived.
+    if (bytesReceived > 0) {
+      ttfc.stop();
+    }
     record('sse.chunk_count', chunkCount);
     record('sse.bytes_received', bytesReceived);
     record('sse.idle_gap_max', maxIdleGapMs);
