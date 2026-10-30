@@ -43,7 +43,6 @@ from tools.status_update import send_status_message
 from tools.web_search import web_search
 from tools.webview_browser import webview_browser
 
-
 # ---------------------------------------------------------------------------
 # 1. SSE Event Schemas & Registry
 # ---------------------------------------------------------------------------
@@ -129,7 +128,11 @@ def validate_sse_event(event_data: dict[str, Any]) -> BaseModel:
         ValidationError: If required fields are missing or types are invalid.
     """
     if not isinstance(event_data, dict):
-        raise ValueError(f"Expected dict for event data, got {type(event_data).__name__}")
+        # One exception type for every malformed SSE input keeps the validator's
+        # contract simple for callers; TRY004's TypeError split is not wanted.
+        raise ValueError(  # noqa: TRY004
+            f"Expected dict for event data, got {type(event_data).__name__}"
+        )
 
     event_type = event_data.get("type")
     if not event_type:

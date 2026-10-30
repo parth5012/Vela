@@ -37,7 +37,6 @@ from agent.spec import (
 )
 from agent.testing.provider import ScriptedToolCall
 
-
 # ===========================================================================
 # 1. SSE Validator Unit Tests
 # ===========================================================================
