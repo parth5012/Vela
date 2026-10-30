@@ -1,0 +1,39 @@
+{
+  "feature": "thread-title-generation",
+  "variant": "new-chat-gets-generated-title",
+  "description": "A fresh thread starts as 'New Chat'; the extra title-generation LLM turn names it and that name is persisted, while the SSE title stays volatile.",
+  "script": [
+    "Here is a short answer about quantum computing.",
+    "Quantum Computing Basics"
+  ],
+  "request": {
+    "thread_id": "new",
+    "message": "Explain quantum computing briefly.",
+    "agent": "personal assistant"
+  },
+  "expected_events": [
+    {
+      "type": "content",
+      "delta": "Here is a short answer about quantum computing."
+    },
+    {
+      "type": "done",
+      "thread_title": "<dynamic-title>",
+      "agent": "personal assistant"
+    }
+  ],
+  "expected_persisted": {
+    "user_query": "Explain quantum computing briefly.",
+    "agent_response": "Here is a short answer about quantum computing.",
+    "conversation_agent": "personal assistant",
+    "conversation_source": "android_client",
+    "conversation_title": "Quantum Computing Basics",
+    "thread_message_count": 2,
+    "assistant_sync_messages": [
+      {
+        "content": "Here is a short answer about quantum computing.",
+        "provider": "cloud"
+      }
+    ]
+  }
+}

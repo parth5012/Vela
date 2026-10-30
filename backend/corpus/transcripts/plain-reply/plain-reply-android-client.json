@@ -1,0 +1,45 @@
+{
+  "feature": "plain-reply",
+  "variant": "android-client-sync",
+  "description": "Reply on a thread whose source is android_client: the turn must also append a cloud SyncMessage for device sync.",
+  "script": [
+    "Android sync reply from the corpus."
+  ],
+  "request": {
+    "thread_id": "seeded",
+    "message": "Sync this turn to my phone",
+    "agent": "personal assistant"
+  },
+  "prep": [
+    {
+      "op": "set_conversation_source",
+      "thread_id": "seeded",
+      "source": "android_client"
+    }
+  ],
+  "expected_events": [
+    {
+      "type": "content",
+      "delta": "Android sync reply from the corpus."
+    },
+    {
+      "type": "done",
+      "thread_title": "Seeded Chat 1",
+      "agent": "personal assistant"
+    }
+  ],
+  "expected_persisted": {
+    "user_query": "Sync this turn to my phone",
+    "agent_response": "Android sync reply from the corpus.",
+    "conversation_agent": "personal assistant",
+    "conversation_source": "android_client",
+    "conversation_title": "Seeded Chat 1",
+    "thread_message_count": 4,
+    "assistant_sync_messages": [
+      {
+        "content": "Android sync reply from the corpus.",
+        "provider": "cloud"
+      }
+    ]
+  }
+}

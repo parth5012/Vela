@@ -1,0 +1,47 @@
+{
+  "feature": "persona-teacher",
+  "variant": "new-thread-teacher-persona",
+  "description": "A turn routed to the teacher persona: the done event and persisted conversation both report 'teacher', and the teacher prompt is injected without dynamic rules.",
+  "script": [
+    "Let's start with sunlight scattering.",
+    "Why the Sky Is Blue"
+  ],
+  "request": {
+    "thread_id": "new",
+    "message": "Why is the sky blue?",
+    "agent": "teacher"
+  },
+  "expected_events": [
+    {
+      "type": "content",
+      "delta": "Let's start with sunlight scattering."
+    },
+    {
+      "type": "done",
+      "thread_title": "<dynamic-title>",
+      "agent": "teacher"
+    }
+  ],
+  "expected_persisted": {
+    "user_query": "Why is the sky blue?",
+    "agent_response": "Let's start with sunlight scattering.",
+    "conversation_agent": "teacher",
+    "conversation_source": "android_client",
+    "conversation_title": "Why the Sky Is Blue",
+    "thread_message_count": 2,
+    "assistant_sync_messages": [
+      {
+        "content": "Let's start with sunlight scattering.",
+        "provider": "cloud"
+      }
+    ]
+  },
+  "expected_prompt": {
+    "contains": [
+      "friendly, encouraging, and knowledgeable Teacher"
+    ],
+    "absent": [
+      "# Dynamic Rules"
+    ]
+  }
+}

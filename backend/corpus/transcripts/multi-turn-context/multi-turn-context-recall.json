@@ -1,0 +1,46 @@
+{
+  "feature": "multi-turn-context",
+  "variant": "recall-prior-turn",
+  "description": "Two sequential turns on one thread: the second turn's system prompt must carry the first user message and reply, and history must grow to three persisted turns.",
+  "script": [
+    "Noted — Python it is.",
+    "You said Python."
+  ],
+  "request": {
+    "thread_id": "seeded",
+    "message": "Which programming language did I mention?",
+    "agent": "personal assistant"
+  },
+  "prior_turns": [
+    {
+      "message": "My favorite programming language is Python."
+    }
+  ],
+  "expected_events": [
+    {
+      "type": "content",
+      "delta": "You said Python."
+    },
+    {
+      "type": "done",
+      "thread_title": "Seeded Chat 1",
+      "agent": "personal assistant"
+    }
+  ],
+  "expected_persisted": {
+    "user_query": "Which programming language did I mention?",
+    "agent_response": "You said Python.",
+    "conversation_agent": "personal assistant",
+    "conversation_source": "client",
+    "conversation_title": "Seeded Chat 1",
+    "thread_message_count": 6,
+    "assistant_sync_messages": []
+  },
+  "expected_prompt": {
+    "contains": [
+      "My favorite programming language is Python.",
+      "Noted — Python it is.",
+      "Human: Which programming language did I mention?"
+    ]
+  }
+}

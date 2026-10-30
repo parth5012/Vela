@@ -1,0 +1,45 @@
+{
+  "feature": "dynamic-rules-prompt",
+  "variant": "dynamic-rules-injected",
+  "description": "A stored 'dynamic_rules' SystemPromptFragment must be injected into the chatbot system prompt as a pinned '# Dynamic Rules' section.",
+  "script": [
+    "Telemetry confirms the deployment is healthy."
+  ],
+  "request": {
+    "thread_id": "seeded",
+    "message": "Is the deployment healthy?",
+    "agent": "personal assistant"
+  },
+  "prep": [
+    {
+      "op": "set_dynamic_rules",
+      "content": "STRICT_CRITICAL_RULE: Always cite verifiable telemetry."
+    }
+  ],
+  "expected_events": [
+    {
+      "type": "content",
+      "delta": "Telemetry confirms the deployment is healthy."
+    },
+    {
+      "type": "done",
+      "thread_title": "Seeded Chat 1",
+      "agent": "personal assistant"
+    }
+  ],
+  "expected_persisted": {
+    "user_query": "Is the deployment healthy?",
+    "agent_response": "Telemetry confirms the deployment is healthy.",
+    "conversation_agent": "personal assistant",
+    "conversation_source": "client",
+    "conversation_title": "Seeded Chat 1",
+    "thread_message_count": 4,
+    "assistant_sync_messages": []
+  },
+  "expected_prompt": {
+    "contains": [
+      "# Dynamic Rules",
+      "STRICT_CRITICAL_RULE: Always cite verifiable telemetry."
+    ]
+  }
+}

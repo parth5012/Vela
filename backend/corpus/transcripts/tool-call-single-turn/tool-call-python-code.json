@@ -1,0 +1,58 @@
+{
+  "feature": "tool-call-single-turn",
+  "variant": "run-python-code",
+  "description": "One scripted tool call on a fresh thread: tool start/end tags stream as content, then the follow-up reply, then a generated title.",
+  "script": [
+    {
+      "tool_calls": [
+        {
+          "name": "run_python_code",
+          "args": {
+            "code": "print(2 + 2)"
+          },
+          "id": "call_python_1"
+        }
+      ]
+    },
+    "The result is 4.",
+    "Math Check"
+  ],
+  "request": {
+    "thread_id": "new",
+    "message": "What is 2 + 2? Run it.",
+    "agent": "personal assistant"
+  },
+  "expected_events": [
+    {
+      "type": "content",
+      "delta": "<call:run_python_code input=\"{\\\"code\\\": \\\"print(2 + 2)\\\"}\">"
+    },
+    {
+      "type": "content",
+      "delta": "content='Mock execution output for code: print(2 + 2)...' name='run_python_code' tool_call_id='call_python_1'</call:run_python_code>"
+    },
+    {
+      "type": "content",
+      "delta": "The result is 4."
+    },
+    {
+      "type": "done",
+      "thread_title": "<dynamic-title>",
+      "agent": "personal assistant"
+    }
+  ],
+  "expected_persisted": {
+    "user_query": "What is 2 + 2? Run it.",
+    "agent_response": "<call:run_python_code input=\"{\\\"code\\\": \\\"print(2 + 2)\\\"}\">content='Mock execution output for code: print(2 + 2)...' name='run_python_code' tool_call_id='call_python_1'</call:run_python_code>The result is 4.",
+    "conversation_agent": "personal assistant",
+    "conversation_source": "android_client",
+    "conversation_title": "Math Check",
+    "thread_message_count": 2,
+    "assistant_sync_messages": [
+      {
+        "content": "<call:run_python_code input=\"{\\\"code\\\": \\\"print(2 + 2)\\\"}\">content='Mock execution output for code: print(2 + 2)...' name='run_python_code' tool_call_id='call_python_1'</call:run_python_code>The result is 4.",
+        "provider": "cloud"
+      }
+    ]
+  }
+}

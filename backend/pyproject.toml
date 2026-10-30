@@ -45,6 +45,9 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 asyncio_mode = "auto"
+markers = [
+    "corpus: pinned transcript corpus replay (deterministic end-to-end fixtures)",
+]
 
 [tool.ruff]
 exclude = ["__pycache__", ".venv", ".pytest_cache", "*.ipynb", "scratch", "previous_chats.json"]

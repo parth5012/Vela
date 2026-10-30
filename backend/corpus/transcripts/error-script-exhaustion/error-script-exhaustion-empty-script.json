@@ -1,0 +1,31 @@
+{
+  "feature": "error-script-exhaustion",
+  "variant": "empty-script",
+  "description": "No scripted provider turn is available: the stream must emit a spec-compliant error event (not hang), still finish with a done event, and persist the turn with an empty response.",
+  "script": [],
+  "request": {
+    "thread_id": "new",
+    "message": "This request has no scripted turn available",
+    "agent": "personal assistant"
+  },
+  "expected_events": [
+    {
+      "type": "error",
+      "message": "FakeProvider script exhausted: no more scripted responses configured (called 1 times, script had 0 turns)"
+    },
+    {
+      "type": "done",
+      "thread_title": "<dynamic-title>",
+      "agent": "personal assistant"
+    }
+  ],
+  "expected_persisted": {
+    "user_query": "This request has no scripted turn available",
+    "agent_response": "",
+    "conversation_agent": "personal assistant",
+    "conversation_source": "android_client",
+    "conversation_title": "Mock Title",
+    "thread_message_count": 2,
+    "assistant_sync_messages": []
+  }
+}

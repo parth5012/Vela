@@ -1,0 +1,52 @@
+{
+  "feature": "tool-call-single-turn",
+  "variant": "seeded-thread-no-title",
+  "description": "One scripted tool call on a seeded thread: no title-generation turn is spent, no SyncMessage is written (source client), and the tool span plus follow-up reply are persisted verbatim.",
+  "script": [
+    {
+      "tool_calls": [
+        {
+          "name": "run_python_code",
+          "args": {
+            "code": "print(7 * 6)"
+          },
+          "id": "call_python_seeded"
+        }
+      ]
+    },
+    "Six times seven is 42."
+  ],
+  "request": {
+    "thread_id": "seeded",
+    "message": "Compute 7 * 6 for me.",
+    "agent": "personal assistant"
+  },
+  "expected_events": [
+    {
+      "type": "content",
+      "delta": "<call:run_python_code input=\"{\\\"code\\\": \\\"print(7 * 6)\\\"}\">"
+    },
+    {
+      "type": "content",
+      "delta": "content='Mock execution output for code: print(7 * 6)...' name='run_python_code' tool_call_id='call_python_seeded'</call:run_python_code>"
+    },
+    {
+      "type": "content",
+      "delta": "Six times seven is 42."
+    },
+    {
+      "type": "done",
+      "thread_title": "Seeded Chat 1",
+      "agent": "personal assistant"
+    }
+  ],
+  "expected_persisted": {
+    "user_query": "Compute 7 * 6 for me.",
+    "agent_response": "<call:run_python_code input=\"{\\\"code\\\": \\\"print(7 * 6)\\\"}\">content='Mock execution output for code: print(7 * 6)...' name='run_python_code' tool_call_id='call_python_seeded'</call:run_python_code>Six times seven is 42.",
+    "conversation_agent": "personal assistant",
+    "conversation_source": "client",
+    "conversation_title": "Seeded Chat 1",
+    "thread_message_count": 4,
+    "assistant_sync_messages": []
+  }
+}
