@@ -16,6 +16,13 @@ import {
   handleWebViewMessage,
 } from '../store/useBrowserStore';
 import { registerVelaBackgroundTask } from '../utils/backgroundTasks';
+
+// Dev-only Playwright control channel (#495). `EXPO_PUBLIC_E2E` is inlined at
+// build time, so in a normal build this branch is dead code and the loader is
+// never installed (no `globalThis.__VELA_E2E__`, no extra runtime work).
+if (process.env.EXPO_PUBLIC_E2E === '1') {
+  require('../e2e/loader').installE2ELoader();
+}
 import * as Notifications from 'expo-notifications';
 import { SafetyDialog } from '../components/ui/SafetyDialog';
 import { persistentWebviewContainerStyle, persistentWebviewPointerEvents } from '../utils/persistentWebviewStyle';

@@ -34,3 +34,6 @@ client/e2e/results/
 backend/evals/report/
 # Needle engine archives — fetched at build by client/modules/needle/scripts/fetch-engine.js (#293)
 client/modules/needle/android/engine/
+# Playwright UI e2e artifacts (failure-only, regenerated)
+client/test-results/
+client/playwright-report/
