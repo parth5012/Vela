@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import { stripReasoning, EMPTY_RESPONSE_ERROR_HINT } from './reasoning';
 import { withRetry, isTransientError } from './retry';
 import { streamController } from './streamController';
+import { counter, record, timer } from './metrics';
 
 const normalizeUrl = (rawUrl: string): string => {
   let formattedUrl = (rawUrl || '').trim();
@@ -11,6 +12,27 @@ const normalizeUrl = (rawUrl: string): string => {
   }
   return formattedUrl.replace(/\/+$/, '');
 };
+
+/** Monotonic clock for idle-gap measurement; mirrors utils/metrics. */
+const transportNowMs = (): number => {
+  if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+    return performance.now();
+  }
+  return Date.now();
+};
+
+/**
+ * Buckets a failed stream attempt into a coarse error type used in the
+ * `sse.failures.<type>` counter names.
+ */
+function classifySseFailure(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  if (message.startsWith('Server returned HTTP')) return 'http_error';
+  if (message.includes('timed out') || message.includes('Response idle')) return 'timeout';
+  if (message.includes('Empty response')) return 'empty_response';
+  if (message.toLowerCase().includes('abort')) return 'abort';
+  return 'network_error';
+}
 
 // Default timeout: 90 seconds (handles Render cold start)
 const DEFAULT_TIMEOUT_MS = 90000;
@@ -35,6 +57,17 @@ async function executeStreamRequest(
   let timeoutId: ReturnType<typeof setTimeout> = setTimeout(() => {
     timeoutController.abort(new Error(`Request timed out after ${timeoutMs / 1000}s. Server may be waking up.`));
   }, timeoutMs);
+
+  // Transport metrics (WF-501): one sample set per stream attempt.
+  counter('sse.attempts').inc();
+  let chunkCount = 0;
+  let bytesReceived = 0;
+  let maxIdleGapMs = 0;
+  let lastReadEnd: number | null = null;
+  let succeeded = false;
+  let failureType: string | null = null;
+  const ttfc = timer('sse.ttfc');
+  ttfc.start();
 
   // Combine external signal with timeout controller
   const combinedSignal = signal
@@ -79,6 +112,7 @@ async function executeStreamRequest(
     }
 
     const requestBody = JSON.stringify(bodyObj);
+    record('sse.request_bytes', typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(requestBody).length : requestBody.length);
     resetTimeout = () => {
       clearTimeout(timeoutId);
       timeoutId = setTimeout(() => {
@@ -120,7 +154,6 @@ async function executeStreamRequest(
     }
 
     let buffer = '';
-    let chunkCount = 0;
     let accumulatedContent = '';
     let emittedLength = 0;
 
@@ -150,6 +183,17 @@ async function executeStreamRequest(
     resetTimeout();
     while (true) {
       const { value, done } = await reader.read();
+      const readEnd = transportNowMs();
+      if (value && value.byteLength > 0) {
+        bytesReceived += value.byteLength;
+        // TTFC: first transport chunk for the attempt; stop() is a no-op once recorded.
+        ttfc.stop();
+      }
+      // Idle gap: time between consecutive read() completions (first read excluded).
+      if (lastReadEnd !== null) {
+        maxIdleGapMs = Math.max(maxIdleGapMs, readEnd - lastReadEnd);
+      }
+      lastReadEnd = readEnd;
       resetTimeout();
       if (done) {
         // Clear timeout on successful completion
@@ -163,12 +207,15 @@ async function executeStreamRequest(
               handleDelta(parsed.delta);
             } else if (parsed.type === 'done') {
               handleStreamEnd(parsed.thread_title);
+              succeeded = true;
               console.log('[streamAgentResponse] Stream complete, total chunks:', chunkCount);
               return;
             } else if (parsed.type === 'thread_stopped') {
+              succeeded = true;
               console.log('[streamAgentResponse] Stream stopped by server');
               return;
             } else if (parsed.type === 'error') {
+              failureType = 'server_error';
               onError(new Error(parsed.message || 'Unknown server error'));
               return;
             } else if (parsed.type === 'auth_required') {
@@ -181,6 +228,7 @@ async function executeStreamRequest(
           }
         }
         handleStreamEnd();
+        succeeded = true;
         console.log('[streamAgentResponse] Stream complete, total chunks:', chunkCount);
         break;
       }
@@ -201,11 +249,14 @@ async function executeStreamRequest(
               handleDelta(parsed.delta);
             } else if (parsed.type === 'done') {
               handleStreamEnd(parsed.thread_title);
+              succeeded = true;
               return;
             } else if (parsed.type === 'thread_stopped') {
+              succeeded = true;
               console.log('[streamAgentResponse] Stream stopped by server');
               return;
             } else if (parsed.type === 'error') {
+              failureType = 'server_error';
               onError(new Error(parsed.message || 'Unknown server error'));
               return;
             } else if (parsed.type === 'auth_required') {
@@ -219,8 +270,24 @@ async function executeStreamRequest(
         }
       }
     }
+  } catch (err: unknown) {
+    failureType = classifySseFailure(err);
+    throw err;
   } finally {
     clearTimeout(timeoutId);
+    // Per-attempt transport metrics (WF-501); recorded for success and error paths.
+    // TTFC only counts as time-to-FIRST-CHUNK when at least one byte arrived.
+    if (bytesReceived > 0) {
+      ttfc.stop();
+    }
+    record('sse.chunk_count', chunkCount);
+    record('sse.bytes_received', bytesReceived);
+    record('sse.idle_gap_max', maxIdleGapMs);
+    if (succeeded) {
+      counter('sse.successes').inc();
+    } else {
+      counter(`sse.failures.${failureType ?? 'other'}`).inc();
+    }
   }
 }
 
@@ -250,6 +317,9 @@ export async function streamAgentResponse(
     emittedAny = true;
     onChunk(chunk);
   };
+
+  const turnTimer = timer('sse.turn_duration');
+  turnTimer.start();
 
   try {
     await withRetry(
@@ -287,5 +357,7 @@ export async function streamAgentResponse(
     if (!signal?.aborted) {
       onError(error instanceof Error ? error : new Error(message));
     }
+  } finally {
+    turnTimer.stop();
   }
 }
