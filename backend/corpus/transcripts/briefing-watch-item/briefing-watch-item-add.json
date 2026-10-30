@@ -1,0 +1,53 @@
+{
+  "feature": "briefing-watch-item",
+  "variant": "save-watch-item",
+  "description": "save_briefing_watch_item executes against the real DB layer; its confirmation (which embeds a generated ULID) streams back inside the tool span and is normalized.",
+  "script": [
+    {
+      "tool_calls": [
+        {
+          "name": "save_briefing_watch_item",
+          "args": {
+            "text": "Track the CI migration to GitHub Actions",
+            "date_hint": "next week"
+          },
+          "id": "call_watch_1"
+        }
+      ]
+    },
+    "Added that topic to your daily briefing watch list."
+  ],
+  "request": {
+    "thread_id": "seeded",
+    "message": "Watch the CI migration for me",
+    "agent": "personal assistant"
+  },
+  "expected_events": [
+    {
+      "type": "content",
+      "delta": "<call:save_briefing_watch_item input=\"{\\\"text\\\": \\\"Track the CI migration to GitHub Actions\\\", \\\"date_hint\\\": \\\"next week\\\"}\">"
+    },
+    {
+      "type": "content",
+      "delta": "content='Watch item saved: Track the CI migration to GitHub Actions (id: <ulid>)' name='save_briefing_watch_item' tool_call_id='call_watch_1'</call:save_briefing_watch_item>"
+    },
+    {
+      "type": "content",
+      "delta": "Added that topic to your daily briefing watch list."
+    },
+    {
+      "type": "done",
+      "thread_title": "Seeded Chat 1",
+      "agent": "personal assistant"
+    }
+  ],
+  "expected_persisted": {
+    "user_query": "Watch the CI migration for me",
+    "agent_response": "<call:save_briefing_watch_item input=\"{\\\"text\\\": \\\"Track the CI migration to GitHub Actions\\\", \\\"date_hint\\\": \\\"next week\\\"}\">content='Watch item saved: Track the CI migration to GitHub Actions (id: <ulid>)' name='save_briefing_watch_item' tool_call_id='call_watch_1'</call:save_briefing_watch_item>Added that topic to your daily briefing watch list.",
+    "conversation_agent": "personal assistant",
+    "conversation_source": "client",
+    "conversation_title": "Seeded Chat 1",
+    "thread_message_count": 4,
+    "assistant_sync_messages": []
+  }
+}

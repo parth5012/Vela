@@ -1,0 +1,33 @@
+{
+  "feature": "thread-title-generation",
+  "variant": "existing-title-is-preserved",
+  "description": "A thread that already has a title must not spend a title-generation turn: the done event echoes the stored title and the title is unchanged.",
+  "script": [
+    "Revision plan: one chapter per day."
+  ],
+  "request": {
+    "thread_id": "seeded_2",
+    "message": "Help me plan revision for the exam.",
+    "agent": "teacher"
+  },
+  "expected_events": [
+    {
+      "type": "content",
+      "delta": "Revision plan: one chapter per day."
+    },
+    {
+      "type": "done",
+      "thread_title": "Seeded Chat 2",
+      "agent": "teacher"
+    }
+  ],
+  "expected_persisted": {
+    "user_query": "Help me plan revision for the exam.",
+    "agent_response": "Revision plan: one chapter per day.",
+    "conversation_agent": "teacher",
+    "conversation_source": "client",
+    "conversation_title": "Seeded Chat 2",
+    "thread_message_count": 2,
+    "assistant_sync_messages": []
+  }
+}

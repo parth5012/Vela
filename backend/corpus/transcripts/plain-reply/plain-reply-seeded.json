@@ -1,0 +1,54 @@
+{
+  "feature": "plain-reply",
+  "variant": "seeded-thread",
+  "description": "Single plain-text turn on a seeded thread: three streamed deltas, a stable existing title, and one persisted Experience row.",
+  "script": [
+    [
+      "Hello! ",
+      "I am Vela, ",
+      "your AI assistant."
+    ]
+  ],
+  "request": {
+    "thread_id": "seeded",
+    "message": "Hi Vela",
+    "agent": "personal assistant"
+  },
+  "expected_events": [
+    {
+      "type": "content",
+      "delta": "Hello! "
+    },
+    {
+      "type": "content",
+      "delta": "I am Vela, "
+    },
+    {
+      "type": "content",
+      "delta": "your AI assistant."
+    },
+    {
+      "type": "done",
+      "thread_title": "Seeded Chat 1",
+      "agent": "personal assistant"
+    }
+  ],
+  "expected_persisted": {
+    "user_query": "Hi Vela",
+    "agent_response": "Hello! I am Vela, your AI assistant.",
+    "conversation_agent": "personal assistant",
+    "conversation_source": "client",
+    "conversation_title": "Seeded Chat 1",
+    "thread_message_count": 4,
+    "assistant_sync_messages": []
+  },
+  "expected_prompt": {
+    "contains": [
+      "Identity: You are Vela, a personal AI assistant",
+      "Human: Hi Vela"
+    ],
+    "absent": [
+      "# Dynamic Rules"
+    ]
+  }
+}
