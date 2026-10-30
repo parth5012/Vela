@@ -16,6 +16,13 @@ itself (notably instrumentation / `androidTest` APKs), uninstalling anything, or
 deleting device files. Read-only inspection (`logcat`, `pm list`, `run-as ls`)
 needs no approval. Full details in `client/AGENTS.md`.
 
+## CI gate
+
+`python vela_ci.py ci` (repo root) is the single definition of green — the same command locally, in GitHub Actions and in agent loops. Run it before reporting any task done. `--stack backend|client|corpus|e2e` narrows it; `--with-e2e` adds the Playwright UI suite; `python vela_ci.py corpus|e2e|bugs` runs one part. The ruff step only gates the lines your change touched.
+
+- A bugfix PR ships a test that fails on the old code and passes after. Record it in `BUGS.toml` — `status = "fixed"` requires `failing_test`.
+- Corpus pass floors only rise, and only through `backend/corpus/floors.py`. Never lower a floor or edit a fixture expectation to get green.
+
 ## Agent skills
 
 ### Issue tracker

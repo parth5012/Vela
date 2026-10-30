@@ -74,3 +74,15 @@ _Avoid_: LiteRT-only model
 The Settings → Local AI badge stating the Needle engine's real state — `Accelerated (native)` when the native library loaded, `Mock Fallback` otherwise — so a mock is never presented as a running model.
 _Avoid_: engine status dot, speed badge
 
+
+**Gate**:
+The single command that defines a green build (`python vela_ci.py ci`), used verbatim by local runs, GitHub Actions and agent loops. It is never re-implemented per environment.
+_Avoid_: test script, CI yaml steps
+
+**Bug Registry**:
+`BUGS.toml` at the repo root — one entry per known bug with repro steps, status (`open`, `mitigated`, `fixed`) and, once fixed, the test that reproduced it (`failing_test`).
+_Avoid_: issue tracker, bug list
+
+**Corpus Floor**:
+The minimum pass rate a recorded transcript feature must hold in `backend/corpus/floors.py`. Floors only rise; a regression is a failure, never a lowered floor.
+_Avoid_: threshold, baseline

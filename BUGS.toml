@@ -1,0 +1,44 @@
+# Vela bug registry.
+#
+# HARD RULE: every bugfix PR ships a test that FAILS on the old code and PASSES
+# after the fix. `failing_test` names that test (required once status = "fixed").
+#
+# Fields per entry:
+#   title        - one line, user-visible symptom
+#   status       - open | mitigated | fixed
+#   repro_steps  - list of concrete steps (inline TOML array)
+#   failing_test - test that reproduces the bug (required when status = "fixed")
+#   fixed_in_pr  - PR number that fixed it (optional)
+#   notes        - context, workaround, or why it is still open
+#
+# Validate with: `python vela_ci.py bugs` (also runs as part of `python vela_ci.py ci`).
+
+[BUG-backend-001]
+title = "save_user_memory fails on the SQLite test database (pgvector `>` operator unsupported)"
+status = "mitigated"
+repro_steps = [
+  "cd backend && uv run pytest tests/e2e -q",
+  "Script a FakeProvider turn that calls the save_user_memory tool",
+  "Observe: sqlite3.OperationalError: near \">\": syntax error"
+]
+notes = "memory_vectors is Postgres-only (pgvector Vector type, no SQLite DDL) and is excluded from SQLITE_SAFE_TABLES. The e2e tool-turn test uses save_briefing_watch_item instead. Mitigated by test substitution, not fixed in production code."
+
+[BUG-client-001]
+title = "RN screen suites (tasksScreen / localAiScreen / cloudProvidersScreen) time out under full-suite worker contention"
+status = "open"
+repro_steps = [
+  "cd client && npx jest",
+  "Add any extra *.spec.ts file under a directory jest still scans",
+  "Observe: the three screen suites take ~40s each and fail, while passing in isolation"
+]
+notes = "Symptom is resource contention, not a product bug: with e2e/ excluded from jest (testPathIgnorePatterns) the full suite is green at 115/115 in ~37s. Keep the jest scan surface stable and this stays dormant."
+
+[BUG-client-002]
+title = "expo-sqlite has no wasm worker on the Expo web dev server, so the local DB layer is inert on web"
+status = "open"
+repro_steps = [
+  "cd client && CI=1 npx expo start --web --port 8081",
+  "Open http://127.0.0.1:8081",
+  "Observe console: [Database] Database client not initialized, skipping migrations"
+]
+notes = "Web is used for deterministic Playwright e2e only (server connection mode). Anything that depends on the on-device SQLite store is out of scope on web; native builds are unaffected."
