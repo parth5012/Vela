@@ -1,15 +1,16 @@
 import json
+from unittest.mock import patch
+
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import patch, AsyncMock
+
 from agent.main import app
-
-
 
 
 def test_health_endpoint(monkeypatch):
     monkeypatch.setenv("VELA_API_KEY", "super-secret-key")
     from fastapi.testclient import TestClient
+
     from agent.main import app
     client = TestClient(app)
     response = client.get("/health", headers={"Authorization": "Bearer super-secret-key"})
@@ -20,6 +21,7 @@ def test_health_endpoint(monkeypatch):
 def test_endpoints_require_api_key_auth(monkeypatch):
     monkeypatch.setenv("VELA_API_KEY", "super-secret-key")
     from fastapi.testclient import TestClient
+
     from agent.main import app
     client = TestClient(app)
     
@@ -69,6 +71,7 @@ def test_streaming_chat_message(deterministic_app):
 def test_streaming_chat_message_with_personas(monkeypatch):
     monkeypatch.setenv("VELA_API_KEY", "secret-test-key")
     from fastapi.testclient import TestClient
+
     from agent.main import app
     client = TestClient(app)
     
@@ -117,12 +120,14 @@ def test_streaming_chat_message_with_personas(monkeypatch):
 
 def test_branch_and_truncate_endpoints(monkeypatch):
     monkeypatch.setenv("VELA_API_KEY", "secret-test-key")
-    from fastapi.testclient import TestClient
-    from agent.main import app
-    from db.session import get_db_session
-    from db.models import Conversation, Experience
     import uuid
     from datetime import datetime, timedelta
+
+    from fastapi.testclient import TestClient
+
+    from agent.main import app
+    from db.models import Conversation, Experience
+    from db.session import get_db_session
 
     client = TestClient(app)
     headers = {"Authorization": "Bearer secret-test-key"}
@@ -296,11 +301,13 @@ def test_conversation_pinning_endpoints(deterministic_app):
 
 def test_truncate_thread_updates_updated_at(monkeypatch):
     import uuid
-    from datetime import datetime, UTC, timedelta
-    from db.session import get_db_session
-    from db.models import Conversation, Experience
+    from datetime import UTC, datetime, timedelta
+
     from fastapi.testclient import TestClient
+
     from agent.main import app
+    from db.models import Conversation, Experience
+    from db.session import get_db_session
 
     monkeypatch.setenv("VELA_API_KEY", "secret-test-key")
     headers = {"Authorization": "Bearer secret-test-key"}
@@ -362,10 +369,12 @@ def test_truncate_thread_updates_updated_at(monkeypatch):
 
 def test_truncate_thread_invalid_cases(monkeypatch):
     import uuid
-    from db.session import get_db_session
-    from db.models import Conversation
+
     from fastapi.testclient import TestClient
+
     from agent.main import app
+    from db.models import Conversation
+    from db.session import get_db_session
 
     monkeypatch.setenv("VELA_API_KEY", "secret-test-key")
     headers = {"Authorization": "Bearer secret-test-key"}
@@ -373,7 +382,7 @@ def test_truncate_thread_invalid_cases(monkeypatch):
     # 1. Non-existent thread/conversation
     with TestClient(app) as client:
         payload = {"upto_message_id": f"usr-{uuid.uuid4()}"}
-        resp = client.post(f"/chat/threads/non-existent-thread-id/truncate", json=payload, headers=headers)
+        resp = client.post("/chat/threads/non-existent-thread-id/truncate", json=payload, headers=headers)
         assert resp.status_code == 404
         assert "Message not found in thread" in resp.json()["detail"]
         
@@ -416,8 +425,9 @@ def test_register_device_token_endpoint(monkeypatch):
 @pytest.mark.asyncio
 async def test_lifespan_schema_migration_rename_persona():
     """Test lifespan DB migration renames legacy persona column to agent."""
-    from agent.main import lifespan, app
     from unittest.mock import MagicMock, patch
+
+    from agent.main import app, lifespan
 
     mock_engine = MagicMock()
     mock_inspector = MagicMock()
@@ -441,8 +451,9 @@ async def test_lifespan_schema_migration_rename_persona():
 @pytest.mark.asyncio
 async def test_lifespan_schema_migration_add_missing_columns():
     """Test lifespan DB migration adds agent, active_skill, is_pinned, source if missing."""
-    from agent.main import lifespan, app
     from unittest.mock import MagicMock, patch
+
+    from agent.main import app, lifespan
 
     mock_engine = MagicMock()
     mock_inspector = MagicMock()
@@ -488,9 +499,10 @@ def test_message_payload_validation():
 
 def test_eval_thread_bypasses_experience_persistence(deterministic_app):
     """Verify that /chat/message with eval- thread prefix bypasses Experience DB writes."""
+    from unittest.mock import patch
+
     from agent.main import _EVAL_THREAD_HISTORY, clear_eval_thread_history
     from db.client import DBClient
-    from unittest.mock import patch
 
     eval_thread_id = "eval-thread-no-poison-999"
     clear_eval_thread_history(eval_thread_id)
