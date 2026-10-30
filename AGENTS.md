@@ -36,3 +36,7 @@ The five canonical triage role labels are used as-is: needs-triage, needs-info, 
 ### Domain docs
 
 Single-context: one `CONTEXT.md` plus `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+### Driving the app in a browser
+
+The client is agent-driveable on Expo web against a scripted LLM: `python vela_ci.py e2e`, or Playwright against the `/_e2e/*` control channel plus `window.__VELA_E2E__`. Use it before claiming a client change works. See `docs/agents/ui-e2e.md`.
