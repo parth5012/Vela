@@ -222,10 +222,10 @@ def create_e2e_app() -> Any:
     os.environ["GOOGLE_API_KEY"] = ""
 
     global _router
-    from agent.testing.db import FIXED_DATETIME
     from fastapi.middleware.cors import CORSMiddleware
 
     from agent.main import app
+    from agent.testing.db import FIXED_DATETIME
 
     _install_provider()
     _freeze_clock(FIXED_DATETIME)
