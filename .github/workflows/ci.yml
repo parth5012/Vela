@@ -4,7 +4,12 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      # Wayfinder / agent stacks open sub-PRs against their parent branch, so
+      # each layer has to be gated too (the workflow used by a pull_request run
+      # is the one in its head commit).
+      - 'wf/**'
   workflow_dispatch:
 
 concurrency:
