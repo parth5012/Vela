@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel
@@ -60,8 +59,6 @@ class ScriptPayload(BaseModel):
     # exactly the shapes ``FakeProvider.add_script`` accepts.
     turns: list[Any]
 
-_DB_FILE = Path(__file__).resolve().parents[2] / ".tmp" / "vela_e2e_ui.db"
-
 _provider: Any = None
 _clock_patch: Any = None
 _router: Any = None
@@ -74,16 +71,6 @@ def require_e2e_env() -> None:
             f"e2e control channel refused: set {E2E_ENV_FLAG}=1 to enable it. "
             "This module is test-only and must never run in production."
         )
-
-
-def _configure_database() -> None:
-    """Point the app at a disposable SQLite DB (unless the caller chose one)."""
-    if os.environ.get("DATABASE_URL"):
-        return
-    _DB_FILE.parent.mkdir(parents=True, exist_ok=True)
-    if _DB_FILE.exists():
-        _DB_FILE.unlink()
-    os.environ["DATABASE_URL"] = f"sqlite:///{_DB_FILE.as_posix()}"
 
 
 def _install_provider() -> Any:
@@ -213,7 +200,6 @@ def _build_router():
 def create_e2e_app() -> Any:
     """Return the real FastAPI app wired for deterministic UI e2e runs."""
     require_e2e_env()
-    _configure_database()
 
     # Determinism knobs that must land before ``agent.main`` is imported.
     # An empty GOOGLE_API_KEY keeps ``utils.helpers.get_title`` on its local
