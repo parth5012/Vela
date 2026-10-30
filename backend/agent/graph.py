@@ -170,9 +170,10 @@ async def chatbot_node(state: AgentState) -> dict:
     has_provider_override = False
     try:
         from utils.llm import _LLM_PROVIDER_OVERRIDE
-        has_provider_override = _LLM_PROVIDER_OVERRIDE is not None
-    except Exception:
-        pass
+    except ImportError:
+        # No override hook in this build of the LLM module — treat as absent.
+        _LLM_PROVIDER_OVERRIDE = None
+    has_provider_override = _LLM_PROVIDER_OVERRIDE is not None
 
     if has_provider_override or (api_key and not api_key.startswith("your_")):
         try:
