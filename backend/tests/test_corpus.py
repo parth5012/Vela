@@ -28,6 +28,22 @@ from corpus.loader import (
 )
 from corpus.runner import run_fixture
 
+
+def test_manifest_hash_is_line_ending_independent(tmp_path):
+    """Pinned content must hash the same on Windows (CRLF) and Linux (LF).
+
+    Regression: hashing raw bytes made every fixture mismatch in CI while the
+    Windows checkout passed, because git hands out different line endings.
+    """
+    from corpus.loader import _sha256
+
+    crlf = tmp_path / "crlf.json"
+    crlf.write_bytes(b'{\r\n  "feature": "plain-reply"\r\n}\r\n')
+    lf = tmp_path / "lf.json"
+    lf.write_bytes(b'{\n  "feature": "plain-reply"\n}\n')
+
+    assert _sha256(crlf) == _sha256(lf)
+
 pytestmark = pytest.mark.corpus
 
 #: Secret-shaped strings that must never be committed inside a transcript.

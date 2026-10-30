@@ -285,11 +285,16 @@ def format_diff(expected: Any, actual: Any, *, label: str) -> str | None:
 
 
 def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(65536), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    """Hash a fixture's normalised content (UTF-8 text, LF newlines).
+
+    The corpus is pinned by *content*, and git checks the same JSON out with
+    CRLF on Windows and LF on Linux. Hashing raw bytes made the manifest
+    platform-dependent — Windows passed while every fixture mismatched in CI.
+    Newline normalisation keeps one manifest valid on every platform.
+    """
+    text = path.read_text(encoding="utf-8")  # universal newlines already fold CRLF
+    normalised = text.replace("\r\n", "\n").replace("\r", "\n")
+    return hashlib.sha256(normalised.encode("utf-8")).hexdigest()
 
 
 def _relative(path: Path) -> str:
