@@ -137,3 +137,8 @@ Known edge cases, gotchas, non-obvious behaviors discovered during work.
 
 ## 2026-10-30 — Loading a module by path breaks `@dataclass` under `from __future__ import annotations`
 - `importlib.util.module_from_spec` + `exec_module` without `sys.modules[spec.name] = module` makes `dataclasses` raise `AttributeError: 'NoneType' object has no attribute '__dict__'`, because it resolves string annotations through `sys.modules[cls.__module__]`. Register the module before executing it (as `backend/tests/test_vela_ci.py` now does).
+
+## 2026-10-30 — Restacking silently drops follow-up commits made on a lower branch
+- A fix commit added to a lower stack branch *after* the children were cut (the corpus CRLF re-pin on `#493`) never reaches the children: `git rebase --onto <new-parent-tip> <their-old-base> <child>` replays only the child's own commits, so the tip PR keeps running the pre-fix code and its CI keeps failing the exact bug that was already fixed one layer down.
+- Restack bottom-up right after every follow-up fix: `git rebase --onto <new lower tip> <old lower tip> <child branch>`, force-with-lease push, then repeat for each descendant. Verify with `git branch -a --contains <fix-sha>` — if only the owning branch lists it, the stack is out of sync.
+- `git rebase --onto X Y` where `Y == branch tip` has an empty commit range and leaves the branch pointing at `X`, i.e. it silently erases the layer instead of erroring. Always pass the *old parent tip* as `Y`, and check `git log --oneline -3` afterwards.
