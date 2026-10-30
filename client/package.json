@@ -60,6 +60,7 @@
   "devDependencies": {
     "@babel/runtime": "^7.29.0",
     "@expo/config-plugins": "~57.0.2",
+    "@playwright/test": "1.62.0",
     "@react-native/jest-preset": "^0.86.0",
     "@types/jest": "^29.5.12",
     "@types/node": "^26.6.4",
@@ -91,6 +92,7 @@
     "android:apk:prod:clean": "powershell -ExecutionPolicy Bypass -File scripts/install-apk.ps1 -Production -CleanInstall",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "e2e": "playwright test",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "benchmark:ci": "jest __tests__/perf.benchmark.test.ts --runInBand",
@@ -104,7 +106,8 @@
     ],
     "testPathIgnorePatterns": [
       "/node_modules/",
-      "[\\/]__tests__[\\/]helpers[\\/]"
+      "[\\/]__tests__[\\/]helpers[\\/]",
+      "<rootDir>/e2e/"
     ],
     "transformIgnorePatterns": [
       "node_modules/(?!(\\.pnpm/.*node_modules/)?((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|ai|@ai-sdk/.*|@openrouter/.*|@workflow/.*|effect|@shopify/flash-list))"
