@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "timestamp": "2026-10-27T16:37:13.088Z",
+  "timestamp": "2026-10-31T08:52:05.730Z",
   "platform": "mobile-android",
   "environment": {
     "os": "linux",
@@ -37,7 +37,7 @@
       "description": "Cumulative AST parse duration across 250 tokens (Target: < 2.5 ms)"
     },
     "parse_quadratic_ratio": {
-      "value": 1.92,
+      "value": 1.46,
       "unit": "ratio",
       "lower_is_better": true,
       "target": 2.2,
@@ -46,7 +46,7 @@
       "description": "Scaling ratio total_parse(250) / total_parse(125) (Target: < 2.20 ratio)"
     },
     "js_event_loop_lag_ms": {
-      "value": 1,
+      "value": 0,
       "unit": "ms",
       "lower_is_better": true,
       "target": 4,
@@ -55,7 +55,7 @@
       "description": "JavaScript event-loop delay under active streaming load (Target: < 4.0 ms)"
     },
     "sqlite_insert_duration_ms": {
-      "value": 0,
+      "value": 1,
       "unit": "ms",
       "lower_is_better": true,
       "target": 3,
