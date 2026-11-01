@@ -29,17 +29,34 @@ import { db } from '../db/client';
 import {
   checkinRowId,
   saveCheckinLocal,
+  loadCheckins,
   loadUnsyncedCheckins,
   markCheckinSynced,
   flushUnsyncedCheckins,
   isCheckinDbAvailable,
 } from '../db/checkinRepository';
+import { reset as resetMetrics, snapshot as metricSnapshot } from '../utils/metrics';
+import {
+  STORAGE_QUERY_COUNT_METRIC as STORAGE_QUERY_COUNT,
+  HISTORY_MAX_QUERIES,
+} from '../utils/storageMetrics';
 
 describe('checkinRepository (local-first check-in queue, wayfinder #117)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     global.fetch = jest.fn();
   });
+
+  /** Mocks the loadCheckins select→from→orderBy→limit chain. */
+  function mockLoadCheckins(rows: unknown[]) {
+    (db.select as jest.Mock).mockReturnValueOnce({
+      from: jest.fn(() => ({
+        orderBy: jest.fn(() => ({
+          limit: jest.fn(async () => rows),
+        })),
+      })),
+    });
+  }
 
   describe('checkinRowId', () => {
     it('keys rows by date so same-day saves replace each other', () => {
@@ -164,6 +181,28 @@ describe('checkinRepository (local-first check-in queue, wayfinder #117)', () =>
       const result = await flushUnsyncedCheckins('', '', '');
       expect(result).toEqual({ syncedCount: 0, failedCount: 0 });
       expect(global.fetch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('storage query metrics (#505)', () => {
+    it('increments storage.query.count on the journal-screen load path', async () => {
+      resetMetrics();
+      mockLoadCheckins([{ id: 'checkin-2026-09-17', date: '2026-09-17' }]);
+
+      await loadCheckins(30);
+
+      expect(metricSnapshot().counters[STORAGE_QUERY_COUNT]).toBe(1);
+    });
+
+    it('history screen stays within its budget: at most one query', async () => {
+      resetMetrics();
+      mockLoadCheckins([]);
+
+      await loadCheckins(30);
+
+      expect(metricSnapshot().counters[STORAGE_QUERY_COUNT]).toBeLessThanOrEqual(
+        HISTORY_MAX_QUERIES
+      );
     });
   });
 });
