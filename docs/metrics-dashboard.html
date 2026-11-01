@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Vela Metrics Dashboard</title>
+<style>
+  :root { --bg:#0b0f14; --panel:#131922; --border:#1f2937; --text:#e5e7eb; --muted:#9ca3af; --good:#22c55e; --warn:#f59e0b; --bad:#ef4444; --accent:#3b82f6; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text)}
+  header{padding:16px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  h1{font-size:18px;margin:0}
+  .sub{color:var(--muted);font-size:12px}
+  main{padding:20px 24px;display:grid;gap:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px}
+  .card h2{font-size:14px;margin:0 0 10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .stat{flex:1;min-width:140px;background:#0f141c;border:1px solid var(--border);border-radius:8px;padding:12px}
+  .stat .k{color:var(--muted);font-size:11px;text-transform:uppercase}
+  .stat .v{font-size:22px;font-weight:600;margin-top:4px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:8px 10px;border-bottom:1px solid var(--border);text-align:left}
+  th{color:var(--muted);font-weight:500}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600}
+  .pill.good{background:#14532d;color:#86efac}
+  .pill.warn{background:#78350f;color:#fcd34d}
+  .pill.bad{background:#7f1d1d;color:#fca5a5}
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  input[type=file]{color:var(--muted)}
+  button{background:var(--accent);color:#fff;border:0;border-radius:6px;padding:8px 14px;cursor:pointer;font-size:13px}
+  button.secondary{background:#1f2937}
+  .empty{color:var(--muted);padding:40px;text-align:center}
+  canvas{max-width:100%}
+  .budgets{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+  .budget{background:#0f141c;border:1px solid var(--border);border-radius:8px;padding:10px}
+  .budget .name{font-size:12px;color:var(--muted)}
+  .budget .val{font-size:16px;font-weight:600;margin:4px 0}
+  .budget .bar{height:6px;background:#1f2937;border-radius:3px;overflow:hidden}
+  .budget .bar>div{height:100%;background:var(--good)}
+  .budget .bar>div.warn{background:var(--warn)}
+  .budget .bar>div.bad{background:var(--bad)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Vela Metrics Dashboard</h1>
+    <div class="sub">Counters, histograms, budgets from utils/metrics.ts snapshots. Load a snapshot JSON (from a dump or AsyncStorage export).</div>
+  </div>
+  <div class="controls">
+    <input type="file" id="file" accept="application/json" />
+    <button id="loadSample">Load sample</button>
+    <button class="secondary" id="clear">Clear</button>
+  </div>
+</header>
+<main id="main">
+  <div class="empty" id="empty">Drop or select a metrics snapshot JSON file to visualize.</div>
+</main>
+
+<script>
+const BUDGETS = [
+  { name: 'SSE request body', metric: 'sse.request_bytes', budget: 4096, kind: 'max' },
+  { name: 'Sort 1,000 messages', metric: 'render.chatFeed', budget: 50, kind: 'max', unit: 'ms' },
+  { name: 'Parse 100 markdown blocks', metric: 'render.parse', budget: 100, kind: 'max', unit: 'ms' },
+  { name: 'History queries', metric: 'storage.query.count', budget: 1, kind: 'max', scope: 'history' },
+  { name: 'History duration', metric: 'storage.query.duration', budget: 100, kind: 'max', unit: 'ms', scope: 'history' },
+  { name: 'Thread-list queries', metric: 'storage.query.count', budget: 2, kind: 'max', scope: 'threadList' },
+  { name: 'Dropped frames', metric: 'frames.dropped', budget: 0, kind: 'max' },
+  { name: 'Long task max', metric: 'tasks.long.maxMs', budget: 100, kind: 'max', unit: 'ms' },
+];
+
+let data = null;
+
+function fmt(n){ if(n==null) return '—'; if(typeof n==='number'){ return Number.isInteger(n)? n : n.toFixed(2); } return String(n); }
+
+function statusFor(metric, value, budget){
+  if(value==null) return 'good';
+  if(value<=budget) return 'good';
+  if(value<=budget*1.25) return 'warn';
+  return 'bad';
+}
+
+function render(){
+  const main = document.getElementById('main');
+  if(!data){ main.innerHTML = '<div class="empty">Drop or select a metrics snapshot JSON file to visualize.</div>'; return; }
+  const snap = data.snapshot || data;
+  const counters = snap.counters || {};
+  const stats = snap.stats || {};
+  const samples = snap.samples || [];
+
+  // top totals
+  const totalSamples = samples.length;
+  const counterNames = Object.keys(counters);
+  const statNames = Object.keys(stats);
+  const totalCounterInc = counterNames.reduce((a,k)=>a+(counters[k]||0),0);
+
+  let html = '';
+  html += '<div class="card"><h2>Overview</h2><div class="row">';
+  html += stat('Total samples (buffer)', totalSamples);
+  html += stat('Distinct counters', counterNames.length);
+  html += stat('Distinct histograms/timers', statNames.length);
+  html += stat('Total counter increments', totalCounterInc);
+  html += '</div></div>';
+
+  // counters table
+  html += '<div class="card"><h2>Counters</h2>';
+  if(counterNames.length===0){ html += '<div class="empty">No counters.</div>'; }
+  else {
+    html += '<table><thead><tr><th>Name</th><th>Total</th></tr></thead><tbody>';
+    counterNames.sort().forEach(k=>{
+      html += `<tr><td>${k}</td><td>${fmt(counters[k])}</td></tr>`;
+    });
+    html += '</tbody></table>';
+  }
+  html += '</div>';
+
+  // histograms/timers
+  html += '<div class="card"><h2>Histograms &amp; Timers</h2>';
+  if(statNames.length===0){ html += '<div class="empty">No stats.</div>'; }
+  else {
+    html += '<table><thead><tr><th>Name</th><th>Count</th><th>Min</th><th>Max</th><th>Mean</th><th>Sum</th></tr></thead><tbody>';
+    statNames.sort().forEach(k=>{
+      const s = stats[k];
+      html += `<tr><td>${k}</td><td>${fmt(s.count)}</td><td>${fmt(s.min)}</td><td>${fmt(s.max)}</td><td>${fmt(s.mean)}</td><td>${fmt(s.sum)}</td></tr>`;
+    });
+    html += '</tbody></table>';
+  }
+  html += '</div>';
+
+  // budgets
+  html += '<div class="card"><h2>Budgets</h2><div class="budgets">';
+  BUDGETS.forEach(b=>{
+    let value = null;
+    if(b.metric in counters && b.scope!=='history' && b.scope!=='threadList'){ value = counters[b.metric]; }
+    // stats-based
+    if(b.metric in stats){
+      const s = stats[b.metric];
+      value = (b.kind==='max') ? s.max : s.count;
+    }
+    // counter-based for count metrics
+    if(b.metric==='storage.query.count' && b.scope==='history'){ value = counters[b.metric]; }
+    if(b.metric==='frames.dropped'){ value = counters[b.metric] ?? 0; }
+    const st = statusFor(b.metric, value, b.budget);
+    const pct = (value==null||b.budget===0) ? 0 : Math.min(100, (value/b.budget)*100);
+    html += `<div class="budget">
+      <div class="name">${b.name} <span class="pill ${st}">${st}</span></div>
+      <div class="val">${fmt(value)} ${b.unit||''} <span style="color:var(--muted);font-size:12px">/ ${b.budget}${b.unit?' '+b.unit:''}</span></div>
+      <div class="bar"><div class="${st}" style="width:${pct}%"></div></div>
+    </div>`;
+  });
+  html += '</div></div>';
+
+  // raw sample distribution (top 20 by count)
+  const byName = {};
+  samples.forEach(s=>{ byName[s.name]=(byName[s.name]||0)+1; });
+  const top = Object.entries(byName).sort((a,b)=>b[1]-a[1]).slice(0,20);
+  html += '<div class="card"><h2>Sample distribution (top 20)</h2>';
+  if(top.length===0){ html += '<div class="empty">No samples.</div>'; }
+  else {
+    html += '<table><thead><tr><th>Metric</th><th>Samples</th></tr></thead><tbody>';
+    top.forEach(([k,v])=>{ html += `<tr><td>${k}</td><td>${v}</td></tr>`; });
+    html += '</tbody></table>';
+  }
+  html += '</div>';
+
+  main.innerHTML = html;
+}
+
+function stat(k,v){ return `<div class="stat"><div class="k">${k}</div><div class="v">${fmt(v)}</div></div>`; }
+
+document.getElementById('file').addEventListener('change', (e)=>{
+  const f = e.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = ()=>{ try{ data = JSON.parse(r.result); render(); }catch(err){ alert('Invalid JSON: '+err.message); } };
+  r.readAsText(f);
+});
+
+document.getElementById('loadSample').addEventListener('click', ()=>{
+  data = {
+    counters: { 'sse.attempts': 12, 'sse.successes': 11, 'sse.failures.http_error': 1, 'frames.dropped': 2, 'storage.query.count': 3, 'net.threads.count': 5, 'net.threads.errors': 0 },
+    stats: {
+      'sse.request_bytes': { count:12, sum:3240, min:270, max:277, mean:270 },
+      'sse.chunk_count': { count:12, sum:12, min:1, max:601, mean:101 },
+      'sse.ttfc': { count:11, sum:120, min:1, max:40, mean:10.9 },
+      'storage.query.duration': { count:3, sum:45, min:8, max:22, mean:15 },
+      'tasks.long.maxMs': { count:1, sum:136, min:136, max:136, mean:136 },
+    },
+    samples: []
+  };
+  render();
+});
+
+document.getElementById('clear').addEventListener('click', ()=>{ data=null; render(); });
+</script>
+</body>
+</html>

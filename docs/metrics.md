@@ -48,3 +48,9 @@ a "non-deterministic; do not gate releases" comment.
 - `client/utils/benchmarkHarness.ts` — perf harness for #499 budgets (keep).
 - `client/db/chatRepository.ts` and chat perf paths — covered by storage/network
   metrics where wrapped; otherwise keep as-is.
+
+## Visualization & regression comparison
+
+- Dashboard: `docs/metrics-dashboard.html` — open in a browser, load a metrics snapshot JSON (from `utils/metrics.snapshot()` / `toJSON()`) to view counters, histograms/timers, sample distribution, and budget pass/fail.
+- Compare two snapshots for regressions: `node scripts/metrics-compare.ts --baseline a.json --current b.json [--out report.json]`. Exits 1 on any budget violation (SSE body ≤4KB, chat-feed sort <50ms, parse <100ms, history ≤1 query + ≤100ms, thread list ≤2, dropped frames ≤0, long task ≤100ms). Also reports growth heuristics (>50% counter growth, >25% max growth).
+- In-app export: `utils/metrics.ts` exports `toJSON()` (string) and `snapshot()` for dumping to a file via expo-file-system in a perf harness.

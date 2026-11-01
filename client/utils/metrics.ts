@@ -194,6 +194,11 @@ export function snapshot(): MetricsSnapshot {
   };
 }
 
+/** Serializes the current snapshot to JSON (for dumps / comparison scripts). */
+export function toJSON(): string {
+  return JSON.stringify(snapshot());
+}
+
 /**
  * Persists the current buffer to AsyncStorage (`vela_metrics_v1`).
  * Returns false when the write could not be completed; in-memory data is unaffected.
