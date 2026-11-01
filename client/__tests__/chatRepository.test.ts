@@ -47,6 +47,12 @@ import {
   markMessageSynced,
 } from '../db/chatRepository';
 import { perfTracker } from '../utils/perfTracker';
+import { reset as resetMetrics, snapshot as metricSnapshot } from '../utils/metrics';
+import {
+  STORAGE_QUERY_COUNT_METRIC as STORAGE_QUERY_COUNT,
+  STORAGE_QUERY_DURATION_METRIC as STORAGE_QUERY_DURATION,
+  THREAD_LIST_MAX_QUERIES,
+} from '../utils/storageMetrics';
 
 describe('chatRepository (local-first chat persistence)', () => {
   beforeEach(() => {
@@ -337,6 +343,53 @@ describe('chatRepository (local-first chat persistence)', () => {
       expect(execSyncMock).toHaveBeenCalledWith('PRAGMA journal_mode = WAL;');
       expect(execSyncMock).toHaveBeenCalledWith('PRAGMA busy_timeout = 5000;');
       expect(execSyncMock).toHaveBeenCalledWith('PRAGMA synchronous = NORMAL;');
+    });
+  });
+
+  describe('storage query metrics (#505)', () => {
+    it('increments storage.query.count on loadThreads', async () => {
+      resetMetrics();
+      const orderByFn = jest.fn(async () => []);
+      (db.select as jest.Mock).mockReturnValueOnce({
+        from: jest.fn(() => ({ orderBy: orderByFn })),
+      });
+
+      await loadThreads();
+
+      expect(metricSnapshot().counters[STORAGE_QUERY_COUNT]).toBe(1);
+      expect(metricSnapshot().stats[STORAGE_QUERY_DURATION]?.count).toBe(1);
+    });
+
+    it('increments storage.query.count on loadMessages', async () => {
+      resetMetrics();
+      const whereFn = jest.fn(() => ({ orderBy: jest.fn(async () => []) }));
+      (db.select as jest.Mock).mockReturnValueOnce({
+        from: jest.fn(() => ({ where: whereFn })),
+      });
+
+      await loadMessages('t1');
+
+      expect(metricSnapshot().counters[STORAGE_QUERY_COUNT]).toBe(1);
+      expect(metricSnapshot().stats[STORAGE_QUERY_DURATION]?.count).toBe(1);
+    });
+
+    it('keeps loadThreads/loadMessages query count within the thread-list budget', async () => {
+      resetMetrics();
+      (db.select as jest.Mock)
+        .mockReturnValueOnce({
+          from: jest.fn(() => ({ orderBy: jest.fn(async () => []) })),
+        })
+        .mockReturnValueOnce({
+          from: jest.fn(() => ({ where: jest.fn(() => ({ orderBy: jest.fn(async () => []) })) })),
+        });
+
+      const threadList = await loadThreads();
+      await loadMessages('t1');
+
+      expect(threadList).toEqual([]);
+      expect(metricSnapshot().counters[STORAGE_QUERY_COUNT]).toBeLessThanOrEqual(
+        THREAD_LIST_MAX_QUERIES
+      );
     });
   });
 });
