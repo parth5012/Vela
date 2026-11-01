@@ -84,7 +84,7 @@ def test_backend_steps_run_pytest_in_backend(gate):
 
 def test_client_steps_cover_lint_typecheck_and_tests(gate):
     steps = gate.build_steps("client")
-    assert [step.name for step in steps] == ["eslint", "tsc", "jest"]
+    assert [step.name for step in steps] == ["arch", "eslint", "tsc", "jest"]
     for step in steps:
         assert step.cwd == REPO_ROOT / "client"
 

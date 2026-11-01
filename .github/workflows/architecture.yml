@@ -20,6 +20,7 @@ jobs:
   client-architecture-check:
     name: Client Boundary Check (dependency-cruiser)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: client
@@ -28,7 +29,7 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 12
+          version: 9
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -43,6 +44,7 @@ jobs:
   backend-architecture-check:
     name: Backend Boundary Check (pytest boundaries)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: backend
