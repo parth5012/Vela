@@ -1,15 +1,17 @@
 import pytest
 from fastapi.testclient import TestClient
 from fastapi.websockets import WebSocketDisconnect
+
 from agent.main import app
+
 
 def test_omni_websocket_rejects_unauthenticated(monkeypatch):
     monkeypatch.setenv("VELA_API_KEY", "test-vela-key")
     client = TestClient(app)
-    with pytest.raises(WebSocketDisconnect) as exc_info:
-        with client.websocket_connect("/ws/omni?token=wrong-key") as ws:
-            ws.receive_json()
+    with pytest.raises(WebSocketDisconnect) as exc_info, client.websocket_connect("/ws/omni?token=wrong-key") as ws:
+        ws.receive_json()
     assert exc_info.value.code == 1008
+
 
 def test_omni_websocket_session_lifecycle(monkeypatch):
     monkeypatch.setenv("VELA_API_KEY", "test-vela-key")
