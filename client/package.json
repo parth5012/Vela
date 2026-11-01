@@ -111,6 +111,11 @@
     ],
     "transformIgnorePatterns": [
       "node_modules/(?!(\\.pnpm/.*node_modules/)?((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|ai|@ai-sdk/.*|@openrouter/.*|@workflow/.*|effect|@shopify/flash-list))"
+    ],
+    "testMatch": [
+      "**/__tests__/**/*.[jt]s?(x)",
+      "**/__tests__/**/*.eval.ts",
+      "**/?(*.)+(spec|test).[jt]s?(x)"
     ]
   },
   "private": true,
