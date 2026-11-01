@@ -130,4 +130,20 @@ describe('promptCompiler utility', () => {
     expect(result).toContain('</s>\n');
     expect(result).toContain('<|user|>\nWhat is 2+2?</s>\n<|assistant|>\n');
   });
+
+  it('should format Liquid LFM templates correctly', () => {
+    const params = {
+      ...defaultParams,
+      compactInstructions: 'Be extremely concise.',
+      toolDeclarations: ['tool_foo'],
+      modelName: 'Liquid LFM 1.7B (GGUF)',
+    };
+
+    const result = compileLocalPrompt(params);
+
+    expect(result).toContain('<|im_start|>system\nSystem instructions.\nBe extremely concise.');
+    expect(result).toContain('Available tools:\ntool_foo');
+    expect(result).toContain('<|im_end|>\n');
+    expect(result).toContain('<|im_start|>user\nWhat is 2+2?<|im_end|>\n<|im_start|>assistant\n');
+  });
 });

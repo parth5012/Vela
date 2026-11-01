@@ -121,6 +121,21 @@ export function compileLocalPrompt(params: CompileLocalPromptParams): string {
 
       prompt += `<｜User｜>\n${userContent}\n<｜Assistant｜>\n`;
       return prompt;
+    } else if (modelName.includes('LFM') || modelName.startsWith('Liquid')) {
+      // Liquid LFM format (ChatML style with <|im_start|> / <|im_end|>)
+      let prompt = `<|im_start|>system\n${systemContent}`;
+      if (toolsContent) {
+        prompt += `\n\nAvailable tools:\n${toolsContent}`;
+      }
+      prompt += '<|im_end|>\n';
+
+      for (const msg of historySlice) {
+        const role = msg.role === 'user' ? 'user' : 'assistant';
+        prompt += `<|im_start|>${role}\n${msg.content}<|im_end|>\n`;
+      }
+
+      prompt += `<|im_start|>user\n${userContent}<|im_end|>\n<|im_start|>assistant\n`;
+      return prompt;
     } else {
       // Default: ChatML for Qwen2.5 0.5B, SmolLM 135M & default fallback
       let prompt = `<|im_start|>system\n${systemContent}`;

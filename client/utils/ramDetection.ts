@@ -399,7 +399,9 @@ export function getModelStatusForRam(modelName: string, ramBytes: number): Model
     if (
       modelName === 'TinyLlama 1.1B' ||
       modelName === 'Qwen2.5 1.5B (GGUF)' ||
-      modelName === 'DeepSeek-R1 1.5B (GGUF)'
+      modelName === 'DeepSeek-R1 1.5B (GGUF)' ||
+      modelName === 'Liquid LFM 1.7B (GGUF)' ||
+      modelName === 'Liquid LFM-D1 (GGUF)'
     ) {
       return 'borderline';
     }

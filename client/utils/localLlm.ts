@@ -293,6 +293,26 @@ export const LOCAL_MODELS: LocalModelSpec[] = [
     filename: 'DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf',
     format: 'gguf',
   },
+  {
+    name: 'Liquid LFM 1.7B (GGUF)',
+    size: '~1.15 GB',
+    description: 'Liquid Foundation Model 1.7B, fast edge reasoning and device automation, 32k context, llama.rn engine',
+    downloadUrl:
+      'https://huggingface.co/LiquidAI/LFM-1.7B-GGUF/resolve/main/LFM-1.7B-Q4_K_M.gguf',
+    filename: 'LFM-1.7B-Q4_K_M.gguf',
+    format: 'gguf',
+    contextSize: 8192,
+  },
+  {
+    name: 'Liquid LFM-D1 (GGUF)',
+    size: '~2.1 GB',
+    description: 'Liquid Foundation Model D1 reasoning model with step-by-step thinking, 32k context, llama.rn engine',
+    downloadUrl:
+      'https://huggingface.co/LiquidAI/LFM-D1-GGUF/resolve/main/LFM-D1-Q4_K_M.gguf',
+    filename: 'LFM-D1-Q4_K_M.gguf',
+    format: 'gguf',
+    contextSize: 8192,
+  },
 ];
 
 // Determine if native bridge is available.
