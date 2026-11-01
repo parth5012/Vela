@@ -1,278 +1,383 @@
-# Vela: Personal Supervisor Agent Backend
+# 🌌 Vela: The Sovereign AI Operating System
 
-Vela is an advanced, FastAPI-powered personal assistant backend designed to coordinate simple utility tools and complex, multi-turn cognitive skills. Utilizing a **Supervisor Agent Pattern** built on **LangGraph**, Vela dynamically routes intents to sub-agent workflows or tools while maintaining server-side long-term semantic memory and performing dynamic self-improvement evaluations.
+<div align="center">
 
-Vela supports multiple gateways to interface with users:
-1. **Telegram Bot** (webhook-driven updates with async execution).
-2. **Discord Bot** (event-driven client monitoring using `discord.py` and prefixed commands).
-3. **Vela Mobile Client** (REST API with SSE streaming support for custom frontend clients).
+[![License](https://img.shields.io/badge/license-Apache%202.0%20%7C%20MIT-blue.svg?style=for-the-badge)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.11+-3776AB.svg?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.111+-009688.svg?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![LangGraph](https://img.shields.io/badge/LangGraph-Supervisor%20Architecture-FF4F00.svg?style=for-the-badge&logo=langchain&logoColor=white)](https://github.com/langchain-ai/langgraph)
+[![React Native / Expo](https://img.shields.io/badge/Expo-SDK%2057%20(RN%200.86)-000020.svg?style=for-the-badge&logo=expo&logoColor=white)](https://expo.dev)
+[![Supabase pgvector](https://img.shields.io/badge/Supabase-pgvector%20512--dim-3ECF8E.svg?style=for-the-badge&logo=supabase&logoColor=white)](https://supabase.com)
+[![Shizuku Privileged Automation](https://img.shields.io/badge/Shizuku-Privileged%20Android%20OS-brightgreen.svg?style=for-the-badge&logo=android&logoColor=white)](https://shizuku.rikka.app)
+[![CI Gate](https://img.shields.io/badge/CI%20Gate-Passing-success.svg?style=for-the-badge&logo=githubactions&logoColor=white)](vela_ci.py)
 
----
+**Your single-tenant, self-hosted, personal AI supervisor—uniting cloud reasoning, on-device neural models, privileged Android OS automation, persistent semantic memory, and a glassmorphic Aurora client.**
 
-## 🚀 Key Features
-
-*   **Supervisor Graph (LangGraph):** Orchestrates intent classification and executes routing dynamically between tools and sub-agent workflows.
-*   **Long-Term Semantic Memory (Supabase pgvector):** Leverages text embeddings to store and query contextually relevant memory history server-side with 512-dimensional vector indexing.
-*   **Google Workspace OAuth Integration:** Automates token exchanges and credentials management for Gmail and Google Calendar.
-*   **Tavily Web Search:** Deep real-time web search integration.
-*   **E2B Sandboxed Playground:** Secure code execution environment.
-*   **Nightly Self-Improvement Loop:** Processes recent transaction experiences, evaluates response performance, and refines system prompts dynamically.
-*   **Multi-Turn Agentic Skills:** Native support for Brainstorming, Research, and Sandbox Coding skills.
+[Features](#-key-capabilities) • [Architecture](#-system-architecture) • [Quickstart](#-quickstart-guide) • [Android Client](#-flagship-android-client) • [Device Automation](#-privileged-os-automation-shizuku) • [On-Device AI](#-hybrid-cloud--on-device-local-ai) • [Quality & CI](#-ui-council--performance-ratchets) • [API Specs](#-api--streaming-protocol)
 
 ---
 
-## 🛠️ Tech Stack
+</div>
 
-*   **Runtime:** Python 3.11+
-*   **Package Manager:** [uv](https://github.com/astral-sh/uv) (fast Python packaging tool)
-*   **API Framework:** FastAPI & Uvicorn
-*   **Workflow Engine:** LangGraph & LangChain Core
-*   **Database:** PostgreSQL (Supabase) utilizing the `vector` extension and SQLAlchemy ORM
-*   **Chat Platforms:** `python-telegram-bot` & `discord.py`
-*   **Testing:** `pytest` & `pytest-asyncio`
+## 💡 Why Vela?
+
+Commercial AI assistants trap your private data inside proprietary walled gardens, run exclusively in the cloud, refuse to take real actions on your hardware, and forget your conversations the moment a thread ends. 
+
+**Vela is built on a radically different premise: *The Owner's data stays on the Owner's infrastructure.***
+
+*   🛡️ **100% Sovereign & Self-Hosted:** Single-tenant by design. You run the backend on your own server or VPS. No telemetry, no third-party data harvesting, and no subscription lock-in.
+*   🦾 **True OS-Level Automation:** Directly controls your Android device via **Shizuku** (ADB/root UID permissions without rooting). Manages apps, toggles system settings, and automates real workflows.
+*   🧠 **Supervisor Cognitive Architecture:** Built on **LangGraph**. A master supervisor classifies intents, delegating dynamically between specialized multi-turn cognitive subagents and atomic tools.
+*   ⚡ **Hybrid Edge + Cloud Intelligence:** Seamlessly switch between cutting-edge frontier LLMs (Gemini 2.5, Claude 3.5, GPT-4o, Groq) and **100% offline on-device neural models** (Needle-3 Cactus C++ engine, MediaPipe LiteRT, llama.rn GGUF).
+*   🔄 **Nightly Autonomous Self-Improvement:** Evaluates daily interaction experiences, identifies conversational friction, and autonomously refines its own prompt fragments using `pgvector` memory reflection.
+*   🎨 **Aurora Glass UI:** A gorgeous, night-sky glassmorphic Android client with real-time SSE streaming, KaTeX math equations, interactive Mermaid diagrams, and 6 dark theme atmospheres.
 
 ---
 
-## 📦 Project Structure
+## ⚡ Feature Matrix at a Glance
+
+| Capability | Vela | Closed Commercial Bots (ChatGPT / Claude) | Generic Open-Source Web UIs |
+| :--- | :---: | :---: | :---: |
+| **Self-Hosted Data Sovereignty** | **Yes (Single-tenant Owner)** | ❌ No (Vendor Cloud) | ⚠️ Partial (UI only, no supervisor) |
+| **Android System Privileged Ops (Shizuku)** | **Yes (UID 2000 ADB / UID 0 Root)** | ❌ No | ❌ No |
+| **Hybrid Cloud + Offline On-Device LLM** | **Yes (Needle-3 / LiteRT / GGUF)** | ❌ Cloud-only | ⚠️ Requires separate Ollama setup |
+| **LangGraph Supervisor Graph Routing** | **Yes (Dynamic Intent Router)** | ❌ Black-box monolithic | ❌ Simple system prompt wrapper |
+| **Long-Term Memory Reflection** | **Yes (Supabase pgvector + Cron)** | ⚠️ Vendor-controlled | ❌ Session-bound or raw DB |
+| **Nightly Autonomous Self-Improvement** | **Yes (Auto-refines prompts)** | ❌ Static | ❌ None |
+| **Agentic In-App Browser Automation** | **Yes (with Human-in-the-Loop Gate)** | ⚠️ Cloud browser only | ❌ None |
+| **Multi-Channel Gateways** | **Android, Telegram, Discord, Voice** | ❌ App/Web only | ⚠️ Discord or Web only |
+| **Visual UI Quality Council** | **Yes (Sol/Opus/Muse automated audits)** | ❌ Internal QA | ❌ None |
+
+---
+
+## 🚀 Key Capabilities
+
+### 1. 🧠 Supervisor Agent Pattern & Cognitive Skills
+Built on **LangGraph**, Vela coordinates a hierarchical agent topology with zero tool hallucination:
+*   **Dynamic Intent Classification:** Inspects incoming context and routes to either dedicated multi-turn cognitive skills or targeted tools.
+*   **7 Specialized Agent Personas:**
+    *   **Personal Assistant:** Calendar, daily agendas, email triage, and smart task management.
+    *   **Deep Researcher:** Exhaustive multi-source web investigation with Tavily search and citation extraction.
+    *   **Software Architect / Coder:** Sandboxed code development, test generation, and review via isolated E2B containers.
+    *   **Brainstorming Partner:** Socratic interview loops that clarify vague ideas into concrete specs.
+    *   **Analytical Engine:** Deep quantitative breakdowns and structured data dissection.
+    *   **Prompt Builder:** Meta-prompt refinement and agent-directed instruction generation.
+    *   **Teacher & Mentor:** Step-by-step conceptual breakdowns with pedagogical clarity.
+*   **Agent Tool Registry:** Enforces strict, explicit tool bindings per persona, drastically reducing token consumption and preventing unauthorized tool execution.
+
+### 2. 📱 Flagship Android Client ("Aurora" Glass Language)
+A modern client built with **Expo SDK 57 / React Native 0.86** designed under Material Design 3 guidelines:
+*   **Aurora Glassmorphism:** Translucent glass cards, ambient glow gradients, ultra-thin borders, and night-sky depth.
+*   **6 Dark Atmospheres & 8 Energy Accents:**
+    *   *Atmospheres:* Deep Space, Slate, Cyberpunk, OLED Pure Black, Dracula, Nordic Dusk.
+    *   *Energy Accents:* Aurora gradient highlights for message bubbles, send triggers, and glowing active states.
+*   **Rich Interactive Rendering:**
+    *   **KaTeX LaTeX:** Flawless rendering for complex mathematical expressions and scientific notation (inline & block).
+    *   **Mermaid Diagrams:** Flowcharts, sequence diagrams, and architecture graphs rendered natively in-chat.
+    *   **Fenced Code Blocks:** Syntax highlighting across 40+ programming languages with one-tap copy and line numbers.
+    *   **Transparent Cognitive Disclosures:** Collapsible `<thought>`, `<intent>`, `<call>`, and `<skill>` blocks show the agent's exact thinking process.
+*   **Conversation Lifecycle:** Branching, pinning, renaming, truncation, and fast local SQLite caching (Drizzle ORM).
+
+### 3. 🦾 Privileged OS Automation (Shizuku + Accessibility)
+Vela bridges the gap between conversational AI and native Android system capabilities:
+*   **No Root Required:** Leverages **Shizuku** to execute privileged APIs via ADB (UID 2000) or Root (UID 0) user-services.
+*   **8 Strictly Allowlisted System Operations:**
+    1.  `pm_grant`: Grant runtime permissions to any package.
+    2.  `pm_revoke`: Revoke runtime permissions safely.
+    3.  `settings_put`: Modify `system`, `secure`, and `global` Android settings on the fly.
+    4.  `force_stop`: Terminate background processes and misbehaving apps.
+    5.  `set_enabled`: Freeze or enable system packages and bloatware.
+    6.  `clear_data`: Clear app storage and resets application cache.
+    7.  `install`: Background silent APK sideloading with absolute paths.
+    8.  `uninstall`: Cleanly remove installed applications.
+*   **Dual-Gate Security Architecture:**
+    *   *Readiness Gate:* Verifies Shizuku server availability and permission state before any action.
+    *   *Policy Tier Gate:* Strict Owner control over tool permissions (`Auto`, `Ask`, `Deny`).
+*   **Accessibility Service Companion:** Performs non-privileged UI automation (clicking, scrolling, typing, screen inspection).
+
+### 4. 🔒 Hybrid Cloud + On-Device Local AI
+Run frontier models when you have connectivity; fall back to private, local models when offline or handling sensitive data:
+*   **Multi-Engine On-Device Runtime:**
+    *   **Needle-3 Cactus Engine:** Statically linked, Apache-2.0 licensed, 20-layer neural network with 8,192 context window, accelerated via native C++ JNI.
+    *   **MediaPipe LiteRT:** Mobile GPU-accelerated `.task` inference using Google's tasks-genai runtime.
+    *   **llama.rn:** High-performance quantized GGUF inference directly on your phone's SoC.
+*   **Capability Honesty:** The Settings engine badge displays real status (`⚡ Accelerated (native)` vs `Mock Fallback`) so mock outputs are never misrepresented.
+*   **Local Constrained JSON Extraction (`/settings/extract`):** Enforces JSON schema adherence directly on local weights without network latency.
+
+### 5. 🌐 Agentic In-App Browser with Human-in-the-Loop
+*   **AI-Driven WebView:** The assistant can autonomously navigate pages, read the DOM, extract research data, and interact with web forms.
+*   **Human Approval Gate:** Sensitive browser actions—such as filling passwords, submitting payment credentials, or form execution—trigger a prominent Owner confirmation modal before execution.
+
+### 6. 🔄 Persistent Semantic Memory & Self-Improvement
+*   **Vectorized Memory (Supabase pgvector):** Conversations and facts are converted to 512-dimensional vector embeddings, allowing the agent to recall preferences and decisions across months of conversations.
+*   **Autonomous Nightly Reflection (`cron/consolidate.py`):**
+    *   Processes recent conversation `Experiences` and execution outcomes.
+    *   Identifies routing mistakes, user corrections, and successful patterns.
+    *   Synthesizes and dynamically updates system prompt fragments in PostgreSQL, making the assistant smarter every single night.
+
+### 7. 💬 Omni-Channel Gateways
+Access your assistant wherever you are:
+*   **Vela Android App:** Real-time SSE streaming, voice inputs, and device automation.
+*   **Telegram Bot:** Webhook-driven background execution with asynchronous processing.
+*   **Discord Bot:** Event-driven gateway with prefix (`v.`) and slash command support.
+*   **CarbonVoice Gateway:** Spoken audio interactions and ambient voice notes.
+
+### 8. 🛠️ External Tool Integrations
+*   **Google Workspace (OAuth2):** Full Gmail and Google Calendar integration with **Auto-Refresh Propagation** (server-side token refresh and automatic DB persistence).
+*   **Tavily Web Search:** Real-time web search with source extraction and domain filtering.
+*   **E2B Sandbox:** Secure, sandboxed cloud micro-VMs for executing arbitrary Python, Node.js, and Bash code.
+
+### 9. 🛡️ Visual Quality Council & Performance Ratchet Harness
+*   **UI Council Screenshot Scoring Harness (`scripts/ui-council.ts`):** Automated visual regression scoring with a tiered multi-agent council (Sol/GPT -> Opus/Claude -> Muse -> Jester/Gemini) with non-determinism tracking.
+*   **Performance Ratchet & Telemetry:** In-app metrics ring buffer tracking request latency, SQLite storage query timings, and JS-thread frame drops (`requestAnimationFrame` cadence) viewable via `docs/metrics-dashboard.html`.
+*   **Single-Command CI Gate:** A unified command (`python vela_ci.py ci`) that gates releases across Backend, Client, Corpus, and Playwright UI e2e tests.
+
+---
+
+## 🏛️ System Architecture
 
 ```text
-Vela/
-├── db/
-│   ├── client.py             # Database CRUD client wrapper
-│   ├── models.py             # SQLAlchemy models (Conversations, Experiences, OAuthTokens, etc.)
-│   ├── schema.sql            # Database schema migration script (tables & extensions)
-│   ├── session.py            # SQLAlchemy database engine and thread-safe sessions
-│   └── supabase.py           # Supabase DB wrapper with pgvector search
-├── agent/
-│   ├── main.py               # FastAPI server (Webhook, OAuth callbacks, Client endpoints)
-│   ├── graph.py              # LangGraph Supervisor workflow definition
-│   ├── router.py             # Supervisor Routing Node
-│   ├── memory.py             # Semantic Memory utility helpers
-│   ├── self_improve.py       # LLM-based evaluation logic
-│   └── prompt_builder.py     # Prompt assembly from fragments
-├── tools/
-│   ├── web_search.py         # Tavily search client
-│   ├── code_exec.py          # E2B execution wrapper
-│   ├── gmail.py              # OAuth Gmail helper
-│   ├── calendar.py           # OAuth Calendar helper
-│   ├── github.py             # GitHub API actions
-│   └── notion.py             # Notion integration
-├── skills/
-│   ├── base.py               # Abstract base class for multi-turn skills
-│   ├── brainstorming.py      # Clarifying interview simulator
-│   ├── research.py           # Deep research agent
-│   └── coding.py             # Sandbox developer/reviewer
-├── gateway/
-│   ├── telegram.py           # Telegram Update parser & webhook receiver
-│   └── discord.py            # Discord event handler bot
-├── cron/
-│   ├── health.py             # Keep-alive check
-│   └── consolidate.py        # System prompt consolidation script (nightly loop)
-└── tests/                    # Comprehensive unit tests suite
+                                 ┌──────────────────────────────────────────────┐
+                                 │                 USER CHANNELS                │
+                                 │  Android App  •  Telegram  •  Discord • Voice│
+                                 └──────────────────────┬───────────────────────┘
+                                                        │
+                                                        ▼
+┌──────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                       VELA FASTAPI BACKEND SERVER                                    │
+│                                                                                                      │
+│  ┌────────────────────────┐         ┌────────────────────────┐         ┌──────────────────────────┐  │
+│  │    Authentication Gate │         │ SSE Streaming Protocol │         │   OAuth Token Manager    │  │
+│  │    (Bearer VELA_KEY)   │         │ (Chunk + XML Parsers)  │         │ (Auto-Refresh & Storage) │  │
+│  └───────────┬────────────┘         └───────────┬────────────┘         └─────────────┬────────────┘  │
+│              │                                  │                                    │               │
+│              ▼                                  ▼                                    ▼               │
+│  ┌────────────────────────────────────────────────────────────────────────────────────────────────┐  │
+│  │                               LANGGRAPH SUPERVISOR AGENT WORKFLOW                              │  │
+│  │                                                                                                │  │
+│  │     ┌─────────────────────┐             ┌─────────────────────┐            ┌────────────────┐  │  │
+│  │     │   Semantic Memory   │ ──context──►│  Intent Classifier  │──routes───►│ Persona Prompt │  │  │
+│  │     │ (pgvector 512-dim)  │             │   (Supervisor)      │            │   Assembly     │  │  │
+│  │     └─────────────────────┘             └──────────┬──────────┘            └───────┬────────┘  │  │
+│  │                                                    │                               │           │  │
+│  │                    ┌───────────────────────────────┴──────────────────┐            │           │  │
+│  │                    ▼                                                  ▼            ▼           │  │
+│  │         ┌─────────────────────┐                            ┌─────────────────────┐             │  │
+│  │         │  Multi-Turn Skills  │                            │ Agent Tool Registry │             │  │
+│  │         │ • Deep Research     │                            │ • Google Workspace  │             │  │
+│  │         │ • E2B Sandbox Code  │                            │ • Tavily Web Search │             │  │
+│  │         │ • Brainstorming     │                            │ • Shizuku Bridge    │             │  │
+│  │         │ • Mermaid Graphs    │                            │ • WebView Browser   │             │  │
+│  │         └─────────────────────┘                            └─────────────────────┘             │  │
+│  └────────────────────────────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                                      │
+│  ┌────────────────────────────────────────────────────────────────────────────────────────────────┐  │
+│  │                                NIGHTLY SELF-IMPROVEMENT LOOP                                   │  │
+│  │          Experiences Log ──► Reflection LLM ──► Refined Prompt Fragments ──► PostgreSQL        │  │
+│  └────────────────────────────────────────────────────────────────────────────────────────────────┘  │
+└───────────────────────────────────────────────────────┬──────────────────────────────────────────────┘
+                                                        │
+                         ┌──────────────────────────────┴──────────────────────────────┐
+                         ▼                                                             ▼
+┌─────────────────────────────────────────────────┐   ┌─────────────────────────────────────────────────┐
+│              SOVEREIGN DATA LAYER               │   │             ANDROID DEVICE RUNTIME              │
+│  • Supabase PostgreSQL (pgvector 512)           │   │  • Shizuku System Daemon (Shell UID 2000)       │
+│  • SQLAlchemy Session Management                │   │  • Accessibility Service UI Automation          │
+│  • Local Client Cache (SQLite + Drizzle ORM)    │   │  • On-Device Neural Models (Needle-3 / LiteRT)  │
+└─────────────────────────────────────────────────┘   └─────────────────────────────────────────────────┘
 ```
 
 ---
 
-## ⚙️ Prerequisites & General Setup
+## ⚡ Quickstart Guide
 
-Ensure you have the following installed on your machine:
-*   Python 3.11+
-*   `uv` Package Manager
+### Prerequisites
+*   **Python:** 3.11+
+*   **Package Manager:** [uv](https://github.com/astral-sh/uv) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
+*   **Node.js & npm:** Node 20+ (for Expo Android client)
+*   **Database:** PostgreSQL with `vector` extension (e.g. free [Supabase](https://supabase.com) project)
 
-### 1. Install Dependencies
-Initialize the virtual environment and sync packages:
+---
+
+### Step 1: Clone & Configure Backend
+
 ```bash
+# Clone the repository
+git clone https://github.com/parth5012/Vela.git
+cd Vela/backend
+
+# Install dependencies using uv
 uv sync
-```
 
-### 2. Environment Configuration
-Copy [.env.example](file:///d:/work/projects/Vela/.env.example) to `.env` and fill in the required keys:
-```bash
+# Configure environment variables
 cp .env.example .env
 ```
 
-**Key configuration parameters include:**
-*   `SUPABASE_URL` & `SUPABASE_SERVICE_ROLE_KEY`: Service credentials for your Supabase project.
-*   `DATABASE_URL`: Connection string to your PostgreSQL instance (e.g. Supabase DB).
-*   `GOOGLE_API_KEY`: API Key for Gemini LLM (used as the primary agent reasoning model).
-*   `VELA_API_KEY`: Custom static Bearer token used to authenticate mobile/external clients (defaults to `vela5012`).
-*   `TAVILY_API_KEY` & `E2B_API_KEY`: API keys for web search and sandbox code execution respectively.
+Edit `.env` with your credentials:
+```ini
+# Supabase Database & Vectors
+SUPABASE_URL="https://your-project.supabase.co"
+SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
+DATABASE_URL="postgresql://postgres:password@db.your-project.supabase.co:5432/postgres"
+
+# Primary Reasoning Model
+GOOGLE_API_KEY="your-gemini-api-key"
+
+# Client Security (Static Bearer Token)
+VELA_API_KEY="your-secure-custom-key"
+
+# Optional External Tools
+TAVILY_API_KEY="your-tavily-key"
+E2B_API_KEY="your-e2b-sandbox-key"
+TELEGRAM_BOT_TOKEN="your-telegram-token"
+DISCORD_BOT_TOKEN="your-discord-token"
+```
 
 ---
 
-## 🗄️ Step 1: Database Setup (Supabase pgvector)
+### Step 2: Initialize Database Schema
 
-Vela uses a PostgreSQL database with `pgvector` enabled to store conversations, experiences, tokens, and semantic memories (using 512-dimensional embeddings).
-
-1. Go to your **Supabase Dashboard** > **SQL Editor**.
-2. Create a new query.
-3. Open [db/schema.sql](file:///d:/work/projects/Vela/db/schema.sql) and paste its contents.
-4. Execute the SQL script. This will:
-    *   Enable the `vector` extension.
-    *   Create `conversations`, `oauth_tokens`, `memory_vectors` (dimension 512), `experiences`, `system_prompt_fragments`, and `skills_registry` tables.
-    *   Set up foreign keys and cascading deletions.
+1. Open your **Supabase Dashboard** > **SQL Editor**.
+2. Run the SQL script from `backend/db/schema.sql` to initialize tables and enable `pgvector` (dimension 512).
+3. Validate your setup:
+   ```bash
+   uv run python scripts/setup_check.py
+   ```
 
 ---
 
-## 🤖 Step 2: Telegram Bot Integration Setup
+### Step 3: Run the Backend Server
 
-The Telegram integration uses webhooks to deliver update payloads to the FastAPI backend.
-
-1. **Create the Bot:**
-    *   Open Telegram and search for `@BotFather`.
-    *   Send `/newbot` and follow the instructions to get your **Bot Token**.
-    *   Save this token in your `.env` file: `TELEGRAM_BOT_TOKEN=your_bot_token`.
-
-2. **Expose your Local Server:**
-    *   Because Telegram webhooks require an HTTPS URL, expose your local backend server during development using a tunneling tool (like `ngrok` or `localtunnel`):
-        ```bash
-        ngrok http 8000
-        ```
-    *   Copy the HTTPS URL generated (e.g., `https://xxxx.ngrok-free.app`).
-
-3. **Register Webhook with Telegram:**
-    *   Run a HTTP GET request in your browser or curl to register your webhook:
-        ```text
-        https://api.telegram.org/bot<YOUR_TELEGRAM_BOT_TOKEN>/setWebhook?url=<YOUR_TUNNEL_HTTPS_URL>/webhooks/telegram
-        ```
-    *   Ensure the response confirms: `{"ok":true,"result":true,"description":"Webhook was set"}`.
-
-4. **Verify Communication:**
-    *   Send a message to your Telegram bot.
-    *   The payload will hit the `POST /webhooks/telegram` endpoint in [agent/main.py](file:///d:/work/projects/Vela/agent/main.py#L448-L453), executing the routing logic asynchronously in the background.
+```bash
+uv run uvicorn agent.main:app --host 0.0.0.0 --port 8000 --reload
+```
+*   API Docs: `http://localhost:8000/docs`
+*   Health Endpoint: `http://localhost:8000/health` (Protected with `Authorization: Bearer <VELA_API_KEY>`)
 
 ---
 
-## 💬 Step 3: Discord Bot Integration Setup
+### Step 4: Launch the Android Client
 
-The Discord bot integration acts as an event-driven bot gateway running on the server's lifecycle.
+```bash
+cd ../client
 
-1. **Create a Discord Application:**
-    *   Go to the [Discord Developer Portal](https://discord.com/developers/applications).
-    *   Click **New Application** and give it a name.
-    *   Navigate to the **Bot** tab on the left sidebar and click **Add Bot**.
+# Install dependencies
+npm install
 
-2. **Configure Bot Permissions & Intents:**
-    *   Scroll down on the **Bot** page to **Privileged Gateway Intents**.
-    *   **Crucial:** Enable **Message Content Intent** (and **Presence/Server Members Intents** if desired). This is required so the bot can read incoming channel messages.
-    *   Save changes.
+# Start the Expo development server
+npm start
+```
 
-3. **Obtain Bot Token:**
-    *   Under the **Bot** tab, click **Reset Token** to generate a new Bot Token.
-    *   Add this token to your `.env` file: `DISCORD_BOT_TOKEN=your_discord_bot_token`.
-
-4. **Invite Bot to Server:**
-    *   Go to the **OAuth2** > **URL Generator** tab.
-    *   Select the `bot` scope.
-    *   Under **Bot Permissions**, select:
-        *   `Send Messages`
-        *   `Read Message History`
-        *   `Use Slash Commands`
-    *   Copy the generated URL at the bottom and open it in a browser to invite the bot to your Discord server.
-
-5. **Server Lifecycle Setup:**
-    *   To run the Discord bot alongside the FastAPI server, it must be started as a background task.
-    *   Uncomment or insert the Discord task startup inside the `lifespan` handler in [agent/main.py](file:///d:/work/projects/Vela/agent/main.py#L32-L47):
-        ```python
-        @asynccontextmanager
-        async def lifespan(app: FastAPI):
-            # ... database migrations ...
-            # Start Discord Gateway task in the background
-            discord_task = asyncio.create_task(discord_gateway.start())
-            yield
-            # Shutdown and cleanup
-            await discord_gateway.close()
-            discord_task.cancel()
-            try:
-                await discord_task
-            except asyncio.CancelledError:
-                pass
-        ```
-    *   When the server is run, the Discord bot will connect automatically. It listens for messages beginning with the `v.` prefix (e.g., `v. research artificial general intelligence`) in channels it has access to.
+*   **Run on Physical Phone:** Scan the QR code using Expo Go or run `npm run android` with your device connected via USB debugging.
+*   **First-Time Setup:** On the setup screen, enter your Backend Server URL (`http://<your-lan-ip>:8000` or `https://your-domain.com`) and your `VELA_API_KEY`. The app validates connectivity via `GET /health` and navigates straight into chat.
 
 ---
 
-## 📱 Step 4: Connecting with Vela Android Client
+## 🦾 Privileged Android Setup (Shizuku)
 
-Vela has a dedicated mobile application client: [Vela Android Client](https://github.com/parth5012/vela-android-client).
+To enable the Device Agent to execute privileged actions without rooting:
 
-### 1. Download the Mobile App
-Download the latest `.apk` release directly from the [Vela Android Client Releases page](https://github.com/parth5012/vela-android-client/releases). Install it on your Android device.
+1. Install **Shizuku** from Google Play or [shizuku.rikka.app](https://shizuku.rikka.app).
+2. Enable **Developer Options** and turn on **Wireless Debugging** on your phone.
+3. Open Shizuku, tap **Pairing**, and enter the pairing code from Wireless Debugging.
+4. Tap **Start** in Shizuku.
+5. In the Vela Android App, open **Settings → Permissions → Shizuku Setup**; tap **Request Permission**.
+6. The status badge will read **⚡ Ready (UID 2000 ADB)**. You can now configure policy tiers (`Auto`, `Ask`, `Deny`) for permission grants, app management, and settings control!
 
-### 2. Host the Vela Backend
-To connect the mobile app, the Vela backend server must be publicly accessible (or on the same local network):
-*   **Public Hosting:** You can host this project on platforms like Render, Railway, or self-host it on a VPS/Server with a public domain or IP.
-*   **Local Network:** If running locally, ensure your mobile device and backend server are on the same Wi-Fi network.
+---
 
-### 3. Connection Configuration
-When you launch the Vela mobile app for the first time, you will be prompted to enter the configuration settings:
-*   **Server URL:** Enter the public URL (e.g., `https://your-vela-backend.com`) or the local IP address (e.g., `http://192.168.1.100:8000`) of your hosted Vela backend.
-*   **API Key:** Enter your configured `VELA_API_KEY` (configured in your backend `.env` file, which defaults to `vela5012`).
+## 🧪 Verification & Release Quality
 
-Once saved, the client will verify the server connection and API Key validity by calling `GET /health` with Bearer Token authentication. On successful validation, you can immediately start creating threads and talking to your Vela assistant.
+Vela uses a rigorous single-command gate for all testing and continuous integration:
 
-### 4. Backend-Client API Specification
-For custom developers, the mobile client communicates with the backend via the following REST and SSE endpoints:
+```bash
+# Run the complete CI gate (Backend, Client, Corpus, Playwright e2e)
+python vela_ci.py ci
 
-*   **Authentication:** All requests require the header:
-    ```text
-    Authorization: Bearer <VELA_API_KEY>
-    ```
-*   **List Threads:** `GET /chat/threads` lists user conversation threads.
-*   **Fetch Messages:** `GET /chat/threads/{thread_id}` fetches historical messages.
-*   **Send Message & SSE Stream:** `POST /chat/message`
-    Request Payload:
+# Run specific stacks
+python vela_ci.py ci --stack backend
+python vela_ci.py ci --stack client
+python vela_ci.py ci --stack corpus
+
+# Run UI Screenshot Council Scoring
+npx tsx scripts/ui-council.ts --dry-run path/to/screenshot.png
+
+# Compare Performance Metrics Snapshot against baseline
+node scripts/metrics-compare.ts --baseline perf-baseline.json --current current-metrics.json
+```
+
+---
+
+## 📡 API & Streaming Protocol
+
+The client-server communication uses a high-performance SSE stream:
+
+*   **Endpoint:** `POST /chat/message`
+*   **Headers:** `Authorization: Bearer <VELA_API_KEY>`, `Content-Type: application/json`
+*   **Request Payload:**
     ```json
     {
-      "thread_id": "thread-uuid",
-      "message": "Calculate the derivative of x^2",
-      "persona": "personal assistant"
+      "thread_id": "01J9...",
+      "message": "Research the implications of quantum annealing on RSA encryption",
+      "persona": "researcher"
     }
     ```
-    Response Streams data in SSE chunks:
-    *   `data: {"type": "content", "delta": "The derivative is "}`
-    *   `data: {"type": "done", "thread_title": "Derivative of x^2"}`
+*   **Response SSE Chunks:**
+    ```text
+    data: {"type": "content", "delta": "<thought>Analyzing quantum annealing vs Shor's algorithm...</thought>"}
+    data: {"type": "content", "delta": "\n\n### Executive Summary\nQuantum annealing..."}
+    data: {"type": "done", "thread_title": "Quantum Annealing & RSA Security"}
+    ```
 
 ---
 
-## 🏃 Running the Application
+## 🗺️ Project Structure
 
-### 1. Launch FastAPI Server
-Run the backend web app locally using `uv`:
-```bash
-uv run uvicorn agent.main:app --reload
+```text
+Vela/
+├── backend/                  # FastAPI + LangGraph Python Backend
+│   ├── agent/                # Supervisor graph, router, persona prompts, concurrency
+│   ├── db/                   # SQLAlchemy ORM, Supabase pgvector client, migrations
+│   ├── tools/                # Device agent, Gmail, Calendar, Tavily, E2B, WebView
+│   ├── skills/               # Research, Coding, Brainstorming, Mermaid graphs
+│   ├── gateway/              # Telegram, Discord, CarbonVoice gateways
+│   ├── cron/                 # Nightly prompt consolidation & health checks
+│   ├── scripts/              # Setup validator and database migration scripts
+│   └── tests/                # pytest unit & integration test suites
+├── client/                   # React Native (Expo SDK 57) Android Client
+│   ├── app/                  # File-based routes (chat, browser, tasks, settings)
+│   ├── components/           # Aurora glass UI, KaTeX, Mermaid, Code blocks, Feed
+│   ├── modules/              # Native Kotlin/C++ modules:
+│   │   ├── device-agent/     # Shizuku AIDL service & AccessibilityService
+│   │   ├── needle/           # Needle-3 Cactus C++ engine JNI bindings
+│   │   └── stable-diffusion/ # On-device Vulkan-accelerated image generator
+│   ├── store/                # Zustand state stores (Chat, Config, Browser, Auth)
+│   └── utils/                # SSE client, metrics ring buffer, local LLM wrappers
+├── scripts/                  # UI Council scoring & Metrics regression comparators
+├── docs/                     # Architectural Decision Records (ADRs) & specs
+├── render.yaml               # Render Cloud Blueprint for 1-click backend deployment
+└── vela_ci.py                # Single-command CI gate
 ```
-By default, the server runs on `http://127.0.0.1:8000`. You can visit `http://127.0.0.1:8000/` or `http://127.0.0.1:8000/docs` to see API docs.
 
 ---
 
-## 🧪 Running Tests
+## 🤝 Community & Contributing
 
-A comprehensive test suite is provided to ensure backend validation and gateways perform correctly.
+Contributions are warmly welcomed! Please review our [Backend Contributing Guide](backend/CONTRIBUTING.md) and [Domain Architecture Model](CONTEXT.md) before submitting pull requests.
 
-Run the test suite with:
-```bash
-uv run python -m pytest -v
-```
-
----
-
-## 🛠️ Contributing & Self-Hosting
-
-- **[Backend CONTRIBUTING.md](backend/CONTRIBUTING.md)** — step-by-step guide to deploy on Render, connect the Android client, and start contributing
-- **[Setup Check Script](backend/scripts/setup_check.py)** — run `uv run python scripts/setup_check.py` after local setup to verify your environment
-- **[render.yaml](render.yaml)** — Render Blueprint for one-click deployment
-- **[ADR Documentation](docs/ADR/)** — architectural decision records explaining key design choices
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AutonomousAgentFeature`)
+3. Verify your changes pass the gate: `python vela_ci.py ci`
+4. Commit your Changes (`git commit -m 'Add AutonomousAgentFeature'`)
+5. Push to the Branch (`git push origin feature/AutonomousAgentFeature`)
+6. Open a Pull Request
 
 ---
 
-## 🧠 Vela On-Device AI — Product Decisions
+## 📜 License
 
-The on-device AI workstream (Map #425) executes MiniCPM5-2B locally on Android with high privacy and low latency. The foundational product decisions (resolved via WF-01) are:
+Vela is released under the **Apache-2.0** and **MIT** licenses. See [LICENSE](LICENSE) for details.
 
-1. **Target Device Tier & Memory Floor**: Minimum 6 GB RAM floor for local on-device execution. Devices with < 6 GB RAM automatically route requests to the secure cloud gateway.
-2. **Model Download & Storage Gate**: Download URLs are sourced dynamically from remote configuration (never hardcoded); downloads default to Wi-Fi only (with explicit cellular override); requires >= 3 GB free disk space and SHA-256 integrity validation.
-3. **Low-RAM Runtime Behavior**: Two-tier graceful degradation — prunes KV cache context window (4096 -> 1024 tokens) under moderate memory warnings; seamlessly offloads to Cloud fallback with user notification upon receiving `TRIM_MEMORY_RUNNING_CRITICAL`.
-4. **Cloud Fallback & Privacy Policy**: Opt-in fallback with prominent user-facing "Cloud Fallback" badge on turns. Disclosures guarantee encrypted transport, zero-log retention, and zero training on user prompts.
-5. **Tool-Calling Scope & Security Gates (v0)**: Capabilities limited to Alarms, Calendar, Messages, and Clipboard. Read actions gated by Android OS permissions; Mutating/Write actions require explicit user confirmation dialogs (deny-by-default); hard-capped at 3 tool calls per turn.
-6. **Voice Stack Direction (v1)**: Bridge pipeline (Android SpeechRecognizer / local STT -> local MiniCPM5-2B -> Android TextToSpeech / system TTS) targeting sub-2s turn latency on mid-range phones. Defer tokenizer-free TTS (VoxCPM2) and omni full-duplex models (MiniCPM-o 4.5) to v2 flagship tiers.
+<div align="center">
+<sub>Crafted with passion for personal sovereignty and sovereign intelligence.</sub>
+</div>
