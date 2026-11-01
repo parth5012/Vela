@@ -321,6 +321,7 @@ def build_steps(stack: str, *, ruff_base: str = DEFAULT_RUFF_BASE) -> list[Step]
         ]
     if stack == "client":
         return [
+            Step(name="arch", cmd=["npm", "run", "arch:check"], cwd=CLIENT_DIR),
             Step(name="eslint", cmd=["npm", "run", "lint"], cwd=CLIENT_DIR),
             Step(name="tsc", cmd=["npx", "tsc", "--noEmit"], cwd=CLIENT_DIR),
             Step(name="jest", cmd=["npx", "jest", "--ci", "--maxWorkers=2"], cwd=CLIENT_DIR),
