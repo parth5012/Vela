@@ -13,7 +13,6 @@ export default function HealthIndicator() {
   const { apiUrl, apiKey, isConfigured, theme, accentColor } = useConfigStore();
   const aurora = getAurora(accentColor, theme);
   const [status, setStatus] = useState<'unknown' | 'checking' | 'online' | 'offline'>('unknown');
-  const [latency, setLatency] = useState<number | null>(null);
 
   const checkHealth = async (showFeedback = false) => {
     if (!isConfigured || !apiUrl) {
@@ -35,7 +34,6 @@ export default function HealthIndicator() {
 
     try {
       setStatus('checking');
-      const startTime = Date.now();
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
 
@@ -49,21 +47,17 @@ export default function HealthIndicator() {
       });
 
       clearTimeout(timeoutId);
-      const endTime = Date.now();
-      const duration = endTime - startTime;
 
       if (response.ok) {
         setStatus('online');
-        setLatency(duration);
         if (showFeedback) {
           Alert.alert(
             'Node Status',
-            `✓ Connected successfully!\n\nNode: ${formattedUrl.replace(/^https?:\/\//, '')}\nLatency: ${duration}ms`
+            `✓ Connected successfully!\n\nNode: ${formattedUrl.replace(/^https?:\/\//, '')}`
           );
         }
       } else {
         setStatus('offline');
-        setLatency(null);
         if (showFeedback) {
           Alert.alert(
             'Node Status',
@@ -73,7 +67,6 @@ export default function HealthIndicator() {
       }
     } catch (err: any) {
       setStatus('offline');
-      setLatency(null);
       if (showFeedback) {
         const errMsg = err.name === 'AbortError' 
           ? 'Connection timed out after 5s.' 
