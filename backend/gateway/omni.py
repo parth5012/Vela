@@ -14,7 +14,12 @@ logger = StructuredLogger("OmniGateway")
 
 async def handle_omni_session(websocket: WebSocket, token: str | None = None):
     expected_key = os.getenv("VELA_API_KEY", "vela5012")
-    if not token or not secrets.compare_digest(token, expected_key):
+    if (
+        not expected_key
+        or expected_key.startswith("your_")
+        or not token
+        or not secrets.compare_digest(token.encode("utf-8"), expected_key.encode("utf-8"))
+    ):
         logger.warning("Omni websocket connection rejected: invalid or missing token")
         await websocket.accept()
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
@@ -30,7 +35,7 @@ async def handle_omni_session(websocket: WebSocket, token: str | None = None):
         "session_id": session_id,
         "model": "liquid-lfm-omni",
         "supported_inputs": ["text", "audio_frame", "image_frame"],
-        "supported_outputs": ["audio_chunk", "transcript_token"],
+        "supported_outputs": ["transcript_token"],
     })
 
     current_image_keyframe: str | None = None
@@ -95,6 +100,8 @@ async def handle_omni_session(websocket: WebSocket, token: str | None = None):
     try:
         while True:
             data = await websocket.receive_json()
+            if not isinstance(data, dict):
+                continue
             msg_type = data.get("type")
 
             if msg_type == "ping":
@@ -105,27 +112,26 @@ async def handle_omni_session(websocket: WebSocket, token: str | None = None):
                 logger.info("Omni keyframe updated", session_id=session_id)
 
             elif msg_type == "text_prompt":
-                text = data.get("text", "")
-                logger.info("Omni text prompt received", session_id=session_id, text=text[:50])
+                text = data.get("text")
+                if not isinstance(text, str) or not text.strip():
+                    continue
+                logger.info("Omni text prompt received", session_id=session_id, length=len(text))
 
                 if active_turn_task and not active_turn_task.done():
                     active_turn_task.cancel()
 
-                active_turn_task = asyncio.create_task(run_text_turn(text, current_image_keyframe))
+                active_turn_task = asyncio.create_task(run_text_turn(text.strip(), current_image_keyframe))
 
             elif msg_type == "audio_frame":
                 audio_b64 = data.get("data", "")
                 is_end_of_speech = data.get("end_of_speech", False)
                 if is_end_of_speech and audio_b64:
-                    await websocket.send_json({
-                        "type": "audio_chunk",
-                        "data": audio_b64,
-                        "format": "pcm_16000",
-                        "session_id": session_id,
-                    })
+                    # Full neural audio output synthesis pipeline will link to Liquid Voice;
+                    # currently acknowledges audio frame ingestion and marks turn complete
                     await websocket.send_json({
                         "type": "turn_complete",
                         "session_id": session_id,
+                        "full_transcript": "Audio stream received.",
                     })
 
             elif msg_type == "interrupt":

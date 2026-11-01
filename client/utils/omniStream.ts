@@ -62,11 +62,13 @@ export class OmniStreamController {
         this.ws = socket;
 
         socket.onopen = () => {
+          if (this.ws !== socket) return;
           this.connected = true;
           resolve();
         };
 
         socket.onmessage = (event) => {
+          if (this.ws !== socket) return;
           try {
             const parsed = JSON.parse(event.data);
             const type = parsed.type;
@@ -85,6 +87,8 @@ export class OmniStreamController {
               });
             } else if (type === 'interrupted') {
               this.emit('interrupted');
+            } else if (type === 'error') {
+              this.emit('error', parsed.error || parsed.message || 'Omni server error');
             }
           } catch {
             // Ignore non-json or unparsed frame
@@ -92,6 +96,7 @@ export class OmniStreamController {
         };
 
         socket.onerror = (err) => {
+          if (this.ws !== socket) return;
           this.emit('error', err);
           if (!this.connected) {
             reject(new Error('WebSocket connection failed'));
@@ -99,6 +104,10 @@ export class OmniStreamController {
         };
 
         socket.onclose = () => {
+          if (this.ws !== socket) return;
+          if (!this.connected) {
+            reject(new Error('WebSocket closed before connection established'));
+          }
           this.connected = false;
           this.emit('close');
         };

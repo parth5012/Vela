@@ -104,11 +104,11 @@ export default function OmniLiveSessionScreen() {
   }, [apiUrl, apiKey]);
 
   const handleSendPrompt = useCallback(() => {
-    if (!inputText.trim() || !controllerRef.current) return;
+    if (!inputText.trim() || !controllerRef.current || status !== 'connected') return;
     setTranscript('');
     controllerRef.current.sendTextPrompt(inputText.trim());
     setInputText('');
-  }, [inputText]);
+  }, [inputText, status]);
 
   const handleInterrupt = useCallback(() => {
     controllerRef.current?.interrupt();
@@ -208,7 +208,11 @@ export default function OmniLiveSessionScreen() {
           <Pressable
             testID="omni-send-button"
             onPress={handleSendPrompt}
-            style={[styles.sendButton, { backgroundColor: accentHex }]}
+            disabled={status !== 'connected' || !inputText.trim()}
+            style={[
+              styles.sendButton,
+              { backgroundColor: accentHex, opacity: status === 'connected' && inputText.trim() ? 1 : 0.5 },
+            ]}
           >
             <Text style={{ color: '#fff', fontWeight: 'bold' }}>Send</Text>
           </Pressable>
