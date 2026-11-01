@@ -125,6 +125,13 @@ const handleJournal = () => {
   }
 };
 
+const handleOmni = () => {
+  router.navigate('/omni');
+  if (typeof navigation.closeDrawer === 'function') {
+    navigation.closeDrawer();
+  }
+};
+
   const sortedThreads = React.useMemo(() => {
     const list = Array.isArray(threads) ? threads : [];
     return [...list].sort((a, b) => {
@@ -297,6 +304,16 @@ const handleJournal = () => {
           onPress={handleJournal}
         >
           <Text style={[styles.settingsButtonText, { color: colors.textMuted }]}>📝 Journal</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          style={({ pressed }) => [
+            styles.settingsButton,
+            pressed && [styles.settingsButtonPressed, { backgroundColor: colors.card }],
+          ]}
+          onPress={handleOmni}
+        >
+          <Text style={[styles.settingsButtonText, { color: colors.textMuted }]}>🎙️ Omni Live</Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"
