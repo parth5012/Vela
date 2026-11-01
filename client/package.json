@@ -69,6 +69,7 @@
     "@typescript-eslint/parser": "^8.67.0",
     "babel-plugin-inline-import": "^3.0.0",
     "babel-preset-expo": "~57.0.6",
+    "dependency-cruiser": "^18.7.0",
     "drizzle-kit": "^0.31.0",
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^6.1.1",
@@ -95,6 +96,7 @@
     "e2e": "playwright test",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "arch:check": "depcruise --config .dependency-cruiser.cjs app components store utils db types modules",
     "benchmark:ci": "jest __tests__/perf.benchmark.test.ts --runInBand",
     "test": "npm run lint && jest",
     "postinstall": "patch-package || echo \"patch-package: some patches failed but continuing\" && node scripts/fetch-llama-jni.js"

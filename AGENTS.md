@@ -40,3 +40,14 @@ Single-context: one `CONTEXT.md` plus `docs/adr/` at the repo root. See `docs/ag
 ### Driving the app in a browser
 
 The client is agent-driveable on Expo web against a scripted LLM: `python vela_ci.py e2e`, or Playwright against the `/_e2e/*` control channel plus `window.__VELA_E2E__`. Use it before claiming a client change works. See `docs/agents/ui-e2e.md`.
+
+## Software Factory & Architecture Enforcement
+
+1. **Context-First Architecture**:
+   - **Read `docs/ARCHITECTURE_CONTRACT.md` before writing code** — every feature and bugfix must respect certified module boundaries and forbidden dependency directions.
+   - Refer to `docs/VALIDATOR_CHECKLIST.md` for the per-PR architectural and performance compliance checklist.
+2. **Locked Rules**:
+   - **Never edit `perf-baseline.json` directly** — baseline updates occur strictly via human-approved ratchet-forward (`perf-ratchet-forward` label). Agents never write the baseline file.
+   - **Never auto-merge** — every PR requires human merge approval.
+   - **Contract violations are merge blockers** — PRs that fail `npm run arch:check` or introduce forbidden imports must not land.
+

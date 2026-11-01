@@ -1,0 +1,62 @@
+name: Architecture Boundary Enforcement
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches:
+      - main
+      - 'wf/**'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  client-architecture-check:
+    name: Client Boundary Check (dependency-cruiser)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: client/pnpm-lock.yaml
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run Architecture Boundary Checker
+        run: npm run arch:check
+
+  backend-architecture-check:
+    name: Backend Boundary Check (pytest boundaries)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --frozen
+      - name: Run Backend Architecture Boundary Tests
+        run: uv run pytest tests/test_architecture_boundaries.py -q

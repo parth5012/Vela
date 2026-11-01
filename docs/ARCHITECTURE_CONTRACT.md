@@ -112,8 +112,8 @@ The Python backend is an async FastAPI service organized around a LangGraph Supe
 ```
 
 ### Layer Dependency Rules:
-1. **Utilities (`backend/utils/`)**: Leaf package. Implements logging, ULID generation, Google OAuth auth-gate. **Never imports `agent`, `db`, `tools`, `skills`, or `gateway`**.
-   - Evidence: `rg "^(from|import) (agent|db|tools|skills|gateway|cron)" backend/utils/` yields **0 matches**.
+1. **Utilities (`backend/utils/`)**: Implements logging, ULID generation, LLM factory, and Google OAuth auth-gate. Can import `db/` models and sessions for auth checking and model tracking. **Never imports `agent`, `tools`, `skills`, `gateway`, or `cron`**.
+   - Evidence: `rg "^(from|import) (agent|tools|skills|gateway|cron)" backend/utils/` yields **0 matches**.
 2. **Database (`backend/db/`)**: Persistence models (`models.py`), session management (`session.py`), and Supabase/pgvector client (`supabase.py`). Only imports `backend/utils/`. **Never imports `agent`, `gateway`, `tools`, `skills`, or `cron`**.
    - Evidence: `rg "^(from|import) (agent|gateway|tools|skills|cron)" backend/db/` yields **0 matches**.
 3. **Tools (`backend/tools/`)**: Tool implementations (Gmail, Calendar, web search, webview browser, device agent). Only imports `backend/db/` and `backend/utils/`. **Never imports `agent`, `gateway`, or `cron`**.
@@ -163,6 +163,6 @@ These rules define strict structural prohibitions. Ticket WF-462-03 will transla
 - forbid backend/tools/** -> backend/agent/**
 - forbid backend/tools/** -> backend/gateway/**
 - forbid backend/utils/** -> backend/agent/**
-- forbid backend/utils/** -> backend/db/**
+- forbid backend/utils/** -> backend/gateway/**
 - forbid backend/utils/** -> backend/tools/**
 - forbid backend/utils/** -> backend/skills/**
