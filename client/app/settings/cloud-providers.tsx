@@ -69,7 +69,7 @@ const PROVIDER_METAS: Record<ProviderSlug, ProviderMeta> = {
     name: 'Liquid AI',
     description: 'Liquid Foundation Models (LFM-D1, LFM-1.7B, LFM-3B) with dynamical state-space architecture.',
     icon: '💧',
-    docsUrl: 'https://api.liquid.ai',
+    docsUrl: 'https://labs.liquid.ai',
   },
   custom: {
     name: 'Custom (OpenAI-Compatible)',
