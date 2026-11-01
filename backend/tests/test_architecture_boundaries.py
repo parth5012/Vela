@@ -14,7 +14,7 @@ def get_imports_from_file(file_path: Path) -> list[str]:
     try:
         content = file_path.read_text(encoding="utf-8")
         tree = ast.parse(content, filename=str(file_path))
-    except Exception:
+    except (SyntaxError, OSError, UnicodeDecodeError):
         return []
 
     imported: list[str] = []
@@ -22,9 +22,8 @@ def get_imports_from_file(file_path: Path) -> list[str]:
         if isinstance(node, ast.Import):
             for alias in node.names:
                 imported.append(alias.name)
-        elif isinstance(node, ast.ImportFrom):
-            if node.module:
-                imported.append(node.module)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported.append(node.module)
     return imported
 
 
@@ -53,35 +52,35 @@ def test_utils_boundary():
     """backend/utils/** must not import agent, tools, skills, gateway, or cron."""
     forbidden = ("agent", "tools", "skills", "gateway", "cron")
     violations = check_directory_forbidden_prefixes("utils", forbidden)
-    assert not violations, f"Architecture contract violations in utils:\n" + "\n".join(violations)
+    assert not violations, "Architecture contract violations in utils:\n" + "\n".join(violations)
 
 
 def test_db_boundary():
     """backend/db/** must not import agent, gateway, tools, skills, or cron."""
     forbidden = ("agent", "gateway", "tools", "skills", "cron")
     violations = check_directory_forbidden_prefixes("db", forbidden)
-    assert not violations, f"Architecture contract violations in db:\n" + "\n".join(violations)
+    assert not violations, "Architecture contract violations in db:\n" + "\n".join(violations)
 
 
 def test_tools_boundary():
     """backend/tools/** must not import agent, gateway, or cron."""
     forbidden = ("agent", "gateway", "cron")
     violations = check_directory_forbidden_prefixes("tools", forbidden)
-    assert not violations, f"Architecture contract violations in tools:\n" + "\n".join(violations)
+    assert not violations, "Architecture contract violations in tools:\n" + "\n".join(violations)
 
 
 def test_skills_boundary():
     """backend/skills/** must not import agent, gateway, or cron."""
     forbidden = ("agent", "gateway", "cron")
     violations = check_directory_forbidden_prefixes("skills", forbidden)
-    assert not violations, f"Architecture contract violations in skills:\n" + "\n".join(violations)
+    assert not violations, "Architecture contract violations in skills:\n" + "\n".join(violations)
 
 
 def test_gateway_boundary():
     """backend/gateway/** must not import tools or skills."""
     forbidden = ("tools", "skills")
     violations = check_directory_forbidden_prefixes("gateway", forbidden)
-    assert not violations, f"Architecture contract violations in gateway:\n" + "\n".join(violations)
+    assert not violations, "Architecture contract violations in gateway:\n" + "\n".join(violations)
 
 
 def test_no_backend_to_client_imports():
@@ -98,4 +97,4 @@ def test_no_backend_to_client_imports():
             if imp.startswith("client."):
                 rel = py_file.relative_to(BACKEND_DIR)
                 violations.append(f"{rel} imports frontend '{imp}'")
-    assert not violations, f"Backend imports client:\n" + "\n".join(violations)
+    assert not violations, "Backend imports client:\n" + "\n".join(violations)
