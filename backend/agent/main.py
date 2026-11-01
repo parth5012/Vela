@@ -1630,7 +1630,7 @@ def submit_device_response(payload: DeviceResponsePayload):
 
 
 @app.websocket("/ws/omni")
-async def omni_websocket_endpoint(websocket: WebSocket, token: Optional[str] = None):
+async def omni_websocket_endpoint(websocket: WebSocket, token: str | None = None):
     """Full-duplex real-time omnimodal stream (audio, video, text) via Liquid LFM-Omni."""
     await handle_omni_session(websocket, token)
 

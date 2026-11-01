@@ -2,16 +2,17 @@ import asyncio
 import os
 import secrets
 import uuid
-from typing import Optional
+
 from fastapi import WebSocket, WebSocketDisconnect, status
-from utils.logger import StructuredLogger
-from utils.llm import get_llm
 from langchain_core.messages import HumanMessage, SystemMessage
+
+from utils.llm import get_llm
+from utils.logger import StructuredLogger
 
 logger = StructuredLogger("OmniGateway")
 
 
-async def handle_omni_session(websocket: WebSocket, token: Optional[str] = None):
+async def handle_omni_session(websocket: WebSocket, token: str | None = None):
     expected_key = os.getenv("VELA_API_KEY", "vela5012")
     if not token or not secrets.compare_digest(token, expected_key):
         logger.warning("Omni websocket connection rejected: invalid or missing token")
@@ -32,10 +33,10 @@ async def handle_omni_session(websocket: WebSocket, token: Optional[str] = None)
         "supported_outputs": ["audio_chunk", "transcript_token"],
     })
 
-    current_image_keyframe: Optional[str] = None
-    active_turn_task: Optional[asyncio.Task] = None
+    current_image_keyframe: str | None = None
+    active_turn_task: asyncio.Task | None = None
 
-    async def run_text_turn(prompt_text: str, keyframe_b64: Optional[str]):
+    async def run_text_turn(prompt_text: str, keyframe_b64: str | None):
         try:
             llm = get_llm()
             system_prompt = (
@@ -82,7 +83,7 @@ async def handle_omni_session(websocket: WebSocket, token: Optional[str] = None)
         except asyncio.CancelledError:
             logger.info("Omni turn cancelled by interrupt/barge-in", session_id=session_id)
             raise
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error("Omni generation error", session_id=session_id, error=str(e))
             await websocket.send_json({
                 "type": "turn_complete",
@@ -140,7 +141,7 @@ async def handle_omni_session(websocket: WebSocket, token: Optional[str] = None)
 
     except WebSocketDisconnect:
         logger.info("Omni websocket session disconnected", session_id=session_id)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.error("Omni session uncaught exception", session_id=session_id, error=str(exc))
     finally:
         if active_turn_task and not active_turn_task.done():
