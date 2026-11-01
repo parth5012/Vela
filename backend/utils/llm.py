@@ -6,6 +6,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.embeddings import Embeddings
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_groq import ChatGroq
+from langchain_openai import ChatOpenAI
 from langchain_openrouter import ChatOpenRouter
 from langchain_voyageai import VoyageAIEmbeddings
 
@@ -150,6 +151,18 @@ def get_llm():
                 cohere_api_key=cohere_api_key,
                 callbacks=[FallbackLoggingHandler()],
                 # max_retries=3,
+            )
+        )
+
+    liquid_api_key = os.getenv("LIQUID_API_KEY", "")
+    if liquid_api_key and not liquid_api_key.startswith("your_"):
+        fallbacks.append(
+            ChatOpenAI(
+                model=os.getenv("LIQUID_MODEL", "lfm-d1"),
+                api_key=liquid_api_key,
+                base_url=os.getenv("LIQUID_BASE_URL", "https://api.liquid.ai/v1"),
+                callbacks=[FallbackLoggingHandler()],
+                max_retries=3,
             )
         )
 

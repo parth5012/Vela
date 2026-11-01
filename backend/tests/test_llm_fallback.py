@@ -33,6 +33,39 @@ def test_llm_fallback_trigger(mock_groq_class, mock_gemini_class):
 
 @patch.dict(os.environ, {
     "GOOGLE_API_KEY": "valid_key",
+    "GROQ_API_KEY": "",
+    "OPENROUTER_API_KEY": "",
+    "COHERE_API_KEY": "",
+    "LIQUID_API_KEY": "valid_liquid_key"
+})
+@patch("utils.llm.ChatGoogleGenerativeAI")
+@patch("utils.llm.ChatOpenAI")
+def test_liquid_llm_fallback_trigger(mock_openai_class, mock_gemini_class):
+    from langchain_core.runnables import RunnableWithFallbacks
+    from langchain_google_genai import ChatGoogleGenerativeAI
+    from langchain_openai import ChatOpenAI
+
+    mock_gemini = MagicMock(spec=ChatGoogleGenerativeAI)
+    mock_gemini.invoke.side_effect = Exception("Rate limit hit")
+    mock_gemini.with_fallbacks = lambda fallbacks: RunnableWithFallbacks(runnable=mock_gemini, fallbacks=fallbacks)
+    mock_gemini_class.return_value = mock_gemini
+
+    mock_liquid = MagicMock(spec=ChatOpenAI)
+    mock_liquid.invoke.return_value = MagicMock(content="Liquid response")
+    mock_openai_class.return_value = mock_liquid
+
+    llm = get_llm()
+    res = llm.invoke("Test prompt")
+    assert res.content == "Liquid response"
+    mock_gemini.invoke.assert_called_once()
+    mock_openai_class.assert_called_once()
+    _, kwargs = mock_openai_class.call_args
+    assert kwargs.get("base_url") == "https://api.liquid.ai/v1"
+
+
+
+@patch.dict(os.environ, {
+    "GOOGLE_API_KEY": "valid_key",
     "VOYAGE_API_KEY": "valid_key"
 })
 @patch("utils.llm.GoogleGenerativeAIEmbeddings")

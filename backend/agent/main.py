@@ -4,12 +4,13 @@ from agent.registry import AGENT_REGISTRY
 import os
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, Query, responses, Request, BackgroundTasks, Security, HTTPException, status
+from fastapi import FastAPI, Depends, Query, responses, Request, BackgroundTasks, Security, HTTPException, status, WebSocket
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from google_auth_oauthlib.flow import Flow
 from db.database import PostgresDB
 from gateway.telegram import TelegramGateway
 from gateway.discord import DiscordGateway
+from gateway.omni import handle_omni_session
 from cron.consolidate import run_self_improvement, run_daily_briefing
 from utils.logger import StructuredLogger
 from db.client import DBClient
@@ -1626,6 +1627,13 @@ def submit_device_response(payload: DeviceResponsePayload):
     else:
         logger.warning("Received Device response but no pending task found", conversation_id=payload.conversation_id)
         raise HTTPException(status_code=404, detail="No pending task found for this conversation ID")
+
+
+@app.websocket("/ws/omni")
+async def omni_websocket_endpoint(websocket: WebSocket, token: Optional[str] = None):
+    """Full-duplex real-time omnimodal stream (audio, video, text) via Liquid LFM-Omni."""
+    await handle_omni_session(websocket, token)
+
 
 @app.post("/consolidate", dependencies=[Depends(verify_api_key)])
 def trigger_consolidation():

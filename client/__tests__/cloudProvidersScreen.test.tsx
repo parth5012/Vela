@@ -62,6 +62,7 @@ describe('Cloud Providers and Connection Settings Screens', () => {
     expect(joined).toContain('Anthropic Claude');
     expect(joined).toContain('OpenRouter');
     expect(joined).toContain('Groq');
+    expect(joined).toContain('Liquid AI');
     expect(joined).toContain('Custom (OpenAI-Compatible)');
 
     act(() => {

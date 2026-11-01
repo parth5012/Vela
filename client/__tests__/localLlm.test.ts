@@ -77,6 +77,7 @@ import {
   isLocalLlmDown,
   setLocalLlmDown,
   getLocalLlmFallbackReason,
+  LOCAL_MODELS,
 } from '../utils/localLlm';
 import { useConfigStore } from '../store/useConfigStore';
 import {
@@ -486,6 +487,18 @@ describe('localLlm wrapper', () => {
       expect(launch2MarkerDuringNativeCall).not.toBeNull();
       const marker2 = JSON.parse(launch2MarkerDuringNativeCall!);
       expect(marker2.backend).toBe('opencl');
+    });
+  });
+
+  describe('LOCAL_MODELS catalog', () => {
+    it('includes Liquid LFM-1.7B and LFM-D1 in LOCAL_MODELS', () => {
+      const lfm17 = LOCAL_MODELS.find((m) => m.name === 'Liquid LFM 1.7B (GGUF)');
+      expect(lfm17).toBeDefined();
+      expect(lfm17?.format).toBe('gguf');
+
+      const lfmD1 = LOCAL_MODELS.find((m) => m.name === 'Liquid LFM-D1 (GGUF)');
+      expect(lfmD1).toBeDefined();
+      expect(lfmD1?.format).toBe('gguf');
     });
   });
 });

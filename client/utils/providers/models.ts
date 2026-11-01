@@ -120,6 +120,7 @@ export const CURATED_MODELS: Record<ProviderSlug, string[]> = {
     'llama-3.1-8b-instant',
     'mixtral-8x7b-32768',
   ],
+  liquid: ['lfm-d1', 'lfm-1.7b', 'lfm-3b'],
   custom: [],
 };
 
@@ -205,6 +206,18 @@ export async function fetchProviderModels(
       }
     } else if (provider === 'openrouter') {
       const res = await fetch('https://openrouter.ai/api/v1/models', {
+        headers: { Authorization: `Bearer ${apiKey.trim()}` },
+        signal: controller.signal,
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json?.data)) {
+          fetchedModels = json.data.map((m: any) => m.id).filter(Boolean);
+        }
+      }
+    } else if (provider === 'liquid') {
+      const endpoint = `${(baseUrl || 'https://api.liquid.ai/v1').replace(/\/+$/, '')}/models`;
+      const res = await fetch(endpoint, {
         headers: { Authorization: `Bearer ${apiKey.trim()}` },
         signal: controller.signal,
       });

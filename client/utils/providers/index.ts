@@ -71,6 +71,19 @@ export function getLanguageModel(
       });
       return groq(modelName);
     }
+    case 'liquid': {
+      let normalizedBaseUrl = (baseUrl || 'https://api.liquid.ai/v1').trim().replace(/\/+$/, '');
+      if (!/^https?:\/\//i.test(normalizedBaseUrl)) {
+        normalizedBaseUrl = `https://${normalizedBaseUrl}`;
+      }
+      const liquid = createOpenAICompatible({
+        name: 'liquid',
+        apiKey,
+        baseURL: normalizedBaseUrl,
+        fetch: customFetch,
+      });
+      return liquid(modelName);
+    }
     case 'custom': {
       let normalizedBaseUrl = (baseUrl || '').trim().replace(/\/+$/, '');
       if (normalizedBaseUrl && !/^https?:\/\//i.test(normalizedBaseUrl)) {

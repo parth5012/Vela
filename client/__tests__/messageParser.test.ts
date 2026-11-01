@@ -24,6 +24,21 @@ describe('messageParser', () => {
     ]);
   });
 
+  it('should parse closed think block from reasoning models like LFM-D1', () => {
+    const text = '<think>Solving this step-by-step...</think>The answer is 42.';
+    const result = parseMessage(text);
+    expect(result).toEqual([
+      {
+        type: 'thought',
+        isClosed: true,
+        children: [
+          { type: 'text', content: 'Solving this step-by-step...', isClosed: true }
+        ]
+      },
+      { type: 'text', content: 'The answer is 42.', isClosed: true }
+    ]);
+  });
+
   it('should parse incomplete/streaming thought block', () => {
     const text = '<thought>Currently thinking about the next step';
     const result = parseMessage(text);

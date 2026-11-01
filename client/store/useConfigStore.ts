@@ -12,7 +12,7 @@ export interface SuggestionStarter {
 }
 
 export type ConnectionMode = 'server' | 'local' | 'cloud';
-export type ProviderSlug = 'gemini' | 'openai' | 'anthropic' | 'openrouter' | 'groq' | 'custom';
+export type ProviderSlug = 'gemini' | 'openai' | 'anthropic' | 'openrouter' | 'groq' | 'liquid' | 'custom';
 
 export interface CloudProviderConfig {
   model: string;
@@ -25,6 +25,7 @@ export const PROVIDER_SLUGS: ProviderSlug[] = [
   'anthropic',
   'openrouter',
   'groq',
+  'liquid',
   'custom',
 ];
 
@@ -34,6 +35,7 @@ export const DEFAULT_CLOUD_PROVIDERS: Record<ProviderSlug, CloudProviderConfig> 
   anthropic: { model: 'claude-3-5-sonnet-20241022' },
   openrouter: { model: 'anthropic/claude-3.5-sonnet' },
   groq: { model: 'llama-3.3-70b-versatile' },
+  liquid: { model: 'lfm-d1', baseUrl: 'https://api.liquid.ai/v1' },
   custom: { model: '', baseUrl: '' },
 };
 

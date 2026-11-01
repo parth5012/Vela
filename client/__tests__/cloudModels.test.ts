@@ -151,6 +151,12 @@ describe('Cloud Provider Models & Connection', () => {
     expect(models).toContain('gpt-4o-mini');
   });
 
+  it('returns curated models for liquid provider', () => {
+    const models = getCuratedModels('liquid');
+    expect(models).toContain('lfm-d1');
+    expect(models).toContain('lfm-1.7b');
+  });
+
   it('fetches and caches models from OpenAI-compatible endpoint', async () => {
     const mockFetch = jest.spyOn(global, 'fetch').mockResolvedValueOnce({
       ok: true,

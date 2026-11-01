@@ -402,6 +402,17 @@ export default function RootLayout() {
             },
           }}
         />
+        <Drawer.Screen
+          name="omni"
+          options={{
+            headerTitle: 'Omni Live',
+            headerTitleStyle: {
+              fontWeight: '600',
+              color: currentColors.text,
+              fontSize: 16,
+            },
+          }}
+        />
       </Drawer>
 
       {/* Persistent WebView — always mounted, visibility toggled by offscreen positioning */}

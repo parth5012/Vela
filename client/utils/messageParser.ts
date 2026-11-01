@@ -215,6 +215,8 @@ export function parseMessage(content: string): MessageSegment[] {
 
     const nextThoughtOpen = textRemaining.indexOf('<thought>');
     const nextThoughtClose = textRemaining.indexOf('</thought>');
+    const nextThinkOpen = textRemaining.indexOf('<think>');
+    const nextThinkClose = textRemaining.indexOf('</think>');
     const nextCallOpen = textRemaining.indexOf('<call:');
     const nextCallClose = textRemaining.indexOf('</call');
     const nextIntentOpen = textRemaining.indexOf('<intent>');
@@ -224,10 +226,12 @@ export function parseMessage(content: string): MessageSegment[] {
 
     const targets: {
       pos: number;
-      type: 'thought_open' | 'thought_close' | 'call_open' | 'call_close' | 'intent_open' | 'intent_close' | 'skill_open' | 'skill_close';
+      type: 'thought_open' | 'thought_close' | 'think_open' | 'think_close' | 'call_open' | 'call_close' | 'intent_open' | 'intent_close' | 'skill_open' | 'skill_close';
     }[] = [];
     if (nextThoughtOpen !== -1) targets.push({ pos: nextThoughtOpen, type: 'thought_open' });
     if (nextThoughtClose !== -1) targets.push({ pos: nextThoughtClose, type: 'thought_close' });
+    if (nextThinkOpen !== -1) targets.push({ pos: nextThinkOpen, type: 'think_open' });
+    if (nextThinkClose !== -1) targets.push({ pos: nextThinkClose, type: 'think_close' });
     if (nextCallOpen !== -1) targets.push({ pos: nextCallOpen, type: 'call_open' });
     if (nextCallClose !== -1) targets.push({ pos: nextCallClose, type: 'call_close' });
     if (nextIntentOpen !== -1) targets.push({ pos: nextIntentOpen, type: 'intent_open' });
@@ -259,14 +263,31 @@ export function parseMessage(content: string): MessageSegment[] {
       };
       activeNode().children!.push(newNode);
       stack.push(newNode);
-    } 
+    }
     else if (nextTarget.type === 'thought_close') {
       index += 10;
       if (stack.length > 1 && stack[stack.length - 1].type === 'thought') {
         const popped = stack.pop()!;
         popped.isClosed = true;
       }
-    } 
+    }
+    else if (nextTarget.type === 'think_open') {
+      index += 7;
+      const newNode: MessageSegment = {
+        type: 'thought',
+        isClosed: false,
+        children: [],
+      };
+      activeNode().children!.push(newNode);
+      stack.push(newNode);
+    }
+    else if (nextTarget.type === 'think_close') {
+      index += 8;
+      if (stack.length > 1 && stack[stack.length - 1].type === 'thought') {
+        const popped = stack.pop()!;
+        popped.isClosed = true;
+      }
+    }
     else if (nextTarget.type === 'intent_open') {
       index += 8;
       const newNode: MessageSegment = {

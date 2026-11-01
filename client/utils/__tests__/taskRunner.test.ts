@@ -38,6 +38,7 @@ describe('taskRunner', () => {
         anthropic: { model: 'claude-3-5-sonnet-20241022' },
         openrouter: { model: 'anthropic/claude-3.5-sonnet' },
         groq: { model: 'llama-3.3-70b-versatile' },
+        liquid: { model: 'lfm-d1', baseUrl: 'https://api.liquid.ai/v1' },
         custom: { model: 'custom-model', baseUrl: 'https://custom.ai/v1' },
       },
       cloudApiKeys: {
