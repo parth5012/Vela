@@ -4,6 +4,7 @@ import { eq, asc, desc } from 'drizzle-orm';
 import { useChatStore, Thread, Message } from '../store/useChatStore';
 import { parseSafeDate } from '../utils/date';
 import { perfTracker } from '../utils/perfTracker';
+import { instrumentQuery } from '../utils/storageMetrics';
 
 /**
  * Local-first chat repository.
@@ -299,32 +300,36 @@ export async function replaceThreadMessages(conversationId: string, messageList:
 
 export async function loadThreads(): Promise<Thread[]> {
   if (!db) return [];
-  const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
-  try {
-    // Store keeps threads newest-first (createThread prepends, addMessage moves
-    // to front); mirror that ordering so hydration renders the same list.
-    const rows = await db.select().from(threads).orderBy(desc(threads.updated_at));
-    return rows.map(fromThreadRow);
-  } finally {
-    const duration = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - start;
-    perfTracker.recordMetric('sqlite_query_duration_ms', duration, 'ms');
-  }
+  return instrumentQuery('chat.loadThreads', async () => {
+    const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    try {
+      // Store keeps threads newest-first (createThread prepends, addMessage moves
+      // to front); mirror that ordering so hydration renders the same list.
+      const rows = await db.select().from(threads).orderBy(desc(threads.updated_at));
+      return rows.map(fromThreadRow);
+    } finally {
+      const duration = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - start;
+      perfTracker.recordMetric('sqlite_query_duration_ms', duration, 'ms');
+    }
+  });
 }
 
 export async function loadMessages(conversationId: string): Promise<Message[]> {
   if (!db) return [];
-  const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
-  try {
-    const rows = await db
-      .select()
-      .from(messages)
-      .where(eq(messages.conversation_id, conversationId))
-      .orderBy(asc(messages.created_at));
-    return rows.map(fromMessageRow);
-  } finally {
-    const duration = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - start;
-    perfTracker.recordMetric('sqlite_query_duration_ms', duration, 'ms');
-  }
+  return instrumentQuery('chat.loadMessages', async () => {
+    const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    try {
+      const rows = await db
+        .select()
+        .from(messages)
+        .where(eq(messages.conversation_id, conversationId))
+        .orderBy(asc(messages.created_at));
+      return rows.map(fromMessageRow);
+    } finally {
+      const duration = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - start;
+      perfTracker.recordMetric('sqlite_query_duration_ms', duration, 'ms');
+    }
+  });
 }
 
 /**

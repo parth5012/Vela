@@ -1,6 +1,7 @@
 import { db } from './client';
 import { checkIns } from './schema';
 import { eq, desc } from 'drizzle-orm';
+import { instrumentQuery } from '../utils/storageMetrics';
 
 export interface CheckInInput {
   /** Local calendar day as YYYY-MM-DD. Same-day saves replace each other. */
@@ -85,7 +86,9 @@ export async function saveCheckinLocal(input: CheckInInput) {
 
 export async function loadCheckins(limit: number = 30) {
   if (!db) return [];
-  return db.select().from(checkIns).orderBy(desc(checkIns.date)).limit(limit);
+  return instrumentQuery('checkins.loadCheckins', () =>
+    db.select().from(checkIns).orderBy(desc(checkIns.date)).limit(limit)
+  );
 }
 
 export async function loadUnsyncedCheckins() {
