@@ -23,6 +23,14 @@ export interface MetricSample {
   name: string;
   kind: MetricKind;
   value: number;
+  /**
+   * Monotonic in-memory sequence number assigned when the sample enters the
+   * buffer (not persisted; restored samples get fresh sequences). Lets
+   * consumers resolve "everything added after snapshot X" reliably even when
+   * the bounded buffer has evicted old entries — an index-based slice would
+   * silently return the wrong range once the buffer wraps.
+   */
+  seq?: number;
 }
 
 export interface MetricStats {
@@ -54,11 +62,16 @@ function isValidNumber(value: number): boolean {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
+/** Monotonic sequence counter for samples; watermark for window resolution. */
+let sampleSeq = 0;
+
 class MetricsBuffer {
   private samples: MetricSample[] = [];
 
   add(sample: MetricSample): void {
-    this.samples.push(sample);
+    // Assign a fresh monotonic sequence, newest = highest seq.
+    const entry: MetricSample = { ...sample, seq: ++sampleSeq };
+    this.samples.push(entry);
     // Oldest eviction: keep only the last MAX_METRIC_SAMPLES entries.
     while (this.samples.length > MAX_METRIC_SAMPLES) {
       this.samples.shift();
@@ -75,7 +88,10 @@ class MetricsBuffer {
 
   /** Restore persisted samples ahead of any in-session samples; cap re-applied. */
   prepend(loaded: MetricSample[]): void {
-    this.samples.unshift(...loaded);
+    // Loaded samples get fresh (higher) sequences: seq is an in-session
+    // watermark mechanism, not a durable ordering — windows are never resolved
+    // across flush() → load() boundaries.
+    this.samples.unshift(...loaded.map((s) => ({ ...s, seq: ++sampleSeq })));
     while (this.samples.length > MAX_METRIC_SAMPLES) {
       this.samples.shift();
     }
