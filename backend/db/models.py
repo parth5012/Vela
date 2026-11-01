@@ -79,6 +79,7 @@ class Experience(Base):
     conversation_id = Column(String, ForeignKey("conversations.id", ondelete="CASCADE"), index=True)
     user_query = Column(String, nullable=False)
     agent_response = Column(String, nullable=False)
+    # Non-deterministic LLM-judge score (informational only; must NOT gate releases).
     eval_score = Column(Float, nullable=True)
     eval_reason = Column(String, nullable=True)
     consolidated = Column(Boolean, default=False)
@@ -104,6 +105,7 @@ class WebViewAutomationSession(Base):
     task_description = Column(String, nullable=False)
     status = Column(String(50), default="running")  # running, completed, failed, timeout
     is_success = Column(Boolean, nullable=True)
+    # Non-deterministic LLM-judge score (informational only; must NOT gate releases).
     eval_score = Column(Float, nullable=True)
     eval_reason = Column(String, nullable=True)
     created_at = Column(DateTime, default=utcnow_naive)
