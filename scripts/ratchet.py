@@ -9,7 +9,7 @@ import argparse
 import json
 import os
 import sys
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 # Ensure stdout and stderr handle UTF-8 cleanly on Windows
 if hasattr(sys.stdout, "reconfigure"):
@@ -18,7 +18,7 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 
-def load_metrics(filepath: str) -> Dict[str, Any]:
+def load_metrics(filepath: str) -> dict[str, Any]:
     if not os.path.exists(filepath):
         raise FileNotFoundError(f"Metric file not found: {filepath}")
     with open(filepath, "r", encoding="utf-8") as f:
@@ -30,7 +30,7 @@ def load_metrics(filepath: str) -> Dict[str, Any]:
     return data
 
 
-def extract_metric_details(entry: Any) -> Tuple[float, str, bool]:
+def extract_metric_details(entry: Any) -> tuple[float, str, bool]:
     """Returns (value, unit, lower_is_better)."""
     if isinstance(entry, (int, float)):
         return float(entry), "ms", True
@@ -43,10 +43,10 @@ def extract_metric_details(entry: Any) -> Tuple[float, str, bool]:
 
 
 def compare_metrics(
-    baseline: Dict[str, Any],
-    current: Dict[str, Any],
+    baseline: dict[str, Any],
+    current: dict[str, Any],
     max_regression_pct: float = 5.0
-) -> Tuple[List[Dict[str, Any]], bool]:
+) -> tuple[list[dict[str, Any]], bool]:
     """
     Compares baseline and current metrics.
     Returns (results_list, has_failed_gate).
@@ -54,7 +54,7 @@ def compare_metrics(
     results = []
     has_failed_gate = False
 
-    all_keys = sorted(list(set(baseline.keys()).union(set(current.keys()))))
+    all_keys = sorted(set(baseline.keys()).union(set(current.keys())))
 
     for key in all_keys:
         if key not in baseline:
@@ -133,7 +133,7 @@ def compare_metrics(
     return results, has_failed_gate
 
 
-def format_markdown_table(results: List[Dict[str, Any]], max_regression_pct: float) -> str:
+def format_markdown_table(results: list[dict[str, Any]], max_regression_pct: float) -> str:
     lines = [
         "### ⏱️ Performance Ratchet Benchmark Report",
         f"**Allowed Regression Tolerance:** `{max_regression_pct}%`\n",
@@ -153,7 +153,7 @@ def format_markdown_table(results: List[Dict[str, Any]], max_regression_pct: flo
     elif improved_count > 0:
         lines.append(f"> 🚀 **Regression Gate Passed**: {improved_count}/{total_metrics} metrics improved. Consider updating baseline!")
     else:
-        lines.append(f"> ✅ **Regression Gate Passed**: All metrics within acceptable threshold.")
+        lines.append("> ✅ **Regression Gate Passed**: All metrics within acceptable threshold.")
 
     return "\n".join(lines)
 
@@ -172,7 +172,7 @@ def main():
     try:
         baseline_data = load_metrics(args.baseline)
         current_data = load_metrics(args.current)
-    except Exception as e:
+    except (FileNotFoundError, json.JSONDecodeError, OSError, ValueError) as e:
         print(f"Error loading metric files: {e}", file=sys.stderr)
         sys.exit(2)
 
