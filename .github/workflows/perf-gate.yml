@@ -1,0 +1,152 @@
+name: Performance Ratchet Gate (Shadow Mode)
+
+on:
+  pull_request:
+    branches:
+      - main
+      - 'wf/**'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+env:
+  SHADOW_MODE: "true"
+  MAX_REGRESSION_PCT: "10.0"
+
+jobs:
+  baseline-lock-check:
+    name: Baseline Lock Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 100
+
+      - name: Verify Baseline Lock Protection
+        run: |
+          BASE_REF="${{ github.base_ref }}"
+          if [ -z "$BASE_REF" ]; then
+            BASE_REF="main"
+          fi
+          git fetch origin "$BASE_REF" --depth=100 || true
+
+          # Find changed files between base and HEAD
+          DIFF_FILES=$(git diff --name-only "origin/$BASE_REF...HEAD" 2>/dev/null || git diff --name-only "origin/$BASE_REF" 2>/dev/null || true)
+          echo "Changed files in PR:"
+          echo "$DIFF_FILES"
+
+          if echo "$DIFF_FILES" | grep -q "^perf-baseline\.json$"; then
+            echo "::warning::perf-baseline.json is modified in this PR."
+
+            LABELS="${{ toJson(github.event.pull_request.labels.*.name) }}"
+            echo "PR labels: $LABELS"
+
+            if echo "$LABELS" | grep -q "perf-ratchet-forward"; then
+              echo "✅ 'perf-ratchet-forward' label present: baseline modification authorized by maintainer."
+            else
+              echo "::error::❌ BLOCKED: perf-baseline.json was modified without 'perf-ratchet-forward' label!"
+              echo "Agents must never advance the performance baseline. Only human maintainers can add 'perf-ratchet-forward'."
+              exit 1
+            fi
+          else
+            echo "✅ Baseline locked: perf-baseline.json untouched."
+          fi
+
+  cuj-ratchet-shadow:
+    name: Tier-1 CUJ Ratchet (Shadow Mode)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm 9
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: client/pnpm-lock.yaml
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install client dependencies
+        working-directory: client
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Tier-1 CUJ Benchmark Harness
+        working-directory: client
+        run: npm run cuj:benchmark
+
+      - name: Run Performance Ratchet
+        id: ratchet
+        run: |
+          mkdir -p results
+          FAIL_ARG="--no-fail-on-regression"
+          if [ "${SHADOW_MODE}" = "false" ]; then
+            FAIL_ARG="--fail-on-regression"
+          fi
+
+          python3 scripts/ratchet.py \
+            --baseline perf-baseline.json \
+            --current results/perf-current.json \
+            --max-regression "${MAX_REGRESSION_PCT}" \
+            --title "### 🔊 Perf ratchet (shadow): did not block" \
+            --markdown-output results/perf-report.md \
+            ${FAIL_ARG}
+
+          if [ -f results/perf-report.md ]; then
+            cat results/perf-report.md >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Post or Update PR Shadow Report Comment
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const reportPath = 'results/perf-report.md';
+            if (fs.existsSync(reportPath)) {
+              const body = fs.readFileSync(reportPath, 'utf8');
+              const { data: comments } = await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+              });
+              const botComment = comments.find(c =>
+                c.body.includes('Perf ratchet (shadow): did not block') ||
+                c.body.includes('Performance Ratchet Benchmark Report')
+              );
+              if (botComment) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: botComment.id,
+                  body,
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body,
+                });
+              }
+            }
