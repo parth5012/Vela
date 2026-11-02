@@ -43,9 +43,12 @@ The client is agent-driveable on Expo web against a scripted LLM: `python vela_c
 
 ## Software Factory & Architecture Enforcement
 
-1. **Context-First Architecture**:
+1. **Context-First Architecture & Operating Kit**:
    - **Read `docs/ARCHITECTURE_CONTRACT.md` before writing code** — every feature and bugfix must respect certified module boundaries and forbidden dependency directions.
+   - Follow `docs/FACTORY_PIPELINE.md` for the 8-stage factory workflow (`research → story → blueprint → [human gate] → AFK build → validate → PR → human merge`).
+   - Consult `docs/BLUEPRINT_GATE_CHECKLIST.md` for the ≤5-minute human gate review criteria.
    - Refer to `docs/VALIDATOR_CHECKLIST.md` for the per-PR architectural and performance compliance checklist.
+   - Record task outcomes in `FACTORY_LEDGER.md` upon completion of each factory-routed task.
 2. **Locked Rules**:
    - **Never edit `perf-baseline.json` directly** — baseline updates occur strictly via human-approved ratchet-forward (`perf-ratchet-forward` label). Agents never write the baseline file.
    - **Never auto-merge** — every PR requires human merge approval.
