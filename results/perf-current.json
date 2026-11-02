@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "timestamp": "2026-10-31T08:52:05.730Z",
+  "timestamp": "2026-11-02T09:20:41.383Z",
   "platform": "mobile-android",
   "environment": {
     "os": "linux",
@@ -28,7 +28,7 @@
       "description": "Historical cell re-render count during stream (Target: strictly 0)"
     },
     "stream_total_parse_ms": {
-      "value": 1.05,
+      "value": 0.87,
       "unit": "ms",
       "lower_is_better": true,
       "target": 2.5,
@@ -37,7 +37,7 @@
       "description": "Cumulative AST parse duration across 250 tokens (Target: < 2.5 ms)"
     },
     "parse_quadratic_ratio": {
-      "value": 1.46,
+      "value": 1.96,
       "unit": "ratio",
       "lower_is_better": true,
       "target": 2.2,
@@ -55,7 +55,7 @@
       "description": "JavaScript event-loop delay under active streaming load (Target: < 4.0 ms)"
     },
     "sqlite_insert_duration_ms": {
-      "value": 1,
+      "value": 0,
       "unit": "ms",
       "lower_is_better": true,
       "target": 3,
@@ -64,7 +64,7 @@
       "description": "SQLite insert duration p50 in WAL mode (Target: < 3.0 ms)"
     },
     "sqlite_query_duration_ms": {
-      "value": 1,
+      "value": 0,
       "unit": "ms",
       "lower_is_better": true,
       "target": 5,
@@ -89,6 +89,33 @@
       "tier": 1,
       "lane": 1,
       "description": "Synchronous dispatch delay before optimistic state commit (Target: < 4.0 ms)"
+    },
+    "cold_start_to_typeable_ms": {
+      "value": 0.33,
+      "unit": "ms",
+      "lower_is_better": true,
+      "target": 400,
+      "tier": 1,
+      "lane": 1,
+      "description": "Process launch & store rehydration to interactive text input (Target: < 400 ms headless, < 1200 ms native)"
+    },
+    "send_to_bubble_ms": {
+      "value": 0,
+      "unit": "ms",
+      "lower_is_better": true,
+      "target": 4,
+      "tier": 1,
+      "lane": 1,
+      "description": "Synchronous send action dispatch to optimistic state commit (Target: < 4.0 ms headless, < 16.6 ms native)"
+    },
+    "stream_100_token_settle_ms": {
+      "value": 2,
+      "unit": "ms",
+      "lower_is_better": true,
+      "target": 20,
+      "tier": 1,
+      "lane": 1,
+      "description": "End-to-end ingestion and settling of 100-token stream (Target: < 20.0 ms headless)"
     }
   }
 }

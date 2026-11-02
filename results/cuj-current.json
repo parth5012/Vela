@@ -1,0 +1,34 @@
+{
+  "version": "1.0.0",
+  "timestamp": "2026-11-02T09:20:47.849Z",
+  "platform": "mobile-android",
+  "metrics": {
+    "cold_start_to_typeable_ms": {
+      "value": 0.33,
+      "unit": "ms",
+      "lower_is_better": true,
+      "target": 400,
+      "tier": 1,
+      "lane": 1,
+      "description": "Process launch & store rehydration to interactive text input (Target: < 400 ms headless, < 1200 ms native)"
+    },
+    "send_to_bubble_ms": {
+      "value": 0,
+      "unit": "ms",
+      "lower_is_better": true,
+      "target": 4,
+      "tier": 1,
+      "lane": 1,
+      "description": "Synchronous send action dispatch to optimistic state commit (Target: < 4.0 ms headless, < 16.6 ms native)"
+    },
+    "stream_100_token_settle_ms": {
+      "value": 2,
+      "unit": "ms",
+      "lower_is_better": true,
+      "target": 20,
+      "tier": 1,
+      "lane": 1,
+      "description": "End-to-end ingestion and settling of 100-token stream (Target: < 20.0 ms headless)"
+    }
+  }
+}
