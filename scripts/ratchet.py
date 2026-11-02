@@ -133,9 +133,10 @@ def compare_metrics(
     return results, has_failed_gate
 
 
-def format_markdown_table(results: list[dict[str, Any]], max_regression_pct: float) -> str:
+def format_markdown_table(results: list[dict[str, Any]], max_regression_pct: float, title: str | None = None) -> str:
+    header = title if title else "### ⏱️ Performance Ratchet Benchmark Report"
     lines = [
-        "### ⏱️ Performance Ratchet Benchmark Report",
+        header,
         f"**Allowed Regression Tolerance:** `{max_regression_pct}%`\n",
         "| Metric | Baseline | Current | Delta | Verdict |",
         "| :--- | :--- | :--- | :--- | :--- |"
@@ -166,6 +167,7 @@ def main():
     parser.add_argument("--markdown-output", help="Optional path to write markdown summary")
     parser.add_argument("--update-baseline", action="store_true", help="Overwrite baseline with current metrics")
     parser.add_argument("--fail-on-regression", action=argparse.BooleanOptionalAction, default=True, help="Exit with non-zero code on regression")
+    parser.add_argument("--title", help="Custom markdown report title")
 
     args = parser.parse_args()
 
@@ -182,7 +184,7 @@ def main():
         max_regression_pct=args.max_regression
     )
 
-    markdown_report = format_markdown_table(results, args.max_regression)
+    markdown_report = format_markdown_table(results, args.max_regression, title=args.title)
     print("\n" + markdown_report + "\n")
 
     if args.markdown_output:
