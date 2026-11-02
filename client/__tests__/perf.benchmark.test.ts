@@ -469,6 +469,35 @@ describe('Headless CI Engine Benchmark Suite (18-Metric Ratchet Lane 1)', () => 
     }
 
     const currentPath = path.join(resultsDir, 'perf-current.json');
+    if (fs.existsSync(currentPath)) {
+      try {
+        const existingData = JSON.parse(fs.readFileSync(currentPath, 'utf-8'));
+        if (existingData && existingData.metrics) {
+          metricsOutput.metrics = {
+            ...existingData.metrics,
+            ...metricsOutput.metrics,
+          };
+        }
+      } catch {
+        // ignore JSON parse error
+      }
+    }
+
+    const cujPath = path.join(resultsDir, 'cuj-current.json');
+    if (fs.existsSync(cujPath)) {
+      try {
+        const cujData = JSON.parse(fs.readFileSync(cujPath, 'utf-8'));
+        if (cujData && cujData.metrics) {
+          metricsOutput.metrics = {
+            ...cujData.metrics,
+            ...metricsOutput.metrics,
+          };
+        }
+      } catch {
+        // ignore JSON parse error
+      }
+    }
+
     fs.writeFileSync(currentPath, JSON.stringify(metricsOutput, null, 2), 'utf-8');
     expect(fs.existsSync(currentPath)).toBe(true);
 

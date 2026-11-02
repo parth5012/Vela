@@ -97,7 +97,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "arch:check": "depcruise --config .dependency-cruiser.cjs app components store utils db types modules hooks",
-    "benchmark:ci": "jest __tests__/perf.benchmark.test.ts --runInBand",
+    "benchmark:ci": "jest __tests__/perf.benchmark.test.ts __tests__/perf.cuj.test.ts --runInBand",
     "cuj:benchmark": "jest __tests__/perf.cuj.test.ts --runInBand",
     "test": "npm run lint && jest",
     "postinstall": "patch-package || echo \"patch-package: some patches failed but continuing\" && node scripts/fetch-llama-jni.js"
