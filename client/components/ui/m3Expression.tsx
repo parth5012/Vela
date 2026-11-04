@@ -209,6 +209,7 @@ export function WeeklyChart({
               <AnimatedBar
                 height={height}
                 color={met ? metColor : value > 0 ? barColor : idleColor}
+                delay={i * 80}
               />
               {met ? (
                 <View style={[styles.seal, { backgroundColor: metColor }]}>
@@ -226,18 +227,19 @@ export function WeeklyChart({
   );
 }
 
-function AnimatedBar({ height, color }: { height: number; color: string }) {
+function AnimatedBar({ height, color, delay = 0 }: { height: number; color: string; delay?: number }) {
   const scaleY = useRef(new Animated.Value(0.05)).current;
 
   useEffect(() => {
-    // Stagger handled by the caller via mount order; keep a spring bounce.
+    // Stagger: caller passes delay = index * 80ms; keep a spring bounce.
     Animated.spring(scaleY, {
       toValue: 1,
       bounciness: 9,
       speed: 0.5,
       useNativeDriver: true,
+      delay,
     }).start();
-  }, [scaleY]);
+  }, [scaleY, delay]);
 
   return (
     <Animated.View
@@ -261,6 +263,7 @@ export function BouncyPressable({
 
   return (
     <Pressable
+      accessibilityRole="button"
       onPress={onPress}
       onPressIn={() => {
         Animated.spring(scale, { toValue: 0.93, speed: 60, useNativeDriver: true }).start();
@@ -321,7 +324,7 @@ export function ShapeBadge({
   return (
     <View style={styles.badgeWrapper}>
       <BouncyPressable onPress={() => setShapeIndex((i) => (i + 1) % BADGE_SHAPES.length)}>
-        <View
+        <Animated.View
           style={[
             styles.badgeBody,
             {
@@ -336,7 +339,7 @@ export function ShapeBadge({
           ]}
         >
           <Text style={styles.badgeEmoji}>{emoji}</Text>
-        </View>
+        </Animated.View>
       </BouncyPressable>
       {label ? <Text style={styles.badgeLabel}>{label}</Text> : null}
     </View>

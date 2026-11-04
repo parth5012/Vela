@@ -154,7 +154,7 @@ export function PillGroup<T extends string>({
             <Text
               style={[
                 styles.pillText,
-                { color: selected ? aurora.acc1 : colors.textMuted, fontSize: sizes.text - 1 },
+                { color: selected ? colors.text : colors.textMuted, fontSize: sizes.text - 1 },
               ]}
             >
               {o.label}
@@ -194,7 +194,7 @@ export function ChipGroup({
             <Text
               style={[
                 styles.chipText,
-                { color: selected ? aurora.acc1 : colors.textMuted, fontSize: sizes.text - 2 },
+                { color: selected ? colors.text : colors.textMuted, fontSize: sizes.text - 2 },
               ]}
             >
               {o.label}

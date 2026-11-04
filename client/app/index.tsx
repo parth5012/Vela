@@ -463,7 +463,7 @@ export default function ChatScreen() {
   const sessionDeniedPermissionsRef = React.useRef<Set<OSPermission>>(new Set());
 
   // Theme values — Aurora: theme = atmosphere (colors), accent = energy (aurora)
-  const { colors, sizes, aurora } = useAurora();
+  const { colors, sizes, aurora, theme } = useAurora();
   const accentHex = aurora.acc1;
 
   // Refs
@@ -1346,6 +1346,7 @@ export default function ChatScreen() {
                       colors={colors}
                       sizes={sizes}
                       aurora={aurora}
+                      theme={theme}
                       isStreamingMessage={false}
                     />
                   );
@@ -1366,32 +1367,32 @@ export default function ChatScreen() {
 
                 const actionBar = showActionBar ? (
                   <View style={styles.actionBar}>
-                    <Pressable style={styles.actionBtn} onPress={() => handleCopyText(message.content)}>
+                    <Pressable style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => handleCopyText(message.content)}>
                       <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Copy</Text>
                     </Pressable>
                     {!isUser && (
                       <>
-                        <Pressable style={styles.actionBtn} onPress={() => setViewerContent(message.content)}>
+                        <Pressable style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => setViewerContent(message.content)}>
                           <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>View</Text>
                         </Pressable>
-                        <Pressable style={styles.actionBtn} onPress={() => handleCopyCodeBlocks(message.content)}>
+                        <Pressable style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => handleCopyCodeBlocks(message.content)}>
                           <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Code</Text>
                         </Pressable>
-                        <Pressable style={styles.actionBtn} onPress={() => handleRegenerate(message)}>
+                        <Pressable style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => handleRegenerate(message)}>
                           <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Retry</Text>
                         </Pressable>
-                        <Pressable style={styles.actionBtn} onPress={() => toggleRaw(message.id)}>
+                        <Pressable style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => toggleRaw(message.id)}>
                           <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Raw</Text>
                         </Pressable>
                       </>
                     )}
-                    <Pressable style={styles.actionBtn} onPress={() => handleBranch(message)}>
+                    <Pressable style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => handleBranch(message)}>
                       <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Branch</Text>
                     </Pressable>
-                    <Pressable style={styles.actionBtn} onPress={() => handleDownloadMd(message)}>
+                    <Pressable style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => handleDownloadMd(message)}>
                       <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Download</Text>
                     </Pressable>
-                    <Pressable style={styles.actionBtn} onPress={() => handleShowInfo(message)}>
+                    <Pressable style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => handleShowInfo(message)}>
                       <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Info</Text>
                     </Pressable>
                   </View>
@@ -1404,6 +1405,7 @@ export default function ChatScreen() {
                     colors={colors}
                     sizes={sizes}
                     aurora={aurora}
+                    theme={theme}
                     accentHex={accentHex}
                     isLocalMode={isLocalMode}
                     agentName={agents.find(p => p.id === currentAgentId)?.name || 'Vela'}

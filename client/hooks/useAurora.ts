@@ -11,7 +11,7 @@ export function useAurora() {
   const colors = THEME_COLORS[theme] || THEME_COLORS.berry;
   const sizes = FONT_SIZES[fontSize] || FONT_SIZES.medium;
   const aurora = getAurora(accentColor, theme);
-  return { colors, sizes, aurora };
+  return { colors, sizes, aurora, theme };
 }
 
 export type AuroraTheme = ReturnType<typeof useAurora>['aurora'];

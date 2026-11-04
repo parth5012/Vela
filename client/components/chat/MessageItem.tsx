@@ -10,6 +10,7 @@ export interface MessageItemProps {
   message: Message;
   isUser: boolean;
   colors: any;
+  theme?: 'berry' | 'citrus' | 'aquatic' | 'sunset' | 'noir';
   sizes: any;
   aurora: any;
   accentHex: string;
@@ -39,6 +40,7 @@ function MessageItemBase({
   message,
   isUser,
   colors,
+  theme,
   sizes,
   aurora,
   accentHex,
@@ -117,6 +119,7 @@ function MessageItemBase({
             <RichText
               content={effectiveContent || '…'}
               colors={colors}
+              theme={theme}
               sizes={sizes}
               accentHex={accentHex}
               onCopyText={onCopyText}
@@ -131,6 +134,7 @@ function MessageItemBase({
                       key={idx}
                       content={segment.content || ''}
                       colors={colors}
+                      theme={theme}
                       sizes={sizes}
                       accentHex={accentHex}
                       onCopyText={onCopyText}
@@ -187,6 +191,7 @@ export const MessageItem = memo(MessageItemBase, (prev, next) => {
     prev.inViewport === next.inViewport &&
     prev.showRaw === next.showRaw &&
     prev.accentHex === next.accentHex &&
+    prev.theme === next.theme &&
     prev.isUser === next.isUser
   );
 });
@@ -206,11 +211,16 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   bubble: {
-    borderRadius: 18,
+    borderRadius: 22,
     borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
     maxWidth: '88%',
+    shadowColor: '#1D1B20',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
   },
   userBubble: {},
   assistantBubble: {},

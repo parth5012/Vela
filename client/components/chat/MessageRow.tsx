@@ -3,6 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { ChatFeedItem } from '../chat/chatFeedTypes';
 import { ThemeColors, FontSizes } from '../../utils/theme';
 import { AuroraTheme } from '../../hooks/useAurora';
+import type { ThemeName } from '../../utils/theme';
 import { Message } from '../../store/useChatStore';
 import DateDividerPill from './DateDividerPill';
 import RichText from './RichText';
@@ -15,6 +16,7 @@ export interface MessageRowProps {
   colors: ThemeColors;
   sizes: FontSizes;
   aurora: AuroraTheme;
+  theme?: ThemeName;
   isStreamingMessage: boolean;
   onLongPress?: (msg: Message) => void;
   onCopyText?: (text: string) => void;
@@ -36,6 +38,7 @@ export const MessageRow = React.memo(
       colors,
       sizes,
       aurora,
+      theme,
       isStreamingMessage,
       onLongPress,
       onCopyText,
@@ -73,6 +76,7 @@ export const MessageRow = React.memo(
           colors={colors}
           sizes={sizes}
           aurora={aurora}
+          theme={theme}
           accentHex={accentHex || aurora.acc1}
           isLocalMode={isLocalMode}
           agentName={agentName}

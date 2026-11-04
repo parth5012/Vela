@@ -136,8 +136,6 @@ export const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#E8E0F2',
-    backgroundColor: '#FFFFFF',
     minHeight: 32,
     minWidth: 44,
     justifyContent: 'center',
