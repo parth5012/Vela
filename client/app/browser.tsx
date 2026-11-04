@@ -27,7 +27,7 @@ const QUICK_LINKS: { label: string; url: string; icon: string }[] = [
 export default function BrowserScreen() {
   const router = useRouter();
   const { theme, fontSize, accentColor } = useConfigStore();
-  const colors = THEME_COLORS[theme] || THEME_COLORS.deep;
+  const colors = THEME_COLORS[theme] || THEME_COLORS.berry;
   const sizes = FONT_SIZES[fontSize] || FONT_SIZES.medium;
   const accentHex = ACCENT_COLORS[accentColor] || ACCENT_COLORS.indigo;
   const aurora = getAurora(accentColor, theme);

@@ -51,7 +51,7 @@ describe('useConfigStore', () => {
 
   it('should initialize with default values for UI customizations and agent parameters', () => {
     const state = useConfigStore.getState();
-    expect(state.theme).toBe('deep');
+    expect(state.theme).toBe('berry');
     expect(state.fontSize).toBe('medium');
     expect(state.accentColor).toBe('indigo');
     expect(state.systemPrompt).toBe('You are an autonomous research agent.');
@@ -128,7 +128,7 @@ describe('useConfigStore', () => {
   it('should allow updating UI customizations and agent parameters via setters', () => {
     const state = useConfigStore.getState();
     
-    state.setTheme('cyberpunk');
+    state.setTheme('aquatic');
     state.setFontSize('large');
     state.setAccentColor('rose');
     state.setSystemPrompt('Hello world');
@@ -136,7 +136,7 @@ describe('useConfigStore', () => {
     state.setModelName('gemini-1.5-flash');
 
     const updatedState = useConfigStore.getState();
-    expect(updatedState.theme).toBe('cyberpunk');
+    expect(updatedState.theme).toBe('aquatic');
     expect(updatedState.fontSize).toBe('large');
     expect(updatedState.accentColor).toBe('rose');
     expect(updatedState.systemPrompt).toBe('Hello world');

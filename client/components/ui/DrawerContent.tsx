@@ -60,7 +60,7 @@ export default function DrawerContent(_props?: any) {
     }
   };
 
-  const colors = THEME_COLORS[theme] || THEME_COLORS.deep;
+  const colors = THEME_COLORS[theme] || THEME_COLORS.berry;
   const sizes = FONT_SIZES[fontSize] || FONT_SIZES.medium;
   const accentHex = ACCENT_COLORS[accentColor] || ACCENT_COLORS.indigo;
   const aurora = getAurora(accentColor, theme);
@@ -171,8 +171,8 @@ const handleOmni = () => {
         style={({ pressed }) => [
           styles.browserRow,
           {
-            backgroundColor: isBrowserActive ? colors.glass : 'rgba(255, 255, 255, 0.02)',
-            borderColor: isBrowserActive ? aurora.acc1 + '44' : colors.glassBorder,
+            backgroundColor: isBrowserActive ? colors.card : colors.bubbleAssistant,
+            borderColor: isBrowserActive ? aurora.acc1 + '44' : colors.border,
           },
           pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
         ]}
