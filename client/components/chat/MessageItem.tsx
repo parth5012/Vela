@@ -86,8 +86,8 @@ function MessageItemBase({
             styles.bubble,
             isUser ? styles.userBubble : styles.assistantBubble,
             pressed && { opacity: 0.85 },
-            !isUser && { backgroundColor: colors.glass, borderColor: colors.glassBorder },
-            isUser && { backgroundColor: aurora.acc1, borderColor: aurora.acc2 },
+            !isUser && { backgroundColor: colors.bubbleAssistant, borderColor: colors.bubbleAssistantBorder },
+            isUser && { backgroundColor: colors.bubbleUser, borderColor: colors.bubbleUserBorder },
           ]}
         >
           {!isUser && (
@@ -97,7 +97,7 @@ function MessageItemBase({
           )}
 
           {isUser ? (
-            <Text style={[styles.messageText, { color: aurora.onAccent, fontSize: sizes.text }]}>
+            <Text style={[styles.messageText, { color: colors.text, fontSize: sizes.text }]}>
               {message.content}
             </Text>
           ) : showRaw ? (

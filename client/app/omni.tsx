@@ -17,7 +17,7 @@ import { OmniStreamController } from '../utils/omniStream';
 export default function OmniLiveSessionScreen() {
   const router = useRouter();
   const { theme, fontSize, accentColor, apiUrl, apiKey } = useConfigStore();
-  const colors = THEME_COLORS[theme] || THEME_COLORS.deep;
+  const colors = THEME_COLORS[theme] || THEME_COLORS.berry;
   const sizes = FONT_SIZES[fontSize] || FONT_SIZES.medium;
   const accentHex = ACCENT_COLORS[accentColor] || ACCENT_COLORS.indigo;
   const aurora = getAurora(accentColor, theme);

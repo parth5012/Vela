@@ -1300,7 +1300,7 @@ export default function ChatScreen() {
                       key={p.id}
                       style={[
                         styles.agentBarCell,
-                        { borderColor: colors.glassBorder, backgroundColor: 'rgba(0,0,0,0.25)' },
+                        { borderColor: colors.border, backgroundColor: colors.card },
                         isSelected && { borderColor: aurora.acc1, backgroundColor: aurora.acc1 + '1f' }
                       ]}
                       onPress={() => {
@@ -1447,8 +1447,8 @@ export default function ChatScreen() {
                   key={idx}
                   style={({ pressed }) => [
                     styles.suggestionCard,
-                    { backgroundColor: colors.glass, borderColor: colors.glassBorder },
-                    pressed && { borderColor: aurora.acc1, opacity: 0.9, transform: [{ scale: 0.98 }] }
+                    { backgroundColor: colors.card, borderColor: colors.border, borderRadius: 999 },
+                    pressed && { borderColor: aurora.acc1, backgroundColor: aurora.acc1 + '1A', opacity: 0.95, transform: [{ scale: 0.98 }] }
                   ]}
                   onPress={() => handleSendWelcome(item.text, item.agent)}
                 >
@@ -1472,7 +1472,7 @@ export default function ChatScreen() {
                     key={p.id}
                     style={({ pressed }) => [
                       styles.agentPill,
-                      { backgroundColor: 'rgba(0,0,0,0.25)', borderColor: colors.glassBorder },
+                      { backgroundColor: colors.card, borderColor: colors.border, borderRadius: 999 },
                       isSelected && { backgroundColor: aurora.acc1, borderColor: aurora.acc1 },
                       pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] }
                     ]}
@@ -1494,7 +1494,7 @@ export default function ChatScreen() {
         <Pressable
           style={({ pressed }) => [
             styles.switcherButton,
-            { borderColor: colors.glassBorder, backgroundColor: 'rgba(0,0,0,0.25)' },
+            { borderColor: colors.border, backgroundColor: colors.card },
             pressed && { opacity: 0.85, transform: [{ scale: 0.97 }] }
           ]}
           onPress={handleToggleLocalMode}
@@ -1541,11 +1541,11 @@ export default function ChatScreen() {
         <View
           style={[
             styles.inputContainer,
-            { backgroundColor: colors.card, borderColor: colors.glassBorder }
+            { backgroundColor: colors.card, borderColor: colors.border, borderRadius: 28, minHeight: 48 }
           ]}
         >
           <TextInput
-            style={[styles.input, { color: colors.text, fontSize: sizes.text }]}
+            style={[styles.input, { color: colors.text, fontSize: sizes.text, backgroundColor: 'transparent' }]}
             placeholder={activeThreadId ? "Ask a question or request a task..." : "Ask Vela anything..."}
             placeholderTextColor={colors.textDark}
             value={input}
@@ -1555,8 +1555,24 @@ export default function ChatScreen() {
           <Pressable
             style={({ pressed }) => [
               styles.sendButton,
-              { backgroundColor: isCurrentThreadStreaming ? '#ef4444' : aurora.acc1, shadowColor: aurora.acc1 },
-              !isCurrentThreadStreaming && !input.trim() && { backgroundColor: colors.textDark, shadowOpacity: 0 },
+              {
+                borderRadius: 999,
+                width: 48,
+                height: 48,
+                minWidth: 48,
+                paddingHorizontal: 0,
+                overflow: 'hidden',
+                backgroundColor: isCurrentThreadStreaming
+                  ? '#ef4444'
+                  : input.trim()
+                    ? 'transparent'
+                    : colors.textDark,
+                shadowColor: isCurrentThreadStreaming ? '#ef4444' : aurora.acc1,
+                shadowOpacity: isCurrentThreadStreaming || input.trim() ? 0.4 : 0,
+                shadowRadius: 12,
+                shadowOffset: { width: 0, height: 4 },
+                elevation: isCurrentThreadStreaming || input.trim() ? 8 : 0,
+              },
               pressed && { opacity: 0.85, transform: [{ scale: 0.94 }] }
             ]}
             onPress={handleSendPress}
@@ -1564,9 +1580,22 @@ export default function ChatScreen() {
             accessibilityRole="button"
             accessibilityLabel={isCurrentThreadStreaming ? 'Stop generating' : 'Send message'}
           >
-            <Text style={[styles.sendButtonText, { fontSize: sizes.text }]}>
-              {isCurrentThreadStreaming ? 'Stop' : 'Send'}
-            </Text>
+            {isCurrentThreadStreaming || !input.trim() ? (
+              <Text style={[styles.sendButtonText, { fontSize: sizes.text, color: '#ffffff' }]}>
+                {isCurrentThreadStreaming ? 'Stop' : 'Send'}
+              </Text>
+            ) : (
+              <LinearGradient
+                colors={[aurora.acc1, aurora.acc2]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, borderRadius: 999, justifyContent: 'center', alignItems: 'center' }}
+              >
+                <Text style={[styles.sendButtonText, { fontSize: sizes.text, color: aurora.onAccent }]}>
+                  Send
+                </Text>
+              </LinearGradient>
+            )}
           </Pressable>
         </View>
       </View>

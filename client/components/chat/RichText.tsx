@@ -25,7 +25,7 @@ function getMermaidRenderer(): React.ComponentType<any> {
 
 interface RichTextProps {
   content: string;
-  theme?: 'deep' | 'slate' | 'cyberpunk' | 'nordic' | 'dracula' | 'oled' | 'berry' | 'citrus' | 'aquatic' | 'sunset' | 'noir';
+  theme?: 'berry' | 'citrus' | 'aquatic' | 'sunset' | 'noir';
   fontSize?: 'small' | 'medium' | 'large';
   accentColor?: 'indigo' | 'emerald' | 'rose' | 'amber' | 'violet' | 'pink' | 'orange' | 'blue';
   colors?: typeof THEME_COLORS[keyof typeof THEME_COLORS];
@@ -37,7 +37,7 @@ interface RichTextProps {
 
 export default function RichText({
   content,
-  theme = 'deep',
+  theme = 'berry',
   fontSize = 'medium',
   accentColor = 'indigo',
   colors: colorsOverride,
@@ -51,7 +51,7 @@ export default function RichText({
       isStreaming ? parseContentIncrementalFast(content) : parseContent(content)
     );
   }, [content, isStreaming]);
-  const colors = colorsOverride || THEME_COLORS[theme] || THEME_COLORS.deep;
+  const colors = colorsOverride || THEME_COLORS[theme] || THEME_COLORS.berry;
   const sizes = sizesOverride || FONT_SIZES[fontSize] || FONT_SIZES.medium;
   const accentHex = accentHexOverride || ACCENT_COLORS[accentColor] || ACCENT_COLORS.indigo;
 

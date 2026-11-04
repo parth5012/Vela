@@ -49,7 +49,7 @@ jest.mock('react-native-markdown-display', () => {
 });
 
 describe('Deferred Heavy WebViews (LaTeX / Mermaid) & Off-Screen Animations', () => {
-  const colors = THEME_COLORS.deep;
+  const colors = THEME_COLORS.berry;
   const sizes = FONT_SIZES.medium;
   const aurora = {
     acc1: '#8b7cf6',

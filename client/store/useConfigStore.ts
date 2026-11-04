@@ -133,7 +133,7 @@ interface ConfigState {
   setConfig: (url: string, key: string) => void;
   clearConfig: () => void;
   setHasHydrated: (val: boolean) => void;
-  theme: 'deep' | 'slate' | 'cyberpunk' | 'nordic' | 'dracula' | 'oled' | 'berry' | 'citrus' | 'aquatic' | 'sunset' | 'noir';
+  theme: 'berry' | 'citrus' | 'aquatic' | 'sunset' | 'noir';
   fontSize: 'small' | 'medium' | 'large';
   accentColor: 'indigo' | 'emerald' | 'rose' | 'amber' | 'violet' | 'pink' | 'orange' | 'blue';
   systemPrompt: string;
@@ -142,7 +142,7 @@ interface ConfigState {
   defaultAgent: string;
   userName: string;
   suggestionStarters: SuggestionStarter[];
-  setTheme: (theme: 'deep' | 'slate' | 'cyberpunk' | 'nordic' | 'dracula' | 'oled' | 'berry' | 'citrus' | 'aquatic' | 'sunset' | 'noir') => void;
+  setTheme: (theme: 'berry' | 'citrus' | 'aquatic' | 'sunset' | 'noir') => void;
   setFontSize: (size: 'small' | 'medium' | 'large') => void;
   setAccentColor: (color: 'indigo' | 'emerald' | 'rose' | 'amber' | 'violet' | 'pink' | 'orange' | 'blue') => void;
   setSystemPrompt: (prompt: string) => void;
@@ -208,7 +208,7 @@ export const useConfigStore = create<ConfigState>()(
       apiKey: '',
       isConfigured: false,
       hasHydrated: false,
-      theme: 'deep',
+      theme: 'berry',
       fontSize: 'medium',
       accentColor: 'indigo',
       systemPrompt: 'You are an autonomous research agent.',
@@ -273,7 +273,7 @@ export const useConfigStore = create<ConfigState>()(
           apiUrl: '',
           apiKey: '',
           isConfigured: false,
-          theme: 'deep',
+          theme: 'berry',
           fontSize: 'medium',
           accentColor: 'indigo',
           systemPrompt: 'You are an autonomous research agent.',
@@ -474,7 +474,7 @@ export const useConfigStore = create<ConfigState>()(
       // (SmolLM 135M, Qwen2.5 0.5B, TinyLlama 1.1B) are handled by the
       // format-aware download check, which forces a re-download instead of
       // trying to load the stale `.task` file.
-      version: 7,
+      version: 8,
       migrate: (persistedState: any, fromVersion: number) => {
         if (persistedState) {
           if (fromVersion < 4) {
@@ -553,6 +553,13 @@ export const useConfigStore = create<ConfigState>()(
           }
           if (persistedState.gpuQuantPreference === undefined) {
             persistedState.gpuQuantPreference = 'auto';
+          }
+          // v8: "Flair" redesign — all legacy Aurora theme names (deep/slate/
+          // cyberpunk/oled/dracula/nordic/expression/vivid/matte) are retired.
+          // Anything unrecognized lands on the new default scheme.
+          const FLAIR_THEMES = ['berry', 'citrus', 'aquatic', 'sunset', 'noir'];
+          if (!FLAIR_THEMES.includes(persistedState.theme)) {
+            persistedState.theme = 'berry';
           }
         }
         return persistedState;

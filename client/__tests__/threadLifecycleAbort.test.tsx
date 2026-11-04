@@ -51,7 +51,7 @@ describe('Thread Lifecycle Auto-Abort & Drawer Streaming Indicator', () => {
         connectionMode: 'local',
         apiUrl: '',
         apiKey: '',
-        theme: 'deep',
+        theme: 'berry',
         fontSize: 'medium',
         accentColor: 'indigo',
       });

@@ -6,7 +6,7 @@ import { THEME_COLORS, FONT_SIZES, ACCENT_COLORS } from '../../utils/theme';
 
 interface MermaidRendererProps {
   graph: string;
-  theme?: 'deep' | 'slate' | 'cyberpunk' | 'nordic' | 'dracula' | 'oled' | 'berry' | 'citrus' | 'aquatic' | 'sunset' | 'noir';
+  theme?: 'berry' | 'citrus' | 'aquatic' | 'sunset' | 'noir';
   fontSize?: 'small' | 'medium' | 'large';
   accentColor?: 'indigo' | 'emerald' | 'rose' | 'amber' | 'violet' | 'pink' | 'orange' | 'blue';
   isStreaming?: boolean;
@@ -17,7 +17,7 @@ const NEWLINE_END_REGEX = /\n$/;
 
 export default function MermaidRenderer({
   graph,
-  theme = 'deep',
+  theme = 'berry',
   fontSize = 'medium',
   accentColor = 'indigo',
   isStreaming = false,
@@ -26,13 +26,13 @@ export default function MermaidRenderer({
   const [height, setHeight] = useState(180);
   const [hasError, setHasError] = useState(false);
 
-  const colors = THEME_COLORS[theme] || THEME_COLORS.deep;
+  const colors = THEME_COLORS[theme] || THEME_COLORS.berry;
   const sizes = FONT_SIZES[fontSize] || FONT_SIZES.medium;
   const accentHex = ACCENT_COLORS[accentColor] || ACCENT_COLORS.indigo;
 
   // Hooks must run unconditionally (rules-of-hooks): compute them even on the
   // Web fallback path below so the hook order never changes between renders.
-  const isDark = theme !== 'slate'; // Slate is the only light-like theme
+  const isDark = theme === 'noir'; // Noir is the only dark theme
   const mermaidTheme = isDark ? 'dark' : 'default';
 
   const safeGraph = useMemo(() => JSON.stringify(graph).replace(LT_REGEX, '\\u003c'), [graph]);

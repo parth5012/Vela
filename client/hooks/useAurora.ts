@@ -8,7 +8,7 @@ export function useAurora() {
   const theme = useConfigStore((s) => s.theme);
   const fontSize = useConfigStore((s) => s.fontSize);
   const accentColor = useConfigStore((s) => s.accentColor);
-  const colors = THEME_COLORS[theme] || THEME_COLORS.deep;
+  const colors = THEME_COLORS[theme] || THEME_COLORS.berry;
   const sizes = FONT_SIZES[fontSize] || FONT_SIZES.medium;
   const aurora = getAurora(accentColor, theme);
   return { colors, sizes, aurora };

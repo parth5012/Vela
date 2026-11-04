@@ -50,7 +50,7 @@ function HeaderRightActions() {
   const segments = useSegments();
   const theme = useConfigStore((state) => state.theme);
   const accentColor = useConfigStore((state) => state.accentColor);
-  const colors = THEME_COLORS[theme] || THEME_COLORS.deep;
+  const colors = THEME_COLORS[theme] || THEME_COLORS.berry;
   const aurora = getAurora(accentColor, theme);
   const isBrowserRoute = segments[0] === 'browser';
 
@@ -299,7 +299,7 @@ export default function RootLayout() {
   if (!hasHydrated || !chatHasHydrated || !isRouterReady || (!isConfigured && !inSetupGroup && !isOAuthCallback) || (isConfigured && inSetupGroup)) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#818cf8" />
+        <ActivityIndicator size="large" color="#6D3AE8" />
       </View>
     );
   }
@@ -312,7 +312,7 @@ export default function RootLayout() {
   const isBrowserRoute = segments[0] === 'browser';
   const shouldShowWebview = isBrowserVisible && isBrowserRoute;
 
-  const currentColors = THEME_COLORS[currentTheme] || THEME_COLORS.deep;
+  const currentColors = THEME_COLORS[currentTheme] || THEME_COLORS.berry;
   const currentAurora = getAurora(currentAccent, currentTheme);
 
   return (
@@ -447,7 +447,7 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#09090b',
+    backgroundColor: '#F2EAFA',
     alignItems: 'center',
     justifyContent: 'center',
   },
