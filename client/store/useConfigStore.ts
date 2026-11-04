@@ -133,7 +133,7 @@ interface ConfigState {
   setConfig: (url: string, key: string) => void;
   clearConfig: () => void;
   setHasHydrated: (val: boolean) => void;
-  theme: 'deep' | 'slate' | 'cyberpunk' | 'nordic' | 'dracula' | 'oled';
+  theme: 'deep' | 'slate' | 'cyberpunk' | 'nordic' | 'dracula' | 'oled' | 'berry' | 'citrus' | 'aquatic' | 'sunset' | 'noir';
   fontSize: 'small' | 'medium' | 'large';
   accentColor: 'indigo' | 'emerald' | 'rose' | 'amber' | 'violet' | 'pink' | 'orange' | 'blue';
   systemPrompt: string;
@@ -142,7 +142,7 @@ interface ConfigState {
   defaultAgent: string;
   userName: string;
   suggestionStarters: SuggestionStarter[];
-  setTheme: (theme: 'deep' | 'slate' | 'cyberpunk' | 'nordic' | 'dracula' | 'oled') => void;
+  setTheme: (theme: 'deep' | 'slate' | 'cyberpunk' | 'nordic' | 'dracula' | 'oled' | 'berry' | 'citrus' | 'aquatic' | 'sunset' | 'noir') => void;
   setFontSize: (size: 'small' | 'medium' | 'large') => void;
   setAccentColor: (color: 'indigo' | 'emerald' | 'rose' | 'amber' | 'violet' | 'pink' | 'orange' | 'blue') => void;
   setSystemPrompt: (prompt: string) => void;

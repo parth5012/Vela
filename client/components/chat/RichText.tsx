@@ -25,7 +25,7 @@ function getMermaidRenderer(): React.ComponentType<any> {
 
 interface RichTextProps {
   content: string;
-  theme?: 'deep' | 'slate' | 'cyberpunk' | 'nordic' | 'dracula' | 'oled';
+  theme?: 'deep' | 'slate' | 'cyberpunk' | 'nordic' | 'dracula' | 'oled' | 'berry' | 'citrus' | 'aquatic' | 'sunset' | 'noir';
   fontSize?: 'small' | 'medium' | 'large';
   accentColor?: 'indigo' | 'emerald' | 'rose' | 'amber' | 'violet' | 'pink' | 'orange' | 'blue';
   colors?: typeof THEME_COLORS[keyof typeof THEME_COLORS];

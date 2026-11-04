@@ -17,6 +17,11 @@ const THEME_OPTIONS = [
   { value: 'nordic' as const, label: 'Velvet Emerald' },
   { value: 'dracula' as const, label: 'Dusk Plum' },
   { value: 'slate' as const, label: 'Mineral Slate' },
+  { value: 'berry' as const, label: 'Berry' },
+  { value: 'citrus' as const, label: 'Citrus' },
+  { value: 'aquatic' as const, label: 'Aquatic' },
+  { value: 'sunset' as const, label: 'Sunset' },
+  { value: 'noir' as const, label: 'Noir' },
 ];
 
 const FONT_OPTIONS = [
@@ -41,7 +46,7 @@ export default function AppearanceScreen() {
         <Label>Theme</Label>
         <PillGroup options={THEME_OPTIONS} value={theme} onChange={setTheme} />
         <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, lineHeight: 16 }}>
-          Six dark atmospheres, one glass language. Current: {THEME_OPTIONS.find((t) => t.value === theme)?.label}.
+          Six dark atmospheres plus five Flair tonal schemes. Current: {THEME_OPTIONS.find((t) => t.value === theme)?.label}.
         </Text>
       </Card>
 
