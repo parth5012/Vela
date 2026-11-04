@@ -6,7 +6,7 @@ import { THEME_COLORS, FONT_SIZES, ACCENT_COLORS } from '../../utils/theme';
 
 interface MermaidRendererProps {
   graph: string;
-  theme?: 'deep' | 'slate' | 'cyberpunk' | 'nordic' | 'dracula' | 'oled';
+  theme?: 'deep' | 'slate' | 'cyberpunk' | 'nordic' | 'dracula' | 'oled' | 'berry' | 'citrus' | 'aquatic' | 'sunset' | 'noir';
   fontSize?: 'small' | 'medium' | 'large';
   accentColor?: 'indigo' | 'emerald' | 'rose' | 'amber' | 'violet' | 'pink' | 'orange' | 'blue';
   isStreaming?: boolean;

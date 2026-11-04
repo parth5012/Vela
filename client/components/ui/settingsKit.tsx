@@ -116,7 +116,7 @@ export function Field({ label, style, ...rest }: { label: string } & TextInputPr
       <TextInput
         style={[
           styles.input,
-          { backgroundColor: 'rgba(0,0,0,0.25)', borderColor: colors.glassBorder, color: colors.text, fontSize: sizes.text },
+          { backgroundColor: colors.card, borderColor: colors.border, color: colors.text, fontSize: sizes.text },
           style,
         ]}
         placeholderTextColor={colors.textDark}
@@ -145,8 +145,8 @@ export function PillGroup<T extends string>({
             key={o.value}
             style={({ pressed }) => [
               styles.pill,
-              { backgroundColor: 'rgba(0,0,0,0.25)', borderColor: colors.glassBorder },
-              selected && { borderColor: aurora.acc1, borderWidth: 1.5, backgroundColor: hexToRgba(aurora.acc1, 0.08) },
+              { backgroundColor: colors.bubbleAssistant, borderColor: colors.border },
+              selected && { borderColor: aurora.acc1, borderWidth: 1.5, backgroundColor: hexToRgba(aurora.acc1, 0.12) },
               pressed && { transform: [{ scale: 0.96 }], opacity: 0.85 },
             ]}
             onPress={() => onChange(o.value)}
@@ -154,7 +154,7 @@ export function PillGroup<T extends string>({
             <Text
               style={[
                 styles.pillText,
-                { color: selected ? colors.text : colors.textMuted, fontSize: sizes.text - 1 },
+                { color: selected ? aurora.acc1 : colors.textMuted, fontSize: sizes.text - 1 },
               ]}
             >
               {o.label}
@@ -185,8 +185,8 @@ export function ChipGroup({
             key={o.value}
             style={({ pressed }) => [
               styles.chip,
-              { backgroundColor: 'rgba(0,0,0,0.25)', borderColor: colors.glassBorder },
-              selected && { borderColor: aurora.acc1, backgroundColor: hexToRgba(aurora.acc1, 0.08) },
+              { backgroundColor: colors.bubbleAssistant, borderColor: colors.border },
+              selected && { borderColor: aurora.acc1, backgroundColor: hexToRgba(aurora.acc1, 0.12) },
               pressed && { transform: [{ scale: 0.96 }], opacity: 0.85 },
             ]}
             onPress={() => onChange(o.value)}
@@ -194,7 +194,7 @@ export function ChipGroup({
             <Text
               style={[
                 styles.chipText,
-                { color: selected ? colors.text : colors.textMuted, fontSize: sizes.text - 2 },
+                { color: selected ? aurora.acc1 : colors.textMuted, fontSize: sizes.text - 2 },
               ]}
             >
               {o.label}
@@ -288,8 +288,8 @@ export function SecondaryButton({
       style={({ pressed }) => [
         styles.secondary,
         {
-          borderColor: colors.glassBorder,
-          backgroundColor: 'rgba(255, 255, 255, 0.06)',
+          borderColor: colors.border,
+          backgroundColor: colors.card,
         },
         pressed && { opacity: 0.75, transform: [{ scale: 0.96 }] },
         disabled && { opacity: 0.4 },

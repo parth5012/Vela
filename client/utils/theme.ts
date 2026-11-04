@@ -41,7 +41,10 @@ export function getContrastForeground(hex: string): string {
 }
 
 export type AccentName = keyof typeof ACCENT_COLORS;
-export type ThemeName = 'deep' | 'slate' | 'cyberpunk' | 'oled' | 'dracula' | 'nordic';
+export type ThemeName =
+  | 'deep' | 'slate' | 'cyberpunk' | 'oled' | 'dracula' | 'nordic'
+  // "Flair" tonal schemes (Material 3 Expressive) — added on top of Aurora
+  | 'berry' | 'citrus' | 'aquatic' | 'sunset' | 'noir';
 
 // Aurora tokens: sky = background gradient stops, glass = surface color,
 // glassBorder = hairline border, aurora = the theme's signature gradient pair.
@@ -211,6 +214,125 @@ export const THEME_COLORS: Record<ThemeName, ThemeColors> = {
     status: '#34d399',
     codeBg: 'rgba(7, 15, 12, 0.7)',
     codeFg: '#d1fae5',
+  },
+  // ── Flair schemes (Material 3 Expressive tonal, light-first) ─────────────
+  // These sit alongside the Aurora glass themes; surfaces are tonal (solid
+  // light containers). Duplicated from the "Flair" redesign so both design
+  // languages coexist.
+  // ── Flair · Berry — tonal lavender-violet (signature)
+  berry: {
+    background: '#FBF7FE',
+    card: '#FFFFFF',
+    border: '#E8E0F2',
+    text: '#1D1B20',
+    textMuted: '#4B4654',
+    textDark: '#79747E',
+    bubbleUser: '#EFE7FF',
+    bubbleUserBorder: '#DACCFA',
+    bubbleAssistant: '#F3F0F7',
+    bubbleAssistantBorder: '#E6E1EC',
+    skyTop: '#F2EAFA',
+    skyBottom: '#FBF7FE',
+    glass: 'rgba(255, 255, 255, 0.92)',
+    glassBorder: '#E8E0F2',
+    aurora1: '#6D3AE8',
+    aurora2: '#B69BF7',
+    glow: 'rgba(109, 58, 232, 0.32)',
+    status: '#F2A33C',
+    codeBg: '#221C2C',
+    codeFg: '#EBE6F4',
+  },
+  // ── Flair · Citrus — cream + tangerine
+  citrus: {
+    background: '#FFFBF2',
+    card: '#FFFFFF',
+    border: '#F2E3CC',
+    text: '#292018',
+    textMuted: '#5D5345',
+    textDark: '#9C8F7E',
+    bubbleUser: '#FFEED6',
+    bubbleUserBorder: '#F5D8A6',
+    bubbleAssistant: '#F7F1E7',
+    bubbleAssistantBorder: '#EAE0D2',
+    skyTop: '#FFF1DA',
+    skyBottom: '#FFFBF2',
+    glass: 'rgba(255, 255, 255, 0.92)',
+    glassBorder: '#F2E3CC',
+    aurora1: '#F0740A',
+    aurora2: '#FDBD6D',
+    glow: 'rgba(240, 116, 10, 0.3)',
+    status: '#F2A33C',
+    codeBg: '#2C2317',
+    codeFg: '#FFF3DF',
+  },
+  // ── Flair · Aquatic — mint mist + deep teal
+  aquatic: {
+    background: '#F2FAF9',
+    card: '#FFFFFF',
+    border: '#D5EAE7',
+    text: '#112726',
+    textMuted: '#4C6866',
+    textDark: '#87A8A5',
+    bubbleUser: '#D2F7EE',
+    bubbleUserBorder: '#ABE7DA',
+    bubbleAssistant: '#EEF5F4',
+    bubbleAssistantBorder: '#E0EAE8',
+    skyTop: '#E5F6F4',
+    skyBottom: '#F2FAF9',
+    glass: 'rgba(255, 255, 255, 0.92)',
+    glassBorder: '#D5EAE7',
+    aurora1: '#0A8F7F',
+    aurora2: '#5BDEC8',
+    glow: 'rgba(10, 143, 127, 0.3)',
+    status: '#E6A93C',
+    codeBg: '#0F2624',
+    codeFg: '#D8F5EF',
+  },
+  // ── Flair · Sunset — blush + coral ember
+  sunset: {
+    background: '#FFF6F4',
+    card: '#FFFFFF',
+    border: '#F5DCD5',
+    text: '#2B1614',
+    textMuted: '#6E4C46',
+    textDark: '#AC9A94',
+    bubbleUser: '#FFE2DA',
+    bubbleUserBorder: '#F9C4B8',
+    bubbleAssistant: '#F8EFEA',
+    bubbleAssistantBorder: '#EBE3DE',
+    skyTop: '#FFE6E0',
+    skyBottom: '#FFF6F4',
+    glass: 'rgba(255, 255, 255, 0.92)',
+    glassBorder: '#F5DCD5',
+    aurora1: '#D9482B',
+    aurora2: '#FFB39F',
+    glow: 'rgba(217, 72, 43, 0.3)',
+    status: '#F2A33C',
+    codeBg: '#301713',
+    codeFg: '#FFE6DD',
+  },
+  // ── Flair · Noir — true black + neon lavender (AMOLED)
+  noir: {
+    background: '#000000',
+    card: '#141419',
+    border: '#26262E',
+    text: '#F1EEF7',
+    textMuted: '#A8A5B5',
+    textDark: '#5E5B6B',
+    bubbleUser: '#1D1B26',
+    bubbleUserBorder: '#2D2A3A',
+    bubbleAssistant: '#17161D',
+    bubbleAssistantBorder: '#26262E',
+    skyTop: '#000000',
+    skyBottom: '#0B0A10',
+    glass: 'rgba(255, 255, 255, 0.05)',
+    glassBorder: '#26262E',
+    aurora1: '#B87BF2',
+    aurora2: '#E3CDFA',
+    glow: 'rgba(184, 123, 242, 0.34)',
+    status: '#E3CDFA',
+    codeBg: '#0A090D',
+    codeFg: '#E7E2F2',
   },
 };
 
