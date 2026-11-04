@@ -153,7 +153,7 @@ export const styles = StyleSheet.create({
     minHeight: 48,
   },
   dangerText: {
-    color: '#D9482B',
+    color: '#B8381F',
     fontSize: 14,
     fontWeight: '700',
     letterSpacing: 0.2,

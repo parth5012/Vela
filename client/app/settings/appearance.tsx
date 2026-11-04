@@ -179,9 +179,11 @@ function hexWithAlpha(hex: string, alpha: number): string {
 const m3styles = StyleSheet.create({
   demoRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 24,
+    rowGap: 14,
     marginBottom: 14,
   },
   demoCounter: { alignItems: 'flex-start' },
