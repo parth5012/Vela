@@ -6,6 +6,7 @@ import SourceCard from './SourceCard';
 import type { Message } from '../../store/useChatStore';
 import { useActiveStreamStore } from '../../store/useActiveStreamStore';
 import type { ThemeName } from '../../utils/theme';
+import { FONT_SIZES } from '../../utils/theme';
 
 export interface MessageItemProps {
   message: Message;
@@ -100,11 +101,28 @@ function MessageItemBase({
           )}
 
           {isUser ? (
-            <Text style={[styles.messageText, { color: colors.text, fontSize: sizes.text }]}>
+            <Text
+              style={[
+                styles.messageText,
+                {
+                  color: colors.text,
+                  fontSize: sizes.text,
+                  lineHeight: sizes.lineHeight,
+                  letterSpacing: sizes.letterSpacing,
+                },
+              ]}
+            >
               {message.content}
             </Text>
           ) : showRaw ? (
-            <Text style={[styles.rawText, { color: colors.text, fontSize: sizes.text }]}>
+            <Text
+              style={[
+                styles.rawText,
+                // Monospace deliberately skips the scale's tracking — sample
+                // code stays uniformly spaced.
+                { color: colors.text, fontSize: sizes.text, lineHeight: sizes.lineHeight },
+              ]}
+            >
               {effectiveContent}
             </Text>
           ) : !inViewport ? (
@@ -112,7 +130,15 @@ function MessageItemBase({
             <Text
               testID="message-ast-unmounted"
               numberOfLines={4}
-              style={[styles.virtualizedText, { color: colors.textMuted, fontSize: sizes.text }]}
+              style={[
+                styles.virtualizedText,
+                {
+                  color: colors.textMuted,
+                  fontSize: sizes.text,
+                  lineHeight: sizes.lineHeight,
+                  letterSpacing: sizes.letterSpacing,
+                },
+              ]}
             >
               {effectiveContent}
             </Text>
@@ -193,6 +219,9 @@ export const MessageItem = memo(MessageItemBase, (prev, next) => {
     prev.showRaw === next.showRaw &&
     prev.accentHex === next.accentHex &&
     prev.theme === next.theme &&
+    // getTypeScale caches per (theme, size), so identity flips require a real
+    // scale change (e.g. user switched font size or theme).
+    prev.sizes === next.sizes &&
     prev.isUser === next.isUser
   );
 });
@@ -232,14 +261,15 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   messageText: {
-    lineHeight: 20,
+    lineHeight: FONT_SIZES.medium.lineHeight,
+    letterSpacing: FONT_SIZES.medium.letterSpacing,
   },
   rawText: {
-    lineHeight: 20,
+    lineHeight: FONT_SIZES.medium.lineHeight,
     fontFamily: 'monospace',
   },
   virtualizedText: {
-    lineHeight: 20,
+    lineHeight: FONT_SIZES.medium.lineHeight,
   },
   thoughtNestingContainer: {
     width: '100%',

@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // VELA DESIGN LANGUAGE — "Flair"
 // Complete redesign. Replaces the old Aurora glass theme system entirely.
@@ -329,25 +331,127 @@ export function getAurora(
   };
 }
 
+// ── Scroll-craft type scale ──
+// Body sizes carry lineHeight (≥1.5 ratio) and letterSpacing (tracking tightens
+// as size grows); display sizes (title/logo) carry their own negative tracking.
 export const FONT_SIZES = {
   small: {
     text: 12,
     sub: 10,
     title: 16,
     logo: 24,
+    lineHeight: 18,
+    subLineHeight: 15,
+    letterSpacing: 0.1,
+    titleLetterSpacing: -0.1,
+    logoLetterSpacing: -0.3,
   },
   medium: {
     text: 14,
     sub: 12,
     title: 20,
     logo: 32,
+    lineHeight: 21,
+    subLineHeight: 18,
+    letterSpacing: 0.1,
+    titleLetterSpacing: -0.2,
+    logoLetterSpacing: -0.4,
   },
   large: {
     text: 17,
     sub: 14,
     title: 24,
     logo: 38,
+    lineHeight: 26,
+    subLineHeight: 21,
+    letterSpacing: 0,
+    titleLetterSpacing: -0.3,
+    logoLetterSpacing: -0.5,
   },
 };
 
-export type FontSizes = (typeof FONT_SIZES)[keyof typeof FONT_SIZES];
+export interface FontSizes {
+  text: number;
+  sub: number;
+  title: number;
+  logo: number;
+  /** Body line-height for `text`, ≥1.5× the text size (dark: +5%). */
+  lineHeight: number;
+  /** Body line-height for `sub`. */
+  subLineHeight: number;
+  /** Tracking for body text; tightens as size grows. */
+  letterSpacing: number;
+  /** Negative tracking for the `title` display size. */
+  titleLetterSpacing: number;
+  /** Negative tracking for the `logo` display size. */
+  logoLetterSpacing: number;
+  /** Dark-mode compensation bumps this one step heavier than light. */
+  fontWeight?: '400' | '500' | '600' | '700' | '800' | '900';
+}
+
+// Two families max: display (headings/brand) and text (body/UI). Do not add a
+// third — role is expressed through weight and tracking, not extra families.
+export const FONTS: { display: string; text: string } = {
+  display: Platform.select({
+    ios: 'System',
+    android: 'sans-serif',
+    web: 'System',
+    default: 'sans-serif',
+  })!,
+  text: Platform.select({
+    ios: 'System',
+    android: 'sans-serif',
+    web: 'System',
+    default: 'sans-serif',
+  })!,
+};
+
+const DARK_THEMES: readonly string[] = ['noir', 'chrome', 'oled'];
+
+/** Dark grounds need airier, roomier text so light-on-dark doesn't look thin. */
+export function isDarkTheme(theme: ThemeName | 'oled'): boolean {
+  return DARK_THEMES.includes(theme);
+}
+
+const WEIGHT_RAMP = ['400', '500', '600', '700', '800', '900'] as const;
+type Weight = (typeof WEIGHT_RAMP)[number];
+
+/** One step heavier on the weight ramp (e.g. 400 → 500). */
+function heavierWeight(weight: Weight): Weight {
+  const idx = WEIGHT_RAMP.indexOf(weight);
+  return idx === -1 || idx === WEIGHT_RAMP.length - 1 ? weight : WEIGHT_RAMP[idx + 1];
+}
+
+/**
+ * Theme-aware type scale. Dark themes compensate: +5% line-height,
+ * +0.1 tracking, and a fontWeight one step heavier than the light default.
+ * Results are cached per (theme, size) so callers can rely on stable object
+ * identity across renders (React.memo comparators compare `sizes`).
+ */
+const typeScaleCache = new Map<string, FontSizes>();
+
+export function getTypeScale(theme: ThemeName | 'oled', size: keyof typeof FONT_SIZES): FontSizes {
+  const cacheKey = `${theme}::${size}`;
+  const cached = typeScaleCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+  const base = FONT_SIZES[size];
+  const lightEntry: FontSizes = { ...base, fontWeight: '400' };
+  const computed: FontSizes = isDarkTheme(theme)
+    ? (() => {
+        const round1 = (v: number) => Math.round(v * 10) / 10;
+        return {
+          ...base,
+          lineHeight: round1(base.lineHeight * 1.05),
+          subLineHeight: round1(base.subLineHeight * 1.05),
+          letterSpacing: round1(base.letterSpacing + 0.1),
+          titleLetterSpacing: round1(base.titleLetterSpacing + 0.1),
+          logoLetterSpacing: round1(base.logoLetterSpacing + 0.1),
+          fontWeight: heavierWeight('400'),
+        };
+      })()
+    : lightEntry;
+  typeScaleCache.set(cacheKey, computed);
+  return computed;
+}

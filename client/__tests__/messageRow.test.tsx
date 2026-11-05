@@ -47,6 +47,12 @@ const dummySizes: FontSizes = {
   sub: 12,
   title: 20,
   logo: 32,
+  lineHeight: 21,
+  subLineHeight: 18,
+  letterSpacing: 0.1,
+  titleLetterSpacing: -0.2,
+  logoLetterSpacing: -0.4,
+  fontWeight: '400',
 };
 
 const dummyAurora: AuroraTheme = {
