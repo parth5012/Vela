@@ -2,11 +2,11 @@ import React, { useState, useMemo } from 'react';
 import { View, StyleSheet, Platform, Text, Pressable, ScrollView, Alert } from 'react-native';
 import { WebView } from 'react-native-webview';
 import * as Clipboard from 'expo-clipboard';
-import { THEME_COLORS, FONT_SIZES, ACCENT_COLORS } from '../../utils/theme';
+import { THEME_COLORS, FONT_SIZES, ACCENT_COLORS, type ThemeName } from '../../utils/theme';
 
 interface MermaidRendererProps {
   graph: string;
-  theme?: 'berry' | 'citrus' | 'aquatic' | 'sunset' | 'noir';
+  theme?: ThemeName;
   fontSize?: 'small' | 'medium' | 'large';
   accentColor?: 'indigo' | 'emerald' | 'rose' | 'amber' | 'violet' | 'pink' | 'orange' | 'blue';
   isStreaming?: boolean;
@@ -32,7 +32,7 @@ export default function MermaidRenderer({
 
   // Hooks must run unconditionally (rules-of-hooks): compute them even on the
   // Web fallback path below so the hook order never changes between renders.
-  const isDark = theme === 'noir'; // Noir is the only dark theme
+  const isDark = theme === 'noir' || theme === 'chrome';
   const mermaidTheme = isDark ? 'dark' : 'default';
 
   const safeGraph = useMemo(() => JSON.stringify(graph).replace(LT_REGEX, '\\u003c'), [graph]);

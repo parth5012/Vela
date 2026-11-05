@@ -18,7 +18,7 @@ import {
 } from '../../components/ui/m3Expression';
 
 // Appearance — the showcase screen of the VELA "Flair" design language.
-// 5 schemes (berry · citrus · aquatic · sunset · noir), accent energy,
+// 6 schemes (berry · citrus · aquatic · sunset · noir · chrome), accent energy,
 // font scale, and a live gallery of the expressive widget kit.
 
 const THEME_OPTIONS = [
@@ -27,6 +27,7 @@ const THEME_OPTIONS = [
   { value: 'aquatic' as const, label: 'Aquatic' },
   { value: 'sunset' as const, label: 'Sunset' },
   { value: 'noir' as const, label: 'Noir' },
+  { value: 'chrome' as const, label: 'Chrome' },
 ];
 
 const FONT_OPTIONS = [
@@ -66,13 +67,13 @@ export default function AppearanceScreen() {
   return (
     <AuroraScreen
       title="Appearance"
-      subtitle="Five tonal schemes, one expressive language. Tap a scheme — the whole app recolors instantly."
+      subtitle="Six tonal schemes, one expressive language. Tap a scheme — the whole app recolors instantly."
     >
       <Card>
         <Label>Color Scheme</Label>
         <PillGroup options={THEME_OPTIONS} value={theme} onChange={setTheme} />
         <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, lineHeight: 16 }}>
-          Berry is the signature. Noir is pure AMOLED black. Current:{' '}
+          Berry is the signature. Noir and Chrome are dark atmospheres. Current:{' '}
           <Text style={{ color: aurora.acc1, fontWeight: '800' }}>
             {THEME_OPTIONS.find((t) => t.value === theme)?.label}
           </Text>
