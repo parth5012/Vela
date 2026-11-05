@@ -8,6 +8,7 @@
  * Maintenance: Update this block when exports, invariants, side effects, or ownership change.
  */
 import { StyleSheet } from 'react-native';
+import { DEFAULT_ELEVATION } from '../utils/elevation';
 
 export const styles = StyleSheet.create({
   container: {
@@ -47,7 +48,7 @@ export const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000000',
+    shadowColor: DEFAULT_ELEVATION.e2.shadowColor,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 6,
@@ -128,7 +129,7 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 6,
-    shadowColor: '#000000',
+    shadowColor: DEFAULT_ELEVATION.e2.shadowColor,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 10,
@@ -164,7 +165,7 @@ export const styles = StyleSheet.create({
     borderRadius: 24,
     borderWidth: 1,
     minHeight: 44,
-    shadowColor: '#000000',
+    shadowColor: DEFAULT_ELEVATION.e2.shadowColor,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.12,
     shadowRadius: 6,
@@ -202,7 +203,7 @@ export const styles = StyleSheet.create({
     padding: 24,
     alignItems: 'center',
     gap: 12,
-    shadowColor: '#000000',
+    shadowColor: DEFAULT_ELEVATION.e2.shadowColor,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.25,
     shadowRadius: 16,
@@ -258,7 +259,7 @@ export const styles = StyleSheet.create({
     borderRadius: 22,
     padding: 24,
     borderWidth: 1,
-    shadowColor: '#000000',
+    shadowColor: DEFAULT_ELEVATION.e2.shadowColor,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
     shadowRadius: 20,
@@ -320,7 +321,7 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 16,
     gap: 14,
-    shadowColor: '#000000',
+    shadowColor: DEFAULT_ELEVATION.e2.shadowColor,
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.25,
     shadowRadius: 18,

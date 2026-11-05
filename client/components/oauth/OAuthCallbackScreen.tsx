@@ -9,6 +9,7 @@ import {
   Platform,
   type ImageStyle,
 } from 'react-native';
+import { DEFAULT_ELEVATION } from '../../utils/elevation';
 
 //--- Types ---------------------------------------------------------------
 
@@ -292,7 +293,7 @@ const styles = StyleSheet.create({
     paddingVertical: 36,
     paddingHorizontal: 28,
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: DEFAULT_ELEVATION.e2.shadowColor,
     shadowOpacity: 0.18,
     shadowRadius: 24,
     shadowOffset: { width: 0, height: 12 },
