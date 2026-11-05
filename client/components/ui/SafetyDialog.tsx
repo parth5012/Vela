@@ -5,6 +5,7 @@ import { useConfigStore } from '../../store/useConfigStore';
 import { classifyAction, getCategoryLabel } from '../../utils/safetyManager';
 import { useAurora } from '../../hooks/useAurora';
 import { Card } from './settingsKit';
+import { DEFAULT_ELEVATION } from '../../utils/elevation';
 
 export function SafetyDialog() {
   const pendingTask = useSafetyStore((s) => s.pendingTask);
@@ -158,7 +159,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 20,
     elevation: 5,
-    shadowColor: '#000',
+    shadowColor: DEFAULT_ELEVATION.e2.shadowColor,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,

@@ -11,6 +11,7 @@ import {
   type TextInputProps,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import Grain from './Grain';
 import { useRouter } from 'expo-router';
 import { useConfigStore } from '../../store/useConfigStore';
 import { ACCENT_COLORS, hexToRgba } from '../../utils/theme';
@@ -42,6 +43,7 @@ export function AuroraScreen({
 
   return (
     <LinearGradient colors={[colors.skyTop, colors.skyBottom]} style={styles.screen}>
+      <Grain />
       <View style={styles.header}>
         <Pressable onPress={handleBack} hitSlop={10} style={styles.backBtn}>
           <Text style={[styles.backText, { color: colors.textMuted, fontSize: sizes.text }]}>‹ Back</Text>

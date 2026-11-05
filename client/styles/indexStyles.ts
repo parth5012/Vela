@@ -9,6 +9,7 @@
  */
 import { Platform, StyleSheet } from 'react-native';
 import { FONT_SIZES } from '../utils/theme';
+import { DEFAULT_ELEVATION } from '../utils/elevation';
 
 export const styles = StyleSheet.create({
   container: {
@@ -182,7 +183,7 @@ export const styles = StyleSheet.create({
     padding: 20,
     width: '100%',
     marginBottom: 28,
-    shadowColor: '#000000',
+    shadowColor: DEFAULT_ELEVATION.e2.shadowColor,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 14,
@@ -218,7 +219,7 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 16,
     padding: 16,
-    shadowColor: '#000000',
+    shadowColor: DEFAULT_ELEVATION.e2.shadowColor,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
@@ -298,7 +299,7 @@ export const styles = StyleSheet.create({
     paddingRight: 6,
     paddingVertical: 6,
     gap: 8,
-    shadowColor: '#000000',
+    shadowColor: DEFAULT_ELEVATION.e2.shadowColor,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 16,

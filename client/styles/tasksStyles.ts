@@ -9,6 +9,7 @@
  */
 import { StyleSheet } from 'react-native';
 import { FONT_SIZES } from '../utils/theme';
+import { DEFAULT_ELEVATION } from '../utils/elevation';
 
 export const styles = StyleSheet.create({
   filterContainer: {
@@ -48,7 +49,7 @@ export const styles = StyleSheet.create({
     padding: 18,
     marginBottom: 16,
     borderRadius: 20,
-    shadowColor: '#000000',
+    shadowColor: DEFAULT_ELEVATION.e2.shadowColor,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 12,
