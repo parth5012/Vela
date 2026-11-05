@@ -66,15 +66,21 @@ export default function CollapsibleBlock({
     });
   };
 
-  useEffect(() => {
+  // Single dispatch shared by the streaming isClosed transitions and manual
+  // toggles: large blocks snap via setValue, small blocks animate.
+  const syncCollapse = (targetExpanded: boolean) => {
     if (isLarge) {
-      settle(!isClosed);
-    } else if (isClosed) {
-      animateTo(false, () => setCollapsed(true));
-    } else {
+      settle(targetExpanded);
+    } else if (targetExpanded) {
       setCollapsed(false); // clip opens to its (static) measured height; content slides in
       animateTo(true);
+    } else {
+      animateTo(false, () => setCollapsed(true));
     }
+  };
+
+  useEffect(() => {
+    syncCollapse(!isClosed);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isClosed, measuredHeight, isLarge]);
 
@@ -83,14 +89,7 @@ export default function CollapsibleBlock({
     if (onToggle) {
       onToggle(nextCollapsed);
     }
-    if (isLarge) {
-      settle(!nextCollapsed);
-    } else if (nextCollapsed) {
-      animateTo(false, () => setCollapsed(true));
-    } else {
-      setCollapsed(false);
-      animateTo(true);
-    }
+    syncCollapse(!nextCollapsed);
   };
 
   const onLayout = (event: any) => {

@@ -388,7 +388,10 @@ export default function TasksScreen() {
                     ]}
                   >
                     {runningTaskId === task.id ? (
-                      <ActivityIndicator size="small" color="#3b82f6" />
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <ActivityIndicator size="small" color="#3b82f6" />
+                        <Text style={[styles.actionBtnText, { color: '#60a5fa' }]}>Run Now</Text>
+                      </View>
                     ) : (
                       <Text style={[styles.actionBtnText, { color: '#60a5fa' }]}>Run Now</Text>
                     )}
