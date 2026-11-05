@@ -38,6 +38,7 @@ import { streamController } from '../utils/streamController';
 import CollapsibleBlock from '../components/chat/CollapsibleBlock';
 import { getCachedParse } from '../utils/parseCache';
 import SourceCard from '../components/chat/SourceCard';
+import Grain from '../components/ui/Grain';
 import { styles } from '../styles/indexStyles';
 import { useRouter } from 'expo-router';
 import { useBrowserStore } from '../store/useBrowserStore';
@@ -1274,6 +1275,7 @@ export default function ChatScreen() {
       colors={[colors.skyTop, colors.skyBottom]}
       style={styles.container}
     >
+      <Grain />
       <View pointerEvents="none" style={styles.auroraGlow}>
         <LinearGradient
           colors={[aurora.glow, 'transparent']}

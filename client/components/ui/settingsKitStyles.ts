@@ -7,6 +7,7 @@
  * Maintenance: Update this block when exports, invariants, side effects, or ownership change.
  */
 import { StyleSheet } from 'react-native';
+import { DEFAULT_ELEVATION, edgeLight } from '../../utils/elevation';
 
 // VELA "Flair" design language: soft tonal surfaces, oversized rounded shapes,
 // full-radius pills and buttons, gentle elevation instead of glass-dark fills.
@@ -59,7 +60,8 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 20,
     gap: 14,
-    shadowColor: '#1D1B20',
+    ...edgeLight,
+    shadowColor: DEFAULT_ELEVATION.e1.shadowColor,
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.07,
     shadowRadius: 12,
