@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { clearGpuCrashFlag } from '../utils/liteRtCrashFlag';
+import type { ThemeName } from '../utils/theme';
 
 export interface SuggestionStarter {
   label: string;
@@ -133,7 +134,7 @@ interface ConfigState {
   setConfig: (url: string, key: string) => void;
   clearConfig: () => void;
   setHasHydrated: (val: boolean) => void;
-  theme: 'berry' | 'citrus' | 'aquatic' | 'sunset' | 'noir';
+  theme: ThemeName;
   fontSize: 'small' | 'medium' | 'large';
   accentColor: 'indigo' | 'emerald' | 'rose' | 'amber' | 'violet' | 'pink' | 'orange' | 'blue';
   systemPrompt: string;
@@ -142,7 +143,7 @@ interface ConfigState {
   defaultAgent: string;
   userName: string;
   suggestionStarters: SuggestionStarter[];
-  setTheme: (theme: 'berry' | 'citrus' | 'aquatic' | 'sunset' | 'noir') => void;
+  setTheme: (theme: ThemeName) => void;
   setFontSize: (size: 'small' | 'medium' | 'large') => void;
   setAccentColor: (color: 'indigo' | 'emerald' | 'rose' | 'amber' | 'violet' | 'pink' | 'orange' | 'blue') => void;
   setSystemPrompt: (prompt: string) => void;
@@ -474,7 +475,10 @@ export const useConfigStore = create<ConfigState>()(
       // (SmolLM 135M, Qwen2.5 0.5B, TinyLlama 1.1B) are handled by the
       // format-aware download check, which forces a re-download instead of
       // trying to load the stale `.task` file.
-      version: 8,
+      // v8: "Flair" redesign (Material 3 Expressive palettes).
+      // v9 (WF-447-01): scroll-craft theme roles & cold silver/chrome addition;
+      // legacy oled users cleanly migrate to noir.
+      version: 9,
       migrate: (persistedState: any, fromVersion: number) => {
         if (persistedState) {
           if (fromVersion < 4) {
@@ -554,11 +558,16 @@ export const useConfigStore = create<ConfigState>()(
           if (persistedState.gpuQuantPreference === undefined) {
             persistedState.gpuQuantPreference = 'auto';
           }
-          // v8: "Flair" redesign — all legacy Aurora theme names (deep/slate/
+          // v8/v9: "Flair" redesign — all legacy Aurora theme names (deep/slate/
           // cyberpunk/oled/dracula/nordic/expression/vivid/matte) are retired.
-          // Anything unrecognized lands on the new default scheme.
-          const FLAIR_THEMES = ['berry', 'citrus', 'aquatic', 'sunset', 'noir'];
-          if (!FLAIR_THEMES.includes(persistedState.theme)) {
+          // Legacy oled users migrate directly to noir (AMOLED dark atmosphere).
+          if (fromVersion < 9) {
+            if ((persistedState.theme as string) === 'oled') {
+              persistedState.theme = 'noir';
+            }
+          }
+          const FLAIR_THEMES: readonly ThemeName[] = ['berry', 'citrus', 'aquatic', 'sunset', 'noir', 'chrome'];
+          if (!FLAIR_THEMES.includes(persistedState.theme as ThemeName)) {
             persistedState.theme = 'berry';
           }
         }

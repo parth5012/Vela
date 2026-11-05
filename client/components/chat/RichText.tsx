@@ -4,7 +4,7 @@ import * as Clipboard from 'expo-clipboard';
 import Markdown from 'react-native-markdown-display';
 import { parseContent, parseContentIncremental, parseContentIncrementalFast } from '../../utils/latexExtractor';
 import { perfTracker } from '../../utils/perfTracker';
-import { THEME_COLORS, FONT_SIZES, ACCENT_COLORS } from '../../utils/theme';
+import { THEME_COLORS, FONT_SIZES, ACCENT_COLORS, type ThemeName } from '../../utils/theme';
 
 // Lazy-loaded heavy modules to avoid blocking initial cold launch bundle evaluation
 let LazyLatexRenderer: React.ComponentType<any> | null = null;
@@ -25,7 +25,7 @@ function getMermaidRenderer(): React.ComponentType<any> {
 
 interface RichTextProps {
   content: string;
-  theme?: 'berry' | 'citrus' | 'aquatic' | 'sunset' | 'noir';
+  theme?: ThemeName;
   fontSize?: 'small' | 'medium' | 'large';
   accentColor?: 'indigo' | 'emerald' | 'rose' | 'amber' | 'violet' | 'pink' | 'orange' | 'blue';
   colors?: typeof THEME_COLORS[keyof typeof THEME_COLORS];

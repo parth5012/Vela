@@ -5,12 +5,13 @@ import BubbleFooter from './BubbleFooter';
 import SourceCard from './SourceCard';
 import type { Message } from '../../store/useChatStore';
 import { useActiveStreamStore } from '../../store/useActiveStreamStore';
+import type { ThemeName } from '../../utils/theme';
 
 export interface MessageItemProps {
   message: Message;
   isUser: boolean;
   colors: any;
-  theme?: 'berry' | 'citrus' | 'aquatic' | 'sunset' | 'noir';
+  theme?: ThemeName;
   sizes: any;
   aurora: any;
   accentHex: string;

@@ -35,24 +35,78 @@ export const ACCENT_AURORA: Record<keyof typeof ACCENT_COLORS, [string, string]>
 };
 
 export function hexToRgba(hex: string, alpha: number): string {
-  const h = hex.replace('#', '');
-  const r = parseInt(h.substring(0, 2), 16);
-  const g = parseInt(h.substring(2, 4), 16);
-  const b = parseInt(h.substring(4, 6), 16);
+  const [r, g, b] = parseHex(hex);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+export function parseHex(hex: string): [number, number, number] {
+  const clean = hex.replace('#', '').trim();
+  if (clean.length === 3) {
+    const r = parseInt(clean[0] + clean[0], 16);
+    const g = parseInt(clean[1] + clean[1], 16);
+    const b = parseInt(clean[2] + clean[2], 16);
+    if (!Number.isNaN(r) && !Number.isNaN(g) && !Number.isNaN(b)) {
+      return [r, g, b];
+    }
+  } else if (clean.length >= 6) {
+    const r = parseInt(clean.substring(0, 2), 16);
+    const g = parseInt(clean.substring(2, 4), 16);
+    const b = parseInt(clean.substring(4, 6), 16);
+    if (!Number.isNaN(r) && !Number.isNaN(g) && !Number.isNaN(b)) {
+      return [r, g, b];
+    }
+  }
+  return [0, 0, 0];
+}
+
+export function relativeLuminance(hex: string): number {
+  const [r, g, b] = parseHex(hex).map((c) => {
+    const norm = c / 255;
+    return norm <= 0.04045 ? norm / 12.92 : Math.pow((norm + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+export function contrastRatio(hexA: string, hexB: string): number {
+  const lumA = relativeLuminance(hexA);
+  const lumB = relativeLuminance(hexB);
+  const lighter = Math.max(lumA, lumB);
+  const darker = Math.min(lumA, lumB);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+export function hueOf(hex: string): number {
+  const [r, g, b] = parseHex(hex).map((c) => c / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const delta = max - min;
+  if (delta === 0) return 0;
+  let h = 0;
+  if (max === r) {
+    h = ((g - b) / delta) % 6;
+  } else if (max === g) {
+    h = (b - r) / delta + 2;
+  } else {
+    h = (r - g) / delta + 4;
+  }
+  h = Math.round(h * 60);
+  if (h < 0) h += 360;
+  return h % 360;
+}
+
+export function hueDiff(hueA: number, hueB: number): number {
+  const diff = Math.abs(hueA - hueB) % 360;
+  return diff > 180 ? 360 - diff : diff;
+}
+
 export function getContrastForeground(hex: string): string {
-  const h = hex.replace('#', '');
-  const r = parseInt(h.substring(0, 2), 16);
-  const g = parseInt(h.substring(2, 4), 16);
-  const b = parseInt(h.substring(4, 6), 16);
+  const [r, g, b] = parseHex(hex);
   const yiq = (r * 299 + g * 587 + b * 114) / 1000;
   return yiq >= 150 ? '#1D1B20' : '#ffffff';
 }
 
 export type AccentName = keyof typeof ACCENT_COLORS;
-export type ThemeName = 'berry' | 'citrus' | 'aquatic' | 'sunset' | 'noir';
+export type ThemeName = 'berry' | 'citrus' | 'aquatic' | 'sunset' | 'noir' | 'chrome';
 
 // Tone tokens: sky = page gradient, glass = surface, aurora = the scheme's
 // signature gradient pair. Bubbles get their own tonal tints.
@@ -84,7 +138,7 @@ export interface ThemeColors extends AuroraTokens {
   bubbleBack?: string;
 }
 
-export const THEME_COLORS: Record<ThemeName, ThemeColors> = {
+export const THEME_COLORS: Record<ThemeName, ThemeColors> & { oled: ThemeColors } = {
   // ── Berry · tonal lavender-violet (signature scheme, default) ──
   berry: {
     background: '#FBF7FE',
@@ -104,7 +158,7 @@ export const THEME_COLORS: Record<ThemeName, ThemeColors> = {
     aurora1: '#6D3AE8',
     aurora2: '#B69BF7',
     glow: 'rgba(109, 58, 232, 0.32)',
-    status: '#F2A33C',
+    status: '#6D3AE8',
     codeBg: '#221C2C',
     codeFg: '#EBE6F4',
   },
@@ -127,7 +181,7 @@ export const THEME_COLORS: Record<ThemeName, ThemeColors> = {
     aurora1: '#F0740A',
     aurora2: '#FDBD6D',
     glow: 'rgba(240, 116, 10, 0.3)',
-    status: '#F2A33C',
+    status: '#B45309',
     codeBg: '#2C2317',
     codeFg: '#FFF3DF',
   },
@@ -150,7 +204,7 @@ export const THEME_COLORS: Record<ThemeName, ThemeColors> = {
     aurora1: '#0A8F7F',
     aurora2: '#5BDEC8',
     glow: 'rgba(10, 143, 127, 0.3)',
-    status: '#E6A93C',
+    status: '#0A8F7F',
     codeBg: '#0F2624',
     codeFg: '#D8F5EF',
   },
@@ -173,13 +227,13 @@ export const THEME_COLORS: Record<ThemeName, ThemeColors> = {
     aurora1: '#D9482B',
     aurora2: '#FFB39F',
     glow: 'rgba(217, 72, 43, 0.3)',
-    status: '#F2A33C',
+    status: '#C2410C',
     codeBg: '#301713',
     codeFg: '#FFE6DD',
   },
-  // ── Noir · true black + neon lavender (AMOLED) ──
+  // ── Noir · dark atmosphere + neon lavender (AMOLED) ──
   noir: {
-    background: '#000000',
+    background: '#050505',
     card: '#141419',
     border: '#26262E',
     text: '#F1EEF7',
@@ -189,7 +243,53 @@ export const THEME_COLORS: Record<ThemeName, ThemeColors> = {
     bubbleUserBorder: '#2D2A3A',
     bubbleAssistant: '#17161D',
     bubbleAssistantBorder: '#26262E',
-    skyTop: '#000000',
+    skyTop: '#090807',
+    skyBottom: '#0B0A10',
+    glass: 'rgba(255, 255, 255, 0.05)',
+    glassBorder: '#26262E',
+    aurora1: '#B87BF2',
+    aurora2: '#E3CDFA',
+    glow: 'rgba(184, 123, 242, 0.34)',
+    status: '#E3CDFA',
+    codeBg: '#0A090D',
+    codeFg: '#E7E2F2',
+  },
+  // ── Chrome · cold silver / steel atmosphere ──
+  chrome: {
+    background: '#0B0D10',
+    card: '#14171C',
+    border: '#242933',
+    text: '#EEF2F7',
+    textMuted: '#A9B6C4',
+    textDark: '#6F7D8C',
+    bubbleUser: '#1C2128',
+    bubbleUserBorder: '#2D3540',
+    bubbleAssistant: '#15191E',
+    bubbleAssistantBorder: '#242933',
+    skyTop: '#0E1116',
+    skyBottom: '#0B0D10',
+    glass: 'rgba(255, 255, 255, 0.05)',
+    glassBorder: '#242933',
+    aurora1: '#9BAEC2',
+    aurora2: '#D2DEEC',
+    glow: 'rgba(155, 174, 194, 0.32)',
+    status: '#B7C9D9',
+    codeBg: '#0D1014',
+    codeFg: '#E1E7EE',
+  },
+  // ── OLED · backward-compatibility alias pointing to warm-black OLED tokens ──
+  oled: {
+    background: '#050505',
+    card: '#141419',
+    border: '#26262E',
+    text: '#F1EEF7',
+    textMuted: '#A8A5B5',
+    textDark: '#5E5B6B',
+    bubbleUser: '#1D1B26',
+    bubbleUserBorder: '#2D2A3A',
+    bubbleAssistant: '#17161D',
+    bubbleAssistantBorder: '#26262E',
+    skyTop: '#090807',
     skyBottom: '#0B0A10',
     glass: 'rgba(255, 255, 255, 0.05)',
     glassBorder: '#26262E',
