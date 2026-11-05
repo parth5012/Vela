@@ -248,7 +248,10 @@ export function PrimaryButton({
       accessibilityLabel={label}
     >
       {loading ? (
-        <ActivityIndicator color={aurora.onAccent} size="small" />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <ActivityIndicator color={aurora.onAccent} size="small" />
+          <Text style={[styles.primaryText, { color: aurora.onAccent, fontSize: sizes.text }]}>{label}</Text>
+        </View>
       ) : (
         <Text style={[styles.primaryText, { color: aurora.onAccent, fontSize: sizes.text }]}>{label}</Text>
       )}

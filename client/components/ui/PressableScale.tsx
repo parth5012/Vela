@@ -17,7 +17,9 @@ export interface PressableScaleProps extends Omit<ComponentProps<typeof Pressabl
  * Pressable with scroll-craft press feedback (WF-447-04):
  * scale 0.97 on press-in, back to 1 on press-out, only transform/opacity on
  * the native driver, ease-out curves, dissolved to opacity-only feedback under
- * reduced motion. Honours `disabled` (opacity 0.4) and forwards
+ * reduced motion (call-site `pressed && { opacity: ... }` styles keep working —
+ * the trailing style layer only forces opacity when disabled). Honours
+ * `disabled` (opacity 0.4), defaults accessibilityRole to button, and forwards
  * accessibilityState (always reporting disabled) / accessibilityLabel.
  */
 export default function PressableScale({
@@ -29,6 +31,7 @@ export default function PressableScale({
   accessibilityLabel,
   accessibilityHint,
   accessibilityState,
+  accessibilityRole = 'button',
   children,
   ...rest
 }: PressableScaleProps) {
@@ -75,14 +78,17 @@ export default function PressableScale({
       {...rest}
       style={[
         baseStyle,
-        // Only transform/opacity — native driver safe.
-        { transform: [{ scale }], opacity: disabled ? 0.4 : 1 },
+        // Only transform/opacity — native driver safe. Trailing opacity is set
+        // only when disabled so call-site pressed opacity survives RN style
+        // flattening (reduced-motion users then keep opacity press feedback).
+        { transform: [{ scale }], ...(disabled ? { opacity: 0.4 } : {}) },
       ]}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       disabled={disabled}
       accessibilityLabel={accessibilityLabel}
       accessibilityHint={accessibilityHint}
+      accessibilityRole={accessibilityRole}
       accessibilityState={{ ...accessibilityState, disabled: disabled || accessibilityState?.disabled || false }}
     >
       {children}
