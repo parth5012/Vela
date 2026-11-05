@@ -1,4 +1,5 @@
-docs/
+docs/*
+!docs/DESIGN.md
 .superpowers/
 .tmp/
 .scratch/

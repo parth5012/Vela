@@ -120,3 +120,13 @@ disk and is lost on `expo prebuild --clean`. It belongs in an Expo config plugin
 - **Date Divider** — a centered, non-interactive visual badge separating messages between different calendar days in a conversation feed.
 - **Day Cluster** — a contiguous sequence of messages sent within the same calendar day in the Owner's local timezone.
 
+## Design
+
+The scroll-craft taste floor — colour roles, typography, depth, motion, states,
+copy rules, the refuse list and the squint test — lives in
+[docs/DESIGN.md](docs/DESIGN.md). It is enforced by `npm run design:lint`
+(`scripts/design-lint.mjs`; errors fail CI, warnings print, exceptions need a
+reasoned entry in `scripts/design-lint-allowlist.json`) and by the motion
+invariants in `__tests__/motion.test.ts`.
+
+
