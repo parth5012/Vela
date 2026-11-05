@@ -8,6 +8,7 @@
  * Maintenance: Update this block when exports, invariants, side effects, or ownership change.
  */
 import { Platform, StyleSheet } from 'react-native';
+import { FONT_SIZES } from '../utils/theme';
 
 export const styles = StyleSheet.create({
   container: {
@@ -56,8 +57,8 @@ export const styles = StyleSheet.create({
   },
   emptyMessagesText: {
     textAlign: 'center',
-    lineHeight: 22,
-    letterSpacing: 0.2,
+    lineHeight: FONT_SIZES.medium.lineHeight,
+    letterSpacing: FONT_SIZES.medium.letterSpacing,
   },
   messagesList: {
     paddingHorizontal: 16,
@@ -92,19 +93,19 @@ export const styles = StyleSheet.create({
     borderTopLeftRadius: 8,
   },
   senderLabel: {
-    fontSize: 10,
+    fontSize: FONT_SIZES.small.sub,
     fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 1.2,
     marginBottom: 6,
   },
   messageText: {
-    lineHeight: 22,
-    letterSpacing: 0.2,
+    lineHeight: FONT_SIZES.medium.lineHeight,
+    letterSpacing: FONT_SIZES.medium.letterSpacing,
   },
   rawText: {
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    lineHeight: 20,
+    lineHeight: FONT_SIZES.medium.lineHeight,
   },
   thoughtNestingContainer: {
     width: '100%',
@@ -189,14 +190,14 @@ export const styles = StyleSheet.create({
   },
   quoteText: {
     fontStyle: 'italic',
-    fontSize: 14,
-    lineHeight: 22,
+    fontSize: FONT_SIZES.medium.text,
+    lineHeight: FONT_SIZES.medium.lineHeight,
     textAlign: 'center',
     marginBottom: 10,
-    letterSpacing: 0.2,
+    letterSpacing: FONT_SIZES.medium.letterSpacing,
   },
   quoteAuthor: {
-    fontSize: 12,
+    fontSize: FONT_SIZES.small.text,
     textAlign: 'right',
     fontWeight: '600',
     letterSpacing: 0.3,
@@ -224,8 +225,8 @@ export const styles = StyleSheet.create({
     elevation: 2,
   },
   suggestionText: {
-    lineHeight: 22,
-    letterSpacing: 0.2,
+    lineHeight: FONT_SIZES.medium.lineHeight,
+    letterSpacing: FONT_SIZES.medium.letterSpacing,
   },
   agentScrollContainer: {
     gap: 10,
@@ -261,12 +262,12 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   switcherLabel: {
-    fontSize: 12,
+    fontSize: FONT_SIZES.small.text,
     fontWeight: '600',
     letterSpacing: 0.2,
   },
   downloadProgressText: {
-    fontSize: 12,
+    fontSize: FONT_SIZES.small.text,
     fontWeight: '600',
     fontVariant: ['tabular-nums'],
   },
