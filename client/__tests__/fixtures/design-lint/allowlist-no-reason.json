@@ -1,0 +1,3 @@
+[
+  { "file": "app/PureBlack.tsx", "rule": "no-pure-black-background" }
+]

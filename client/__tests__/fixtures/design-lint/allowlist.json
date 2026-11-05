@@ -1,0 +1,8 @@
+[
+  { "file": "app/PureBlack.tsx", "rule": "no-pure-black-background", "reason": "fixture: demonstrates allowlist suppression in the design-lint tests" },
+  { "file": "app/PureBlack.tsx", "rule": "no-black-shadow", "reason": "fixture: demonstrates allowlist suppression in the design-lint tests" },
+  { "file": "app/NeonGlow.tsx", "rule": "no-neon-glow-text", "reason": "fixture: demonstrates allowlist suppression in the design-lint tests" },
+  { "file": "app/GradientText.tsx", "rule": "no-gradient-text", "reason": "fixture: demonstrates allowlist suppression in the design-lint tests" },
+  { "file": "app/MotionBans.tsx", "rule": "no-ease-in", "reason": "fixture: demonstrates allowlist suppression in the design-lint tests" },
+  { "file": "app/MotionBans.tsx", "rule": "no-transition-all", "reason": "fixture: demonstrates allowlist suppression in the design-lint tests" }
+]
