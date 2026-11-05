@@ -490,6 +490,26 @@ export default function ChatScreen() {
   const [agentBarShown, setAgentBarShown] = React.useState(true);
   const reduceMotion = useReducedMotion();
 
+  // 180ms sits inside every motion cap (press 120–180, transitions ≤300).
+  const slideAgentBar = React.useCallback(
+    (toValue: number, onDone?: () => void) => {
+      if (reduceMotion) {
+        agentBarSlide.setValue(toValue);
+        if (onDone) onDone();
+      } else {
+        Animated.timing(agentBarSlide, {
+          toValue,
+          duration: 180,
+          easing: EASING.out,
+          useNativeDriver: true,
+        }).start(({ finished }) => {
+          if (finished && onDone) onDone();
+        });
+      }
+    },
+    [agentBarSlide, reduceMotion]
+  );
+
   const handleScroll = useCallback((event: any) => {
     const currentOffset = event.nativeEvent.contentOffset.y;
     const diff = currentOffset - lastOffsetY.current;
@@ -498,51 +518,21 @@ export default function ChatScreen() {
       if (diff > 10 && isAgentBarVisible.current) {
         // Scrolling down: Hide agent bar
         isAgentBarVisible.current = false;
-        if (reduceMotion) {
-          agentBarSlide.setValue(-AGENT_BAR_HEIGHT);
-          setAgentBarShown(false);
-        } else {
-          Animated.timing(agentBarSlide, {
-            toValue: -AGENT_BAR_HEIGHT,
-            duration: 180,
-            easing: EASING.out,
-            useNativeDriver: true,
-          }).start(({ finished }) => {
-            if (finished) setAgentBarShown(false);
-          });
-        }
+        slideAgentBar(-AGENT_BAR_HEIGHT, () => setAgentBarShown(false));
       } else if (diff < -10 && !isAgentBarVisible.current) {
         // Scrolling up: Show agent bar
         isAgentBarVisible.current = true;
         setAgentBarShown(true);
-        if (reduceMotion) {
-          agentBarSlide.setValue(0);
-        } else {
-          Animated.timing(agentBarSlide, {
-            toValue: 0,
-            duration: 180,
-            easing: EASING.out,
-            useNativeDriver: true,
-          }).start();
-        }
+        slideAgentBar(0);
       }
     } else if (currentOffset <= 5 && !isAgentBarVisible.current) {
       isAgentBarVisible.current = true;
       setAgentBarShown(true);
-      if (reduceMotion) {
-        agentBarSlide.setValue(0);
-      } else {
-        Animated.timing(agentBarSlide, {
-          toValue: 0,
-          duration: 180,
-          easing: EASING.out,
-          useNativeDriver: true,
-        }).start();
-      }
+      slideAgentBar(0);
     }
 
     lastOffsetY.current = currentOffset;
-  }, [agentBarSlide, reduceMotion]);
+  }, [slideAgentBar]);
 
   React.useEffect(() => {
     const randomIdx = Math.floor(Math.random() * QUOTES.length);
