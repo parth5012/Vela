@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TextInput,
-  Pressable,
   ScrollView,
   ActivityIndicator,
   type StyleProp,
@@ -12,6 +11,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Grain from './Grain';
+import PressableScale from './PressableScale';
 import { useRouter } from 'expo-router';
 import { useConfigStore } from '../../store/useConfigStore';
 import { ACCENT_COLORS, hexToRgba } from '../../utils/theme';
@@ -45,9 +45,9 @@ export function AuroraScreen({
     <LinearGradient colors={[colors.skyTop, colors.skyBottom]} style={styles.screen}>
       <Grain />
       <View style={styles.header}>
-        <Pressable onPress={handleBack} hitSlop={10} style={styles.backBtn}>
+        <PressableScale onPress={handleBack} hitSlop={10} style={styles.backBtn} accessibilityLabel="Back">
           <Text style={[styles.backText, { color: colors.textMuted, fontSize: sizes.text }]}>‹ Back</Text>
-        </Pressable>
+        </PressableScale>
         <Text
           style={[styles.headerTitle, { color: colors.text, fontSize: sizes.title }]}
           numberOfLines={1}
@@ -143,15 +143,18 @@ export function PillGroup<T extends string>({
       {options.map((o) => {
         const selected = o.value === value;
         return (
-          <Pressable
+          <PressableScale
             key={o.value}
+            scaleTo={0.96}
             style={({ pressed }) => [
               styles.pill,
               { backgroundColor: colors.bubbleAssistant, borderColor: colors.border },
               selected && { borderColor: aurora.acc1, borderWidth: 1.5, backgroundColor: hexToRgba(aurora.acc1, 0.12) },
-              pressed && { transform: [{ scale: 0.96 }], opacity: 0.85 },
+              pressed && { opacity: 0.85 },
             ]}
             onPress={() => onChange(o.value)}
+            accessibilityState={{ selected }}
+            accessibilityLabel={o.label}
           >
             <Text
               style={[
@@ -161,7 +164,7 @@ export function PillGroup<T extends string>({
             >
               {o.label}
             </Text>
-          </Pressable>
+          </PressableScale>
         );
       })}
     </View>
@@ -183,15 +186,18 @@ export function ChipGroup({
       {options.map((o) => {
         const selected = o.value === value;
         return (
-          <Pressable
+          <PressableScale
             key={o.value}
+            scaleTo={0.96}
             style={({ pressed }) => [
               styles.chip,
               { backgroundColor: colors.bubbleAssistant, borderColor: colors.border },
               selected && { borderColor: aurora.acc1, backgroundColor: hexToRgba(aurora.acc1, 0.12) },
-              pressed && { transform: [{ scale: 0.96 }], opacity: 0.85 },
+              pressed && { opacity: 0.85 },
             ]}
             onPress={() => onChange(o.value)}
+            accessibilityState={{ selected }}
+            accessibilityLabel={o.label}
           >
             <Text
               style={[
@@ -201,7 +207,7 @@ export function ChipGroup({
             >
               {o.label}
             </Text>
-          </Pressable>
+          </PressableScale>
         );
       })}
     </View>
@@ -221,7 +227,8 @@ export function PrimaryButton({
 }) {
   const { aurora, sizes } = useAurora();
   return (
-    <Pressable
+    <PressableScale
+      scaleTo={0.96}
       style={({ pressed }) => [
         styles.primary,
         {
@@ -232,18 +239,20 @@ export function PrimaryButton({
           shadowOffset: { width: 0, height: 6 },
           elevation: 8,
         },
-        pressed && { transform: [{ scale: 0.96 }], opacity: 0.9 },
+        pressed && { opacity: 0.9 },
         (disabled || loading) && { opacity: 0.6 },
       ]}
       onPress={onPress}
       disabled={disabled || loading}
+      accessibilityState={{ busy: loading || false }}
+      accessibilityLabel={label}
     >
       {loading ? (
         <ActivityIndicator color={aurora.onAccent} size="small" />
       ) : (
         <Text style={[styles.primaryText, { color: aurora.onAccent, fontSize: sizes.text }]}>{label}</Text>
       )}
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -257,17 +266,17 @@ export function DangerButton({
   accessibilityLabel?: string;
 }) {
   return (
-    <Pressable
-      accessibilityRole="button"
+    <PressableScale
+      scaleTo={0.96}
       accessibilityLabel={accessibilityLabel || label}
       style={({ pressed }) => [
         styles.danger,
-        pressed && { backgroundColor: 'rgba(239, 68, 68, 0.22)', transform: [{ scale: 0.96 }] }
+        pressed && { backgroundColor: 'rgba(239, 68, 68, 0.22)' }
       ]}
       onPress={onPress}
     >
       <Text style={styles.dangerText}>{label}</Text>
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -284,23 +293,24 @@ export function SecondaryButton({
 }) {
   const { colors, sizes } = useAurora();
   return (
-    <Pressable
-      accessibilityRole="button"
+    <PressableScale
+      scaleTo={0.96}
       accessibilityLabel={accessibilityLabel || label}
+      accessibilityState={{ disabled: disabled || false }}
       style={({ pressed }) => [
         styles.secondary,
         {
           borderColor: colors.border,
           backgroundColor: colors.card,
         },
-        pressed && { opacity: 0.75, transform: [{ scale: 0.96 }] },
+        pressed && { opacity: 0.75 },
         disabled && { opacity: 0.4 },
       ]}
       onPress={onPress}
       disabled={disabled}
     >
       <Text style={[styles.secondaryText, { color: colors.text, fontSize: sizes.text }]}>{label}</Text>
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -322,16 +332,15 @@ export function AccentDots() {
       {(Object.keys(ACCENT_COLORS) as Array<keyof typeof ACCENT_COLORS>).map((color) => {
         const selected = accentColor === color;
         return (
-          <Pressable
+          <PressableScale
             key={color}
             style={({ pressed }) => [
               styles.accentDot,
               { backgroundColor: ACCENT_COLORS[color] },
               selected && { borderColor: aurora.acc1, borderWidth: 2.5 },
-              pressed && { transform: [{ scale: 0.96 }], opacity: 0.85 },
+              pressed && { opacity: 0.85 },
             ]}
             onPress={() => setAccentColor(color)}
-            accessibilityRole="button"
             accessibilityLabel={`Accent ${color}`}
             accessibilityState={{ selected }}
             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
@@ -339,7 +348,7 @@ export function AccentDots() {
             {selected ? (
               <Text style={{ color: '#0e0d0b', fontSize: 13, fontWeight: '800' }}>✓</Text>
             ) : null}
-          </Pressable>
+          </PressableScale>
         );
       })}
     </View>

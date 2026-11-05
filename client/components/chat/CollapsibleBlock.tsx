@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { View, Text, Pressable, StyleSheet, Animated, Platform, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Animated, Platform, ScrollView } from 'react-native';
+import PressableScale from '../ui/PressableScale';
+import { DURATIONS, EASING } from '../../utils/motion';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 
 interface CollapsibleBlockProps {
   type: 'thought' | 'tool_call' | 'intent' | 'skill';
@@ -27,105 +30,66 @@ export default function CollapsibleBlock({
   safetyTier
 }: CollapsibleBlockProps) {
   // If streaming (unclosed) default expanded. Once closed, collapse it.
+  // WF-447-04: no animated height anywhere. The clip container's height is a
+  // static prop per state; the content is absolutely positioned (so it stays
+  // measurable even when collapsed) and is revealed with translateY + opacity
+  // on the native driver. Reduced motion keeps the fade only — no position
+  // change.
   const [collapsed, setCollapsed] = useState(isClosed);
   const [measuredHeight, setMeasuredHeight] = useState(0);
-  const animatedValue = useRef(new Animated.Value(isClosed ? 0 : 1)).current;
+  const reduceMotion = useReducedMotion();
+  const expandedness = useRef(new Animated.Value(isClosed ? 0 : 1)).current;
   const contentOpacity = useRef(new Animated.Value(isClosed ? 0 : 1)).current;
 
+  const isLarge = (input?.length || 0) > 2000 || measuredHeight > 2000;
+
+  const settle = (toExpanded: boolean) => {
+    expandedness.setValue(toExpanded ? 1 : 0);
+    contentOpacity.setValue(toExpanded ? 1 : 0);
+    setCollapsed(!toExpanded);
+  };
+
+  const animateTo = (toExpanded: boolean, onDone?: () => void) => {
+    const config = {
+      toValue: toExpanded ? 1 : 0,
+      duration: DURATIONS.reveal, // 200ms ≤ 300 cap
+      easing: EASING.out,
+      useNativeDriver: true,
+    };
+    Animated.parallel([
+      Animated.timing(contentOpacity, config),
+      // Under reduced motion, keep the opacity change that carries
+      // comprehension and drop the position change entirely.
+      ...(reduceMotion ? [] : [Animated.timing(expandedness, config)]),
+    ]).start(({ finished }) => {
+      if (finished && onDone) onDone();
+    });
+  };
+
   useEffect(() => {
-    const isLarge = (input?.length || 0) > 2000 || measuredHeight > 2000;
-    // transitions when streaming is closed, collapse automatically
-    if (isClosed) {
-      if (isLarge) {
-        animatedValue.setValue(0);
-        contentOpacity.setValue(0);
-        setCollapsed(true);
-      } else {
-        Animated.parallel([
-          Animated.timing(animatedValue, {
-            toValue: 0,
-            duration: 200,
-            useNativeDriver: false, // height is a layout prop; keep on JS driver
-          }),
-          Animated.timing(contentOpacity, {
-            toValue: 0,
-            duration: 200,
-            useNativeDriver: true, // opacity can run on the native driver
-          }),
-        ]).start(() => {
-          setCollapsed(true);
-        });
-      }
+    if (isLarge) {
+      settle(!isClosed);
+    } else if (isClosed) {
+      animateTo(false, () => setCollapsed(true));
     } else {
-      if (isLarge) {
-        animatedValue.setValue(1);
-        contentOpacity.setValue(1);
-        setCollapsed(false);
-      } else {
-        setCollapsed(false);
-        Animated.parallel([
-          Animated.timing(animatedValue, {
-            toValue: 1,
-            duration: 200,
-            useNativeDriver: false, // height is a layout prop; keep on JS driver
-          }),
-          Animated.timing(contentOpacity, {
-            toValue: 1,
-            duration: 200,
-            useNativeDriver: true, // opacity can run on the native driver
-          }),
-        ]).start();
-      }
+      setCollapsed(false); // clip opens to its (static) measured height; content slides in
+      animateTo(true);
     }
-  }, [isClosed, measuredHeight]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isClosed, measuredHeight, isLarge]);
 
   const toggleCollapse = () => {
     const nextCollapsed = !collapsed;
     if (onToggle) {
       onToggle(nextCollapsed);
     }
-    const isLarge = (input?.length || 0) > 2000 || measuredHeight > 2000;
-    if (nextCollapsed) {
-      if (isLarge) {
-        animatedValue.setValue(0);
-        contentOpacity.setValue(0);
-        setCollapsed(true);
-      } else {
-        Animated.parallel([
-          Animated.timing(animatedValue, {
-            toValue: 0,
-            duration: 200,
-            useNativeDriver: false, // height is a layout prop; keep on JS driver
-          }),
-          Animated.timing(contentOpacity, {
-            toValue: 0,
-            duration: 200,
-            useNativeDriver: true, // opacity can run on the native driver
-          }),
-        ]).start(() => {
-          setCollapsed(true);
-        });
-      }
+    if (isLarge) {
+      settle(!nextCollapsed);
+    } else if (nextCollapsed) {
+      animateTo(false, () => setCollapsed(true));
     } else {
-      if (isLarge) {
-        animatedValue.setValue(1);
-        contentOpacity.setValue(1);
-        setCollapsed(false);
-      } else {
-        setCollapsed(false);
-        Animated.parallel([
-          Animated.timing(animatedValue, {
-            toValue: 1,
-            duration: 200,
-            useNativeDriver: false, // height is a layout prop; keep on JS driver
-          }),
-          Animated.timing(contentOpacity, {
-            toValue: 1,
-            duration: 200,
-            useNativeDriver: true, // opacity can run on the native driver
-          }),
-        ]).start();
-      }
+      setCollapsed(false);
+      animateTo(true);
     }
   };
 
@@ -183,11 +147,12 @@ export default function CollapsibleBlock({
           : { label: 'Blocked', bg: '#ef4444', color: '#ffffff' }
       : null;
 
-  // Interpolate height on the JS driver (height is a layout prop).
-  // Opacity is its own Animated.Value driven by the native driver (see above).
-  const contentHeight = animatedValue.interpolate({
+  // WF-447-04: the collapse translate — content slides out of the clip window
+  // (opacity fades concurrently). Native-driver-safe interpolation; the
+  // output depends on the measured content height.
+  const collapsedTx = expandedness.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, measuredHeight],
+    outputRange: [-measuredHeight, 0],
   });
 
   return (
@@ -199,15 +164,15 @@ export default function CollapsibleBlock({
         borderStyle: 'solid',
       }
     ]}>
-      {/* Header Pressable */}
-      <Pressable
+      {/* Header — button surface with press feedback and expanded state */}
+      <PressableScale
+        accessibilityState={{ expanded: !collapsed }}
+        accessibilityLabel={(collapsed ? 'Expand ' : 'Collapse ') + title}
         style={({ pressed }) => [
           styles.header,
           pressed && { opacity: 0.8 }
         ]}
         onPress={toggleCollapse}
-        accessibilityRole="button"
-        accessibilityLabel={(collapsed ? 'Expand ' : 'Collapse ') + title}
       >
         <View style={styles.headerTextContainer}>
           <Text style={[styles.icon, { fontSize: themeSizes.text }]}>{icon}</Text>
@@ -241,21 +206,25 @@ export default function CollapsibleBlock({
         <Text style={[styles.arrow, { color: themeColors.textDark, fontSize: themeSizes.sub }]}>
           {collapsed ? '▼' : '▲'}
         </Text>
-      </Pressable>
+      </PressableScale>
 
       {/* Collapsible Content */}
-      {/* Collapsible Content: opacity on its own Animated.View (native driver);
-          height stays on the inner Animated.View (JS driver - layout prop).
-          RN native validation rejects layout props inside native-driven styles. */}
-      <Animated.View style={{ opacity: contentOpacity }}>
+      {/* WF-447-04: transform/opacity only. Clip height is static per state
+          (never animated); the absolutely-positioned content stays measurable
+          even when collapsed, and slides/fades on the native driver. */}
+      <View style={{ overflow: 'hidden', height: collapsed ? 0 : (measuredHeight || undefined) }}>
         <Animated.View
+          onLayout={onLayout}
           style={{
-            height: contentHeight,
-            overflow: 'hidden',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            opacity: contentOpacity,
+            transform: [{ translateY: collapsedTx }],
           }}
         >
           <View
-            onLayout={onLayout}
             style={[
               styles.content,
               {
@@ -267,7 +236,7 @@ export default function CollapsibleBlock({
             {children}
           </View>
         </Animated.View>
-      </Animated.View>
+      </View>
     </View>
   );
 }
