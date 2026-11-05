@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TextInput,
-  Pressable,
   ActivityIndicator,
   Modal,
   KeyboardAvoidingView,
@@ -11,6 +10,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import PressableScale from '../components/ui/PressableScale';
 import { useRouter } from 'expo-router'; import { webViewRef } from '../store/useBrowserStore';
 import { useBrowserStore } from '../store/useBrowserStore';
 import { useConfigStore } from '../store/useConfigStore';
@@ -166,71 +166,71 @@ export default function BrowserScreen() {
           returnKeyType="go"
           selectTextOnFocus
         />
-        <Pressable
+        <PressableScale
           onPress={handleGo}
+          scaleTo={0.95}
           style={({ pressed }) => [
             styles.goButton,
             { backgroundColor: accentHex },
-            pressed && { opacity: 0.85, transform: [{ scale: 0.95 }] },
+            pressed && { opacity: 0.85 },
           ]}
+          accessibilityLabel="Go"
         >
           <Text style={styles.goButtonText}>Go</Text>
-        </Pressable>
+        </PressableScale>
       </View>
 
       {/* Toolbar */}
       <View style={[styles.toolbar, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-        <Pressable
+        <PressableScale
           onPress={handleBack}
           disabled={!canGoBack}
-          style={({ pressed }) => [
+          scaleTo={0.92}
+          style={[
             styles.toolbarButton,
             !canGoBack && styles.toolbarButtonDisabled,
-            pressed && canGoBack && { opacity: 0.7, transform: [{ scale: 0.92 }] },
           ]}
+          accessibilityLabel="Back"
+          accessibilityState={{ disabled: !canGoBack }}
         >
           <Text style={[styles.toolbarButtonText, { color: canGoBack ? colors.text : colors.textDark }]}>◀</Text>
-        </Pressable>
+        </PressableScale>
 
-        <Pressable
+        <PressableScale
           onPress={handleForward}
           disabled={!canGoForward}
-          style={({ pressed }) => [
+          scaleTo={0.92}
+          style={[
             styles.toolbarButton,
             !canGoForward && styles.toolbarButtonDisabled,
-            pressed && canGoForward && { opacity: 0.7, transform: [{ scale: 0.92 }] },
           ]}
+          accessibilityLabel="Forward"
+          accessibilityState={{ disabled: !canGoForward }}
         >
           <Text style={[styles.toolbarButtonText, { color: canGoForward ? colors.text : colors.textDark }]}>▶</Text>
-        </Pressable>
+        </PressableScale>
 
-        <Pressable
+        <PressableScale
           onPress={handleRefresh}
-          style={({ pressed }) => [
-            styles.toolbarButton,
-            pressed && { opacity: 0.7, transform: [{ scale: 0.92 }] },
-          ]}
+          scaleTo={0.92}
+          style={styles.toolbarButton}
+          accessibilityLabel="Refresh"
         >
           <Text style={[styles.toolbarButtonText, { color: colors.text }]}>⟳</Text>
-        </Pressable>
+        </PressableScale>
 
         {/* Cookie Sync button + Sync Status Badge dot */}
-        <Pressable
+        <PressableScale
           onPress={() => setShowCookieSync(true)}
-          style={({ pressed }) => [
-            styles.toolbarButton,
-            styles.cookieSyncButton,
-            { borderColor: colors.border },
-            pressed && { opacity: 0.7, transform: [{ scale: 0.92 }] },
-          ]}
+          scaleTo={0.92}
+          style={[styles.toolbarButton, styles.cookieSyncButton, { borderColor: colors.border }]}
           accessibilityLabel="Cookie Sync"
-          accessibilityRole="button"
         >
           <Text style={[styles.toolbarButtonText, { color: colors.text, fontSize: 16 }]}>🍪</Text>
           {lastCookieSync ? (
             <View style={[styles.syncBadgeDot, { backgroundColor: '#22c55e', borderColor: colors.card }]} />
           ) : null}
-        </Pressable>
+        </PressableScale>
 
         {isLoading && <ActivityIndicator size="small" color={aurora.acc1} style={{ marginLeft: 8 }} />}
 
@@ -240,9 +240,8 @@ export default function BrowserScreen() {
           </Text>
         </View>
 
-        <Pressable
+        <PressableScale
           onPress={handleClose}
-          accessibilityRole="button"
           accessibilityLabel="Return to chat"
           style={({ pressed }) => [
             styles.toolbarButton,
@@ -256,11 +255,11 @@ export default function BrowserScreen() {
               borderWidth: 1,
               borderColor: colors.border,
             },
-            pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] },
+            pressed && { opacity: 0.8 },
           ]}
         >
           <Text style={[styles.toolbarButtonText, { color: colors.text, fontSize: sizes.sub, fontWeight: '700' }]}>💬 Chat</Text>
-        </Pressable>
+        </PressableScale>
       </View>
 
       {/* WebView area — the actual WebView is mounted in _layout.tsx and made visible here */}
@@ -282,7 +281,7 @@ export default function BrowserScreen() {
               </Text>
               <View style={styles.quickRow}>
                 {QUICK_LINKS.map((link) => (
-                  <Pressable
+                  <PressableScale
                     key={link.url}
                     onPress={() => handleQuickNavigate(link.url)}
                     style={({ pressed }) => [
@@ -291,14 +290,13 @@ export default function BrowserScreen() {
                         backgroundColor: colors.glass,
                         borderColor: colors.glassBorder,
                       },
-                      pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] },
+                      pressed && { opacity: 0.85 },
                     ]}
-                    accessibilityRole="button"
                     accessibilityLabel={`Open ${link.label}`}
                   >
                     <Text style={styles.quickIcon}>{link.icon}</Text>
                     <Text style={[styles.quickLabel, { color: colors.text, fontSize: sizes.text }]}>{link.label}</Text>
-                  </Pressable>
+                  </PressableScale>
                 ))}
               </View>
             </View>
@@ -322,29 +320,27 @@ export default function BrowserScreen() {
                 </Text>
               ) : null}
               <View style={styles.errorActions}>
-                <Pressable
+                <PressableScale
                   onPress={handleRetry}
-                  style={({ pressed }) => [
+                  style={[
                     styles.errorButton,
                     styles.errorButtonPrimary,
-                    { backgroundColor: aurora.acc1, opacity: pressed ? 0.8 : 1 },
+                    { backgroundColor: aurora.acc1 },
                   ]}
-                  accessibilityRole="button"
                   accessibilityLabel="Retry loading page"
                 >
                   <Text style={[styles.errorButtonText, { color: aurora.onAccent }]}>Retry</Text>
-                </Pressable>
-                <Pressable
+                </PressableScale>
+                <PressableScale
                   onPress={handleGoHome}
-                  style={({ pressed }) => [
+                  style={[
                     styles.errorButton,
-                    { backgroundColor: colors.background, borderColor: colors.border, borderWidth: 1, opacity: pressed ? 0.8 : 1 },
+                    { backgroundColor: colors.background, borderColor: colors.border, borderWidth: 1 },
                   ]}
-                  accessibilityRole="button"
                   accessibilityLabel="Go to browser home"
                 >
                   <Text style={[styles.errorButtonText, { color: colors.text }]}>Go Home</Text>
-                </Pressable>
+                </PressableScale>
               </View>
             </View>
           </LinearGradient>
@@ -357,9 +353,9 @@ export default function BrowserScreen() {
           <View style={[styles.cookieModalCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
             <View style={styles.cookieModalHeader}>
               <Text style={[styles.cookieModalTitle, { color: colors.text }]}>Cookie Sync</Text>
-              <Pressable onPress={() => setShowCookieSync(false)} hitSlop={10} style={styles.cookieModalClose}>
+              <PressableScale onPress={() => setShowCookieSync(false)} hitSlop={10} style={styles.cookieModalClose} accessibilityLabel="Close cookie sync">
                 <Text style={[styles.cookieModalCloseText, { color: colors.textMuted }]}>✕</Text>
-              </Pressable>
+              </PressableScale>
             </View>
             <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               <CookieSyncCard colors={colors} sizes={sizes} accentHex={accentHex} />
@@ -378,18 +374,20 @@ export default function BrowserScreen() {
                 Vela wants to: {pendingApproval.description}
               </Text>
               <View style={styles.modalButtons}>
-                <Pressable
+                <PressableScale
                   onPress={denyAction}
+                  accessibilityLabel="Deny action"
                   style={[styles.modalButton, { backgroundColor: colors.background, borderColor: colors.border, borderWidth: 1 }]}
                 >
                   <Text style={[styles.modalButtonText, { color: colors.text }]}>Deny</Text>
-                </Pressable>
-                <Pressable
+                </PressableScale>
+                <PressableScale
                   onPress={approveAction}
+                  accessibilityLabel="Allow action"
                   style={[styles.modalButton, { backgroundColor: accentHex }]}
                 >
                   <Text style={[styles.modalButtonText, { color: '#ffffff' }]}>Allow</Text>
-                </Pressable>
+                </PressableScale>
               </View>
             </View>
           </View>

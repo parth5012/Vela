@@ -5,7 +5,6 @@ import {
   Text,
   StyleSheet,
   TextInput,
-  Pressable,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
@@ -17,6 +16,9 @@ import {
 } from 'react-native';
 import { FlashList, type FlashListRef, type FlashListProps } from '@shopify/flash-list';
 import { LinearGradient } from 'expo-linear-gradient';
+import PressableScale from '../components/ui/PressableScale';
+import { EASING } from '../utils/motion';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system/legacy';
 import MessageOptionsModal from '../components/ui/MessageOptionsModal';
@@ -479,7 +481,14 @@ export default function ChatScreen() {
       }, 50);
     }
   }, []);
-  const agentBarHeight = React.useRef(new Animated.Value(58)).current;
+  const AGENT_BAR_HEIGHT = 58;
+  // WF-447-04: bar collapse is transform/opacity only — the layout height is a
+  // static prop switched once at animation end; the bar itself slides out via
+  // translateY on the native driver. Under reduced motion the state flips
+  // without any position animation.
+  const agentBarSlide = React.useRef(new Animated.Value(0)).current;
+  const [agentBarShown, setAgentBarShown] = React.useState(true);
+  const reduceMotion = useReducedMotion();
 
   const handleScroll = useCallback((event: any) => {
     const currentOffset = event.nativeEvent.contentOffset.y;
@@ -489,31 +498,51 @@ export default function ChatScreen() {
       if (diff > 10 && isAgentBarVisible.current) {
         // Scrolling down: Hide agent bar
         isAgentBarVisible.current = false;
-        Animated.timing(agentBarHeight, {
-          toValue: 0,
-          duration: 180,
-          useNativeDriver: false,
-        }).start();
+        if (reduceMotion) {
+          agentBarSlide.setValue(-AGENT_BAR_HEIGHT);
+          setAgentBarShown(false);
+        } else {
+          Animated.timing(agentBarSlide, {
+            toValue: -AGENT_BAR_HEIGHT,
+            duration: 180,
+            easing: EASING.out,
+            useNativeDriver: true,
+          }).start(({ finished }) => {
+            if (finished) setAgentBarShown(false);
+          });
+        }
       } else if (diff < -10 && !isAgentBarVisible.current) {
         // Scrolling up: Show agent bar
         isAgentBarVisible.current = true;
-        Animated.timing(agentBarHeight, {
-          toValue: 58,
-          duration: 180,
-          useNativeDriver: false,
-        }).start();
+        setAgentBarShown(true);
+        if (reduceMotion) {
+          agentBarSlide.setValue(0);
+        } else {
+          Animated.timing(agentBarSlide, {
+            toValue: 0,
+            duration: 180,
+            easing: EASING.out,
+            useNativeDriver: true,
+          }).start();
+        }
       }
     } else if (currentOffset <= 5 && !isAgentBarVisible.current) {
       isAgentBarVisible.current = true;
-      Animated.timing(agentBarHeight, {
-        toValue: 58,
-        duration: 180,
-        useNativeDriver: false,
-      }).start();
+      setAgentBarShown(true);
+      if (reduceMotion) {
+        agentBarSlide.setValue(0);
+      } else {
+        Animated.timing(agentBarSlide, {
+          toValue: 0,
+          duration: 180,
+          easing: EASING.out,
+          useNativeDriver: true,
+        }).start();
+      }
     }
 
     lastOffsetY.current = currentOffset;
-  }, [agentBarHeight]);
+  }, [agentBarSlide, reduceMotion]);
 
   React.useEffect(() => {
     const randomIdx = Math.floor(Math.random() * QUOTES.length);
@@ -1292,14 +1321,17 @@ export default function ChatScreen() {
       {activeThreadId ? (
         <View style={styles.chatArea}>
           {/* Horizontal Agent Selector Bar */}
-          <Animated.View style={{ height: agentBarHeight, overflow: 'hidden' }}>
+          <View style={{ height: agentBarShown ? AGENT_BAR_HEIGHT : 0, overflow: 'hidden' }}>
+            <Animated.View style={{ transform: [{ translateY: agentBarSlide }] }}>
             <View style={[styles.agentBar, { borderBottomColor: colors.glassBorder, backgroundColor: colors.glass }]}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.agentBarScroll}>
                 {agents.map((p) => {
                   const isSelected = currentAgentId === p.id;
                   return (
-                    <Pressable
+                    <PressableScale
                       key={p.id}
+                      accessibilityState={{ selected: isSelected }}
+                      accessibilityLabel={`${p.name} agent`}
                       style={[
                         styles.agentBarCell,
                         { borderColor: colors.border, backgroundColor: colors.card },
@@ -1312,12 +1344,13 @@ export default function ChatScreen() {
                       <Text style={[styles.agentBarText, { color: isSelected ? aurora.acc1 : colors.textMuted, fontSize: sizes.sub }]}>
                         {p.icon} {p.name}
                       </Text>
-                    </Pressable>
+                    </PressableScale>
                   );
                 })}
               </ScrollView>
             </View>
-          </Animated.View>
+            </Animated.View>
+          </View>
 
           {activeMessages.length === 0 ? (
             <View style={styles.emptyMessagesContainer}>
@@ -1369,34 +1402,34 @@ export default function ChatScreen() {
 
                 const actionBar = showActionBar ? (
                   <View style={styles.actionBar}>
-                    <Pressable style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => handleCopyText(message.content)}>
+                    <PressableScale accessibilityLabel="Copy message text" style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => handleCopyText(message.content)}>
                       <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Copy</Text>
-                    </Pressable>
+                    </PressableScale>
                     {!isUser && (
                       <>
-                        <Pressable style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => setViewerContent(message.content)}>
+                        <PressableScale accessibilityLabel="View message source" style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => setViewerContent(message.content)}>
                           <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>View</Text>
-                        </Pressable>
-                        <Pressable style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => handleCopyCodeBlocks(message.content)}>
+                        </PressableScale>
+                        <PressableScale accessibilityLabel="Copy code blocks" style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => handleCopyCodeBlocks(message.content)}>
                           <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Code</Text>
-                        </Pressable>
-                        <Pressable style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => handleRegenerate(message)}>
+                        </PressableScale>
+                        <PressableScale accessibilityLabel="Regenerate response" style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => handleRegenerate(message)}>
                           <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Retry</Text>
-                        </Pressable>
-                        <Pressable style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => toggleRaw(message.id)}>
+                        </PressableScale>
+                        <PressableScale accessibilityLabel="Toggle raw view" style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => toggleRaw(message.id)}>
                           <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Raw</Text>
-                        </Pressable>
+                        </PressableScale>
                       </>
                     )}
-                    <Pressable style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => handleBranch(message)}>
+                    <PressableScale accessibilityLabel="Branch conversation" style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => handleBranch(message)}>
                       <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Branch</Text>
-                    </Pressable>
-                    <Pressable style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => handleDownloadMd(message)}>
+                    </PressableScale>
+                    <PressableScale accessibilityLabel="Download as Markdown" style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => handleDownloadMd(message)}>
                       <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Download</Text>
-                    </Pressable>
-                    <Pressable style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => handleShowInfo(message)}>
+                    </PressableScale>
+                    <PressableScale accessibilityLabel="Message details" style={[styles.actionBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => handleShowInfo(message)}>
                       <Text style={[styles.actionBtnText, { color: colors.textMuted, fontSize: sizes.sub }]}>Info</Text>
-                    </Pressable>
+                    </PressableScale>
                   </View>
                 ) : null;
 
@@ -1447,12 +1480,14 @@ export default function ChatScreen() {
             <Text style={[styles.sectionTitleLabel, { color: colors.text, fontSize: sizes.text }]}>Suggestions</Text>
             <View style={styles.suggestionsContainer}>
               {suggestionStarters.map((item, idx) => (
-                <Pressable
+                <PressableScale
                   key={idx}
+                  scaleTo={0.98}
+                  accessibilityLabel={`Suggestion: ${item.label}`}
                   style={({ pressed }) => [
                     styles.suggestionCard,
                     { backgroundColor: colors.card, borderColor: colors.border, borderRadius: 999 },
-                    pressed && { borderColor: aurora.acc1, backgroundColor: aurora.acc1 + '1A', opacity: 0.95, transform: [{ scale: 0.98 }] }
+                    pressed && { borderColor: aurora.acc1, backgroundColor: aurora.acc1 + '1A', opacity: 0.95 }
                   ]}
                   onPress={() => handleSendWelcome(item.text, item.agent)}
                 >
@@ -1460,7 +1495,7 @@ export default function ChatScreen() {
                     <Text style={{ color: aurora.acc1, fontWeight: '700' }}>{item.label}</Text>
                     {': '}<Text style={{ color: colors.textMuted }}>"{item.text}"</Text>
                   </Text>
-                </Pressable>
+                </PressableScale>
               ))}
             </View>
 
@@ -1472,20 +1507,23 @@ export default function ChatScreen() {
               {agents.map((p) => {
                 const isSelected = currentAgentId === p.id;
                 return (
-                  <Pressable
+                  <PressableScale
                     key={p.id}
+                    scaleTo={0.96}
+                    accessibilityState={{ selected: isSelected }}
+                    accessibilityLabel={`${p.name} agent`}
                     style={({ pressed }) => [
                       styles.agentPill,
                       { backgroundColor: colors.card, borderColor: colors.border, borderRadius: 999 },
                       isSelected && { backgroundColor: aurora.acc1, borderColor: aurora.acc1 },
-                      pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] }
+                      pressed && { opacity: 0.85 }
                     ]}
                     onPress={() => setDefaultAgent(p.id)}
                   >
                     <Text style={[styles.agentPillText, { color: isSelected ? aurora.onAccent : colors.textMuted, fontSize: sizes.sub }]}>
                       {p.icon} {p.name}
                     </Text>
-                  </Pressable>
+                  </PressableScale>
                 );
               })}
             </ScrollView>
@@ -1495,18 +1533,19 @@ export default function ChatScreen() {
 
       {/* Model Mode Selector */}
       <View style={[styles.modelSwitcherContainer, { backgroundColor: colors.glass, borderTopColor: colors.glassBorder }]}>
-        <Pressable
+        <PressableScale
+          accessibilityLabel="Toggle engine mode"
           style={({ pressed }) => [
             styles.switcherButton,
             { borderColor: colors.border, backgroundColor: colors.card },
-            pressed && { opacity: 0.85, transform: [{ scale: 0.97 }] }
+            pressed && { opacity: 0.85 }
           ]}
           onPress={handleToggleLocalMode}
         >
           <Text style={[styles.switcherLabel, { color: colors.text }]}>
             Engine: {connectionMode === 'local' ? `🤖 Local (${localModelName})` : connectionMode === 'cloud' ? `☁️ Cloud (${activeCloudProvider || 'gemini'})` : `🖥️ Server (${modelName || 'Gemini'})`}
           </Text>
-        </Pressable>
+        </PressableScale>
         {localModelDownloadProgress !== null && (
           <Text style={[styles.downloadProgressText, { color: aurora.acc2 }]}>
             Downloading model: {localModelDownloadProgress}%
@@ -1516,7 +1555,7 @@ export default function ChatScreen() {
 
       {/* Active skill indicator */}
       {activeThreadId && activeThreadSkill && SKILL_METADATA[activeThreadSkill] && connectionMode !== 'server' && (
-        <Pressable
+        <PressableScale
           style={({ pressed }) => [
             styles.skillIndicator,
             { backgroundColor: aurora.acc1 + '1A', borderColor: aurora.acc1 },
@@ -1532,7 +1571,7 @@ export default function ChatScreen() {
           <Text style={[styles.skillIndicatorText, { color: aurora.acc1, fontSize: sizes.sub }]}>
             {SKILL_METADATA[activeThreadSkill].icon} {SKILL_METADATA[activeThreadSkill].name} · tap to stop
           </Text>
-        </Pressable>
+        </PressableScale>
       )}
 
       {/* Unifying Input container at bottom */}
@@ -1556,7 +1595,8 @@ export default function ChatScreen() {
             onChangeText={setInput}
             multiline
           />
-          <Pressable
+          <PressableScale
+            accessibilityState={{ busy: isCurrentThreadStreaming || false }}
             style={({ pressed }) => [
               styles.sendButton,
               {
@@ -1577,11 +1617,11 @@ export default function ChatScreen() {
                 shadowOffset: { width: 0, height: 4 },
                 elevation: isCurrentThreadStreaming || input.trim() ? 8 : 0,
               },
-              pressed && { opacity: 0.85, transform: [{ scale: 0.94 }] }
+              pressed && { opacity: 0.85 }
             ]}
+            scaleTo={0.94}
             onPress={handleSendPress}
             disabled={!isCurrentThreadStreaming && !input.trim()}
-            accessibilityRole="button"
             accessibilityLabel={isCurrentThreadStreaming ? 'Stop generating' : 'Send message'}
           >
             {isCurrentThreadStreaming || !input.trim() ? (
@@ -1600,7 +1640,7 @@ export default function ChatScreen() {
                 </Text>
               </LinearGradient>
             )}
-          </Pressable>
+          </PressableScale>
         </View>
       </View>
 

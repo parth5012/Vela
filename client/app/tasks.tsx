@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Pressable, ScrollView, Modal, Switch, ActivityIndicator, Alert, TextInput } from 'react-native';
+import { View, Text, ScrollView, Modal, Switch, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import PressableScale from '../components/ui/PressableScale';
 import db, { initializeDatabase } from '../db/client';
 import { tasks, taskRuns, TaskEntity, TaskRunEntity } from '../db/schema';
 import { eq } from 'drizzle-orm';
@@ -294,14 +295,16 @@ export default function TasksScreen() {
       {/* Filter Tabs */}
       <View style={styles.filterContainer}>
         {['all', 'active', 'paused'].map((filter) => (
-          <Pressable
+          <PressableScale
             key={filter}
             onPress={() => setActiveFilter(filter as any)}
+            accessibilityState={{ selected: activeFilter === filter }}
+            accessibilityLabel={`${filter} tasks`}
             style={({ pressed }) => [
               styles.filterTab,
               { backgroundColor: colors.glass, borderColor: colors.glassBorder },
               activeFilter === filter && { backgroundColor: aurora.acc1, borderColor: aurora.acc1 },
-              pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] }
+              pressed && { opacity: 0.85 }
             ]}
           >
             <Text
@@ -312,7 +315,7 @@ export default function TasksScreen() {
             >
               {filter.toUpperCase()}
             </Text>
-          </Pressable>
+          </PressableScale>
         ))}
       </View>
 
@@ -327,7 +330,7 @@ export default function TasksScreen() {
         ) : (
           filteredTasks.map((task) => (
             <Card key={task.id} style={styles.taskCard}>
-              <Pressable onPress={() => handleOpenDetail(task)} style={styles.cardHeader}>
+              <PressableScale onPress={() => handleOpenDetail(task)} style={styles.cardHeader} accessibilityLabel={`Open details for ${task.title}`}>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.taskTitle, { color: colors.text, fontSize: sizes.title }]}>
                     {task.title}
@@ -346,7 +349,7 @@ export default function TasksScreen() {
                     {task.status.toUpperCase()}
                   </Text>
                 </View>
-              </Pressable>
+              </PressableScale>
 
               <View style={[styles.cardMeta, { borderTopColor: colors.glassBorder }]}>
                 <Text style={[styles.metaText, { color: colors.textMuted }]}>
@@ -372,14 +375,16 @@ export default function TasksScreen() {
                 </View>
 
                 <View style={styles.actionsRow}>
-                  <Pressable
+                  <PressableScale
                     onPress={() => handleTriggerManualRun(task)}
                     disabled={runningTaskId !== null}
+                    accessibilityState={{ busy: runningTaskId === task.id, disabled: runningTaskId !== null }}
+                    accessibilityLabel={`Run task ${task.title} now`}
                     style={({ pressed }) => [
                       styles.actionBtn,
                       { backgroundColor: 'rgba(59, 130, 246, 0.15)', borderColor: 'rgba(59, 130, 246, 0.3)' },
                       runningTaskId !== null && runningTaskId !== task.id && { opacity: 0.4 },
-                      pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] },
+                      pressed && { opacity: 0.8 },
                     ]}
                   >
                     {runningTaskId === task.id ? (
@@ -387,29 +392,31 @@ export default function TasksScreen() {
                     ) : (
                       <Text style={[styles.actionBtnText, { color: '#60a5fa' }]}>Run Now</Text>
                     )}
-                  </Pressable>
+                  </PressableScale>
 
-                  <Pressable
+                  <PressableScale
                     onPress={() => handleOpenForm(task)}
+                    accessibilityLabel={`Edit task ${task.title}`}
                     style={({ pressed }) => [
                       styles.actionBtn,
                       { backgroundColor: 'rgba(245, 158, 11, 0.15)', borderColor: 'rgba(245, 158, 11, 0.3)' },
-                      pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] },
+                      pressed && { opacity: 0.8 },
                     ]}
                   >
                     <Text style={[styles.actionBtnText, { color: '#fbbf24' }]}>Edit</Text>
-                  </Pressable>
+                  </PressableScale>
 
-                  <Pressable
+                  <PressableScale
                     onPress={() => handleDeleteTask(task.id)}
+                    accessibilityLabel={`Delete task ${task.title}`}
                     style={({ pressed }) => [
                       styles.actionBtn,
                       { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderColor: 'rgba(239, 68, 68, 0.3)' },
-                      pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] },
+                      pressed && { opacity: 0.8 },
                     ]}
                   >
                     <Text style={[styles.actionBtnText, { color: '#f87171' }]}>Delete</Text>
-                  </Pressable>
+                  </PressableScale>
                 </View>
               </View>
             </Card>
@@ -455,19 +462,21 @@ export default function TasksScreen() {
               <Text style={[styles.inputLabel, { color: colors.textMuted }]}>Recurrence Schedule</Text>
               <View style={styles.recurrencePills}>
                 {['15m', '1h', '12h', '24h', 'weekly'].map((r) => (
-                  <Pressable
+                  <PressableScale
                     key={r}
                     onPress={() => setFormRecurrence(r as any)}
+                    accessibilityState={{ selected: formRecurrence === r }}
+                    accessibilityLabel={r}
                     style={({ pressed }) => [
                       styles.rPill,
                       formRecurrence === r && { backgroundColor: aurora.acc1, borderColor: aurora.acc1 },
-                      pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] }
+                      pressed && { opacity: 0.85 }
                     ]}
                   >
                     <Text style={[styles.rPillText, { color: formRecurrence === r ? aurora.onAccent : colors.textMuted }]}>
                       {r}
                     </Text>
-                  </Pressable>
+                  </PressableScale>
                 ))}
               </View>
             </View>
@@ -476,33 +485,36 @@ export default function TasksScreen() {
               <Text style={[styles.inputLabel, { color: colors.textMuted }]}>Trigger Agent</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recurrencePills}>
                 {agents.map((p) => (
-                  <Pressable
+                  <PressableScale
                     key={p.id}
                     onPress={() => setFormAgent(p.id)}
+                    accessibilityState={{ selected: formAgent === p.id }}
+                    accessibilityLabel={p.name}
                     style={({ pressed }) => [
                       styles.rPill,
                       formAgent === p.id && { backgroundColor: aurora.acc1, borderColor: aurora.acc1 },
-                      pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] }
+                      pressed && { opacity: 0.85 }
                     ]}
                   >
                     <Text style={[styles.rPillText, { color: formAgent === p.id ? aurora.onAccent : colors.textMuted }]}>
                       {p.icon} {p.name}
                     </Text>
-                  </Pressable>
+                  </PressableScale>
                 ))}
                 {formAgent && !agents.some((p) => p.id === formAgent) ? (
-                  <Pressable
+                  <PressableScale
                     onPress={() => setFormAgent(formAgent)}
+                    accessibilityState={{ selected: true }}
                     style={({ pressed }) => [
                       styles.rPill,
                       { backgroundColor: aurora.acc1, borderColor: aurora.acc1 },
-                      pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] }
+                      pressed && { opacity: 0.85 }
                     ]}
                   >
                     <Text style={[styles.rPillText, { color: aurora.onAccent }]}>
                       {formAgent} (removed)
                     </Text>
-                  </Pressable>
+                  </PressableScale>
                 ) : null}
               </ScrollView>
             </View>
@@ -516,19 +528,21 @@ export default function TasksScreen() {
                   { value: 'local', label: 'Local' },
                   { value: 'cloud', label: 'Cloud' },
                 ].map((opt) => (
-                  <Pressable
+                  <PressableScale
                     key={opt.label}
                     onPress={() => setFormConnectionMode(opt.value as any)}
+                    accessibilityState={{ selected: formConnectionMode === opt.value }}
+                    accessibilityLabel={opt.label}
                     style={({ pressed }) => [
                       styles.rPill,
                       formConnectionMode === opt.value && { backgroundColor: aurora.acc1, borderColor: aurora.acc1 },
-                      pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] }
+                      pressed && { opacity: 0.85 }
                     ]}
                   >
                     <Text style={[styles.rPillText, { color: formConnectionMode === opt.value ? aurora.onAccent : colors.textMuted }]}>
                       {opt.label}
                     </Text>
-                  </Pressable>
+                  </PressableScale>
                 ))}
               </View>
               {formConnectionMode === null && (
@@ -555,16 +569,17 @@ export default function TasksScreen() {
               <View style={{ flex: 1, marginRight: 8 }}>
                 <PrimaryButton label="Save Task" onPress={handleSaveTask} />
               </View>
-              <Pressable
+              <PressableScale
                 onPress={() => setIsFormModalVisible(false)}
+                accessibilityLabel="Cancel"
                 style={({ pressed }) => [
                   styles.cancelBtn,
                   { borderColor: colors.glassBorder },
-                  pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] }
+                  pressed && { opacity: 0.85 }
                 ]}
               >
                 <Text style={{ color: colors.text, fontWeight: 'bold' }}>Cancel</Text>
-              </Pressable>
+              </PressableScale>
             </View>
           </ScrollView>
         </LinearGradient>
