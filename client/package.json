@@ -97,10 +97,11 @@
     "e2e": "playwright test",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "design:lint": "node scripts/design-lint.mjs",
     "arch:check": "depcruise --config .dependency-cruiser.cjs app components store utils db types modules hooks",
     "benchmark:ci": "jest __tests__/perf.benchmark.test.ts __tests__/perf.cuj.test.ts --runInBand",
     "cuj:benchmark": "jest __tests__/perf.cuj.test.ts --runInBand",
-    "test": "npm run lint && jest",
+    "test": "npm run lint && npm run design:lint && jest",
     "postinstall": "patch-package || echo \"patch-package: some patches failed but continuing\" && node scripts/fetch-llama-jni.js"
   },
   "jest": {
@@ -111,6 +112,7 @@
     "testPathIgnorePatterns": [
       "/node_modules/",
       "[\\/]__tests__[\\/]helpers[\\/]",
+      "[\\/]__tests__[\\/]fixtures[\\/]",
       "<rootDir>/e2e/"
     ],
     "transformIgnorePatterns": [
