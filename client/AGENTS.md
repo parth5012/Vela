@@ -5,20 +5,21 @@ Android AI assistant chat app. Single Expo project in `client/`. No monorepo.
 ## Structure
 
 - `client/` — the entire Expo app (all code lives here)
-- `docs/` — supplementary docs (gitignored)
+- `docs/` — supplementary docs (gitignored; `client/docs/DESIGN.md` is the tracked exception)
 - `client/graphify-out/` — knowledge graph of the codebase; query before reading files blindly
 
 ## Commands (run from `client/`)
 
 ```
 npm start            # Expo dev server
-npm test             # Jest (jest-expo preset)
+npm test             # eslint + design:lint + Jest (jest-expo preset)
 npm run android      # expo run:android
 npx tsc --noEmit     # typecheck (no script alias — run manually)
 npx expo prebuild --clean  # regenerate native dirs
 ```
 
-No lint or format scripts are configured.
+Lint: `npm run lint` (eslint); `npm run design:lint` enforces the refuse list in
+`docs/DESIGN.md` and runs before jest inside `npm test`.
 
 ## Physical device policy
 

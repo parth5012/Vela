@@ -62,12 +62,12 @@ describe('design-lint fixtures (WF-447-05)', () => {
     const { status, report } = runLint({ root: FIXTURE_ROOT });
     expect(report).not.toBeNull();
     expect(status).toBe(1);
-    expect(report!.summary.errors).toBe(7);
+    expect(report!.summary.errors).toBe(8);
     expect(count(report!.errors, 'no-pure-black-background')).toBe(1);
     expect(count(report!.errors, 'no-black-shadow')).toBe(1);
     expect(count(report!.errors, 'no-neon-glow-text')).toBe(1);
     expect(count(report!.errors, 'no-gradient-text')).toBe(1);
-    expect(count(report!.errors, 'no-ease-in')).toBe(2);
+    expect(count(report!.errors, 'no-ease-in')).toBe(3);
     expect(count(report!.errors, 'no-transition-all')).toBe(1);
   });
 
@@ -96,7 +96,7 @@ describe('design-lint fixtures (WF-447-05)', () => {
     expect(status).toBe(0);
     expect(report!.summary.errors).toBe(0);
     expect(report!.summary.warnings).toBe(5);
-    expect(report!.allowlist.suppressed).toBe(7);
+    expect(report!.allowlist.suppressed).toBe(8);
     expect(report!.allowlist.invalid).toEqual([]);
     expect(report!.allowlist.unused).toEqual([]);
   });

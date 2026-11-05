@@ -134,7 +134,7 @@ Errors fail CI; warnings print and stay visible.
 | --- | --- | --- |
 | `background`/`backgroundColor: '#000'`/`'#000000'` | `no-pure-black-background` | error |
 | `shadowColor: '#000'`/`'#000000'` | `no-black-shadow` | error |
-| `Easing.in(` or `ease-in` anywhere | `no-ease-in` | error |
+| `Easing.in(`, `Easing.inOut(` or `ease-in` anywhere | `no-ease-in` | error |
 | `transition: 'all'` | `no-transition-all` | error |
 | `textShadowRadius` > 0 with a bright saturated `textShadowColor` | `no-neon-glow-text` | error |
 | masked `LinearGradient` fill (gradient text recipe) | `no-gradient-text` | error |
@@ -148,6 +148,8 @@ file and must say why: `{ "file": "app/foo.tsx", "rule": "<id>", "reason": "…"
 An entry without a reason fails the lint. The rule set is deliberately
 complementary to `__tests__/motion.test.ts`, which owns the behavioural motion
 invariants and its SVG-geometry exception.
+
+Source: scroll-craft `references/taste.md` (the refuse list).
 
 ## Squint test
 
@@ -166,3 +168,5 @@ Blur your eyes (or step back from the phone). The screen still has to read:
 
 A screen that fails the squint test usually broke one of the rules above — fix
 the rule, not the blur.
+
+Source: scroll-craft `references/taste.md` (the squint test).
