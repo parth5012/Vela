@@ -15,7 +15,6 @@
  *
  * Usage:
  *   node scripts/design-lint.mjs [--root <dir>] [--allowlist <file>] [--json]
- *   DESIGN_LINT_ROOT=<dir> node scripts/design-lint.mjs --json
  *
  * Allowlist (scripts/design-lint-allowlist.json): an array of
  *   { "file": "app/foo.tsx", "rule": "<rule id>", "reason": "why this exists" }
@@ -42,9 +41,7 @@ function argValue(flag) {
   const i = argv.indexOf(flag);
   return i !== -1 && i + 1 < argv.length ? argv[i + 1] : undefined;
 }
-const ROOT = path.resolve(
-  argValue('--root') || process.env.DESIGN_LINT_ROOT || DEFAULT_ROOT
-);
+const ROOT = path.resolve(argValue('--root') || DEFAULT_ROOT);
 const ALLOWLIST_PATH = path.resolve(
   argValue('--allowlist') || path.join(SCRIPT_DIR, 'design-lint-allowlist.json')
 );
@@ -268,52 +265,52 @@ const RULES = [
   {
     id: 'no-pure-black-background',
     severity: 'error',
-    describe: "background/backgroundColor set to '#000' or '#000000' — grounds are tinted, never pure black",
+    description: "background/backgroundColor set to '#000' or '#000000' — grounds are tinted, never pure black",
   },
   {
     id: 'no-black-shadow',
     severity: 'error',
-    describe: "shadowColor '#000'/'#000000' — shadows are tinted to the canvas hue via utils/elevation.ts",
+    description: "shadowColor '#000'/'#000000' — shadows are tinted to the canvas hue via utils/elevation.ts",
   },
   {
     id: 'no-ease-in',
     severity: 'error',
-    describe: "Easing.in( or 'ease-in' — ease-out curves only (mirrors __tests__/motion.test.ts)",
+    description: "Easing.in(/Easing.inOut( or 'ease-in' — ease-out curves only (mirrors __tests__/motion.test.ts)",
   },
   {
     id: 'no-transition-all',
     severity: 'error',
-    describe: "transition: 'all' — transitions name the property they animate",
+    description: "transition: 'all' — transitions name the property they animate",
   },
   {
     id: 'no-neon-glow-text',
     severity: 'error',
-    describe: 'textShadowRadius > 0 with a bright saturated textShadowColor — glowing text is refused',
+    description: 'textShadowRadius > 0 with a bright saturated textShadowColor — glowing text is refused',
   },
   {
     id: 'no-gradient-text',
     severity: 'error',
-    describe: 'MaskedView + LinearGradient in one file — the masked-gradient fill recipe (gradient text)',
+    description: 'MaskedView + LinearGradient in one file — the masked-gradient fill recipe (gradient text)',
   },
   {
     id: 'emoji-standalone-label',
     severity: 'warn',
-    describe: 'emoji as a standalone label/icon slot — use text labels or a real icon set',
+    description: 'emoji as a standalone label/icon slot — use text labels or a real icon set',
   },
   {
     id: 'copy-filler-verb',
     severity: 'warn',
-    describe: 'filler verbs in string copy: elevate/seamless/unleash/next-gen/revolutionize/supercharge',
+    description: 'filler verbs in string copy: elevate/seamless/unleash/next-gen/revolutionize/supercharge',
   },
   {
     id: 'copy-em-dash',
     severity: 'warn',
-    describe: 'em dash (—) inside a string literal — user-facing copy prefers period or comma',
+    description: 'em dash (—) inside a string literal — user-facing copy prefers period or comma',
   },
   {
     id: 'left-border-overkill',
     severity: 'warn',
-    describe: 'borderLeftWidth > 1 — left accent bars on cards are refused',
+    description: 'borderLeftWidth > 1 — left accent bars on cards are refused',
   },
 ];
 const SEVERITY_OF = Object.fromEntries(RULES.map((r) => [r.id, r.severity]));
@@ -332,7 +329,7 @@ const JSX_EMOJI_NODE = new RegExp(`>(${EMOJI_NODE_CONTENT}+)<`, 'gu');
 
 const PURE_BLACK_BG = /background(?:Color)?\s*:\s*(['"])#(?:000000|000)\1/g;
 const PURE_BLACK_SHADOW = /shadowColor\s*:\s*(['"])#(?:000000|000)\1/g;
-const BANNED_CURVE_API = /Easing\.in\s*\(/g;
+const BANNED_CURVE_API = /Easing\.in(?:Out)?\s*\(/g;
 const TRANSITION_ALL = /transition\s*:\s*(['"])all\b\1?/g;
 const TEXT_SHADOW_RADIUS = /textShadowRadius\s*:\s*(\d+(?:\.\d+)?)/g;
 const TEXT_SHADOW_COLOR = /textShadowColor\s*:\s*(['"])([^'"]+)\1/g;
