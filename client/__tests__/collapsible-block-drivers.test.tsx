@@ -5,13 +5,14 @@ import { Animated } from 'react-native';
 import CollapsibleBlock from '../components/chat/CollapsibleBlock';
 
 /**
- * Wayfinder #146 regression guard.
+ * Wayfinder #146 regression guard, tightened by WF-447-04.
  *
  * CollapsibleBlock previously ran every Animated.timing with useNativeDriver: false,
  * so height/opacity animations blocked the JS thread while many thought/tool-call
- * blocks animated during streaming. The fix splits height (JS driver, layout prop)
- * from opacity (native driver) using two Animated.Values. These tests assert both
- * drivers are used and that toggle behavior is preserved.
+ * blocks animated during streaming. WF-447-04 removed the animated height entirely:
+ * the clip container height is a static prop per state and the content is revealed
+ * with translateY + opacity on the native driver. These tests assert every animation
+ * is native-driven and that toggle behavior is preserved.
  */
 describe('CollapsibleBlock animation drivers (wayfinder #146)', () => {
   let timingSpy: jest.SpyInstance;
@@ -29,7 +30,7 @@ describe('CollapsibleBlock animation drivers (wayfinder #146)', () => {
     jest.useRealTimers();
   });
 
-  it('uses the native driver for opacity and the JS driver for height', () => {
+  it('runs every animation on the native driver (transform/opacity only)', () => {
     act(() => {
       renderer.create(
         <CollapsibleBlock
@@ -48,8 +49,8 @@ describe('CollapsibleBlock animation drivers (wayfinder #146)', () => {
 
     const configs = timingSpy.mock.calls.map((call) => call[1] as { useNativeDriver?: boolean });
     expect(configs.length).toBeGreaterThanOrEqual(2);
-    expect(configs.some((c) => c.useNativeDriver === true)).toBe(true);
-    expect(configs.some((c) => c.useNativeDriver === false)).toBe(true);
+    expect(configs.every((c) => c.useNativeDriver === true)).toBe(true);
+    expect(configs.some((c) => c.useNativeDriver === false)).toBe(false);
   });
 
   it('still collapses and expands when toggled', () => {
