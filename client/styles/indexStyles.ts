@@ -80,11 +80,9 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 28,
-    shadowColor: DEFAULT_ELEVATION.e2.shadowColor,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 3,
+    // Certified e2 token (offset 4, opacity 0.24, radius 10, elevation 4) —
+    // no ad-hoc values alongside it.
+    ...DEFAULT_ELEVATION.e2,
   },
   emptyCtaText: {
     fontWeight: '700',
