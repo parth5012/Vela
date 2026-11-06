@@ -10,7 +10,10 @@ import {
   TouchableWithoutFeedback,
   Keyboard,
   ScrollView,
+  Animated,
 } from 'react-native';
+import { DURATIONS, EASING } from '../utils/motion';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import {
   useConfigStore,
   ProviderSlug,
@@ -32,20 +35,42 @@ const CLOUD_OPTIONS: { slug: ProviderSlug; label: string }[] = [
   { slug: 'custom', label: 'Custom' },
 ];
 
+// WF-447-06: the setup steps are ordered as the feeling curve (see
+// docs/FEELING-CURVE.md). fork = Recognition (what Vela is, one decision);
+// the server/standalone forms = Tension (the effort of credentials); the
+// verify success lines = Turn (effort converts into "Opening your chat.");
+// the chat screen's empty state = Substance; the first send = Commitment.
 const HEADER_TEXTS: Record<SetupStep, { title: string; subtitle: string }> = {
   fork: {
     title: 'Get Started with Vela',
-    subtitle: 'Choose how you would like to run Vela on this device:',
+    subtitle: 'One decision first: how should Vela run on this device?',
   },
   server: {
     title: 'Connect to Server',
-    subtitle: 'Configure your self-hosted Vela instance to synchronize and manage tasks.',
+    subtitle: 'Enter your self-hosted Vela address and key. Vela verifies them before opening your chat.',
   },
   standalone: {
     title: 'Run Standalone',
-    subtitle: 'Direct inference without a backend server using Cloud APIs or local models.',
+    subtitle: 'No backend needed. Bring a Cloud API key or run a model on this device.',
   },
 };
+
+// WF-447-06: the fork cards arrive as one staggered gesture. DURATIONS.stagger
+// (left unapplied by WF-447-04, landed here by ticket) offsets the arrivals;
+// transform/opacity only on the native driver, reveal duration, one easing
+// curve. Reduced motion keeps the fade and drops the travel.
+const forkCardMotion = (value: Animated.Value, reduceMotion: boolean) => [
+  { opacity: value },
+  {
+    transform: [
+      {
+        translateY: reduceMotion
+          ? 0
+          : value.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }),
+      },
+    ],
+  },
+];
 
 export default function SetupScreen() {
   const [step, setStep] = useState<SetupStep>('fork');
@@ -68,6 +93,32 @@ export default function SetupScreen() {
 
   const isMounted = useRef(true);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // WF-447-06: one staggered arrival for the fork cards (the Recognition beat).
+  // The group resets each time the fork step mounts so returning via Back
+  // replays the same gesture.
+  const reduceMotion = useReducedMotion();
+  const forkEntrances = useRef([new Animated.Value(0), new Animated.Value(0)]).current;
+
+  useEffect(() => {
+    if (step !== 'fork') return;
+    if (reduceMotion) {
+      forkEntrances.forEach((value) => value.setValue(1));
+      return;
+    }
+    forkEntrances.forEach((value) => value.setValue(0));
+    Animated.stagger(
+      DURATIONS.stagger,
+      forkEntrances.map((value) =>
+        Animated.timing(value, {
+          toValue: 1,
+          duration: DURATIONS.reveal,
+          easing: EASING.out,
+          useNativeDriver: true,
+        })
+      )
+    ).start();
+  }, [step, reduceMotion, forkEntrances]);
 
   useEffect(() => {
     isMounted.current = true;
@@ -283,33 +334,37 @@ export default function SetupScreen() {
 
           {step === 'fork' && (
             <View style={styles.forkContainer}>
-              <Pressable
-                style={({ pressed }) => [styles.forkCard, pressed && styles.forkCardPressed]}
-                onPress={() => setStep('server')}
-              >
-                <Text style={styles.forkIcon}>🖥️</Text>
-                <View style={styles.forkTextContainer}>
-                  <Text style={styles.forkTitle}>Connect to Server</Text>
-                  <Text style={styles.forkSubtitle}>
-                    Connect to your self-hosted Vela FastAPI instance for syncing and agent orchestration.
-                  </Text>
-                </View>
-                <Text style={styles.forkArrow}>›</Text>
-              </Pressable>
+              <Animated.View style={forkCardMotion(forkEntrances[0], reduceMotion)}>
+                <Pressable
+                  style={({ pressed }) => [styles.forkCard, pressed && styles.forkCardPressed]}
+                  onPress={() => setStep('server')}
+                >
+                  <Text style={styles.forkIcon}>🖥️</Text>
+                  <View style={styles.forkTextContainer}>
+                    <Text style={styles.forkTitle}>Connect to Server</Text>
+                    <Text style={styles.forkSubtitle}>
+                      Connect to your self-hosted Vela FastAPI instance for syncing and agent orchestration.
+                    </Text>
+                  </View>
+                  <Text style={styles.forkArrow}>›</Text>
+                </Pressable>
+              </Animated.View>
 
-              <Pressable
-                style={({ pressed }) => [styles.forkCard, pressed && styles.forkCardPressed]}
-                onPress={() => setStep('standalone')}
-              >
-                <Text style={styles.forkIcon}>✨</Text>
-                <View style={styles.forkTextContainer}>
-                  <Text style={styles.forkTitle}>Run Standalone</Text>
-                  <Text style={styles.forkSubtitle}>
-                    Run standalone without a server using direct Cloud APIs or On-Device Local AI.
-                  </Text>
-                </View>
-                <Text style={styles.forkArrow}>›</Text>
-              </Pressable>
+              <Animated.View style={forkCardMotion(forkEntrances[1], reduceMotion)}>
+                <Pressable
+                  style={({ pressed }) => [styles.forkCard, pressed && styles.forkCardPressed]}
+                  onPress={() => setStep('standalone')}
+                >
+                  <Text style={styles.forkIcon}>✨</Text>
+                  <View style={styles.forkTextContainer}>
+                    <Text style={styles.forkTitle}>Run Standalone</Text>
+                    <Text style={styles.forkSubtitle}>
+                      Run standalone without a server using direct Cloud APIs or On-Device Local AI.
+                    </Text>
+                  </View>
+                  <Text style={styles.forkArrow}>›</Text>
+                </Pressable>
+              </Animated.View>
             </View>
           )}
 
@@ -357,7 +412,7 @@ export default function SetupScreen() {
 
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
               {success ? (
-                <Text style={styles.successText}>✓ Credentials verified successfully! Starting node...</Text>
+                <Text style={styles.successText}>✓ Credentials verified. Opening your chat.</Text>
               ) : null}
 
               <Pressable
@@ -495,7 +550,7 @@ export default function SetupScreen() {
 
                   {error ? <Text style={styles.errorText}>{error}</Text> : null}
                   {success ? (
-                    <Text style={styles.successText}>✓ Cloud provider connected successfully!</Text>
+                    <Text style={styles.successText}>✓ Cloud connected. Opening your chat.</Text>
                   ) : null}
 
                   <Pressable

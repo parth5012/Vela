@@ -50,16 +50,55 @@ export const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.2,
   },
-  emptyMessagesContainer: {
+  emptyThreadContainer: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
   },
-  emptyMessagesText: {
+  // WF-447-06: the empty-chat block. One headline, one line of subtext, one
+  // primary CTA; starters and agent picker sit quiet below it.
+  emptyContainer: {
+    width: '100%',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingBottom: 8,
+  },
+  emptyHeadline: {
+    fontWeight: '800',
     textAlign: 'center',
-    lineHeight: FONT_SIZES.medium.lineHeight,
-    letterSpacing: FONT_SIZES.medium.letterSpacing,
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  emptySubtext: {
+    textAlign: 'center',
+    maxWidth: 340,
+    marginBottom: 26,
+  },
+  emptyCta: {
+    borderRadius: 999,
+    minHeight: 44,
+    paddingHorizontal: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 28,
+    shadowColor: DEFAULT_ELEVATION.e2.shadowColor,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  emptyCtaText: {
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  // WF-447-06 peak device: the assistant answer arrives once (opacity + slight
+  // rise), then fills in as one composed block. Wrapper is layout-only.
+  answerEntrance: {
+    width: '100%',
+  },
+  // WF-447-06 authored silence: the quiet single line held while the first
+  // tokens stream. Colour/size come from the theme at the call site.
+  quietStreamLine: {
+    marginTop: 12,
   },
   messagesList: {
     paddingHorizontal: 16,
@@ -162,46 +201,6 @@ export const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 10,
     marginBottom: 16,
-  },
-  welcomeTitle: {
-    fontSize: 26,
-    fontWeight: '800',
-    marginBottom: 8,
-    letterSpacing: 0.3,
-    textAlign: 'center',
-  },
-  welcomeSubtitle: {
-    fontSize: 15,
-    textAlign: 'center',
-    marginBottom: 26,
-    lineHeight: 22,
-    letterSpacing: 0.2,
-  },
-  quoteContainer: {
-    borderWidth: 1,
-    borderRadius: 18,
-    padding: 20,
-    width: '100%',
-    marginBottom: 28,
-    shadowColor: DEFAULT_ELEVATION.e2.shadowColor,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 14,
-    elevation: 3,
-  },
-  quoteText: {
-    fontStyle: 'italic',
-    fontSize: FONT_SIZES.medium.text,
-    lineHeight: FONT_SIZES.medium.lineHeight,
-    textAlign: 'center',
-    marginBottom: 10,
-    letterSpacing: FONT_SIZES.medium.letterSpacing,
-  },
-  quoteAuthor: {
-    fontSize: FONT_SIZES.small.text,
-    textAlign: 'right',
-    fontWeight: '600',
-    letterSpacing: 0.3,
   },
   sectionTitleLabel: {
     alignSelf: 'flex-start',

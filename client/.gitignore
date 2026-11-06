@@ -1,5 +1,6 @@
 docs/*
 !docs/DESIGN.md
+!docs/FEELING-CURVE.md
 .superpowers/
 .tmp/
 .scratch/
