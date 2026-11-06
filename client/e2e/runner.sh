@@ -682,7 +682,9 @@ run_lane_visual_regression() {
 
     # Diff pass: current shots against e2e/baselines/ with pixelmatch.
     local diff_args=()
-    [ -n "$DIFF_THRESHOLD" ] && diff_args+=(--threshold "$DIFF_THRESHOLD")
+    if [ -n "$DIFF_THRESHOLD" ]; then
+        diff_args+=(--threshold "$DIFF_THRESHOLD")
+    fi
     if $UPDATE_BASELINES; then
         diff_args+=(--update-baselines)
     fi
