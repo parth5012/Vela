@@ -7,7 +7,6 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
   Keyboard,
   Alert,
   ScrollView,
@@ -17,7 +16,7 @@ import {
 import { FlashList, type FlashListRef, type FlashListProps } from '@shopify/flash-list';
 import { LinearGradient } from 'expo-linear-gradient';
 import PressableScale from '../components/ui/PressableScale';
-import { EASING } from '../utils/motion';
+import { DURATIONS, EASING } from '../utils/motion';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -26,7 +25,7 @@ import MarkdownViewerOverlay from '../components/ui/MarkdownViewerOverlay';
 import { useActiveStreamStore } from '../store/useActiveStreamStore';
 import { healXmlTags } from '../utils/xmlHealer';
 import { useConfigStore } from '../store/useConfigStore';
-import type { ConnectionMode } from '../store/useConfigStore';
+import type { ConnectionMode, SuggestionStarter } from '../store/useConfigStore';
 import { useChatStore, Message, Thread } from '../store/useChatStore';
 import { useAurora } from '../hooks/useAurora';
 import RichText from '../components/chat/RichText';
@@ -82,24 +81,21 @@ const generateUUID = () => {
 };
 
 import { resolveAgentPrompt, resolveNewThreadAgent } from '../utils/agents';
+import type { Agent } from '../utils/agents';
 import { overlayRemoteAgents, getCachedAgents } from '../db/agentRepository';
 import { saveMessages } from '../db/chatRepository';
 import { useAgents } from '../hooks/useAgents';
 import { useMessageActions } from '../hooks/useMessageActions';
 import { generateUlid } from '../utils/syncIds';
 
-const QUOTES = [
-  { text: "An investment in knowledge pays the best interest.", author: "Benjamin Franklin" },
-  { text: "Science is organized knowledge. Wisdom is organized life.", author: "Immanuel Kant" },
-  { text: "The important thing is not to stop questioning.", author: "Albert Einstein" },
-  { text: "Research is creating new knowledge.", author: "Neil Armstrong" },
-  { text: "Somewhere, something incredible is waiting to be known.", author: "Carl Sagan" },
-  { text: "Data! Data! Data! I can't make bricks without clay.", author: "Arthur Conan Doyle" },
-  { text: "Knowledge has to be improved, challenged, and increased constantly.", author: "Peter Drucker" },
-  { text: "Great things are done by a series of small things brought together.", author: "Vincent Van Gogh" },
-  { text: "In the middle of difficulty lies opportunity.", author: "Albert Einstein" },
-  { text: "Focus on being productive instead of busy.", author: "Tim Ferriss" }
-];
+// WF-447-06: the empty chat state is one authored feeling-curve beat, not a
+// generic placeholder. One headline (<= 8 words), one line of subtext
+// (<= 20 words), one primary CTA. Word caps are pinned by
+// __tests__/emptyState.test.tsx; copy rules are pinned by docs/DESIGN.md.
+export const EMPTY_HEADLINE = 'Ask once. It does the thing.';
+export const EMPTY_SUBTEXT =
+  'Describe what you need. Vela answers in one composed reply and can run the task on your device.';
+export const EMPTY_CTA_LABEL = 'Ask your first question';
 
 const generateId = (_prefix: string) => {
   // T5 (#253): cursor-safe IDs are pure ULIDs. The prefix argument is kept so
@@ -375,6 +371,209 @@ export function handleSendPressAction(params: {
   Promise.resolve(params.onSendWelcome(params.input)).catch((err) => console.error('[handleSendPress] error:', err));
 }
 
+type AuroraBundle = ReturnType<typeof useAurora>;
+
+/**
+ * WF-447-06: the empty chat state, rendered both on the no-thread welcome
+ * screen and inside a thread with zero messages. Recognition beat of the
+ * feeling curve: the brand, one headline, one line of subtext and exactly one
+ * primary action; starters and the agent picker stay quiet below it. The whole
+ * block is the state's single animated element: one ease-out entrance
+ * (opacity + slight rise, reveal duration, native driver). Reduced motion
+ * keeps the fade and drops the travel.
+ */
+export function EmptyChatState({
+  colors,
+  sizes,
+  aurora,
+  onPressAsk,
+  starters,
+  onSelectStarter,
+  agents,
+  currentAgentId,
+  onSelectAgent,
+}: {
+  colors: AuroraBundle['colors'];
+  sizes: AuroraBundle['sizes'];
+  aurora: AuroraBundle['aurora'];
+  onPressAsk: () => void;
+  /** Welcome variant only: quiet starter prompts under the primary action. */
+  starters?: SuggestionStarter[];
+  onSelectStarter?: (starter: SuggestionStarter) => void;
+  agents?: Agent[];
+  currentAgentId?: string;
+  onSelectAgent?: (agentId: string) => void;
+}) {
+  const reducedMotion = useReducedMotion();
+  const entrance = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    Animated.timing(entrance, {
+      toValue: 1,
+      duration: DURATIONS.reveal,
+      easing: EASING.out,
+      useNativeDriver: true,
+    }).start();
+  }, [entrance]);
+
+  const showStarters = !!starters?.length && !!onSelectStarter;
+  const showAgents = !!agents?.length && !!onSelectAgent;
+
+  return (
+    <Animated.View
+      testID="empty-state-root"
+      style={[
+        styles.emptyContainer,
+        {
+          opacity: entrance,
+          transform: [
+            {
+              translateY: reducedMotion
+                ? 0
+                : entrance.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }),
+            },
+          ],
+        },
+      ]}
+    >
+      <Text style={[styles.welcomeLogo, { color: aurora.acc1 }]}>VELA</Text>
+      <Text
+        testID="empty-headline"
+        style={[styles.emptyHeadline, { color: colors.text, fontSize: sizes.title, letterSpacing: sizes.titleLetterSpacing }]}
+      >
+        {EMPTY_HEADLINE}
+      </Text>
+      <Text
+        testID="empty-subtext"
+        style={[styles.emptySubtext, { color: colors.textMuted, fontSize: sizes.text, lineHeight: sizes.lineHeight, letterSpacing: sizes.letterSpacing }]}
+      >
+        {EMPTY_SUBTEXT}
+      </Text>
+
+      <PressableScale
+        testID="empty-cta"
+        accessibilityLabel={EMPTY_CTA_LABEL}
+        accessibilityRole="button"
+        onPress={onPressAsk}
+        style={[styles.emptyCta, { backgroundColor: aurora.acc1 }]}
+      >
+        <Text style={[styles.emptyCtaText, { color: aurora.onAccent, fontSize: sizes.text }]}>
+          {EMPTY_CTA_LABEL}
+        </Text>
+      </PressableScale>
+
+      {showStarters && (
+        <>
+          <Text style={[styles.sectionTitleLabel, { color: colors.text, fontSize: sizes.text }]}>Suggestions</Text>
+          <View style={styles.suggestionsContainer}>
+            {starters!.map((item, idx) => (
+              <PressableScale
+                key={idx}
+                scaleTo={0.98}
+                accessibilityLabel={`Suggestion: ${item.label}`}
+                style={({ pressed }) => [
+                  styles.suggestionCard,
+                  { backgroundColor: colors.card, borderColor: colors.border, borderRadius: 999 },
+                  pressed && { borderColor: aurora.acc1, backgroundColor: aurora.acc1 + '1A', opacity: 0.95 }
+                ]}
+                onPress={() => onSelectStarter!(item)}
+              >
+                <Text style={[styles.suggestionText, { color: colors.text, fontSize: sizes.text - 1 }]}>
+                  <Text style={{ color: aurora.acc1, fontWeight: '700' }}>{item.label}</Text>
+                  {': '}<Text style={{ color: colors.textMuted }}>"{item.text}"</Text>
+                </Text>
+              </PressableScale>
+            ))}
+          </View>
+        </>
+      )}
+
+      {showAgents && (
+        <>
+          <Text style={[styles.sectionTitleLabel, { color: colors.text, fontSize: sizes.text }]}>
+            Choose Agent
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.agentScrollContainer}>
+            {agents!.map((p) => {
+              const isSelected = currentAgentId === p.id;
+              return (
+                <PressableScale
+                  key={p.id}
+                  scaleTo={0.96}
+                  accessibilityState={{ selected: isSelected }}
+                  accessibilityLabel={`${p.name} agent`}
+                  style={({ pressed }) => [
+                    styles.agentPill,
+                    { backgroundColor: colors.card, borderColor: colors.border, borderRadius: 999 },
+                    isSelected && { backgroundColor: aurora.acc1, borderColor: aurora.acc1 },
+                    pressed && { opacity: 0.85 }
+                  ]}
+                  onPress={() => onSelectAgent!(p.id)}
+                >
+                  <Text style={[styles.agentPillText, { color: isSelected ? aurora.onAccent : colors.textMuted, fontSize: sizes.sub }]}>
+                    {p.icon} {p.name}
+                  </Text>
+                </PressableScale>
+              );
+            })}
+          </ScrollView>
+        </>
+      )}
+    </Animated.View>
+  );
+}
+
+/**
+ * WF-447-06 peak device: bubble entrance. The assistant answer arrives ONCE
+ * with a single ease-out entrance (opacity + slight rise, reveal duration,
+ * native driver) and then fills in as one composed block. The other two peak
+ * devices are deliberately static: no streaming progress bar exists, and the
+ * send button is a plain Send/Stop state swap. The entrance plays only when
+ * the row mounts while its message is the one currently streaming, so history
+ * bubbles never re-animate. Reduced motion keeps the fade, drops the rise.
+ */
+function AssistantAnswerEntrance({
+  animate,
+  reducedMotion,
+  children,
+}: {
+  animate: boolean;
+  reducedMotion: boolean;
+  children: React.ReactNode;
+}) {
+  const progress = React.useRef(new Animated.Value(animate ? 0 : 1)).current;
+
+  React.useEffect(() => {
+    if (!animate) return;
+    Animated.timing(progress, {
+      toValue: 1,
+      duration: DURATIONS.reveal,
+      easing: EASING.out,
+      useNativeDriver: true,
+    }).start();
+  }, [animate, progress]);
+
+  return (
+    <Animated.View
+      style={[
+        styles.answerEntrance,
+        {
+          opacity: progress,
+          transform: [
+            {
+              translateY: reducedMotion
+                ? 0
+                : progress.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }),
+            },
+          ],
+        },
+      ]}
+    >
+      {children}
+    </Animated.View>
+  );
+}
+
 export default function ChatScreen() {
   const router = useRouter();
   const executedDeviceToolsRef = React.useRef(new Set());
@@ -386,7 +585,6 @@ export default function ChatScreen() {
   const modelName = useConfigStore((state) => state.modelName);
   const defaultAgent = useConfigStore((state) => state.defaultAgent);
   const setDefaultAgent = useConfigStore((state) => state.setDefaultAgent);
-  const userName = useConfigStore((state) => state.userName);
   const suggestionStarters = useConfigStore((state) => state.suggestionStarters);
 
   // Local and cloud mode states
@@ -447,6 +645,12 @@ export default function ChatScreen() {
 
   // Local/UI States
   const [input, setInput] = useState('');
+  // WF-447-06: the empty state's primary CTA focuses the composer — the one
+  // action the screen asks for is the first question.
+  const inputRef = React.useRef<TextInput | null>(null);
+  const focusComposer = React.useCallback(() => {
+    inputRef.current?.focus();
+  }, []);
   // #357: agents come from the shared DB-backed selector (no local copy).
   const agents = useAgents();
   const currentThread = useMemo(
@@ -454,8 +658,6 @@ export default function ChatScreen() {
     [threads, activeThreadId]
   );
   const currentAgentId = currentThread?.agent || defaultAgent;
-  const [welcomeQuote, setWelcomeQuote] = useState(QUOTES[0]);
-  const [welcomeGreeting, setWelcomeGreeting] = useState('Hello');
   const [showRawMap, setShowRawMap] = useState<Record<string, boolean>>({});
   const [activeMenuMessage, setActiveMenuMessage] = useState<Message | null>(null);
   const [authRequired, setAuthRequired] = useState<Record<string, boolean>>({});
@@ -535,14 +737,6 @@ export default function ChatScreen() {
   }, [slideAgentBar]);
 
   React.useEffect(() => {
-    const randomIdx = Math.floor(Math.random() * QUOTES.length);
-    setWelcomeQuote(QUOTES[randomIdx]);
-
-    const hour = new Date().getHours();
-    if (hour < 12) setWelcomeGreeting("Good morning");
-    else if (hour < 17) setWelcomeGreeting("Good afternoon");
-    else setWelcomeGreeting("Good evening");
-
     setStreamingThread(activeThreadId || '', false);
   }, []);
 
@@ -1343,10 +1537,8 @@ export default function ChatScreen() {
           </View>
 
           {activeMessages.length === 0 ? (
-            <View style={styles.emptyMessagesContainer}>
-              <Text style={[styles.emptyMessagesText, { color: colors.textDark }]}>
-                Send a message to start conversation with {agents.find(p => p.id === currentAgentId)?.name || 'Vela'}.
-              </Text>
+            <View style={styles.emptyThreadContainer}>
+              <EmptyChatState colors={colors} sizes={sizes} aurora={aurora} onPressAsk={focusComposer} />
             </View>
           ) : (
             <FlashList
@@ -1381,14 +1573,16 @@ export default function ChatScreen() {
                 const showActionBar = activeMenuMessage?.id === message.id;
                 const isStreamingThis = !isUser && isCurrentThreadStreaming && activeMessages[activeMessages.length - 1]?.id === message.id;
 
-                const compilingIndicator = isStreamingThis ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12, gap: 4 }}>
-                    <ActivityIndicator size="small" color={aurora.acc1} />
-                    <Text style={{ color: aurora.acc2, fontSize: sizes.sub - 1, fontWeight: 'bold' }}>
-                      {isLocalMode ? 'LOCAL MODEL COMPILING...' : 'VELA COMPILING...'}
+                // WF-447-06 authored silence: while the first tokens stream, the
+                // answer holds one quiet, static single line — no spinner, no
+                // pulse, no competing motion. It yields to the composed block the
+                // moment content arrives.
+                const compilingIndicator =
+                  isStreamingThis && !message.content.trim() ? (
+                    <Text style={[styles.quietStreamLine, { color: colors.textMuted, fontSize: sizes.sub, lineHeight: sizes.subLineHeight }]}>
+                      {isLocalMode ? 'Loading the on-device model.' : 'Writing your answer.'}
                     </Text>
-                  </View>
-                ) : null;
+                  ) : null;
 
                 const actionBar = showActionBar ? (
                   <View style={styles.actionBar}>
@@ -1424,25 +1618,30 @@ export default function ChatScreen() {
                 ) : null;
 
                 return (
-                  <MessageRow
+                  <AssistantAnswerEntrance
                     key={message.id}
-                    item={item}
-                    colors={colors}
-                    sizes={sizes}
-                    aurora={aurora}
-                    theme={theme}
-                    accentHex={accentHex}
-                    isLocalMode={isLocalMode}
-                    agentName={agents.find(p => p.id === currentAgentId)?.name || 'Vela'}
-                    showRaw={showRawMap[message.id]}
-                    isStreamingMessage={isStreamingThis}
-                    inViewport={true}
-                    onLongPress={handleMessageLongPress}
-                    onCopyText={handleCopyText}
-                    renderSegment={renderSegment}
-                    actionBar={actionBar}
-                    compilingIndicator={compilingIndicator}
-                  />
+                    animate={!isUser && isStreamingThis}
+                    reducedMotion={reduceMotion}
+                  >
+                    <MessageRow
+                      item={item}
+                      colors={colors}
+                      sizes={sizes}
+                      aurora={aurora}
+                      theme={theme}
+                      accentHex={accentHex}
+                      isLocalMode={isLocalMode}
+                      agentName={agents.find(p => p.id === currentAgentId)?.name || 'Vela'}
+                      showRaw={showRawMap[message.id]}
+                      isStreamingMessage={isStreamingThis}
+                      inViewport={true}
+                      onLongPress={handleMessageLongPress}
+                      onCopyText={handleCopyText}
+                      renderSegment={renderSegment}
+                      actionBar={actionBar}
+                      compilingIndicator={compilingIndicator}
+                    />
+                  </AssistantAnswerEntrance>
                 );
               }}
             />
@@ -1450,74 +1649,17 @@ export default function ChatScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.welcomeScroll} keyboardShouldPersistTaps="handled">
-          <View style={styles.welcomeContainer}>
-            <Text style={[styles.welcomeLogo, { color: aurora.acc1 }]}>VELA</Text>
-
-            <Text style={[styles.welcomeTitle, { color: colors.text }]}>
-              {welcomeGreeting}, {userName}
-            </Text>
-            <Text style={[styles.welcomeSubtitle, { color: colors.textMuted }]}>
-              How can I help you research today?
-            </Text>
-
-            {/* Random Quote */}
-            <View style={[styles.quoteContainer, { backgroundColor: colors.glass, borderColor: colors.glassBorder }]}>
-              <Text style={[styles.quoteText, { color: colors.text }]}>“{welcomeQuote.text}”</Text>
-              <Text style={[styles.quoteAuthor, { color: aurora.acc2 }]}>— {welcomeQuote.author}</Text>
-            </View>
-
-            {/* Suggestion Starter Cards */}
-            <Text style={[styles.sectionTitleLabel, { color: colors.text, fontSize: sizes.text }]}>Suggestions</Text>
-            <View style={styles.suggestionsContainer}>
-              {suggestionStarters.map((item, idx) => (
-                <PressableScale
-                  key={idx}
-                  scaleTo={0.98}
-                  accessibilityLabel={`Suggestion: ${item.label}`}
-                  style={({ pressed }) => [
-                    styles.suggestionCard,
-                    { backgroundColor: colors.card, borderColor: colors.border, borderRadius: 999 },
-                    pressed && { borderColor: aurora.acc1, backgroundColor: aurora.acc1 + '1A', opacity: 0.95 }
-                  ]}
-                  onPress={() => handleSendWelcome(item.text, item.agent)}
-                >
-                  <Text style={[styles.suggestionText, { color: colors.text, fontSize: sizes.text - 1 }]}>
-                    <Text style={{ color: aurora.acc1, fontWeight: '700' }}>{item.label}</Text>
-                    {': '}<Text style={{ color: colors.textMuted }}>"{item.text}"</Text>
-                  </Text>
-                </PressableScale>
-              ))}
-            </View>
-
-            {/* Agent Quick Selector */}
-            <Text style={[styles.sectionTitleLabel, { color: colors.text, fontSize: sizes.text, marginTop: 12 }]}>
-              Choose Agent
-            </Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.agentScrollContainer}>
-              {agents.map((p) => {
-                const isSelected = currentAgentId === p.id;
-                return (
-                  <PressableScale
-                    key={p.id}
-                    scaleTo={0.96}
-                    accessibilityState={{ selected: isSelected }}
-                    accessibilityLabel={`${p.name} agent`}
-                    style={({ pressed }) => [
-                      styles.agentPill,
-                      { backgroundColor: colors.card, borderColor: colors.border, borderRadius: 999 },
-                      isSelected && { backgroundColor: aurora.acc1, borderColor: aurora.acc1 },
-                      pressed && { opacity: 0.85 }
-                    ]}
-                    onPress={() => setDefaultAgent(p.id)}
-                  >
-                    <Text style={[styles.agentPillText, { color: isSelected ? aurora.onAccent : colors.textMuted, fontSize: sizes.sub }]}>
-                      {p.icon} {p.name}
-                    </Text>
-                  </PressableScale>
-                );
-              })}
-            </ScrollView>
-          </View>
+          <EmptyChatState
+            colors={colors}
+            sizes={sizes}
+            aurora={aurora}
+            onPressAsk={focusComposer}
+            starters={suggestionStarters}
+            onSelectStarter={(item) => handleSendWelcome(item.text, item.agent)}
+            agents={agents}
+            currentAgentId={currentAgentId}
+            onSelectAgent={setDefaultAgent}
+          />
         </ScrollView>
       )}
 
@@ -1578,6 +1720,7 @@ export default function ChatScreen() {
           ]}
         >
           <TextInput
+            ref={inputRef}
             style={[styles.input, { color: colors.text, fontSize: sizes.text, backgroundColor: 'transparent' }]}
             placeholder={activeThreadId ? "Ask a question or request a task..." : "Ask Vela anything..."}
             placeholderTextColor={colors.textDark}
