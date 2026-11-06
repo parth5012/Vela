@@ -1,0 +1,61 @@
+# Visual Regression Lane (WF-447-07)
+# Screenshot diffing at the scroll-craft compact viewport (360×640) —
+# the lane never targets serials other than an emulator-* device.
+#
+# States are captured twice:
+#   1. normal pass  — current UI behaviour
+#   2. reduced-motion pass — animator_duration_scale 0 (same states)
+#
+# Baselines live in client/e2e/baselines/. Only update them intentionally:
+#   bash e2e/visual-diff.mjs --update-baselines
+
+name: visual-regression
+description: "Pixel-diff UI states at 360×640 (normal + reduced motion)."
+execution: sequential
+
+viewport:
+  width: 360
+  height: 640
+
+reduced_motion_pass: true
+
+states:
+  - name: setup
+    note: "Unconfigured first run (app data cleared for determinism)."
+    steps:
+      - pm_clear: true
+      - launch: true
+      - wait: 6
+  - name: chat-empty
+    note: "Chat home with no thread selected."
+    steps:
+      - launch: true
+      - wait: 8
+  - name: chat-thread
+    note: "One-thread chat: seeded thread with a response rendered."
+    steps:
+      - launch: true
+      - wait: 8
+      - send_message: "Hello from E2E"
+      - wait: 4
+  - name: settings-appearance
+    note: "Settings → Appearance."
+    steps:
+      - open_drawer: true
+      - tap_text: "Settings"
+      - wait: 2
+      - tap_text: "Appearance"
+      - wait: 2
+  - name: tasks-empty
+    note: "Task Scheduler with no tasks."
+    steps:
+      - open_drawer: true
+      - tap_text: "Tasks"
+      - wait: 3
+
+diff:
+  tool: visual-diff.mjs
+  threshold: 0.005  # 0.5% of pixels
+  output: results/visual
+
+abort_on_failure: false
