@@ -585,7 +585,30 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {line}", file=sys.stderr)
         if result.log_path is not None:
             print(f"  full log: {result.log_path}", file=sys.stderr)
+            # Surface the actual failure detail (per-test `●` blocks, stack
+            # traces) — the condensed summary above hides everything CI
+            # needs to adjudicate a failure.
+            _print_log_tail(result.log_path)
     return 1
+
+
+def _print_log_tail(log_path, limit: int = 40, file=sys.stderr):
+    """Print the tail of a step's full log so Actions runs stay adjudicable.
+
+    The condensed summary deliberately keeps only matching lines; workers
+    that crash mid-suite (jest `●` blocks, pytest tracebacks) otherwise
+    leave CI logs with no evidence at all.
+    """
+    try:
+        with open(log_path, encoding="utf-8", errors="replace") as fh:
+            lines = [line.rstrip("\n") for line in fh if line.strip()]
+        if not lines:
+            return
+        print(f"  --- {log_path} (last {limit} lines) ---", file=file)
+        for line in lines[-limit:]:
+            print(f"  {line}", file=file)
+    except OSError:
+        pass
 
 
 if __name__ == "__main__":
