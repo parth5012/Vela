@@ -5,7 +5,7 @@ Android AI assistant chat app. Single Expo project in `client/`. No monorepo.
 ## Structure
 
 - `client/` — the entire Expo app (all code lives here)
-- `docs/` — supplementary docs (gitignored; `client/docs/DESIGN.md` is the tracked exception)
+- `docs/` — supplementary docs (gitignored; `client/docs/DESIGN.md` and `client/docs/FEELING-CURVE.md` are the tracked exceptions)
 - `client/graphify-out/` — knowledge graph of the codebase; query before reading files blindly
 
 ## Commands (run from `client/`)

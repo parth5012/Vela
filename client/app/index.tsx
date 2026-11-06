@@ -1576,11 +1576,12 @@ export default function ChatScreen() {
                 // WF-447-06 authored silence: while the first tokens stream, the
                 // answer holds one quiet, static single line — no spinner, no
                 // pulse, no competing motion. It yields to the composed block the
-                // moment content arrives.
-                const compilingIndicator =
+                // moment content arrives. (Formal MessageRow prop keeps the old
+                // `compilingIndicator` name.)
+                const quietStreamIntro =
                   isStreamingThis && !message.content.trim() ? (
                     <Text style={[styles.quietStreamLine, { color: colors.textMuted, fontSize: sizes.sub, lineHeight: sizes.subLineHeight }]}>
-                      {isLocalMode ? 'Loading the on-device model.' : 'Writing your answer.'}
+                      {isLocalMode ? 'Composing on-device.' : 'Writing your answer.'}
                     </Text>
                   ) : null;
 
@@ -1639,7 +1640,7 @@ export default function ChatScreen() {
                       onCopyText={handleCopyText}
                       renderSegment={renderSegment}
                       actionBar={actionBar}
-                      compilingIndicator={compilingIndicator}
+                      compilingIndicator={quietStreamIntro}
                     />
                   </AssistantAnswerEntrance>
                 );
