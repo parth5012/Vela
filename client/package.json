@@ -77,6 +77,8 @@
     "jest": "^29.7.0",
     "jest-expo": "~57.0.1",
     "patch-package": "^8.0.1",
+    "pixelmatch": "^8.0.0",
+    "pngjs": "^7.0.0",
     "postinstall-postinstall": "^2.1.0",
     "react-test-renderer": "19.2.3",
     "typescript": "^6.0.3"
@@ -97,11 +99,13 @@
     "e2e": "playwright test",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "design:lint": "node scripts/design-lint.mjs",
     "arch:check": "depcruise --config .dependency-cruiser.cjs app components store utils db types modules hooks",
     "benchmark:ci": "jest __tests__/perf.benchmark.test.ts __tests__/perf.cuj.test.ts --runInBand",
     "cuj:benchmark": "jest __tests__/perf.cuj.test.ts --runInBand",
-    "test": "npm run lint && jest",
-    "postinstall": "patch-package || echo \"patch-package: some patches failed but continuing\" && node scripts/fetch-llama-jni.js"
+    "test": "npm run lint && npm run design:lint && jest",
+    "postinstall": "patch-package || echo \"patch-package: some patches failed but continuing\" && node scripts/fetch-llama-jni.js",
+    "e2e:visual": "bash e2e/runner.sh --lane visual-regression"
   },
   "jest": {
     "preset": "jest-expo",
@@ -111,6 +115,7 @@
     "testPathIgnorePatterns": [
       "/node_modules/",
       "[\\/]__tests__[\\/]helpers[\\/]",
+      "[\\/]__tests__[\\/]fixtures[\\/]",
       "<rootDir>/e2e/"
     ],
     "transformIgnorePatterns": [

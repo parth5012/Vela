@@ -4,7 +4,7 @@ import * as Clipboard from 'expo-clipboard';
 import Markdown from 'react-native-markdown-display';
 import { parseContent, parseContentIncremental, parseContentIncrementalFast } from '../../utils/latexExtractor';
 import { perfTracker } from '../../utils/perfTracker';
-import { THEME_COLORS, FONT_SIZES, ACCENT_COLORS } from '../../utils/theme';
+import { THEME_COLORS, FONT_SIZES, ACCENT_COLORS, getTypeScale, type ThemeName, type FontSizes } from '../../utils/theme';
 
 // Lazy-loaded heavy modules to avoid blocking initial cold launch bundle evaluation
 let LazyLatexRenderer: React.ComponentType<any> | null = null;
@@ -25,11 +25,11 @@ function getMermaidRenderer(): React.ComponentType<any> {
 
 interface RichTextProps {
   content: string;
-  theme?: 'berry' | 'citrus' | 'aquatic' | 'sunset' | 'noir';
+  theme?: ThemeName;
   fontSize?: 'small' | 'medium' | 'large';
   accentColor?: 'indigo' | 'emerald' | 'rose' | 'amber' | 'violet' | 'pink' | 'orange' | 'blue';
   colors?: typeof THEME_COLORS[keyof typeof THEME_COLORS];
-  sizes?: typeof FONT_SIZES[keyof typeof FONT_SIZES];
+  sizes?: FontSizes;
   accentHex?: string;
   onCopyText?: (text: string) => void;
   isStreaming?: boolean;
@@ -52,7 +52,7 @@ export default function RichText({
     );
   }, [content, isStreaming]);
   const colors = colorsOverride || THEME_COLORS[theme] || THEME_COLORS.berry;
-  const sizes = sizesOverride || FONT_SIZES[fontSize] || FONT_SIZES.medium;
+  const sizes = sizesOverride || getTypeScale(theme, fontSize);
   const accentHex = accentHexOverride || ACCENT_COLORS[accentColor] || ACCENT_COLORS.indigo;
 
   const rules = useMemo(() => ({
@@ -152,7 +152,9 @@ export default function RichText({
     body: {
       color: colors.text,
       fontSize: sizes.text,
-      lineHeight: sizes.text * 1.45,
+      lineHeight: sizes.lineHeight,
+      letterSpacing: sizes.letterSpacing,
+      fontWeight: sizes.fontWeight,
     },
     link: {
       color: accentHex,
@@ -203,6 +205,8 @@ export default function RichText({
     heading1: {
       color: colors.text,
       fontSize: sizes.title + 2,
+      lineHeight: Math.round((sizes.title + 2) * 1.25),
+      letterSpacing: sizes.titleLetterSpacing,
       fontWeight: 'bold' as const,
       marginTop: 16,
       marginBottom: 8,
@@ -210,6 +214,8 @@ export default function RichText({
     heading2: {
       color: colors.text,
       fontSize: sizes.title,
+      lineHeight: Math.round(sizes.title * 1.25),
+      letterSpacing: sizes.titleLetterSpacing,
       fontWeight: 'bold' as const,
       marginTop: 14,
       marginBottom: 8,
@@ -217,6 +223,8 @@ export default function RichText({
     heading3: {
       color: colors.text,
       fontSize: sizes.title - 2,
+      lineHeight: Math.round((sizes.title - 2) * 1.25),
+      letterSpacing: sizes.titleLetterSpacing,
       fontWeight: 'bold' as const,
       marginTop: 12,
       marginBottom: 6,
@@ -231,6 +239,9 @@ export default function RichText({
       color: colors.text,
       marginVertical: 2,
       fontSize: sizes.text,
+      lineHeight: sizes.lineHeight,
+      letterSpacing: sizes.letterSpacing,
+      fontWeight: sizes.fontWeight,
     },
     paragraph: {
       marginTop: 0,
@@ -239,6 +250,11 @@ export default function RichText({
     },
     text: {
       flexWrap: 'wrap',
+      color: colors.text,
+      fontSize: sizes.text,
+      lineHeight: sizes.lineHeight,
+      letterSpacing: sizes.letterSpacing,
+      fontWeight: sizes.fontWeight,
     },
     table: {
       borderWidth: 1,

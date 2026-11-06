@@ -8,6 +8,7 @@
  * Maintenance: Update this block when exports, invariants, side effects, or ownership change.
  */
 import { StyleSheet } from 'react-native';
+import { FONT_SIZES } from '../utils/theme';
 
 export const styles = StyleSheet.create({
   container: {
@@ -24,9 +25,10 @@ export const styles = StyleSheet.create({
     marginBottom: 32,
   },
   logo: {
-    fontSize: 24,
+    fontSize: FONT_SIZES.small.logo,
     fontWeight: '900',
     color: '#818cf8',
+    /* Branded wordmark keeps its wide tracking; token only sets the size. */
     letterSpacing: 4,
     marginBottom: 12,
   },
@@ -38,10 +40,10 @@ export const styles = StyleSheet.create({
     textAlign: 'center',
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: FONT_SIZES.medium.text,
     color: '#a1a1aa',
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: FONT_SIZES.medium.lineHeight,
     paddingHorizontal: 16,
   },
   forkContainer: {
@@ -61,7 +63,7 @@ export const styles = StyleSheet.create({
     borderColor: '#6366f1',
   },
   forkIcon: {
-    fontSize: 32,
+    fontSize: FONT_SIZES.medium.logo,
     marginRight: 16,
   },
   forkTextContainer: {
@@ -76,7 +78,7 @@ export const styles = StyleSheet.create({
   forkSubtitle: {
     fontSize: 13,
     color: '#a1a1aa',
-    lineHeight: 18,
+    lineHeight: FONT_SIZES.medium.subLineHeight,
   },
   forkArrow: {
     fontSize: 24,
@@ -96,7 +98,7 @@ export const styles = StyleSheet.create({
   },
   backButtonText: {
     color: '#818cf8',
-    fontSize: 14,
+    fontSize: FONT_SIZES.medium.text,
     fontWeight: '600',
   },
   subtabContainer: {
@@ -143,7 +145,7 @@ export const styles = StyleSheet.create({
   },
   pillText: {
     color: '#a1a1aa',
-    fontSize: 12,
+    fontSize: FONT_SIZES.small.text,
     fontWeight: '600',
   },
   pillTextSelected: {
@@ -154,14 +156,14 @@ export const styles = StyleSheet.create({
   },
   localTitle: {
     color: '#f4f4f5',
-    fontSize: 16,
+    fontSize: FONT_SIZES.small.title,
     fontWeight: '700',
     marginBottom: 4,
   },
   localSubtitle: {
     color: '#a1a1aa',
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: FONT_SIZES.medium.text,
+    lineHeight: FONT_SIZES.medium.lineHeight,
   },
   modelInfoCard: {
     backgroundColor: '#09090b',
@@ -174,18 +176,18 @@ export const styles = StyleSheet.create({
   modelNameLabel: {
     color: '#818cf8',
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: FONT_SIZES.medium.text,
   },
   modelHint: {
     color: '#71717a',
-    fontSize: 12,
+    fontSize: FONT_SIZES.small.text,
     marginTop: 4,
   },
   inputGroup: {
     marginBottom: 16,
   },
   label: {
-    fontSize: 12,
+    fontSize: FONT_SIZES.small.text,
     fontWeight: '600',
     color: '#a1a1aa',
     marginBottom: 6,

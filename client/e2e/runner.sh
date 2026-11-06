@@ -40,6 +40,9 @@ Options:
   --device <serial>       Target device (default: emulator-5554)
   --fixture <name>        Override fixture for feature run
   --skip-install          Skip APK install step
+  --compact               Force the compact 360x640 viewport (default for the visual-regression lane)
+  --update-baselines      Promote current visual captures to e2e/baselines/ (intentional use only)
+  --threshold <0..1>      Visual diff failure threshold (default 0.005)
   --verbose               Show ADB command output
 EOF
     exit 1
@@ -111,6 +114,9 @@ stop_mock_server() {
 
 cleanup() {
     stop_mock_server
+    # Restore viewport / motion settings even on failure paths
+    restore_viewport
+    restore_motion
     # Remove reverse port
     adb -s "$DEVICE" reverse --remove tcp:$MOCK_PORT 2>/dev/null || true
     # Cleanup temp files
@@ -463,6 +469,234 @@ run_lane_parallel_surface() {
     fi
 }
 
+# --- Visual Regression Lane (WF-447-07) ---
+
+ORIG_WM_SIZE=""
+ORIG_ANIM_SCALE=""
+COMPACT_MODE=false
+UPDATE_BASELINES=false
+DIFF_THRESHOLD=""
+
+# Scroll-craft compact viewport: the 360x640 mobile floor.
+set_compact_viewport() {
+    COMPACT_MODE=true
+    ORIG_WM_SIZE=$(adb -s "$DEVICE" shell wm size | grep Physical | awk '{print $3}' | tr -d '\r')
+    log "Compact viewport: ${ORIG_WM_SIZE:-unknown} -> 360x640"
+    adb -s "$DEVICE" shell wm size 360x640 >/dev/null 2>&1 || true
+    sleep 1
+}
+
+restore_viewport() {
+    if [ -n "$ORIG_WM_SIZE" ]; then
+        adb -s "$DEVICE" shell wm size "$ORIG_WM_SIZE" 2>/dev/null || true
+        log "Viewport restored ($ORIG_WM_SIZE)"
+        ORIG_WM_SIZE=""
+    fi
+}
+
+set_reduced_motion() {
+    ORIG_ANIM_SCALE=$(adb -s "$DEVICE" shell settings get global animator_duration_scale | tr -d '\r\n')
+    adb -s "$DEVICE" shell settings put global animator_duration_scale 0 >/dev/null 2>&1 || true
+    log "Reduced motion: animator_duration_scale 0 (was ${ORIG_ANIM_SCALE:-unknown})"
+}
+
+restore_motion() {
+    if [ -n "$ORIG_ANIM_SCALE" ]; then
+        adb -s "$DEVICE" shell settings put global animator_duration_scale "$ORIG_ANIM_SCALE" 2>/dev/null || true
+        log "Motion restored (animator_duration_scale $ORIG_ANIM_SCALE)"
+        ORIG_ANIM_SCALE=""
+    fi
+}
+
+# Tap the centre of the first on-screen node whose text contains $1.
+tap_ui_text() {
+    local text="$1"
+    capture_ui_dump "tap_target"
+    local dump="$RESULTS_DIR/e2e_tap_target.xml"
+    local bounds
+    bounds=$(tr '\r' ' ' < "$dump" | grep -o "text=\"[^\"]*${text}[^\"]*\"[^>]*bounds=\"\[[0-9]*,[0-9]*\]\[[0-9]*,[0-9]*\]\"" | head -1 | grep -o '\[[0-9]*,[0-9]*\]\[[0-9]*,[0-9]*\]' || true)
+    if [ -z "$bounds" ]; then
+        fail "tap_ui_text: '$text' not found on screen"
+        return 1
+    fi
+    local xs=($(echo "$bounds" | tr -d '[]' | tr ',' ' '))
+    local cx=$(( (xs[0] + xs[2]) / 2 ))
+    local cy=$(( (xs[1] + xs[3]) / 2 ))
+    log "  Tapping '$text' at ($cx,$cy)"
+    tap_screen "$cx" "$cy"
+}
+
+# Tap the centre of the Nth editable text field on screen (1-based).
+tap_editable_nth() {
+    local n="${1:-1}"
+    capture_ui_dump "tap_editable"
+    local dump="$RESULTS_DIR/e2e_tap_editable.xml"
+    local bounds
+    bounds=$(tr '\r' ' ' < "$dump" | grep -o 'class="android.widget.EditText"[^>]*bounds="[^"]*"' | head -n "$n" | tail -n 1 | grep -o '\[[0-9]*,[0-9]*\]\[[0-9]*,[0-9]*\]' || true)
+    if [ -z "$bounds" ]; then
+        fail "tap_editable_nth: editable field #$n not found on screen"
+        return 1
+    fi
+    local xs=($(echo "$bounds" | tr -d '[]' | tr ',' ' '))
+    local cx=$(( (xs[0] + xs[2]) / 2 ))
+    local cy=$(( (xs[1] + xs[3]) / 2 ))
+    log "  Tapping editable field #$n at ($cx,$cy)"
+    tap_screen "$cx" "$cy"
+}
+
+# Capture one screenshot per state into e2e/results/visual/<name>.png
+capture_visual_state() {
+    local name="$1"
+    mkdir -p "$SCRIPT_DIR/results/visual"
+    adb -s "$DEVICE" shell screencap -p "//sdcard/e2e_visual.png"
+    adb -s "$DEVICE" pull "//sdcard/e2e_visual.png" "$SCRIPT_DIR/results/visual/${name}.png" >/dev/null
+    adb -s "$DEVICE" shell rm "//sdcard/e2e_visual.png" 2>/dev/null || true
+    log "  captured visual state: $name"
+}
+
+# After the setup screenshot, leave the app configured against the mock
+# backend so remaining states capture real chat/settings/tasks UI.
+configure_via_server() {
+    tap_ui_text "Connect to Server" || return 1
+    sleep 2
+    tap_editable_nth 1 || return 1
+    type_text "vela.local"
+    sleep 0.5
+    tap_editable_nth 2 || return 1
+    type_text "e2e-token"
+    sleep 0.5
+    press_back
+    sleep 0.5
+    tap_ui_text "Connect & Save" || return 1
+    wait_for_text "Send" 30 || { fail "Configuration did not reach chat"; return 1; }
+    ok "Configured against mock server"
+}
+
+run_visual_state_setup() {
+    local suffix="$1"
+    start_mock_server "setup"
+    # Deterministic first run: wipe app data (emulator only — this lane
+    # refuses to run against a physical device).
+    adb -s "$DEVICE" shell pm clear com.parth5012.client.dev >/dev/null 2>&1 || true
+    launch_app
+    sleep 3
+    if wait_for_text "Get Started with Vela" 15; then
+        ok "Setup state visible"
+    else
+        warn "Setup title not found — capturing current frame anyway"
+    fi
+    capture_visual_state "setup${suffix}"
+    # Continue in the same session: configure so later states are usable.
+    configure_via_server
+}
+
+run_visual_state_chat_empty() {
+    local suffix="$1"
+    start_mock_server "chat"
+    launch_app
+    sleep 2
+    wait_for_text "Send" 15 || warn "chat not ready — capturing current frame"
+    sleep 6  # let entrance motion settle
+    capture_visual_state "chat-empty${suffix}"
+}
+
+run_visual_state_chat_thread() {
+    local suffix="$1"
+    start_mock_server "chat"
+    launch_app
+    sleep 2
+    wait_for_text "Send" 15 || warn "chat not ready — capturing current frame"
+    tap_editable_nth 1 || true
+    type_text "Hello%sfrom%sE2E"
+    sleep 0.5
+    press_back  # dismiss keyboard so Send is reachable
+    sleep 0.5
+    tap_ui_text "Send" || warn "Send not found"
+    sleep 4
+    wait_for_text "Response" 15 || warn "SSE response not detected"
+    sleep 2
+    capture_visual_state "chat-thread${suffix}"
+}
+
+run_visual_state_settings_appearance() {
+    local suffix="$1"
+    start_mock_server "settings"
+    launch_app
+    sleep 2
+    tap_screen 30 70  # hamburger (compact viewport)
+    sleep 2
+    tap_ui_text "Settings" || { warn "Settings not in drawer — capturing current frame"; return 1; }
+    sleep 2
+    if ! tap_ui_text "Appearance"; then
+        warn "Appearance entry not found — capturing settings index instead"
+    fi
+    sleep 2
+    capture_visual_state "settings-appearance${suffix}"
+}
+
+run_visual_state_tasks_empty() {
+    local suffix="$1"
+    start_mock_server "tasks"
+    launch_app
+    sleep 2
+    tap_screen 30 70  # hamburger (compact viewport)
+    sleep 2
+    tap_ui_text "Tasks" || { warn "Tasks not in drawer — capturing current frame"; return 1; }
+    sleep 3
+    capture_visual_state "tasks-empty${suffix}"
+}
+
+run_lane_visual_regression() {
+    log "=== Running Visual Regression Lane ==="
+
+    # Safety: the lane never targets the user's phone.
+    if [[ "$DEVICE" != emulator-* ]]; then
+        fail "visual-regression refuses non-emulator device '$DEVICE'. Use --device emulator-XXXXXX."
+        exit 1
+    fi
+
+    set_compact_viewport
+
+    # Clean capture set so the diff only sees this run.
+    mkdir -p "$SCRIPT_DIR/results/visual/diffs"
+    rm -f "$SCRIPT_DIR/results/visual"/*.png "$SCRIPT_DIR/results/visual/diffs"/*.png 2>/dev/null || true
+
+    local suffix
+    for suffix in "" ".rmd"; do
+        if [ -n "$suffix" ]; then
+            log "--- Reduced-motion pass ---"
+            set_reduced_motion
+        else
+            log "--- Normal pass ---"
+        fi
+        run_visual_state_setup "$suffix" || true
+        run_visual_state_chat_empty "$suffix" || true
+        run_visual_state_chat_thread "$suffix" || true
+        run_visual_state_settings_appearance "$suffix" || true
+        run_visual_state_tasks_empty "$suffix" || true
+        if [ -n "$suffix" ]; then
+            restore_motion
+        fi
+    done
+    restore_viewport
+
+    # Diff pass: current shots against e2e/baselines/ with pixelmatch.
+    local diff_args=()
+    if [ -n "$DIFF_THRESHOLD" ]; then
+        diff_args+=(--threshold "$DIFF_THRESHOLD")
+    fi
+    if $UPDATE_BASELINES; then
+        diff_args+=(--update-baselines)
+    fi
+    if node "$SCRIPT_DIR/visual-diff.mjs" "${diff_args[@]}"; then
+        record_result "visual-regression" "PASS"
+        ok "Visual regression lane complete"
+    else
+        record_result "visual-regression" "FAIL"
+        fail "Visual regression lane failed (details: e2e/results/visual/report.json)"
+    fi
+}
+
 # --- Dry Run ---
 
 dry_run() {
@@ -700,10 +934,13 @@ while [[ $# -gt 0 ]]; do
         --fixture) FIXTURE="$2"; shift 2 ;;
         --device) DEVICE="$2"; shift 2 ;;
         --skip-install) SKIP_INSTALL=true; shift ;;
+        --compact) COMPACT_MODE=true; shift ;;
+        --update-baselines) UPDATE_BASELINES=true; shift ;;
+        --threshold) DIFF_THRESHOLD="$2"; shift 2 ;;
         --verbose) VERBOSE=true; shift ;;
         --list)
             echo "Features: setup, chat, tasks, browser, settings, local-ai, device-agent, offline, fcm"
-            echo "Lanes: critical-path, extended-coverage, parallel-surface"
+            echo "Lanes: critical-path, extended-coverage, parallel-surface, visual-regression"
             exit 0
             ;;
         *) usage ;;
@@ -753,6 +990,7 @@ elif [ -n "$LANE" ]; then
         critical-path) run_lane_critical_path "$FIXTURE" ;;
         extended-coverage) run_lane_extended "$FIXTURE" ;;
         parallel-surface) run_lane_parallel_surface "$FIXTURE" ;;
+        visual-regression) run_lane_visual_regression "$FIXTURE" ;;
         *) fail "Unknown lane: $LANE"; usage ;;
     esac
 else

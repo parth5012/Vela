@@ -8,6 +8,8 @@
  * Maintenance: Update this block when exports, invariants, side effects, or ownership change.
  */
 import { StyleSheet } from 'react-native';
+import { FONT_SIZES } from '../utils/theme';
+import { DEFAULT_ELEVATION } from '../utils/elevation';
 
 export const styles = StyleSheet.create({
   filterContainer: {
@@ -27,7 +29,7 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
   },
   filterTabText: {
-    fontSize: 12,
+    fontSize: FONT_SIZES.small.text,
     fontWeight: '700',
     letterSpacing: 0.8,
   },
@@ -39,15 +41,15 @@ export const styles = StyleSheet.create({
   emptyText: {
     textAlign: 'center',
     marginVertical: 40,
-    fontSize: 14,
-    letterSpacing: 0.2,
-    lineHeight: 22,
+    fontSize: FONT_SIZES.medium.text,
+    letterSpacing: FONT_SIZES.medium.letterSpacing,
+    lineHeight: FONT_SIZES.medium.lineHeight,
   },
   taskCard: {
     padding: 18,
     marginBottom: 16,
     borderRadius: 20,
-    shadowColor: '#000000',
+    shadowColor: DEFAULT_ELEVATION.e2.shadowColor,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 12,
@@ -66,14 +68,14 @@ export const styles = StyleSheet.create({
   },
   taskDesc: {
     fontSize: 13,
-    lineHeight: 18,
+    lineHeight: FONT_SIZES.medium.subLineHeight,
     letterSpacing: 0.2,
   },
   statusIndicator: {
     marginLeft: 10,
   },
   badge: {
-    fontSize: 10,
+    fontSize: FONT_SIZES.small.sub,
     fontWeight: '800',
     paddingVertical: 3,
     paddingHorizontal: 8,
@@ -89,7 +91,7 @@ export const styles = StyleSheet.create({
     marginBottom: 14,
   },
   metaText: {
-    fontSize: 12,
+    fontSize: FONT_SIZES.small.text,
     fontWeight: '500',
     letterSpacing: 0.2,
   },
@@ -103,7 +105,7 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
   },
   toggleLabel: {
-    fontSize: 12,
+    fontSize: FONT_SIZES.small.text,
     fontWeight: '600',
     marginRight: 8,
     letterSpacing: 0.2,
@@ -123,7 +125,7 @@ export const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   actionBtnText: {
-    fontSize: 12,
+    fontSize: FONT_SIZES.small.text,
     fontWeight: '700',
     letterSpacing: 0.2,
   },
@@ -158,7 +160,7 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 14,
     paddingHorizontal: 16,
-    fontSize: 14,
+    fontSize: FONT_SIZES.medium.text,
     letterSpacing: 0.2,
   },
   recurrencePills: {
@@ -188,7 +190,7 @@ export const styles = StyleSheet.create({
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    fontSize: 14,
+    fontSize: FONT_SIZES.medium.text,
     minHeight: 110,
     textAlignVertical: 'top',
     letterSpacing: 0.2,
@@ -219,7 +221,7 @@ export const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   historyTitle: {
-    fontSize: 16,
+    fontSize: FONT_SIZES.small.title,
     fontWeight: '800',
     letterSpacing: 0.3,
     paddingHorizontal: 20,

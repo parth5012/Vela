@@ -8,6 +8,8 @@
  * Maintenance: Update this block when exports, invariants, side effects, or ownership change.
  */
 import { Platform, StyleSheet } from 'react-native';
+import { FONT_SIZES } from '../utils/theme';
+import { DEFAULT_ELEVATION } from '../utils/elevation';
 
 export const styles = StyleSheet.create({
   container: {
@@ -48,16 +50,53 @@ export const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.2,
   },
-  emptyMessagesContainer: {
+  emptyThreadContainer: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
   },
-  emptyMessagesText: {
+  // WF-447-06: the empty-chat block. One headline, one line of subtext, one
+  // primary CTA; starters and agent picker sit quiet below it.
+  emptyContainer: {
+    width: '100%',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingBottom: 8,
+  },
+  emptyHeadline: {
+    fontWeight: '800',
     textAlign: 'center',
-    lineHeight: 22,
-    letterSpacing: 0.2,
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  emptySubtext: {
+    textAlign: 'center',
+    maxWidth: 340,
+    marginBottom: 26,
+  },
+  emptyCta: {
+    borderRadius: 999,
+    minHeight: 44,
+    paddingHorizontal: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 28,
+    // Certified e2 token (offset 4, opacity 0.24, radius 10, elevation 4) —
+    // no ad-hoc values alongside it.
+    ...DEFAULT_ELEVATION.e2,
+  },
+  emptyCtaText: {
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  // WF-447-06 peak device: the assistant answer arrives once (opacity + slight
+  // rise), then fills in as one composed block. Wrapper is layout-only.
+  answerEntrance: {
+    width: '100%',
+  },
+  // WF-447-06 authored silence: the quiet single line held while the first
+  // tokens stream. Colour/size come from the theme at the call site.
+  quietStreamLine: {
+    marginTop: 12,
   },
   messagesList: {
     paddingHorizontal: 16,
@@ -92,19 +131,19 @@ export const styles = StyleSheet.create({
     borderTopLeftRadius: 8,
   },
   senderLabel: {
-    fontSize: 10,
+    fontSize: FONT_SIZES.small.sub,
     fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 1.2,
     marginBottom: 6,
   },
   messageText: {
-    lineHeight: 22,
-    letterSpacing: 0.2,
+    lineHeight: FONT_SIZES.medium.lineHeight,
+    letterSpacing: FONT_SIZES.medium.letterSpacing,
   },
   rawText: {
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    lineHeight: 20,
+    lineHeight: FONT_SIZES.medium.lineHeight,
   },
   thoughtNestingContainer: {
     width: '100%',
@@ -161,46 +200,6 @@ export const styles = StyleSheet.create({
     letterSpacing: 10,
     marginBottom: 16,
   },
-  welcomeTitle: {
-    fontSize: 26,
-    fontWeight: '800',
-    marginBottom: 8,
-    letterSpacing: 0.3,
-    textAlign: 'center',
-  },
-  welcomeSubtitle: {
-    fontSize: 15,
-    textAlign: 'center',
-    marginBottom: 26,
-    lineHeight: 22,
-    letterSpacing: 0.2,
-  },
-  quoteContainer: {
-    borderWidth: 1,
-    borderRadius: 18,
-    padding: 20,
-    width: '100%',
-    marginBottom: 28,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 14,
-    elevation: 3,
-  },
-  quoteText: {
-    fontStyle: 'italic',
-    fontSize: 14,
-    lineHeight: 22,
-    textAlign: 'center',
-    marginBottom: 10,
-    letterSpacing: 0.2,
-  },
-  quoteAuthor: {
-    fontSize: 12,
-    textAlign: 'right',
-    fontWeight: '600',
-    letterSpacing: 0.3,
-  },
   sectionTitleLabel: {
     alignSelf: 'flex-start',
     fontWeight: '800',
@@ -217,15 +216,15 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 16,
     padding: 16,
-    shadowColor: '#000000',
+    shadowColor: DEFAULT_ELEVATION.e2.shadowColor,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 2,
   },
   suggestionText: {
-    lineHeight: 22,
-    letterSpacing: 0.2,
+    lineHeight: FONT_SIZES.medium.lineHeight,
+    letterSpacing: FONT_SIZES.medium.letterSpacing,
   },
   agentScrollContainer: {
     gap: 10,
@@ -261,12 +260,12 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   switcherLabel: {
-    fontSize: 12,
+    fontSize: FONT_SIZES.small.text,
     fontWeight: '600',
     letterSpacing: 0.2,
   },
   downloadProgressText: {
-    fontSize: 12,
+    fontSize: FONT_SIZES.small.text,
     fontWeight: '600',
     fontVariant: ['tabular-nums'],
   },
@@ -297,7 +296,7 @@ export const styles = StyleSheet.create({
     paddingRight: 6,
     paddingVertical: 6,
     gap: 8,
-    shadowColor: '#000000',
+    shadowColor: DEFAULT_ELEVATION.e2.shadowColor,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 16,
