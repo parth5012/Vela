@@ -129,6 +129,89 @@ def cleanup_test_db():
             print(f"Failed to remove test database file {db_file}: {e}")
 
 
+class _IsolatedDb:
+    """Handle returned by the ``isolated_db`` fixture (map WF-541, ticket #544)."""
+
+    def __init__(self, engine, session_local, path):
+        self._engine = engine
+        self._session_local = session_local
+        self._path = str(path)
+
+    @property
+    def path(self) -> str:
+        """Filesystem path of this test's private database file."""
+        return self._path
+
+    @property
+    def engine(self):
+        return self._engine
+
+    @property
+    def session(self):
+        """Context manager mirroring ``get_db_session``'s commit/rollback rule."""
+        from contextlib import contextmanager
+
+        @contextmanager
+        def _cm():
+            s = self._session_local()
+            try:
+                yield s
+                s.commit()
+            except Exception:
+                s.rollback()
+                raise
+            finally:
+                s.close()
+
+        return _cm
+
+
+def _isolated_test_db(monkeypatch, tmp_path):
+    """Create a fresh per-test SQLite database and rebind db.session to it.
+
+    Mirrors the engine setup in db/session.py (NullPool, foreign_keys pragma,
+    SQLITE_SAFE_TABLES create_all) so behavior matches the app engine, but on
+    a private temp file instead of the shared test_vela_backend.db.
+    """
+    from sqlalchemy import create_engine, event
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import NullPool
+    from db import session as dbsession
+    from db.models import Base
+    from db.session import SQLITE_SAFE_TABLES
+
+    db_path = tmp_path / "isolated_test.db"
+    engine = create_engine(f"sqlite:///{db_path}", poolclass=NullPool)
+
+    @event.listens_for(engine, "connect")
+    def _set_sqlite_pragma(dbapi_connection, _record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
+    tables = [
+        Base.metadata.tables[name] for name in SQLITE_SAFE_TABLES if name in Base.metadata.tables
+    ]
+    Base.metadata.create_all(bind=engine, tables=tables)
+    session_local = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    monkeypatch.setattr(dbsession, "engine", engine)
+    monkeypatch.setattr(dbsession, "SessionLocal", session_local)
+    return _IsolatedDb(engine, session_local, db_path)
+
+
+@pytest.fixture
+def isolated_db(monkeypatch, tmp_path):
+    """Per-test isolated SQLite database (prototype for AFK ticket #548).
+
+    Each test gets a brand-new, real SQLite database file; evidence
+    (sessions, agents, check-ins...) can be seeded through
+    ``isolated_db.session`` or the rebound sessionmaker. Foreign keys are
+    enforced. No shared state: leaks between tests prove a bug, not a
+    harness quirk.
+    """
+    return _isolated_test_db(monkeypatch, tmp_path)
+
+
 @pytest.fixture
 def fake_provider():
     """Fixture returning a fresh FakeProvider wired into utils.llm."""
