@@ -176,6 +176,7 @@ def _isolated_test_db(monkeypatch, tmp_path):
     from sqlalchemy import create_engine, event
     from sqlalchemy.orm import sessionmaker
     from sqlalchemy.pool import NullPool
+
     from db import session as dbsession
     from db.models import Base
     from db.session import SQLITE_SAFE_TABLES
