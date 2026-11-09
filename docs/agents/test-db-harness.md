@@ -65,5 +65,6 @@ Note: editing only `db/migrations/*.sql` still requires `npx jest --clearCache`
 - `python vela_ci.py ci --stack client` — green
 - Known contention flake: `perf.benchmark.test.ts` timing ratchets can fail
   when sharing workers with other suites (BUG-client-001 class; solo run
-  passes). AFK #552's flaky policy should isolate perf lanes like
-  `benchmark:ci` already does.
+  passes). Landed in #552: perf timing suites are excluded from the
+  `jest-coverage` lane, and the quarantine / one-retry policy now lives in
+  `docs/agents/flaky-policy.md`.
