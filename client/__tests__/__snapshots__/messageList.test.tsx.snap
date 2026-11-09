@@ -2,6 +2,7 @@
 
 exports[`MessageList & View Recycling Verification matches snapshot 1`] = `
 <RCTScrollView
+  accessibilityLabel="Chat messages"
   data={
     [
       {

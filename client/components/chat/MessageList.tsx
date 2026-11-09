@@ -22,6 +22,7 @@ export interface MessageListProps<T = ChatFeedItem> {
   extraData?: any;
   testID?: string;
   keyboardShouldPersistTaps?: 'always' | 'never' | 'handled';
+  accessibilityLabel?: string;
 }
 
 /**
@@ -65,6 +66,7 @@ export const MessageList = forwardRef<FlashListRef<any>, MessageListProps<any>>(
       extraData,
       testID = 'chat-message-list',
       keyboardShouldPersistTaps = 'handled',
+      accessibilityLabel = 'Chat messages',
     },
     ref
   ) {
@@ -78,6 +80,7 @@ export const MessageList = forwardRef<FlashListRef<any>, MessageListProps<any>>(
     const flashListProps: any = {
       ref,
       testID,
+      accessibilityLabel,
       data,
       renderItem,
       keyExtractor: keyExtractor || defaultKeyExtractor,
