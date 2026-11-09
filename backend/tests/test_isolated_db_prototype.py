@@ -35,14 +35,11 @@ def test_b_each_test_gets_a_fresh_database(isolated_db):
 def test_c_foreign_keys_are_enforced(isolated_db):
     # Same transaction rule as get_db_session: an exception at commit is
     # rolled back and re-raised, so the FK violation surfaces to the caller.
-    from sqlalchemy.exc import IntegrityError
-
-    with pytest.raises(IntegrityError):
-        with isolated_db.session() as s:
-            s.add(
-                OAuthToken(
-                    conversation_id="no-such-conversation",
-                    provider="google",
-                    token={"a": "b"},
-                )
+    with pytest.raises(IntegrityError), isolated_db.session() as s:
+        s.add(
+            OAuthToken(
+                conversation_id="no-such-conversation",
+                provider="google",
+                token={"a": "b"},
             )
+        )
