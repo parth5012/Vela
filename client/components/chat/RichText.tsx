@@ -104,8 +104,10 @@ export default function RichText({
             <Text style={[styles.codeBlockLang, { color: colors.textDark }]}>
               {lang.toUpperCase() || 'CODE'}
             </Text>
-            <Pressable 
-              style={({ pressed }) => [styles.codeCopyBtn, { borderColor: colors.glassBorder }, pressed && { opacity: 0.7, transform: [{ scale: 0.96 }] }]} 
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Copy code block"
+              style={({ pressed }) => [styles.codeCopyBtn, { borderColor: colors.glassBorder }, pressed && { opacity: 0.7, transform: [{ scale: 0.96 }] }]}
               onPress={async () => {
                 await Clipboard.setStringAsync(codeText);
               }}
@@ -128,8 +130,10 @@ export default function RichText({
         <View key={node.key} style={[styles.codeBlockWrapper, { backgroundColor: colors.codeBg || colors.background, borderColor: colors.border }]}>
           <View style={[styles.codeBlockHeader, { borderBottomColor: colors.border, backgroundColor: 'rgba(0, 0, 0, 0.25)' }]}>
             <Text style={[styles.codeBlockLang, { color: colors.textDark }]}>CODE</Text>
-            <Pressable 
-              style={({ pressed }) => [styles.codeCopyBtn, { borderColor: colors.glassBorder }, pressed && { opacity: 0.7, transform: [{ scale: 0.96 }] }]} 
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Copy code block"
+              style={({ pressed }) => [styles.codeCopyBtn, { borderColor: colors.glassBorder }, pressed && { opacity: 0.7, transform: [{ scale: 0.96 }] }]}
               onPress={async () => {
                 await Clipboard.setStringAsync(codeText);
               }}

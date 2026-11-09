@@ -98,10 +98,28 @@ function matchesParsedInstant(match: RegExpExecArray, timestamp: number): boolea
   return timestamp === Date.UTC(year, month - 1, day, hour, minute, second, millis) - offsetMs;
 }
 
-export function formatTimestamp(raw: string | number | undefined | null): string | null {
+export interface FormatDateOptions {
+  /** BCP-47 locale, e.g. 'en-US'. Undefined preserves device/host locale. */
+  locale?: string;
+  /** IANA time zone, e.g. 'America/New_York'. Undefined preserves device zone. */
+  timeZone?: string;
+  /** Force 12/24-hour cycle regardless of locale defaults. Format-time only. */
+  hour12?: boolean;
+}
+
+export function formatTimestamp(
+  raw: string | number | undefined | null,
+  options: FormatDateOptions = {},
+): string | null {
   const date = parseSafeDate(raw);
   if (!date) return null;
-  return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  const { locale, timeZone, hour12 } = options;
+  return date.toLocaleTimeString(locale, {
+    hour: '2-digit',
+    minute: '2-digit',
+    ...(hour12 !== undefined ? { hour12 } : {}),
+    ...(timeZone !== undefined ? { timeZone } : {}),
+  });
 }
 
 export function toLocalDateKey(date: Date): string {
@@ -111,17 +129,53 @@ export function toLocalDateKey(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-export function formatDateDividerLabel(date: Date, now: Date = new Date()): string {
-  const dateKey = toLocalDateKey(date);
-  const nowKey = toLocalDateKey(now);
+function zonedDateKey(date: Date, timeZone: string): string {
+  // 'en-CA' YYYY-MM-DD is a stable calendar-key format across zones.
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+function previousDateKey(dateKey: string): string {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const d = new Date(Date.UTC(year, month - 1, day));
+  d.setUTCDate(d.getUTCDate() - 1);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const dayStr = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${dayStr}`;
+}
+
+export function formatDateDividerLabel(
+  date: Date,
+  now: Date = new Date(),
+  options: FormatDateOptions = {},
+): string {
+  const { locale, timeZone } = options;
+  const dateKey = timeZone ? zonedDateKey(date, timeZone) : toLocalDateKey(date);
+  const nowKey = timeZone ? zonedDateKey(now, timeZone) : toLocalDateKey(now);
   if (dateKey === nowKey) return 'Today';
 
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-  if (dateKey === toLocalDateKey(yesterday)) return 'Yesterday';
+  if (dateKey === previousDateKey(nowKey)) return 'Yesterday';
 
-  if (date.getFullYear() === now.getFullYear()) {
-    return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  const sameYear = timeZone
+    ? dateKey.slice(0, 4) === nowKey.slice(0, 4)
+    : date.getFullYear() === now.getFullYear();
+  if (sameYear) {
+    return date.toLocaleDateString(locale, {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      ...(timeZone !== undefined ? { timeZone } : {}),
+    });
   }
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  return date.toLocaleDateString(locale, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    ...(timeZone !== undefined ? { timeZone } : {}),
+  });
 }

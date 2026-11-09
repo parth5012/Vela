@@ -85,6 +85,9 @@ function MessageItemBase({
         )}
 
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={isUser ? 'Your message' : `${isLocalMode ? 'Gemma (Local)' : agentName} message`}
+          {...(onLongPress ? { accessibilityHint: 'Long press for options' } : {})}
           onLongPress={onLongPress}
           style={({ pressed }) => [
             styles.bubble,

@@ -147,10 +147,15 @@ export default function MermaidRenderer({
     return (
       <View
         testID="mermaid-source-view"
+        accessibilityLabel="Mermaid source code"
         style={[styles.codeBlockWrapper, { backgroundColor: colors.background, borderColor: colors.border }]}
       >
         {hasError && (
-          <View style={styles.errorBanner}>
+          <View
+            accessibilityRole="alert"
+            accessibilityLabel="Mermaid render failed. Showing source view."
+            style={styles.errorBanner}
+          >
             <Text style={styles.errorText}>⚠️ Mermaid render failed. Showing source view.</Text>
           </View>
         )}
@@ -174,6 +179,9 @@ export default function MermaidRenderer({
       <View style={[styles.tabBar, { borderBottomColor: colors.border }]}>
         <View style={styles.tabsContainer}>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Diagram tab"
+            accessibilityState={{ selected: activeTab === 'diagram' }}
             style={[styles.tabButton, activeTab === 'diagram' ? { borderBottomColor: accentHex } : null]}
             onPress={() => setActiveTab('diagram')}
           >
@@ -182,6 +190,9 @@ export default function MermaidRenderer({
             </Text>
           </Pressable>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Source tab"
+            accessibilityState={{ selected: activeTab === 'source' }}
             style={[styles.tabButton, activeTab === 'source' ? { borderBottomColor: accentHex } : null]}
             onPress={() => setActiveTab('source')}
           >
@@ -192,7 +203,12 @@ export default function MermaidRenderer({
         </View>
 
         {activeTab === 'source' && (
-          <Pressable style={({ pressed }) => [styles.copyBtn, pressed && { opacity: 0.7 }]} onPress={copyToClipboard}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Copy mermaid source"
+            style={({ pressed }) => [styles.copyBtn, pressed && { opacity: 0.7 }]}
+            onPress={copyToClipboard}
+          >
             <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, fontWeight: 'bold' }}>Copy</Text>
           </Pressable>
         )}
