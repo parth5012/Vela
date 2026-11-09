@@ -103,7 +103,36 @@ function pressText(root: any, text: string) {
   );
   while (node && !node.props?.onPress) node = node.parent;
   if (!node) throw new Error(`Cannot find pressable for text ${text}`);
-  node.props.onPress();
+  // Return the handler's promise (if any) so callers can await async
+  // continuations inside act() and no state update lands outside act.
+  return node.props.onPress();
+}
+
+/**
+ * Flush async effects until `condition` holds, bounded so a genuinely
+ * broken render fails the test instead of hanging the worker. Runs inside
+ * act() so every store/local setState triggered by the effect is wrapped —
+ * fixed sleeps raced under full-suite worker contention (BUG-client-001).
+ */
+async function flushUntil(
+  condition: () => boolean,
+  { timeoutMs = 3000, intervalMs = 10 }: { timeoutMs?: number; intervalMs?: number } = {}
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  let ok = condition();
+  while (!ok && Date.now() < deadline) {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    });
+    ok = condition();
+  }
+  return ok;
+}
+
+function allTexts(root: any): string[] {
+  return root
+    .findAll((n: any) => n.type === 'Text')
+    .map((n: any) => (Array.isArray(n.children) ? n.children.join('') : String(n.children || '')));
 }
 
 function findTexts(root: any): string[] {
@@ -113,9 +142,26 @@ function findTexts(root: any): string[] {
 }
 
 describe('TasksScreen Connection Mode Selector (#362)', () => {
+  // Track every mounted renderer so it unmounts between tests. A leftover
+  // instance stays subscribed to useConfigStore, so the next test's
+  // beforeEach setState re-renders it outside act() (act() warnings) and
+  // its loadTasks() effect can resolve mid-assertion (flakes).
+  let mounted: any;
+
   beforeEach(() => {
     jest.clearAllMocks();
-    useConfigStore.setState({ connectionMode: 'server' });
+    act(() => {
+      useConfigStore.setState({ connectionMode: 'server' });
+    });
+  });
+
+  afterEach(() => {
+    if (mounted) {
+      act(() => {
+        mounted.unmount();
+      });
+      mounted = undefined;
+    }
   });
 
   it('renders task list and displays connection mode badges', async () => {
@@ -123,8 +169,13 @@ describe('TasksScreen Connection Mode Selector (#362)', () => {
     await act(async () => {
       component = renderer.create(<TasksScreen />);
     });
+    mounted = component;
 
-    const texts = findTexts(component.root);
+    // loadTasks() is async (initializeDatabase + select); poll for the list
+    // instead of trusting act()'s initial flush under worker contention.
+    expect(await flushUntil(() => allTexts(component.root).some((t) => t.includes('Daily News Digest')))).toBe(true);
+
+    const texts = allTexts(component.root);
     expect(texts.some((t) => t.includes('Daily News Digest'))).toBe(true);
     expect(texts.some((t) => t.includes('local'))).toBe(true);
     expect(texts.some((t) => t.includes('default'))).toBe(true);
@@ -135,6 +186,8 @@ describe('TasksScreen Connection Mode Selector (#362)', () => {
     await act(async () => {
       component = renderer.create(<TasksScreen />);
     });
+    mounted = component;
+    expect(await flushUntil(() => allTexts(component.root).some((t) => t.includes('Daily News Digest')))).toBe(true);
 
     // Press "+ Add Task" button
     const newBtn = component.root.find(
@@ -143,9 +196,9 @@ describe('TasksScreen Connection Mode Selector (#362)', () => {
 
     await act(async () => {
       if (newBtn.props.onPress) {
-        newBtn.props.onPress();
+        await newBtn.props.onPress();
       } else {
-        newBtn.parent.props.onPress();
+        await newBtn.parent.props.onPress();
       }
     });
 
@@ -163,6 +216,8 @@ describe('TasksScreen Connection Mode Selector (#362)', () => {
     await act(async () => {
       component = renderer.create(<TasksScreen />);
     });
+    mounted = component;
+    expect(await flushUntil(() => allTexts(component.root).some((t) => t.includes('Daily News Digest')))).toBe(true);
 
     // Open form
     const newBtn = component.root.find(
@@ -170,9 +225,9 @@ describe('TasksScreen Connection Mode Selector (#362)', () => {
     );
     await act(async () => {
       if (newBtn.props.onPress) {
-        newBtn.props.onPress();
+        await newBtn.props.onPress();
       } else {
-        newBtn.parent.props.onPress();
+        await newBtn.parent.props.onPress();
       }
     });
 
@@ -188,18 +243,20 @@ describe('TasksScreen Connection Mode Selector (#362)', () => {
 
     // Select "Cloud" pill
     await act(async () => {
-      pressText(component.root, 'Cloud');
+      await pressText(component.root, 'Cloud');
     });
 
-    // Press "Save Task"
+    // Press "Save Task" — handleSaveTask is async (await db.insert, then
+    // loadTasks() + setState); awaiting the returned promise keeps every
+    // continuation inside act() instead of landing after it exits.
     const saveBtn = component.root.find(
       (n: any) => n.props?.label === 'Save Task' || (n.type === 'Text' && n.children?.includes('Save Task'))
     );
     await act(async () => {
       if (saveBtn.props.onPress) {
-        saveBtn.props.onPress();
+        await saveBtn.props.onPress();
       } else {
-        saveBtn.parent.props.onPress();
+        await saveBtn.parent.props.onPress();
       }
     });
 
@@ -214,6 +271,8 @@ describe('TasksScreen Connection Mode Selector (#362)', () => {
     await act(async () => {
       component = renderer.create(<TasksScreen />);
     });
+    mounted = component;
+    expect(await flushUntil(() => allTexts(component.root).some((t) => t.includes('Daily News Digest')))).toBe(true);
 
     // Open form
     const newBtn = component.root.find(
@@ -221,9 +280,9 @@ describe('TasksScreen Connection Mode Selector (#362)', () => {
     );
     await act(async () => {
       if (newBtn.props.onPress) {
-        newBtn.props.onPress();
+        await newBtn.props.onPress();
       } else {
-        newBtn.parent.props.onPress();
+        await newBtn.parent.props.onPress();
       }
     });
 
@@ -243,9 +302,9 @@ describe('TasksScreen Connection Mode Selector (#362)', () => {
     );
     await act(async () => {
       if (saveBtn.props.onPress) {
-        saveBtn.props.onPress();
+        await saveBtn.props.onPress();
       } else {
-        saveBtn.parent.props.onPress();
+        await saveBtn.parent.props.onPress();
       }
     });
 
@@ -259,11 +318,17 @@ describe('TasksScreen Connection Mode Selector (#362)', () => {
     await act(async () => {
       component = renderer.create(<TasksScreen />);
     });
+    mounted = component;
+    expect(await flushUntil(() => allTexts(component.root).some((t) => t.includes('Daily News Digest')))).toBe(true);
 
-    // Click first task to open details modal
+    // Click first task to open details modal — loadRunHistory() is async,
+    // so await the handler inside act() and poll for the history rows.
     await act(async () => {
-      pressText(component.root, 'Daily News Digest');
+      await pressText(component.root, 'Daily News Digest');
     });
+    expect(
+      await flushUntil(() => allTexts(component.root).some((t) => t.includes('Execution Run History')))
+    ).toBe(true);
 
     const texts = findTexts(component.root);
     expect(texts.some((t) => t.includes('Execution Run History'))).toBe(true);
