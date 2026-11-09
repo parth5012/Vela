@@ -184,12 +184,17 @@ export default function ThreadOptionsModal({
       transparent={true}
       onRequestClose={onClose}
     >
-      <Pressable style={styles.overlay} onPress={onClose}>
+      <Pressable
+        style={styles.overlay}
+        accessibilityRole="button"
+        accessibilityLabel="Close thread options"
+        onPress={onClose}
+      >
         <KeyboardAvoidingView
           behavior="padding"
           style={styles.keyboardAvoid}
         >
-          <Pressable style={styles.modalContent} onPress={() => {}}>
+          <Pressable style={styles.modalContent} accessible={false} onPress={() => {}}>
             <View style={styles.dragHandle} />
 
             {!isEditing ? (
@@ -199,6 +204,8 @@ export default function ThreadOptionsModal({
                 </Text>
 
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Share Conversation"
                   style={({ pressed }) => [
                     styles.optionButton,
                     pressed && styles.optionButtonPressed,
@@ -210,6 +217,8 @@ export default function ThreadOptionsModal({
                 </Pressable>
 
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Export as Markdown"
                   style={({ pressed }) => [
                     styles.optionButton,
                     pressed && styles.optionButtonPressed,
@@ -221,6 +230,8 @@ export default function ThreadOptionsModal({
                 </Pressable>
 
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Export as JSON"
                   style={({ pressed }) => [
                     styles.optionButton,
                     pressed && styles.optionButtonPressed,
@@ -232,6 +243,8 @@ export default function ThreadOptionsModal({
                 </Pressable>
 
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={activeThread.is_pinned ? 'Unpin Thread' : 'Pin Thread'}
                   style={({ pressed }) => [
                     styles.optionButton,
                     pressed && styles.optionButtonPressed,
@@ -245,6 +258,8 @@ export default function ThreadOptionsModal({
                 </Pressable>
 
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Rename Thread"
                   style={({ pressed }) => [
                     styles.optionButton,
                     pressed && styles.optionButtonPressed,
@@ -256,6 +271,8 @@ export default function ThreadOptionsModal({
                 </Pressable>
 
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Delete Thread"
                   style={({ pressed }) => [
                     styles.optionButton,
                     styles.destructiveButton,
@@ -270,6 +287,8 @@ export default function ThreadOptionsModal({
                 </Pressable>
 
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel"
                   style={({ pressed }) => [
                     styles.cancelButton,
                     pressed && styles.cancelButtonPressed,
@@ -284,6 +303,7 @@ export default function ThreadOptionsModal({
                 <Text style={styles.editHeader}>Rename Thread</Text>
                 <TextInput
                   style={styles.textInput}
+                  accessibilityLabel="New thread title"
                   value={newTitle}
                   onChangeText={setNewTitle}
                   placeholder="Enter new title..."
@@ -293,6 +313,8 @@ export default function ThreadOptionsModal({
                 />
                 <View style={styles.editActionRow}>
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancel"
                     style={({ pressed }) => [
                       styles.editActionButton,
                       styles.editCancelButton,
@@ -303,6 +325,9 @@ export default function ThreadOptionsModal({
                     <Text style={styles.editCancelButtonText}>Cancel</Text>
                   </Pressable>
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Save"
+                    accessibilityState={{ disabled: isSaveDisabled }}
                     style={({ pressed }) => [
                       styles.editActionButton,
                       styles.editSaveButton,
