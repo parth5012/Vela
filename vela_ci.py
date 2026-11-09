@@ -52,6 +52,32 @@ BACKEND_ENV = {
     "PYTHONPATH": ".",
 }
 
+#: Coverage floors from map WF-541 decision #542. These NEVER go down — a PR
+#: may only ratchet them up (with evidence the new level holds). The backend
+#: floor is enforced by pytest-cov in the backend step; the client floor lives
+#: in `client/package.json` (`coverageThreshold`) and is enforced by the
+#: jest-coverage step.
+BACKEND_COVERAGE_FLOOR = 60
+
+#: `testPathIgnorePatterns` for the jest coverage lane. This REPLACES the
+#: `client/package.json` list (CLI patterns do not merge with config), so it
+#: repeats the config patterns verbatim, plus the two coverage-lane exclusions:
+#:
+#: - `perf.benchmark` / `perf.cuj` timing suites — coverage instrumentation
+#:   slows execution and breaks their timing ratchets. They stay in the main
+#:   jest step (and have their own `benchmark:ci` lane).
+#: - `__tests__/setup.test.tsx` — quarantined from THIS lane only (still runs
+#:   in the main step). Under instrumentation an RN Animated native call fires
+#:   before teardown and kills the worker; see docs/agents/flaky-policy.md.
+CLIENT_COVERAGE_IGNORE_PATTERNS = (
+    "/node_modules/",
+    "[\\/]__tests__[\\/]helpers[\\/]",
+    "[\\/]__tests__[\\/]fixtures[\\/]",
+    "/e2e/",
+    "perf\\.(benchmark|cuj)\\.test\\.",
+    "__tests__\\/setup\\.test\\.tsx",
+)
+
 _MAX_SUMMARY_LINES = 40
 
 
@@ -296,7 +322,16 @@ def build_steps(stack: str, *, ruff_base: str = DEFAULT_RUFF_BASE) -> list[Step]
         return [
             Step(
                 name="pytest",
-                cmd=["uv", "run", "pytest", "-q"],
+                # --cov-fail-under enforces the backend coverage floor
+                # (BACKEND_COVERAGE_FLOOR) in the gate only. Local
+                # `pytest -q` stays coverage-free: the same suite must pass
+                # without the overhead, and the gate is what blocks merges.
+                cmd=[
+                    "uv", "run", "pytest", "-q",
+                    "--cov=.",
+                    "--cov-report=term-missing:skip-covered",
+                    f"--cov-fail-under={BACKEND_COVERAGE_FLOOR}",
+                ],
                 cwd=BACKEND_DIR,
                 env=BACKEND_ENV,
             ),
@@ -320,11 +355,19 @@ def build_steps(stack: str, *, ruff_base: str = DEFAULT_RUFF_BASE) -> list[Step]
             )
         ]
     if stack == "client":
+        jest_coverage_cmd = ["npx", "jest", "--ci", "--coverage", "--maxWorkers=2"]
+        for pattern in CLIENT_COVERAGE_IGNORE_PATTERNS:
+            jest_coverage_cmd += ["--testPathIgnorePatterns", pattern]
         return [
             Step(name="arch", cmd=["npm", "run", "arch:check"], cwd=CLIENT_DIR),
             Step(name="eslint", cmd=["npm", "run", "lint"], cwd=CLIENT_DIR),
             Step(name="tsc", cmd=["npx", "tsc", "--noEmit"], cwd=CLIENT_DIR),
             Step(name="jest", cmd=["npx", "jest", "--ci", "--maxWorkers=2"], cwd=CLIENT_DIR),
+            # Coverage gate: same suite minus the perf timing lanes and the
+            # quarantined setup suite, with global thresholds (50%) from
+            # client/package.json. Kept a separate step so the main jest run
+            # above stays at full speed and includes every suite.
+            Step(name="jest-coverage", cmd=jest_coverage_cmd, cwd=CLIENT_DIR),
         ]
     if stack == "e2e":
         return [Step(name="playwright", cmd=["npx", "playwright", "test"], cwd=CLIENT_DIR)]

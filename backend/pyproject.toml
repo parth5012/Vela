@@ -39,6 +39,7 @@ dev = [
     "ipykernel>=7.3.0",
     "pytest>=8.1.1",
     "pytest-asyncio>=0.23.6",
+    "pytest-cov>=7.1.0",
     "ruff>=0.5.0",
 ]
 
@@ -48,6 +49,26 @@ asyncio_mode = "auto"
 markers = [
     "corpus: pinned transcript corpus replay (deterministic end-to-end fixtures)",
 ]
+
+# Coverage (pytest-cov / coverage.py). The CI gate runs
+# `pytest --cov=. --cov-fail-under=60` (see vela_ci.py BACKEND_COVERAGE_FLOOR):
+# 60% is the backend floor from map WF-541 decision #542 — it may only rise.
+# Only the omit list lives here; the threshold lives in the gate so local
+# `pytest -q` runs stay fast and green without coverage overhead.
+[tool.coverage.run]
+source = ["."]
+omit = [
+    "tests/*",
+    "scratch/*",
+    "scripts/*",
+    "corpus/*",
+    "evals/*",
+    "*/.venv/*",
+]
+
+[tool.coverage.report]
+skip_covered = true
+show_missing = true
 
 [tool.ruff]
 exclude = ["__pycache__", ".venv", ".pytest_cache", "*.ipynb", "scratch", "previous_chats.json"]

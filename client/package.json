@@ -122,7 +122,24 @@
       "**/__tests__/**/*.[jt]s?(x)",
       "**/__tests__/**/*.eval.ts",
       "**/?(*.)+(spec|test).[jt]s?(x)"
-    ]
+    ],
+    "collectCoverageFrom": [
+      "app/**/*.{js,jsx,ts,tsx}",
+      "components/**/*.{js,jsx,ts,tsx}",
+      "store/**/*.{js,jsx,ts,tsx}",
+      "utils/**/*.{js,jsx,ts,tsx}",
+      "hooks/**/*.{js,jsx,ts,tsx}",
+      "db/**/*.{js,jsx,ts,tsx}",
+      "types/**/*.{js,jsx,ts,tsx}"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "statements": 50,
+        "branches": 50,
+        "functions": 50,
+        "lines": 50
+      }
+    }
   },
   "private": true,
   "expo": {

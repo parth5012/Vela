@@ -80,13 +80,20 @@ def test_backend_steps_run_pytest_in_backend(gate):
     assert pytest_step.cwd == REPO_ROOT / "backend"
     assert pytest_step.cmd[:3] == ["uv", "run", "pytest"]
     assert pytest_step.env["DATABASE_URL"].startswith("sqlite")
+    # The backend coverage floor is enforced in the gate (60%, decision #542).
+    assert f"--cov-fail-under={gate.BACKEND_COVERAGE_FLOOR}" in pytest_step.cmd
 
 
 def test_client_steps_cover_lint_typecheck_and_tests(gate):
     steps = gate.build_steps("client")
-    assert [step.name for step in steps] == ["arch", "eslint", "tsc", "jest"]
+    assert [step.name for step in steps] == ["arch", "eslint", "tsc", "jest", "jest-coverage"]
     for step in steps:
         assert step.cwd == REPO_ROOT / "client"
+    # The coverage lane enforces the client floor (50%, package.json
+    # coverageThreshold) minus the perf-timing and quarantined suites.
+    coverage_step = steps[-1]
+    assert "--coverage" in coverage_step.cmd
+    assert "perf\\.(benchmark|cuj)\\.test\\." in coverage_step.cmd
 
 
 def test_corpus_step_uses_the_corpus_mark(gate):
