@@ -70,6 +70,36 @@ jest.mock('../utils/ramDetection', () => {
   };
 });
 
+/**
+ * Flush async effects until `condition` holds, bounded so a genuinely
+ * broken render fails instead of hanging a worker. Every store/local
+ * setState lands inside act() — fixed 50ms sleeps raced under full-suite
+ * worker contention (BUG-client-001).
+ */
+async function flushUntil(
+  condition: () => boolean,
+  { timeoutMs = 3000, intervalMs = 10 }: { timeoutMs?: number; intervalMs?: number } = {}
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  let ok = condition();
+  while (!ok && Date.now() < deadline) {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    });
+    ok = condition();
+  }
+  return ok;
+}
+
+function combinedText(component: renderer.ReactTestRenderer): string {
+  return component.root
+    .findAllByType('Text' as any)
+    .map((n) => n.props.children)
+    .flat()
+    .join(' ')
+    .replace(/\s+/g, ' ');
+}
+
 describe('LocalAiScreen RAM Display (fail-closed detectRamBytes)', () => {
   // Track the mounted renderer so it unsubscribes from the store between
   // tests; otherwise a leftover instance re-runs its RAM effect during the
@@ -99,20 +129,19 @@ describe('LocalAiScreen RAM Display (fail-closed detectRamBytes)', () => {
     let component: renderer.ReactTestRenderer | undefined;
     await act(async () => {
       component = renderer.create(<LocalAiScreen />);
-      await new Promise((resolve) => setTimeout(resolve, 50));
     });
     mounted = component;
 
+    // detectRamBytes resolves async into the store, then the readout
+    // re-renders; poll for the rendered value rather than a fixed sleep.
+    expect(
+      await flushUntil(() => combinedText(component!).includes('Device RAM: 6.0 GB'))
+    ).toBe(true);
     expect(detectRamBytes).toHaveBeenCalledWith({ allowEmulator: true });
 
-    const allTextNodes = component!.root.findAllByType('Text' as any);
-    const combinedText = allTextNodes
-      .map((n) => n.props.children)
-      .flat()
-      .join(' ')
-      .replace(/\s+/g, ' ');
-    expect(combinedText).toContain('Device RAM: 6.0 GB');
-    expect(combinedText).not.toContain('Device RAM: 0.0 GB');
+    const text = combinedText(component!);
+    expect(text).toContain('Device RAM: 6.0 GB');
+    expect(text).not.toContain('Device RAM: 0.0 GB');
   });
 
   it('does not simulate 6 GB RAM on a production Android build', async () => {
@@ -129,10 +158,16 @@ describe('LocalAiScreen RAM Display (fail-closed detectRamBytes)', () => {
       let component: renderer.ReactTestRenderer | undefined;
       await act(async () => {
         component = renderer.create(<LocalAiScreen />);
-        await new Promise((resolve) => setTimeout(resolve, 50));
       });
       mounted = component;
 
+      expect(
+        await flushUntil(() =>
+          (detectRamBytes as jest.Mock).mock.calls.some(
+            (call) => call[0]?.allowEmulator === false
+          )
+        )
+      ).toBe(true);
       expect(detectRamBytes).toHaveBeenCalledWith({ allowEmulator: false });
     } finally {
       (global as { __DEV__?: boolean }).__DEV__ = originalDev;
@@ -154,18 +189,19 @@ describe('LocalAiScreen RAM Display (fail-closed detectRamBytes)', () => {
       let component: renderer.ReactTestRenderer | undefined;
       await act(async () => {
         component = renderer.create(<LocalAiScreen />);
-        await new Promise((resolve) => setTimeout(resolve, 50));
       });
       mounted = component;
+
+      // Wait for the 0-byte resolution to render the honest unavailable
+      // readout; the store write + re-render is async.
+      expect(
+        await flushUntil(() =>
+          combinedText(component!).includes("Device RAM: unavailable — couldn't read total memory")
+        )
+      ).toBe(true);
       expect(detectRamBytes).toHaveBeenCalledWith({ allowEmulator: false });
 
-      const allText = () =>
-        component!.root
-          .findAllByType('Text' as any)
-          .map((n) => n.props.children)
-          .flat()
-          .join(' ')
-          .replace(/\s+/g, ' ');
+      const allText = () => combinedText(component!);
 
       // RAM readout stays honest: no simulated value, and it says so.
       expect(allText()).toContain("Device RAM: unavailable — couldn't read total memory");
@@ -185,6 +221,11 @@ describe('LocalAiScreen RAM Display (fail-closed detectRamBytes)', () => {
 });
 
 describe('LocalAiScreen LiteRT Crash Badge', () => {
+  // Same leak guard as the RAM describe: every mounted renderer unmounts
+  // in afterEach so a leftover instance cannot re-run its crash-flag /
+  // RAM effects (and re-render) during the next test's store writes.
+  let mounted: renderer.ReactTestRenderer | undefined;
+
   beforeEach(async () => {
     jest.clearAllMocks();
     await AsyncStorage.clear();
@@ -196,6 +237,12 @@ describe('LocalAiScreen LiteRT Crash Badge', () => {
   });
 
   afterEach(async () => {
+    if (mounted) {
+      act(() => {
+        mounted!.unmount();
+      });
+      mounted = undefined;
+    }
     await clearGpuCrashFlag();
   });
 
@@ -214,9 +261,16 @@ describe('LocalAiScreen LiteRT Crash Badge', () => {
 
     await act(async () => {
       component = renderer.create(<LocalAiScreen />);
-      // Allow useEffect to read crash flag details
-      await new Promise((resolve) => setTimeout(resolve, 50));
     });
+    mounted = component;
+
+    // getGpuCrashFlagDetails() resolves async into local state; poll for
+    // the badge instead of a fixed sleep.
+    expect(
+      await flushUntil(() =>
+        component!.root.findAllByProps({ accessibilityRole: 'alert' }).length > 0
+      )
+    ).toBe(true);
 
     const root = component!.root;
 
@@ -239,8 +293,7 @@ describe('LocalAiScreen LiteRT Crash Badge', () => {
 
     // 2. Click clear button
     await act(async () => {
-      clearButton.props.onPress();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await clearButton.props.onPress();
     });
 
     // Crash flag must be cleared from storage
@@ -256,7 +309,17 @@ describe('LocalAiScreen LiteRT Crash Badge', () => {
 
     await act(async () => {
       component = renderer.create(<LocalAiScreen />);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    mounted = component;
+
+    // Let the crash-flag effect resolve (into state, outside act would
+    // warn) then assert the badge stayed absent.
+    await flushUntil(() => useConfigStore.getState().detectedRamBytes === 6 * 1024 * 1024 * 1024);
+    // Negative case: no badge to poll for — drain pending microtasks
+    // (crash-flag storage read) so the resolved state has rendered.
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
     });
 
     const root = component!.root;

@@ -40,22 +40,54 @@ jest.mock('../db/client', () => ({
   default: null,
 }));
 
+/**
+ * Flush async effects until `condition` holds, bounded so a genuinely
+ * broken render fails instead of hanging a worker. Every store/local
+ * setState lands inside act() — a single `await Promise.resolve()`
+ * raced under full-suite worker contention (BUG-client-001).
+ */
+async function flushUntil(
+  condition: () => boolean,
+  { timeoutMs = 3000, intervalMs = 10 }: { timeoutMs?: number; intervalMs?: number } = {}
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  let ok = condition();
+  while (!ok && Date.now() < deadline) {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    });
+    ok = condition();
+  }
+  return ok;
+}
+
+function joinedText(root: any): string {
+  return root
+    .findAllByType('Text')
+    .map((t: ReactTestInstance) => t.props.children)
+    .flat(Infinity)
+    .join(' ');
+}
+
 describe('Cloud Providers and Connection Settings Screens', () => {
   beforeEach(() => {
     mockPush.mockClear();
-    useConfigStore.getState().clearConfig();
+    // clearConfig() notifies every subscribed screen; wrap it so a
+    // leftover instance can never re-render outside act().
+    act(() => {
+      useConfigStore.getState().clearConfig();
+    });
   });
 
   it('renders CloudProvidersScreen with all 6 provider cards', async () => {
     let component: any;
     await act(async () => {
       component = renderer.create(<CloudProvidersScreen />);
-      await Promise.resolve();
     });
 
     const root = component.root;
-    const texts = root.findAllByType('Text').map((t: ReactTestInstance) => t.props.children);
-    const joined = texts.flat(Infinity).join(' ');
+    expect(await flushUntil(() => joinedText(root).includes('Google Gemini'))).toBe(true);
+    const joined = joinedText(root);
 
     expect(joined).toContain('Google Gemini');
     expect(joined).toContain('OpenAI');
@@ -74,9 +106,9 @@ describe('Cloud Providers and Connection Settings Screens', () => {
     let component: any;
     await act(async () => {
       component = renderer.create(<ConnectionScreen />);
-      await Promise.resolve();
     });
 
+    expect(await flushUntil(() => joinedText(component.root).includes('Server'))).toBe(true);
     expect(useConfigStore.getState().connectionMode).toBe('server');
 
     act(() => {
@@ -105,8 +137,8 @@ describe('Cloud Providers and Connection Settings Screens', () => {
     let component: any;
     await act(async () => {
       component = renderer.create(<ConnectionScreen />);
-      await Promise.resolve();
     });
+    expect(await flushUntil(() => joinedText(component.root).includes('Server'))).toBe(true);
 
     const root = component.root;
     // Find Server pill
@@ -138,10 +170,10 @@ describe('Cloud Providers and Connection Settings Screens', () => {
     let component: any;
     await act(async () => {
       component = renderer.create(<CloudProvidersScreen />);
-      await Promise.resolve();
     });
 
     const root = component.root;
+    expect(await flushUntil(() => joinedText(root).includes('OpenRouter'))).toBe(true);
     // Find OpenRouter card header to expand it
     const openrouterHeader = root.find(
       (node: any) => node.type === 'Text' && node.children.includes('OpenRouter')
@@ -178,12 +210,11 @@ describe('Cloud Providers and Connection Settings Screens', () => {
     let component: any;
     await act(async () => {
       component = renderer.create(<CloudProvidersScreen />);
-      await Promise.resolve();
     });
 
     const root = component.root;
-    const texts = root.findAllByType('Text').map((t: ReactTestInstance) => t.props.children);
-    const joined = texts.flat(Infinity).join(' ');
+    expect(await flushUntil(() => joinedText(root).includes('Inference & Prompt Controls'))).toBe(true);
+    const joined = joinedText(root);
 
     expect(joined).toContain('Inference & Prompt Controls');
     expect(joined).toContain('Context Compression');
