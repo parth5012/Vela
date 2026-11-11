@@ -331,4 +331,19 @@ export const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     padding: 16,
   },
+  // #556: persistent "finish setup later" banner (Settings → Permissions link).
+  setupBanner: {
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginBottom: 10,
+    gap: 2,
+  },
+  setupBannerTitle: {
+    fontWeight: '700',
+  },
+  setupBannerText: {
+    lineHeight: 16,
+  },
 });

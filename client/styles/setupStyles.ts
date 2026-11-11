@@ -237,4 +237,67 @@ export const styles = StyleSheet.create({
     marginBottom: 14,
     textAlign: 'center',
   },
+  // #556: permissions step — independent rows, one OS dialog each.
+  permRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#27272a',
+  },
+  permIcon: {
+    fontSize: FONT_SIZES.medium.logo,
+    marginTop: 2,
+  },
+  permTextContainer: {
+    flex: 1,
+  },
+  permTitle: {
+    color: '#f4f4f5',
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  permRationale: {
+    color: '#a1a1aa',
+    fontSize: 13,
+    lineHeight: FONT_SIZES.medium.subLineHeight,
+    marginBottom: 4,
+  },
+  permStatus: {
+    color: '#71717a',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  permActions: {
+    alignItems: 'flex-end',
+    gap: 6,
+  },
+  permBtn: {
+    backgroundColor: '#6366f1',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  permBtnPressed: {
+    opacity: 0.8,
+  },
+  permBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  permSkip: {
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#27272a',
+  },
+  permSkipText: {
+    color: '#a1a1aa',
+    fontSize: 13,
+    fontWeight: '600',
+  },
 });

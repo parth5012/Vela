@@ -11,6 +11,19 @@
 | 5 | Tap Save & Continue | Green checkmark visible | `screencap` + pixel check OR `uiautomator dump` + grep "verified" | 5s |
 | 6 | Auto-navigate | Chat screen loads | `uiautomator dump` + grep "Send" | 5s |
 
+## Addendum (#556 — onboarding permissions step)
+
+The wizard now has a permissions step between connection and chat:
+
+- After "Connect & Save" (or "Test & Start" / "Start with Local AI"), expect a
+  "Set Up Permissions" screen with independent rows for Notifications, Camera,
+  Microphone (each with Allow + "Not now") and an Accessibility "Set up" entry.
+- Tapping "Finish setup" navigates to chat. Steps 5–6 above therefore now end
+  at the permissions screen; chat loads only after "Finish setup".
+- Skip-tolerant: "Finish setup" is always available; no dialog is blocking.
+- The silent post-setup notification prompt was removed — the notifications
+  OS dialog only fires when the user taps "Allow" in the wizard.
+
 ## Fail Conditions
 
 - Setup screen never appears (app crash → check logcat for `ReactNativeJS|Hermes|SQLite`)

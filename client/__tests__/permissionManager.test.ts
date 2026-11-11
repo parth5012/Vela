@@ -122,6 +122,33 @@ describe('permissionManager', () => {
     });
   });
 
+  // #556: the onboarding wizard fires these three OS dialogs independently.
+  describe('onboarding permission requests (#556)', () => {
+    it('requests notifications through expo-notifications and maps the status', async () => {
+      const status = await requestPermission('notifications');
+      expect(status).toBe('granted');
+    });
+
+    it('returns honest undetermined for camera when expo-camera is not installed', async () => {
+      const status = await requestPermission('camera');
+      expect(status).toBe('undetermined');
+    });
+
+    it('returns honest undetermined for microphone when expo-av is not installed', async () => {
+      const status = await requestPermission('microphone');
+      expect(status).toBe('undetermined');
+    });
+
+    it('provides a one-line rationale for each onboarding dialog', () => {
+      const perms: OSPermission[] = ['notifications', 'camera', 'microphone'];
+      for (const perm of perms) {
+        const rationale = getRationale(perm);
+        expect(rationale.length).toBeGreaterThan(0);
+        expect(rationale.split('\n').length).toBe(1);
+      }
+    });
+  });
+
   describe('Finding 2: hardcoded package id guard', () => {
     it('asserts no hardcoded com.parth5012 or package: literal remains in permissionManager.ts', () => {
       // Arrange
