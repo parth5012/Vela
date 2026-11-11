@@ -2,7 +2,10 @@
 // point for the notifications OS dialog. registerAndPostToken must support a
 // "never request" mode so _layout.tsx cannot double-fire the OS dialog.
 import * as Notifications from 'expo-notifications';
-import { registerAndPostToken } from '../utils/pushRegistration';
+import {
+  registerAndPostToken,
+  __resetPushRegistrationForTests,
+} from '../utils/pushRegistration';
 import { useConfigStore } from '../store/useConfigStore';
 
 const mocks = Notifications as unknown as {
@@ -15,6 +18,7 @@ const mocks = Notifications as unknown as {
 describe('pushRegistration (#556 wizard-owned request)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    __resetPushRegistrationForTests();
     useConfigStore.getState().clearConfig();
     useConfigStore.getState().setConfig('https://api.vela.local', 'test-key');
     (globalThis as any).fetch = jest.fn().mockResolvedValue({ ok: true, status: 200 });
@@ -65,5 +69,38 @@ describe('pushRegistration (#556 wizard-owned request)', () => {
 
     expect(token).toBe('ExponentPushToken[tok]');
     expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  // #556 self-review (C1/C2): the wizard and the _layout effect can both fire
+  // registration when isConfigured flips — concurrent calls must share one
+  // in-flight registration and a completed one must not repeat.
+  it('shares one in-flight registration across concurrent callers (single POST)', async () => {
+    mocks.getPermissionsAsync.mockResolvedValue({ status: 'granted' });
+    mocks.getDevicePushTokenAsync.mockResolvedValue({ data: 'ExponentPushToken[tok]' });
+
+    const [a, b] = await Promise.all([registerAndPostToken(), registerAndPostToken()]);
+
+    expect(a).toBe('ExponentPushToken[tok]');
+    expect(b).toBe('ExponentPushToken[tok]');
+    const postCalls = (globalThis.fetch as jest.Mock).mock.calls.filter(
+      ([url]: [string]) => url === 'https://api.vela.local/api/config/device-token'
+    );
+    expect(postCalls).toHaveLength(1);
+  });
+
+  it('does not re-register after a successful registration this session', async () => {
+    mocks.getPermissionsAsync.mockResolvedValue({ status: 'granted' });
+    mocks.getDevicePushTokenAsync.mockResolvedValue({ data: 'ExponentPushToken[tok]' });
+
+    const first = await registerAndPostToken();
+    const second = await registerAndPostToken({ requestIfUndetermined: false });
+
+    expect(first).toBe('ExponentPushToken[tok]');
+    expect(second).toBeNull();
+    const postCalls = (globalThis.fetch as jest.Mock).mock.calls.filter(
+      ([url]: [string]) => url === 'https://api.vela.local/api/config/device-token'
+    );
+    expect(postCalls).toHaveLength(1);
+    expect(mocks.getDevicePushTokenAsync).toHaveBeenCalledTimes(1);
   });
 });

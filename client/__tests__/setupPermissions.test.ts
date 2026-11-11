@@ -1,6 +1,7 @@
 // #556: onboarding permission set + "finish setup later" banner logic.
 import {
   ONBOARDING_PERMISSIONS,
+  REQUESTABLE_PERMISSIONS,
   getMissingSetupPermissions,
 } from '../utils/setupPermissions';
 import type { OSPermission, OSPermissionStatus } from '../store/useConfigStore';
@@ -35,6 +36,17 @@ describe('setupPermissions (#556)', () => {
       expect(ONBOARDING_PERMISSIONS).not.toContain('background');
       expect(ONBOARDING_PERMISSIONS).not.toContain('phone');
       expect(ONBOARDING_PERMISSIONS).not.toContain('contacts');
+    });
+
+    it('exposes the three independently-requested OS dialogs in canonical order', () => {
+      // Accessibility is guide-only (not an OS dialog) and therefore not in
+      // the requestable list.
+      expect(REQUESTABLE_PERMISSIONS).toEqual([
+        'notifications',
+        'camera',
+        'microphone',
+      ]);
+      expect(REQUESTABLE_PERMISSIONS).not.toContain('accessibility' as any);
     });
   });
 
@@ -74,11 +86,27 @@ describe('setupPermissions (#556)', () => {
       ]);
     });
 
-    it('does not flag undetermined (never asked / not determinable on this build)', () => {
+    it('flags notifications as missing when only ever asked-not / undetermined', () => {
+      // Notifications is dismissible — granting via Settings → Permissions
+      // flips it to granted (the _layout polling effect re-checks on
+      // foreground), so 'undetermined' (never asked) must surface on the
+      // banner instead of silently disappearing.
+      const store = storeWith({ notifications: 'undetermined' });
+      expect(getMissingSetupPermissions(store)).toEqual(['notifications']);
+    });
+
+    it('does not flag camera/microphone/accessibility as undetermined (never dismissible)', () => {
       // expo-camera and expo-av are optional deps not shipped in this build, so
       // camera/microphone can stay 'undetermined' forever; a banner keyed on
-      // undetermined would never dismiss. Only explicit denial counts.
-      const store = storeWith(); // everything undetermined
+      // undetermined would never dismiss. Accessibility is guide-only — same
+      // honesty applies when the native module cannot determine the service.
+      // Only explicit denial counts for these three.
+      const store = storeWith({
+        camera: 'undetermined',
+        microphone: 'undetermined',
+        accessibility: 'undetermined',
+        notifications: 'granted',
+      });
       expect(getMissingSetupPermissions(store)).toEqual([]);
     });
   });

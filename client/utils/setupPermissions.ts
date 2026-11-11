@@ -8,6 +8,23 @@
 // ---------------------------------------------------------------------------
 import type { OSPermission, OSPermissionStatus } from '../store/useConfigStore';
 
+/**
+ * The three permissions the wizard requests as independent OS dialogs
+ * (accessibility is guide-only and therefore not part of this union).
+ */
+export type RequestablePermission = 'notifications' | 'camera' | 'microphone';
+
+export const REQUESTABLE_PERMISSIONS: readonly RequestablePermission[] = [
+  'notifications',
+  'camera',
+  'microphone',
+];
+
+/**
+ * Full onboarding set tracked by the wizard (#556). Accessibility is
+ * guide-only — no OS dialog — but its outcome is persisted by the wizard on
+ * step finish, so it stays in the banner list for the denied path.
+ */
 export const ONBOARDING_PERMISSIONS: readonly OSPermission[] = [
   'notifications',
   'camera',
@@ -19,13 +36,22 @@ export const ONBOARDING_PERMISSIONS: readonly OSPermission[] = [
  * Permissions that count as "missing" after setup for the persistent
  * "finish setup later" banner in chat (client/app/index.tsx).
  *
- * Only explicit denial counts. 'undetermined' means never asked or not
- * determinable on this build (expo-camera / expo-av are optional deps not
- * shipped), so keying the banner on undetermined would keep it on screen
- * forever. The Settings → Permissions hub remains the place to resolve those.
+ * - notifications: anything not granted counts — 'undetermined' here means
+ *   "never asked", which is dismissible (granting via Settings → Permissions
+ *   flips it granted, and the _layout polling effect re-checks on foreground).
+ * - camera / microphone / accessibility: explicit denial only. They can stay
+ *   'undetermined' forever on builds without expo-camera / expo-av (optional
+ *   deps not shipped) or without the accessibility native module, so keying
+ *   the banner on undetermined would keep it on screen permanently.
  */
 export function getMissingSetupPermissions(
   osPermissions: Record<OSPermission, OSPermissionStatus>
 ): OSPermission[] {
-  return ONBOARDING_PERMISSIONS.filter((perm) => osPermissions[perm] === 'denied');
+  return ONBOARDING_PERMISSIONS.filter((perm) => {
+    const status = osPermissions[perm];
+    if (perm === 'notifications') {
+      return status !== 'granted';
+    }
+    return status === 'denied';
+  });
 }

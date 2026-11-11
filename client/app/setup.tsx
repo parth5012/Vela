@@ -27,6 +27,7 @@ import {
   getRationale,
   type PermissionStatus,
 } from '../utils/permissionManager';
+import type { RequestablePermission } from '../utils/setupPermissions';
 import { registerAndPostToken } from '../utils/pushRegistration';
 import AccessibilityGuide from '../components/ui/AccessibilityGuide';
 import { styles } from '../styles/setupStyles';
@@ -37,8 +38,9 @@ type StandaloneSubtype = 'cloud' | 'local';
 // #556: the wizard asks notifications, camera and microphone as INDEPENDENT
 // OS dialogs (each individually skippable, never blocking, no cascade), in
 // this order. Accessibility is offered through AccessibilityGuide instead.
-const REQUESTABLE_PERMISSIONS: {
-  perm: 'notifications' | 'camera' | 'microphone';
+// The requestable keys come from utils/setupPermissions (single source).
+const REQUESTABLE_ROWS: {
+  perm: RequestablePermission;
   label: string;
   icon: string;
 }[] = [
@@ -123,7 +125,7 @@ export default function SetupScreen() {
   // from them. `pendingTransition` holds the connection finalize step until
   // the user finishes the permissions step.
   const [permStatuses, setPermStatuses] = useState<
-    Record<'notifications' | 'camera' | 'microphone', PermissionStatus>
+    Record<RequestablePermission, PermissionStatus>
   >({
     notifications: 'undetermined',
     camera: 'undetermined',
@@ -367,9 +369,7 @@ export default function SetupScreen() {
   };
 
   // #556: fire ONE OS dialog for this permission (independent, no cascade).
-  const handleRequestPermission = async (
-    perm: 'notifications' | 'camera' | 'microphone'
-  ) => {
+  const handleRequestPermission = async (perm: RequestablePermission) => {
     const status = await requestPermission(perm);
     setPermStatuses((prev) => ({ ...prev, [perm]: status }));
     setOSPermission(perm, status);
@@ -377,9 +377,7 @@ export default function SetupScreen() {
 
   // #556: "Not now" skips just this one — persist the current OS state
   // (honest 'undetermined' when never asked) without firing a dialog.
-  const handleSkipPermission = async (
-    perm: 'notifications' | 'camera' | 'microphone'
-  ) => {
+  const handleSkipPermission = async (perm: RequestablePermission) => {
     const status = await checkPermission(perm);
     setPermStatuses((prev) => ({ ...prev, [perm]: status }));
     setOSPermission(perm, status);
@@ -391,12 +389,29 @@ export default function SetupScreen() {
   // requests the dialog, so this is the single canonical request point.
   // NEVER blocks: Finish is available no matter what was skipped or denied.
   const handleFinishSetup = async () => {
+    // Persist the accessibility outcome too — it is guide-only (granted in
+    // system Settings), so the wizard re-checks on finish to keep the chat
+    // banner invariant wizard-owned.
+    try {
+      const accessibilityStatus = await checkPermission('accessibility');
+      setOSPermission('accessibility', accessibilityStatus);
+    } catch {
+      // ignore — the _layout polling effect records the OS state as fallback
+    }
+
     const transition = pendingTransition.current;
     pendingTransition.current = null;
     if (transition) {
       await transition();
     }
-    if (useConfigStore.getState().osPermissions.notifications === 'granted') {
+    // Token registration is a server-mode concern: standalone-cloud/local
+    // intentionally do not register push (no backend to post the token to).
+    // The gate is explicit here rather than relying on the util's internal
+    // apiUrl skip, so the intent is visible.
+    if (
+      useConfigStore.getState().connectionMode === 'server' &&
+      useConfigStore.getState().osPermissions.notifications === 'granted'
+    ) {
       void registerAndPostToken();
     }
   };
@@ -690,7 +705,7 @@ export default function SetupScreen() {
             <View style={styles.formContainer}>
               {/* #556: three independent OS dialogs, each individually
                   skippable, never blocking. No cascade — one tap, one dialog. */}
-              {REQUESTABLE_PERMISSIONS.map(({ perm, label, icon }) => (
+              {REQUESTABLE_ROWS.map(({ perm, label, icon }) => (
                 <View key={perm} style={styles.permRow}>
                   <Text style={styles.permIcon}>{icon}</Text>
                   <View style={styles.permTextContainer}>
