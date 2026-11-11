@@ -62,15 +62,14 @@ async function postTokenToBackend(token: string): Promise<boolean> {
   }
 }
 
-export async function registerAndPostToken(
-  options?: { requestIfUndetermined?: boolean }
-): Promise<string | null> {
-  // #556: the onboarding wizard's permissions step is the canonical request
-  // point for the notifications OS dialog. Callers that must never trigger the
-  // dialog themselves (e.g. the _layout.tsx registration effect) pass
-  // requestIfUndetermined: false — they only register when permission was
-  // already granted.
-  const requestIfUndetermined = options?.requestIfUndetermined ?? true;
+// #556: session idempotency guards. The wizard and the _layout.tsx effect can
+// both fire registration when isConfigured flips — concurrent calls share one
+// in-flight promise, and a successful registration is not repeated this app
+// session (a failed one is, so a later grant can still register).
+let registrationInFlight: Promise<string | null> | null = null;
+let registeredThisSession = false;
+
+async function runRegistration(requestIfUndetermined: boolean): Promise<string | null> {
   try {
     await ensureAndroidChannels();
 
@@ -109,6 +108,44 @@ export async function registerAndPostToken(
     console.warn('[pushRegistration] registerAndPostToken failed', e);
     return null;
   }
+}
+
+export async function registerAndPostToken(
+  options?: { requestIfUndetermined?: boolean }
+): Promise<string | null> {
+  // #556: the onboarding wizard's permissions step is the canonical request
+  // point for the notifications OS dialog. Callers that must never trigger the
+  // dialog themselves (e.g. the _layout.tsx registration effect) pass
+  // requestIfUndetermined: false — they only register when permission was
+  // already granted.
+  const requestIfUndetermined = options?.requestIfUndetermined ?? true;
+  if (registeredThisSession) {
+    console.log('[pushRegistration] Already registered this session — skipping (#556)');
+    return null;
+  }
+  if (registrationInFlight) {
+    return registrationInFlight;
+  }
+  const promise = runRegistration(requestIfUndetermined);
+  registrationInFlight = promise;
+  try {
+    const token = await promise;
+    if (token) {
+      registeredThisSession = true;
+    }
+    return token;
+  } finally {
+    registrationInFlight = null;
+  }
+}
+
+/**
+ * Test-only: reset the session idempotency guards (Jest leaks module state
+ * across tests in one file).
+ */
+export function __resetPushRegistrationForTests(): void {
+  registrationInFlight = null;
+  registeredThisSession = false;
 }
 
 export function setupTokenRefreshListener(): Notifications.Subscription | null {

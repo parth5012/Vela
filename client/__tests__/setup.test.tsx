@@ -4,6 +4,7 @@ import SetupScreen from '../app/setup';
 import { useConfigStore } from '../store/useConfigStore';
 import * as Notifications from 'expo-notifications';
 import { registerAndPostToken } from '../utils/pushRegistration';
+import * as permissionManager from '../utils/permissionManager';
 import { getMissingSetupPermissions } from '../utils/setupPermissions';
 
 // #556: the wizard owns push registration when notifications are granted.
@@ -175,6 +176,20 @@ describe('SetupScreen', () => {
     });
 
     // #556: the wizard now shows the permissions step before finishing.
+    // Grant notifications so the server-only registration gate is the only
+    // thing that can suppress registration on this standalone path.
+    const allowNode = root.find(
+      (node: any) => node.props.accessibilityLabel === 'Allow notifications'
+    );
+    let allowBtn = allowNode;
+    while (allowBtn && !allowBtn.props.onPress) {
+      allowBtn = allowBtn.parent;
+    }
+    await act(async () => {
+      await allowBtn.props.onPress();
+    });
+    expect(useConfigStore.getState().osPermissions.notifications).toBe('granted');
+
     await pressButtonWithText(root, 'Finish setup');
 
     const configState = useConfigStore.getState();
@@ -182,6 +197,10 @@ describe('SetupScreen', () => {
     expect(configState.activeCloudProvider).toBe('gemini');
     expect(configState.cloudApiKeys.gemini).toBe('sk-gemini-test-key');
     expect(configState.isConfigured).toBe(true);
+
+    // #556 self-review: token registration is gated to server mode — even
+    // with notifications granted, the standalone path must not register push.
+    expect(registerAndPostToken).not.toHaveBeenCalled();
   });
 
   it('configures standalone local AI mode', async () => {
@@ -381,6 +400,30 @@ describe('SetupScreen', () => {
     expect(useConfigStore.getState().connectionMode).toBe('server');
     expect(registerAndPostToken).toHaveBeenCalledTimes(1);
     expect(getMissingSetupPermissions(useConfigStore.getState().osPermissions)).toEqual([]);
+  });
+
+  it('persists the accessibility outcome from the guide-only row on finish (#556 self-review)', async () => {
+    // Native DeviceAgent reports the service state; simulate "service off".
+    const checkSpy = jest
+      .spyOn(permissionManager, 'checkPermission')
+      .mockResolvedValue('denied');
+    try {
+      let component: any;
+      act(() => {
+        component = renderer.create(<SetupScreen />);
+      });
+      const root = component.root;
+      await reachPermissionsStepViaServer(root);
+
+      await pressButtonWithText(root, 'Finish setup');
+
+      // The wizard owns the accessibility state too — finish re-checks and
+      // persists so the chat banner invariant is wizard-driven.
+      expect(useConfigStore.getState().osPermissions.accessibility).toBe('denied');
+      expect(useConfigStore.getState().isConfigured).toBe(true);
+    } finally {
+      checkSpy.mockRestore();
+    }
   });
 
   it('skip path: "Not now" skips only that permission and does not register push', async () => {
