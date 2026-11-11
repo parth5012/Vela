@@ -26,7 +26,7 @@ if (process.env.EXPO_PUBLIC_E2E === '1') {
 import * as Notifications from 'expo-notifications';
 import { SafetyDialog } from '../components/ui/SafetyDialog';
 import { persistentWebviewContainerStyle, persistentWebviewPointerEvents } from '../utils/persistentWebviewStyle';
-import { registerAndPostToken, setupTokenRefreshListener } from '../utils/pushRegistration';
+import { registerAndPostToken } from '../utils/pushRegistration';
 import { routeByType } from '../utils/notificationRouting';
 
 Notifications.setNotificationHandler({
@@ -153,33 +153,17 @@ export default function RootLayout() {
   // point for the notifications OS dialog. This effect re-registers push on
   // later launches, but must never request the permission itself (that would
   // double-fire the OS dialog right after setup) — requestIfUndetermined: false.
+  // The token refresh listener is owned by the util (attached once per app
+  // session, even on short-circuit), so nothing to subscribe/clean up here.
   useEffect(() => {
     if (!hasHydrated || !isConfigured) return;
-    let refreshSub: Notifications.Subscription | null = null;
-    let cancelled = false;
     // Cold startup optimization (WF-427-04): defer FCM push registration after interactions
     const task = InteractionManager.runAfterInteractions(() => {
-      // Fire registration; on success register refresh listener. Failures are silent+logged inside util.
-      registerAndPostToken({ requestIfUndetermined: false }).then((token) => {
-        if (cancelled) return;
-        // Only listen for refresh if permission was granted (token obtained).
-        // If denied, listener is skipped; next app launch after grant will register.
-        if (!token) return;
-        try {
-          refreshSub = setupTokenRefreshListener();
-        } catch {
-          // silent
-        }
-      });
+      // Fire registration; failures are silent+logged inside util.
+      void registerAndPostToken({ requestIfUndetermined: false });
     });
     return () => {
-      cancelled = true;
       task.cancel();
-      try {
-        refreshSub?.remove();
-      } catch {
-        // ignore cleanup errors
-      }
     };
   }, [hasHydrated, isConfigured]);
 
