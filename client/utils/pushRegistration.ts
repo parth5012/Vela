@@ -62,13 +62,6 @@ async function postTokenToBackend(token: string): Promise<boolean> {
   }
 }
 
-// #556: session idempotency guards. The wizard and the _layout.tsx effect can
-// both fire registration when isConfigured flips — concurrent calls share one
-// in-flight promise, and a successful registration is not repeated this app
-// session (a failed one is, so a later grant can still register).
-let registrationInFlight: Promise<string | null> | null = null;
-let registeredThisSession = false;
-
 async function runRegistration(requestIfUndetermined: boolean): Promise<string | null> {
   try {
     await ensureAndroidChannels();
@@ -110,19 +103,43 @@ async function runRegistration(requestIfUndetermined: boolean): Promise<string |
   }
 }
 
+// #556: session idempotency guards. The wizard and the _layout.tsx effect can
+// both fire registration when isConfigured flips — concurrent calls share one
+// in-flight promise, and a successful registration is not repeated this app
+// session (a failed one is, so a later grant can still register). The token
+// refresh listener is attached exactly once per app session, independent of
+// whether registration proceeds.
+let registrationInFlight: Promise<string | null> | null = null;
+let registeredThisSession = false;
+let refreshListenerAttached = false;
+
+function attachTokenRefreshListenerOnce(): void {
+  if (refreshListenerAttached) return;
+  refreshListenerAttached = true;
+  try {
+    setupTokenRefreshListener();
+  } catch {
+    // silent — refresh handling degrades to next-launch re-registration
+  }
+}
+
 export async function registerAndPostToken(
   options?: { requestIfUndetermined?: boolean }
 ): Promise<string | null> {
+  // #556: attach the refresh listener BEFORE any early return so a
+  // short-circuit (already-registered this session or in-flight adoption)
+  // still leaves the session covered for push token refreshes.
+  attachTokenRefreshListenerOnce();
+  if (registeredThisSession) {
+    console.log('[pushRegistration] Already registered this session — skipping (#556)');
+    return null;
+  }
   // #556: the onboarding wizard's permissions step is the canonical request
   // point for the notifications OS dialog. Callers that must never trigger the
   // dialog themselves (e.g. the _layout.tsx registration effect) pass
   // requestIfUndetermined: false — they only register when permission was
   // already granted.
   const requestIfUndetermined = options?.requestIfUndetermined ?? true;
-  if (registeredThisSession) {
-    console.log('[pushRegistration] Already registered this session — skipping (#556)');
-    return null;
-  }
   if (registrationInFlight) {
     return registrationInFlight;
   }
@@ -141,11 +158,13 @@ export async function registerAndPostToken(
 
 /**
  * Test-only: reset the session idempotency guards (Jest leaks module state
- * across tests in one file).
+ * across tests in one file). Clears the registration guard, the in-flight
+ * handle and the refresh-listener once-flag.
  */
 export function __resetPushRegistrationForTests(): void {
   registrationInFlight = null;
   registeredThisSession = false;
+  refreshListenerAttached = false;
 }
 
 export function setupTokenRefreshListener(): Notifications.Subscription | null {

@@ -13,6 +13,7 @@ const mocks = Notifications as unknown as {
   requestPermissionsAsync: jest.Mock;
   getDevicePushTokenAsync: jest.Mock;
   setNotificationChannelAsync: jest.Mock;
+  addPushTokenListener: jest.Mock;
 };
 
 describe('pushRegistration (#556 wizard-owned request)', () => {
@@ -102,5 +103,19 @@ describe('pushRegistration (#556 wizard-owned request)', () => {
     );
     expect(postCalls).toHaveLength(1);
     expect(mocks.getDevicePushTokenAsync).toHaveBeenCalledTimes(1);
+  });
+
+  // #556 final self-review: a short-circuit (already-registered this session)
+  // must not leave the session without token-refresh handling — the listener
+  // is attached exactly once per session, including on the success path.
+  it('attaches the token refresh listener exactly once per session, even when short-circuiting', async () => {
+    mocks.getPermissionsAsync.mockResolvedValue({ status: 'granted' });
+    mocks.getDevicePushTokenAsync.mockResolvedValue({ data: 'ExponentPushToken[tok]' });
+
+    await registerAndPostToken(); // success path
+    await registerAndPostToken(); // short-circuits on registeredThisSession
+    await registerAndPostToken(); // still short-circuits
+
+    expect(mocks.addPushTokenListener).toHaveBeenCalledTimes(1);
   });
 });
