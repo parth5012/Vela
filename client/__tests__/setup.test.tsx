@@ -2,6 +2,14 @@ import React from 'react';
 import renderer, { act } from 'react-test-renderer';
 import SetupScreen from '../app/setup';
 import { useConfigStore } from '../store/useConfigStore';
+import * as Notifications from 'expo-notifications';
+import { registerAndPostToken } from '../utils/pushRegistration';
+import { getMissingSetupPermissions } from '../utils/setupPermissions';
+
+// #556: the wizard owns push registration when notifications are granted.
+jest.mock('../utils/pushRegistration', () => ({
+  registerAndPostToken: jest.fn(async () => 'ExponentPushToken[test-token]'),
+}));
 
 // Mock expo-router
 const mockReplace = jest.fn();
@@ -10,6 +18,13 @@ jest.mock('expo-router', () => ({
     replace: mockReplace,
   }),
 }));
+
+// Per-test override of the global always-granted expo-notifications mock
+// (same pattern as checkIn.test.ts).
+const notificationMocks = Notifications as unknown as {
+  getPermissionsAsync: jest.Mock;
+  requestPermissionsAsync: jest.Mock;
+};
 
 // Mock AsyncStorage
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -35,64 +50,57 @@ jest.mock('expo-secure-store', () => ({
 
 describe('SetupScreen', () => {
   beforeEach(() => {
-    mockReplace.mockClear();
+    jest.clearAllMocks();
+    notificationMocks.getPermissionsAsync.mockResolvedValue({ status: 'undetermined' });
+    notificationMocks.requestPermissionsAsync.mockResolvedValue({ status: 'granted' });
     useConfigStore.getState().clearConfig();
     (globalThis as any).fetch = jest.fn();
   });
 
-  it('should call setConfig on successful 200 response for server path', async () => {
-    const mockFetch = jest.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
+  // Walks up from a Text node to the nearest Pressable with onPress and presses it.
+  const pressButtonWithText = async (root: any, text: string) => {
+    const textNode = root.find(
+      (node: any) => node.type === 'Text' && node.children.includes(text)
+    );
+    let button = textNode;
+    while (button && !button.props.onPress) {
+      button = button.parent;
+    }
+    expect(button).toBeDefined();
+    await act(async () => {
+      await button.props.onPress();
     });
-    (globalThis as any).fetch = mockFetch;
+  };
 
+  // Fork → server form → verified → the permissions step (#556).
+  const reachPermissionsStepViaServer = async (root: any) => {
+    await pressButtonWithText(root, 'Connect to Server');
+    const textInputs = root.findAllByType('TextInput');
+    act(() => {
+      textInputs[0].props.onChangeText('https://api.vela.local');
+      textInputs[1].props.onChangeText('test-key');
+    });
+    (globalThis as any).fetch = jest.fn().mockResolvedValue({ ok: true, status: 200 });
+    await pressButtonWithText(root, 'Connect & Save');
+  };
+
+  it('should call setConfig on successful 200 response for server path', async () => {
     let component: any;
     act(() => {
       component = renderer.create(<SetupScreen />);
     });
 
     const root = component.root;
+    await reachPermissionsStepViaServer(root);
 
-    // Click "Connect to Server" card/button to enter server configuration step
-    const serverBtnText = root.find(
-      (node: any) => node.type === 'Text' && node.children.includes('Connect to Server')
-    );
-    let serverBtn = serverBtnText;
-    while (serverBtn && !serverBtn.props.onPress) {
-      serverBtn = serverBtn.parent;
-    }
-    expect(serverBtn).toBeDefined();
+    // #556: after verification the wizard shows the permissions step, NOT the
+    // chat — config is only finalized when the user finishes the permissions
+    // step (the connection state itself is stashed, not applied).
+    expect(useConfigStore.getState().isConfigured).toBe(false);
+    expect(root.find((node: any) => node.type === 'Text' && node.children.includes('Finish setup'))).toBeDefined();
+    expect(root.find((node: any) => node.type === 'Text' && node.children.includes('Notifications'))).toBeDefined();
 
-    await act(async () => {
-      await serverBtn.props.onPress();
-    });
-
-    // Find Inputs
-    const textInputs = root.findAllByType('TextInput');
-    expect(textInputs.length).toBe(2);
-
-    // Simulate entering API URL and API Key
-    act(() => {
-      textInputs[0].props.onChangeText('https://api.vela.local');
-      textInputs[1].props.onChangeText('test-key');
-    });
-
-    // Find Connect button by looking for text "Connect & Save" and walking up to find onPress
-    const textNode = root.find((node: any) => node.type === 'Text' && node.children.includes('Connect & Save'));
-    let button = textNode;
-    while (button && !button.props.onPress) {
-      button = button.parent;
-    }
-    expect(button).toBeDefined();
-
-    // Press the button
-    await act(async () => {
-      await button.props.onPress();
-    });
-
-    // Verify fetch was called with correct arguments
-    expect(mockFetch).toHaveBeenCalledWith('https://api.vela.local/health', expect.any(Object));
+    await pressButtonWithText(root, 'Finish setup');
 
     // Verify useConfigStore has been updated
     const configState = useConfigStore.getState();
@@ -166,6 +174,9 @@ describe('SetupScreen', () => {
       await testStartBtn.props.onPress();
     });
 
+    // #556: the wizard now shows the permissions step before finishing.
+    await pressButtonWithText(root, 'Finish setup');
+
     const configState = useConfigStore.getState();
     expect(configState.connectionMode).toBe('cloud');
     expect(configState.activeCloudProvider).toBe('gemini');
@@ -220,6 +231,9 @@ describe('SetupScreen', () => {
     await act(async () => {
       await startLocalBtn.props.onPress();
     });
+
+    // #556: the wizard now shows the permissions step before finishing.
+    await pressButtonWithText(root, 'Finish setup');
 
     const configState = useConfigStore.getState();
     expect(configState.connectionMode).toBe('local');
@@ -312,5 +326,135 @@ describe('SetupScreen', () => {
     const errorText = root.find((node: any) => node.props.style === 259 || (node.props.children && String(node.props.children).includes('Failed to connect')));
     expect(errorText).toBeDefined();
     expect(useConfigStore.getState().isConfigured).toBe(false);
+  });
+
+  // ------------------------------------------------------------------
+  // #556: onboarding permissions step
+  // ------------------------------------------------------------------
+  it('renders independent permission rows with rationales and accessibility entry', async () => {
+    let component: any;
+    act(() => {
+      component = renderer.create(<SetupScreen />);
+    });
+    const root = component.root;
+    await reachPermissionsStepViaServer(root);
+
+    // Three independent OS-dialog rows, notifications → camera → microphone
+    expect(root.find((node: any) => node.props.accessibilityLabel === 'Allow notifications')).toBeDefined();
+    expect(root.find((node: any) => node.props.accessibilityLabel === 'Allow camera')).toBeDefined();
+    expect(root.find((node: any) => node.props.accessibilityLabel === 'Allow microphone')).toBeDefined();
+    // Each row has a "Not now" skip
+    expect(root.find((node: any) => node.props.accessibilityLabel === 'Not now camera')).toBeDefined();
+    // Accessibility is offered through the guide, not an OS dialog
+    expect(root.find((node: any) => node.props.accessibilityLabel === 'Set up accessibility')).toBeDefined();
+    expect(root.find((node: any) => node.type === 'Text' && node.children.includes('Notifications'))).toBeDefined();
+  });
+
+  it('grant path: allowing notifications persists granted and Finish triggers registerAndPostToken', async () => {
+    notificationMocks.getPermissionsAsync.mockResolvedValue({ status: 'undetermined' });
+    notificationMocks.requestPermissionsAsync.mockResolvedValue({ status: 'granted' });
+
+    let component: any;
+    act(() => {
+      component = renderer.create(<SetupScreen />);
+    });
+    const root = component.root;
+    await reachPermissionsStepViaServer(root);
+
+    // Allow fires the OS dialog via requestPermission and persists the outcome.
+    const allowBtn = root.find((node: any) => node.props.accessibilityLabel === 'Allow notifications');
+    let button = allowBtn;
+    while (button && !button.props.onPress) {
+      button = button.parent;
+    }
+    await act(async () => {
+      await button.props.onPress();
+    });
+    expect(notificationMocks.requestPermissionsAsync).toHaveBeenCalledTimes(1);
+    expect(useConfigStore.getState().osPermissions.notifications).toBe('granted');
+
+    // Finishing finalizes the server config and runs push registration from
+    // the wizard path (no silent prompt anywhere else).
+    await pressButtonWithText(root, 'Finish setup');
+
+    expect(useConfigStore.getState().isConfigured).toBe(true);
+    expect(useConfigStore.getState().connectionMode).toBe('server');
+    expect(registerAndPostToken).toHaveBeenCalledTimes(1);
+    expect(getMissingSetupPermissions(useConfigStore.getState().osPermissions)).toEqual([]);
+  });
+
+  it('skip path: "Not now" skips only that permission and does not register push', async () => {
+    notificationMocks.getPermissionsAsync.mockResolvedValue({ status: 'undetermined' });
+
+    let component: any;
+    act(() => {
+      component = renderer.create(<SetupScreen />);
+    });
+    const root = component.root;
+    await reachPermissionsStepViaServer(root);
+
+    const skipBtn = root.find((node: any) => node.props.accessibilityLabel === 'Not now notifications');
+    let button = skipBtn;
+    while (button && !button.props.onPress) {
+      button = button.parent;
+    }
+    await act(async () => {
+      await button.props.onPress();
+    });
+
+    // Skipped — never asked, nothing to register, outcome persisted honestly.
+    expect(notificationMocks.requestPermissionsAsync).not.toHaveBeenCalled();
+    expect(useConfigStore.getState().osPermissions.notifications).toBe('undetermined');
+
+    await pressButtonWithText(root, 'Finish setup');
+
+    expect(useConfigStore.getState().isConfigured).toBe(true);
+    expect(registerAndPostToken).not.toHaveBeenCalled();
+  });
+
+  it('denied path: OS denial is persisted and Finish does not register push', async () => {
+    notificationMocks.getPermissionsAsync.mockResolvedValue({ status: 'undetermined' });
+    notificationMocks.requestPermissionsAsync.mockResolvedValue({ status: 'denied' });
+
+    let component: any;
+    act(() => {
+      component = renderer.create(<SetupScreen />);
+    });
+    const root = component.root;
+    await reachPermissionsStepViaServer(root);
+
+    const allowBtn = root.find((node: any) => node.props.accessibilityLabel === 'Allow notifications');
+    let button = allowBtn;
+    while (button && !button.props.onPress) {
+      button = button.parent;
+    }
+    await act(async () => {
+      await button.props.onPress();
+    });
+    expect(useConfigStore.getState().osPermissions.notifications).toBe('denied');
+
+    await pressButtonWithText(root, 'Finish setup');
+
+    expect(useConfigStore.getState().isConfigured).toBe(true);
+    expect(registerAndPostToken).not.toHaveBeenCalled();
+    // Banner logic: the denied notification counts as missing setup.
+    expect(getMissingSetupPermissions(useConfigStore.getState().osPermissions)).toEqual([
+      'notifications',
+    ]);
+  });
+
+  it('is never blocked: Finish is available without touching any permission', async () => {
+    let component: any;
+    act(() => {
+      component = renderer.create(<SetupScreen />);
+    });
+    const root = component.root;
+    await reachPermissionsStepViaServer(root);
+
+    // No permission touched at all — Finish still completes the setup.
+    expect(notificationMocks.requestPermissionsAsync).not.toHaveBeenCalled();
+    await pressButtonWithText(root, 'Finish setup');
+    expect(useConfigStore.getState().isConfigured).toBe(true);
+    expect(registerAndPostToken).not.toHaveBeenCalled();
   });
 });

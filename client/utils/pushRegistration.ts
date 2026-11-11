@@ -62,13 +62,25 @@ async function postTokenToBackend(token: string): Promise<boolean> {
   }
 }
 
-export async function registerAndPostToken(): Promise<string | null> {
+export async function registerAndPostToken(
+  options?: { requestIfUndetermined?: boolean }
+): Promise<string | null> {
+  // #556: the onboarding wizard's permissions step is the canonical request
+  // point for the notifications OS dialog. Callers that must never trigger the
+  // dialog themselves (e.g. the _layout.tsx registration effect) pass
+  // requestIfUndetermined: false — they only register when permission was
+  // already granted.
+  const requestIfUndetermined = options?.requestIfUndetermined ?? true;
   try {
     await ensureAndroidChannels();
 
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
     if (existingStatus !== 'granted') {
+      if (!requestIfUndetermined) {
+        console.log('[pushRegistration] Notifications not granted yet — wizard owns the request (#556), skipping registration');
+        return null;
+      }
       const { status } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
     }

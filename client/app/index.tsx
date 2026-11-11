@@ -70,6 +70,7 @@ import {
   shouldPrompt,
   type OSPermission,
 } from '../utils/permissionManager';
+import { getMissingSetupPermissions } from '../utils/setupPermissions';
 import PermissionRequestCard from '../components/chat/PermissionRequestCard';
 
 const generateUUID = () => {
@@ -596,6 +597,13 @@ export default function ChatScreen() {
   const localModelDownloadProgress = useConfigStore((state) => state.localModelDownloadProgress);
   const wifiOnlyDownload = useConfigStore((state) => state.wifiOnlyDownload);
   const setLocalModelDownloadProgress = useConfigStore((state) => state.setLocalModelDownloadProgress);
+
+  // #556: persistent "finish setup later" banner — shown while any onboarding
+  // permission was explicitly denied during setup; links to Settings →
+  // Permissions. Derived from the store so it hides as soon as everything
+  // requested is granted.
+  const osPermissions = useConfigStore((state) => state.osPermissions);
+  const missingSetupPermissions = getMissingSetupPermissions(osPermissions);
 
   // Chat State
   const threads = useChatStore((state) => state.threads);
@@ -1483,6 +1491,24 @@ export default function ChatScreen() {
     );
   };
 
+  // #556: persistent "finish setup later" banner, shown in both the thread
+  // view and the welcome screen while any onboarding permission was denied.
+  const setupPermissionsBanner = missingSetupPermissions.length > 0 ? (
+    <PressableScale
+      accessibilityRole="button"
+      accessibilityLabel="Finish setup: review permissions"
+      style={[styles.setupBanner, { backgroundColor: colors.glass, borderColor: colors.glassBorder }]}
+      onPress={() => router.push('/settings/permissions')}
+    >
+      <Text style={[styles.setupBannerTitle, { color: colors.text, fontSize: sizes.text }]}>
+        Finish setup later
+      </Text>
+      <Text style={[styles.setupBannerText, { color: colors.textMuted, fontSize: sizes.sub }]}>
+        {missingSetupPermissions.length} permission{missingSetupPermissions.length > 1 ? 's' : ''} still need your OK. Tap to review in Settings.
+      </Text>
+    </PressableScale>
+  ) : null;
+
   return (
     <LinearGradient
       colors={[colors.skyTop, colors.skyBottom]}
@@ -1504,6 +1530,7 @@ export default function ChatScreen() {
     >
       {activeThreadId ? (
         <View style={styles.chatArea}>
+          {setupPermissionsBanner}
           {/* Horizontal Agent Selector Bar */}
           <View style={{ height: agentBarShown ? AGENT_BAR_HEIGHT : 0, overflow: 'hidden' }}>
             <Animated.View style={{ transform: [{ translateY: agentBarSlide }] }}>
@@ -1650,6 +1677,7 @@ export default function ChatScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.welcomeScroll} keyboardShouldPersistTaps="handled">
+          {setupPermissionsBanner}
           <EmptyChatState
             colors={colors}
             sizes={sizes}

@@ -21,10 +21,31 @@ import {
 } from '../store/useConfigStore';
 import { syncHistoryWithBackend } from '../utils/history';
 import { testProviderConnection } from '../utils/providers/models';
+import {
+  requestPermission,
+  checkPermission,
+  getRationale,
+  type PermissionStatus,
+} from '../utils/permissionManager';
+import { registerAndPostToken } from '../utils/pushRegistration';
+import AccessibilityGuide from '../components/ui/AccessibilityGuide';
 import { styles } from '../styles/setupStyles';
 
-type SetupStep = 'fork' | 'server' | 'standalone';
+type SetupStep = 'fork' | 'server' | 'standalone' | 'permissions';
 type StandaloneSubtype = 'cloud' | 'local';
+
+// #556: the wizard asks notifications, camera and microphone as INDEPENDENT
+// OS dialogs (each individually skippable, never blocking, no cascade), in
+// this order. Accessibility is offered through AccessibilityGuide instead.
+const REQUESTABLE_PERMISSIONS: {
+  perm: 'notifications' | 'camera' | 'microphone';
+  label: string;
+  icon: string;
+}[] = [
+  { perm: 'notifications', label: 'Notifications', icon: '🔔' },
+  { perm: 'camera', label: 'Camera', icon: '📷' },
+  { perm: 'microphone', label: 'Microphone', icon: '🎙️' },
+];
 
 const CLOUD_OPTIONS: { slug: ProviderSlug; label: string }[] = [
   { slug: 'gemini', label: 'Gemini' },
@@ -38,8 +59,10 @@ const CLOUD_OPTIONS: { slug: ProviderSlug; label: string }[] = [
 // WF-447-06: the setup steps are ordered as the feeling curve (see
 // docs/FEELING-CURVE.md). fork = Recognition (what Vela is, one decision);
 // the server/standalone forms = Tension (the effort of credentials); the
-// verify success lines = Turn (effort converts into "Opening your chat.");
-// the chat screen's empty state = Substance; the first send = Commitment.
+// permissions step (#556) keeps the Tension→Turn handoff honest — optional,
+// individually skippable asks instead of a silent prompt; the verify success
+// lines = Turn (effort converts into "Opening your chat."); the chat screen's
+// empty state = Substance; the first send = Commitment.
 const HEADER_TEXTS: Record<SetupStep, { title: string; subtitle: string }> = {
   fork: {
     title: 'Get Started with Vela',
@@ -52,6 +75,10 @@ const HEADER_TEXTS: Record<SetupStep, { title: string; subtitle: string }> = {
   standalone: {
     title: 'Run Standalone',
     subtitle: 'No backend needed. Bring a Cloud API key or run a model on this device.',
+  },
+  permissions: {
+    title: 'Set Up Permissions',
+    subtitle: 'Vela asks only for what it needs. Each one is optional — skip any and finish anytime.',
   },
 };
 
@@ -90,6 +117,20 @@ export default function SetupScreen() {
   const [isTesting, setIsTesting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+
+  // #556: permissions step state. Outcomes are persisted to the config store
+  // via setOSPermission so the chat banner ("finish setup later") can derive
+  // from them. `pendingTransition` holds the connection finalize step until
+  // the user finishes the permissions step.
+  const [permStatuses, setPermStatuses] = useState<
+    Record<'notifications' | 'camera' | 'microphone', PermissionStatus>
+  >({
+    notifications: 'undetermined',
+    camera: 'undetermined',
+    microphone: 'undetermined',
+  });
+  const [guideVisible, setGuideVisible] = useState(false);
+  const pendingTransition = useRef<(() => void | Promise<void>) | null>(null);
 
   const isMounted = useRef(true);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -136,6 +177,7 @@ export default function SetupScreen() {
   const setCloudProviderConfig = useConfigStore((state) => state.setCloudProviderConfig);
   const setCloudApiKey = useConfigStore((state) => state.setCloudApiKey);
   const localModelName = useConfigStore((state) => state.localModelName);
+  const setOSPermission = useConfigStore((state) => state.setOSPermission);
 
   const handleSelectProvider = (slug: ProviderSlug) => {
     setCloudProvider(slug);
@@ -199,10 +241,13 @@ export default function SetupScreen() {
           syncHistoryWithBackend(formattedUrl, apiKey.trim());
         };
 
+        // #556: don't finalize yet — the permissions step runs before the
+        // chat, and Finish applies the transition.
+        pendingTransition.current = transition;
         if (process.env.NODE_ENV === 'test') {
-          transition();
+          setStep('permissions');
         } else {
-          timerRef.current = setTimeout(transition, 1500);
+          timerRef.current = setTimeout(() => setStep('permissions'), 1500);
         }
         return;
       } else {
@@ -294,12 +339,13 @@ export default function SetupScreen() {
         }
       };
 
+      // #556: don't finalize yet — the permissions step runs before the
+      // chat, and Finish applies the transition.
+      pendingTransition.current = transition;
       if (process.env.NODE_ENV === 'test') {
-        await transition();
+        setStep('permissions');
       } else {
-        timerRef.current = setTimeout(() => {
-          void transition();
-        }, 1200);
+        timerRef.current = setTimeout(() => setStep('permissions'), 1200);
       }
     } catch (err: any) {
       if (isMounted.current) {
@@ -312,8 +358,47 @@ export default function SetupScreen() {
     }
   };
 
-  const handleConnectLocal = async () => {
-    setConnectionMode('local');
+  const handleConnectLocal = () => {
+    // #556: don't finalize yet — the permissions step runs before the chat.
+    pendingTransition.current = () => {
+      setConnectionMode('local');
+    };
+    setStep('permissions');
+  };
+
+  // #556: fire ONE OS dialog for this permission (independent, no cascade).
+  const handleRequestPermission = async (
+    perm: 'notifications' | 'camera' | 'microphone'
+  ) => {
+    const status = await requestPermission(perm);
+    setPermStatuses((prev) => ({ ...prev, [perm]: status }));
+    setOSPermission(perm, status);
+  };
+
+  // #556: "Not now" skips just this one — persist the current OS state
+  // (honest 'undetermined' when never asked) without firing a dialog.
+  const handleSkipPermission = async (
+    perm: 'notifications' | 'camera' | 'microphone'
+  ) => {
+    const status = await checkPermission(perm);
+    setPermStatuses((prev) => ({ ...prev, [perm]: status }));
+    setOSPermission(perm, status);
+  };
+
+  // #556: Finish finalizes the stashed connection transition, then — when the
+  // wizard's notification ask was granted — runs push registration from the
+  // wizard path. The silent post-setup prompt in _layout.tsx no longer
+  // requests the dialog, so this is the single canonical request point.
+  // NEVER blocks: Finish is available no matter what was skipped or denied.
+  const handleFinishSetup = async () => {
+    const transition = pendingTransition.current;
+    pendingTransition.current = null;
+    if (transition) {
+      await transition();
+    }
+    if (useConfigStore.getState().osPermissions.notifications === 'granted') {
+      void registerAndPostToken();
+    }
   };
 
   const header = HEADER_TEXTS[step];
@@ -412,7 +497,7 @@ export default function SetupScreen() {
 
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
               {success ? (
-                <Text style={styles.successText}>✓ Credentials verified. Opening your chat.</Text>
+                <Text style={styles.successText}>✓ Credentials verified.</Text>
               ) : null}
 
               <Pressable
@@ -550,7 +635,7 @@ export default function SetupScreen() {
 
                   {error ? <Text style={styles.errorText}>{error}</Text> : null}
                   {success ? (
-                    <Text style={styles.successText}>✓ Cloud connected. Opening your chat.</Text>
+                    <Text style={styles.successText}>✓ Cloud connected.</Text>
                   ) : null}
 
                   <Pressable
@@ -600,7 +685,72 @@ export default function SetupScreen() {
               )}
             </View>
           )}
+
+          {step === 'permissions' && (
+            <View style={styles.formContainer}>
+              {/* #556: three independent OS dialogs, each individually
+                  skippable, never blocking. No cascade — one tap, one dialog. */}
+              {REQUESTABLE_PERMISSIONS.map(({ perm, label, icon }) => (
+                <View key={perm} style={styles.permRow}>
+                  <Text style={styles.permIcon}>{icon}</Text>
+                  <View style={styles.permTextContainer}>
+                    <Text style={styles.permTitle}>{label}</Text>
+                    <Text style={styles.permRationale}>{getRationale(perm)}</Text>
+                    <Text style={styles.permStatus}>
+                      {permStatuses[perm] === 'granted' ? '✓ Allowed' : 'Not set'}
+                    </Text>
+                  </View>
+                  <View style={styles.permActions}>
+                    <Pressable
+                      accessibilityLabel={`Allow ${perm}`}
+                      style={({ pressed }) => [styles.permBtn, pressed && styles.permBtnPressed]}
+                      onPress={() => void handleRequestPermission(perm)}
+                    >
+                      <Text style={styles.permBtnText}>Allow</Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityLabel={`Not now ${perm}`}
+                      style={({ pressed }) => [styles.permSkip, pressed && styles.permBtnPressed]}
+                      onPress={() => void handleSkipPermission(perm)}
+                    >
+                      <Text style={styles.permSkipText}>Not now</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
+
+              {/* #556: accessibility goes through the step-by-step guide, not
+                  an OS dialog. */}
+              <View style={styles.permRow}>
+                <Text style={styles.permIcon}>♿</Text>
+                <View style={styles.permTextContainer}>
+                  <Text style={styles.permTitle}>Accessibility</Text>
+                  <Text style={styles.permRationale}>{getRationale('accessibility')}</Text>
+                </View>
+                <View style={styles.permActions}>
+                  <Pressable
+                    accessibilityLabel="Set up accessibility"
+                    style={({ pressed }) => [styles.permBtn, pressed && styles.permBtnPressed]}
+                    onPress={() => setGuideVisible(true)}
+                  >
+                    <Text style={styles.permBtnText}>Set up</Text>
+                  </Pressable>
+                </View>
+              </View>
+
+              {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+              <Pressable
+                style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+                onPress={() => void handleFinishSetup()}
+              >
+                <Text style={styles.buttonText}>Finish setup</Text>
+              </Pressable>
+            </View>
+          )}
         </ScrollView>
+
+        <AccessibilityGuide visible={guideVisible} onClose={() => setGuideVisible(false)} />
       </KeyboardAvoidingView>
     </TouchableWithoutFeedback>
   );

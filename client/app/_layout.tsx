@@ -149,6 +149,10 @@ export default function RootLayout() {
   // FCM push registration — triggers on setup completion (hasHydrated && isConfigured)
   // per #132. Extracted to utils/pushRegistration.ts; reads apiUrl/apiKey via
   // useConfigStore.getState() at call time (same pattern as backgroundTasks).
+  // #556: the onboarding wizard's permissions step is now the canonical request
+  // point for the notifications OS dialog. This effect re-registers push on
+  // later launches, but must never request the permission itself (that would
+  // double-fire the OS dialog right after setup) — requestIfUndetermined: false.
   useEffect(() => {
     if (!hasHydrated || !isConfigured) return;
     let refreshSub: Notifications.Subscription | null = null;
@@ -156,7 +160,7 @@ export default function RootLayout() {
     // Cold startup optimization (WF-427-04): defer FCM push registration after interactions
     const task = InteractionManager.runAfterInteractions(() => {
       // Fire registration; on success register refresh listener. Failures are silent+logged inside util.
-      registerAndPostToken().then((token) => {
+      registerAndPostToken({ requestIfUndetermined: false }).then((token) => {
         if (cancelled) return;
         // Only listen for refresh if permission was granted (token obtained).
         // If denied, listener is skipped; next app launch after grant will register.
