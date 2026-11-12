@@ -11,7 +11,9 @@ import {
   Keyboard,
   ScrollView,
   Animated,
+  Linking,
 } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 import { DURATIONS, EASING } from '../utils/motion';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import {
@@ -31,8 +33,17 @@ import type { RequestablePermission } from '../utils/setupPermissions';
 import { registerAndPostToken } from '../utils/pushRegistration';
 import AccessibilityGuide from '../components/ui/AccessibilityGuide';
 import { styles } from '../styles/setupStyles';
+import DeviceAgentNative from '../modules/device-agent';
+import {
+  deriveShizukuState,
+  describeShizukuState,
+  type ShizukuState,
+  type ShizukuStatus,
+} from '../utils/shizuku';
+import { useGoogleAuthStore } from '../store/useGoogleAuthStore';
+import { parseOAuthCallbackUrl } from '../utils/oauthCallback';
 
-type SetupStep = 'fork' | 'server' | 'standalone' | 'permissions';
+type SetupStep = 'fork' | 'server' | 'standalone' | 'permissions' | 'integrations';
 type StandaloneSubtype = 'cloud' | 'local';
 
 // #556: the wizard asks notifications, camera and microphone as INDEPENDENT
@@ -82,6 +93,10 @@ const HEADER_TEXTS: Record<SetupStep, { title: string; subtitle: string }> = {
     title: 'Set Up Permissions',
     subtitle: 'Vela asks only for what it needs. Each one is optional — skip any and finish anytime.',
   },
+  integrations: {
+    title: 'Connect Integrations',
+    subtitle: 'Optional extras. Each one is skippable — connect now or finish later from Settings.',
+  },
 };
 
 // WF-447-06: the fork cards arrive as one staggered gesture. DURATIONS.stagger
@@ -104,6 +119,9 @@ const forkCardMotion = (value: Animated.Value, reduceMotion: boolean) => [
 export default function SetupScreen() {
   const [step, setStep] = useState<SetupStep>('fork');
   const [standaloneSubtype, setStandaloneSubtype] = useState<StandaloneSubtype>('cloud');
+  // #557: which connection path the wizard took, so the integrations step
+  // knows whether to show the Google Workspace (server-only) row.
+  const [wizardMode, setWizardMode] = useState<'server' | 'cloud' | 'local' | null>(null);
 
   // Server state
   const [apiUrl, setApiUrl] = useState('');
@@ -133,6 +151,17 @@ export default function SetupScreen() {
   });
   const [guideVisible, setGuideVisible] = useState(false);
   const pendingTransition = useRef<(() => void | Promise<void>) | null>(null);
+
+  // #557: Google Workspace integration row state (server mode only).
+  const [googleStatus, setGoogleStatus] = useState<'unknown' | 'checking' | 'connected' | 'not_connected'>('unknown');
+  const [googleSigningIn, setGoogleSigningIn] = useState(false);
+  const [googleError, setGoogleError] = useState<string | null>(null);
+
+  // #557: Shizuku integration row state (all modes).
+  const [shizukuStatus, setShizukuStatus] = useState<ShizukuStatus | null>(null);
+  const [shizukuChecking, setShizukuChecking] = useState(false);
+  const [shizukuRequesting, setShizukuRequesting] = useState(false);
+  const [shizukuRequestResult, setShizukuRequestResult] = useState<string | null>(null);
 
   const isMounted = useRef(true);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -235,6 +264,7 @@ export default function SetupScreen() {
           setIsTesting(false);
           setSuccess(true);
           setError('');
+          setWizardMode('server');
         }
 
         const transition = () => {
@@ -322,6 +352,7 @@ export default function SetupScreen() {
         setIsTesting(false);
         setSuccess(true);
         setError('');
+        setWizardMode('cloud');
       }
 
       const transition = async () => {
@@ -362,6 +393,7 @@ export default function SetupScreen() {
 
   const handleConnectLocal = () => {
     // #556: don't finalize yet — the permissions step runs before the chat.
+    setWizardMode('local');
     pendingTransition.current = () => {
       setConnectionMode('local');
     };
@@ -381,6 +413,161 @@ export default function SetupScreen() {
     const status = await checkPermission(perm);
     setPermStatuses((prev) => ({ ...prev, [perm]: status }));
     setOSPermission(perm, status);
+  };
+
+  // #557: when the integrations step mounts, refresh live status for the
+  // rows shown in this mode. Never throws — failures just show "not connected".
+  useEffect(() => {
+    if (step !== 'integrations') return;
+    let cancelled = false;
+
+    const checkGoogle = async () => {
+      if (wizardMode !== 'server') return;
+      const apiUrlRaw = useConfigStore.getState().apiUrl;
+      const apiKey = useConfigStore.getState().apiKey;
+      if (!apiUrlRaw || !apiKey) {
+        if (!cancelled) setGoogleStatus('not_connected');
+        return;
+      }
+      if (!cancelled) setGoogleStatus('checking');
+      try {
+        const base = apiUrlRaw.replace(/\/+$/, '');
+        const res = await fetch(`${base}/oauth/token/status`, {
+          headers: { Authorization: `Bearer ${apiKey.trim()}` },
+        });
+        if (cancelled) return;
+        if (res.ok) {
+          const data = await res.json();
+          setGoogleStatus(data.connected === true ? 'connected' : 'not_connected');
+          useGoogleAuthStore.getState().setBackendConnected(data.connected === true);
+          if (data.connected && data.user) {
+            useGoogleAuthStore.getState().setUser({
+              name: data.user.name || 'Google User',
+              email: data.user.email || '',
+              picture: data.user.picture || undefined,
+            });
+          }
+        } else {
+          setGoogleStatus('not_connected');
+        }
+      } catch {
+        if (!cancelled) setGoogleStatus('not_connected');
+      }
+    };
+
+    const checkShizuku = async () => {
+      if (!cancelled) setShizukuChecking(true);
+      try {
+        const native = DeviceAgentNative as any;
+        if (native && typeof native.getShizukuStatus === 'function') {
+          const status = await native.getShizukuStatus();
+          if (!cancelled) setShizukuStatus(status ?? null);
+        } else {
+          if (!cancelled) setShizukuStatus(null);
+        }
+      } catch {
+        if (!cancelled) setShizukuStatus(null);
+      } finally {
+        if (!cancelled) setShizukuChecking(false);
+      }
+    };
+
+    // Record that the wizard showed the Google step so the chat banner can
+    // surface a gap if it stays unconnected.
+    if (wizardMode === 'server') {
+      useConfigStore.getState().setGoogleSetupPending(true);
+    }
+
+    void checkGoogle();
+    void checkShizuku();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [step, wizardMode]);
+
+  const handleConnectGoogle = async () => {
+    const apiUrlRaw = useConfigStore.getState().apiUrl;
+    const apiKey = useConfigStore.getState().apiKey;
+    if (!apiUrlRaw) {
+      setGoogleError('Server URL is not configured.');
+      return;
+    }
+    setGoogleSigningIn(true);
+    setGoogleError(null);
+    try {
+      const redirectUri = 'vela-client://oauth/callback';
+      const base = apiUrlRaw.replace(/\/+$/, '');
+      const authUrl = `${base}/oauth/google/authorize?redirect_uri=${encodeURIComponent(redirectUri)}&api_key=${encodeURIComponent(apiKey || '')}`;
+      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+      if (result.type === 'success') {
+        // Re-check status to confirm.
+        try {
+          const res = await fetch(`${base}/oauth/token/status`, {
+            headers: { Authorization: `Bearer ${(apiKey || '').trim()}` },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setGoogleStatus(data.connected === true ? 'connected' : 'not_connected');
+            useGoogleAuthStore.getState().setBackendConnected(data.connected === true);
+            if (data.connected && data.user) {
+              useGoogleAuthStore.getState().setUser({
+                name: data.user.name || 'Google User',
+                email: data.user.email || '',
+                picture: data.user.picture || undefined,
+              });
+            }
+          }
+        } catch {
+          setGoogleStatus('not_connected');
+        }
+      } else if (result.type === 'cancel') {
+        setGoogleError('Google sign-in was cancelled.');
+      } else if (result.type === 'dismiss') {
+        setGoogleError('Google sign-in was dismissed.');
+      }
+    } catch (err: any) {
+      setGoogleError(err?.message || 'Google sign-in failed.');
+    } finally {
+      setGoogleSigningIn(false);
+    }
+  };
+
+  const handleRecheckShizuku = async () => {
+    setShizukuChecking(true);
+    setShizukuRequestResult(null);
+    try {
+      const native = DeviceAgentNative as any;
+      if (native && typeof native.getShizukuStatus === 'function') {
+        const status = await native.getShizukuStatus();
+        setShizukuStatus(status ?? null);
+      } else {
+        setShizukuStatus(null);
+      }
+    } catch {
+      setShizukuStatus(null);
+    } finally {
+      setShizukuChecking(false);
+    }
+  };
+
+  const handleRequestShizuku = async () => {
+    setShizukuRequesting(true);
+    setShizukuRequestResult(null);
+    try {
+      const native = DeviceAgentNative as any;
+      if (native && typeof native.requestShizukuPermission === 'function') {
+        const result = await native.requestShizukuPermission();
+        setShizukuRequestResult(String(result ?? 'requested'));
+      } else {
+        setShizukuRequestResult('Unavailable in this build.');
+      }
+    } catch (err: any) {
+      setShizukuRequestResult(err?.message || 'Request failed.');
+    } finally {
+      setShizukuRequesting(false);
+    }
+    await handleRecheckShizuku();
   };
 
   // #556: Finish finalizes the stashed connection transition, then — when the
@@ -757,12 +944,119 @@ export default function SetupScreen() {
 
               <Pressable
                 style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+                onPress={() => setStep('integrations')}
+              >
+                <Text style={styles.buttonText}>Continue</Text>
+              </Pressable>
+            </View>
+          )}
+
+          {step === 'integrations' && (
+            <View style={styles.formContainer}>
+              <Pressable onPress={() => setStep('permissions')} style={styles.backButton}>
+                <Text style={styles.backButtonText}>‹ Back</Text>
+              </Pressable>
+
+              {wizardMode === 'server' && (
+                <View style={styles.permRow}>
+                  <Text style={styles.permIcon}>G</Text>
+                  <View style={styles.permTextContainer}>
+                    <Text style={styles.permTitle}>Google Workspace</Text>
+                    <Text style={styles.permRationale}>
+                      Connect Gmail, Calendar, and Drive for the Vela agent.
+                    </Text>
+                    <Text style={styles.permStatus}>
+                      {googleStatus === 'connected'
+                        ? '✓ Connected'
+                        : googleStatus === 'checking'
+                        ? 'Checking…'
+                        : 'Not connected'}
+                    </Text>
+                    {googleError ? <Text style={styles.errorText}>{googleError}</Text> : null}
+                  </View>
+                  <View style={styles.permActions}>
+                    {googleStatus !== 'connected' && (
+                      <Pressable
+                        accessibilityLabel="Connect Google"
+                        style={({ pressed }) => [styles.permBtn, pressed && styles.permBtnPressed]}
+                        onPress={() => void handleConnectGoogle()}
+                        disabled={googleSigningIn}
+                      >
+                        {googleSigningIn ? (
+                          <ActivityIndicator color="#ffffff" size="small" />
+                        ) : (
+                          <Text style={styles.permBtnText}>Connect</Text>
+                        )}
+                      </Pressable>
+                    )}
+                    <Pressable
+                      accessibilityLabel="Skip Google"
+                      style={({ pressed }) => [styles.permSkip, pressed && styles.permBtnPressed]}
+                      onPress={() => setGoogleStatus('not_connected')}
+                    >
+                      <Text style={styles.permSkipText}>Not now</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              )}
+
+              <View style={styles.permRow}>
+                <Text style={styles.permIcon}>S</Text>
+                <View style={styles.permTextContainer}>
+                  <Text style={styles.permTitle}>Shizuku</Text>
+                  <Text style={styles.permRationale}>
+                    {shizukuStatus
+                      ? describeShizukuState(deriveShizukuState(shizukuStatus))
+                      : 'Device automation (optional).'}
+                  </Text>
+                  {shizukuRequestResult ? (
+                    <Text style={styles.permStatus}>{shizukuRequestResult}</Text>
+                  ) : null}
+                </View>
+                <View style={styles.permActions}>
+                  {shizukuStatus && deriveShizukuState(shizukuStatus) === 'permission_denied' && (
+                    <Pressable
+                      accessibilityLabel="Request Shizuku permission"
+                      style={({ pressed }) => [styles.permBtn, pressed && styles.permBtnPressed]}
+                      onPress={() => void handleRequestShizuku()}
+                      disabled={shizukuRequesting}
+                    >
+                      <Text style={styles.permBtnText}>
+                        {shizukuRequesting ? '…' : 'Grant'}
+                      </Text>
+                    </Pressable>
+                  )}
+                  <Pressable
+                    accessibilityLabel="Recheck Shizuku"
+                    style={({ pressed }) => [styles.permSkip, pressed && styles.permBtnPressed]}
+                    onPress={() => void handleRecheckShizuku()}
+                    disabled={shizukuChecking}
+                  >
+                    <Text style={styles.permSkipText}>
+                      {shizukuChecking ? '…' : 'Recheck'}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityLabel="Skip Shizuku"
+                    style={({ pressed }) => [styles.permSkip, pressed && styles.permBtnPressed]}
+                    onPress={() => {}}
+                  >
+                    <Text style={styles.permSkipText}>Not now</Text>
+                  </Pressable>
+                </View>
+              </View>
+
+              {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+              <Pressable
+                style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
                 onPress={() => void handleFinishSetup()}
               >
                 <Text style={styles.buttonText}>Finish setup</Text>
               </Pressable>
             </View>
           )}
+
         </ScrollView>
 
         <AccessibilityGuide visible={guideVisible} onClose={() => setGuideVisible(false)} />

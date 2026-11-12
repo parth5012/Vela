@@ -7,6 +7,7 @@
 // excluded — inert or point-of-use only.
 // ---------------------------------------------------------------------------
 import type { OSPermission, OSPermissionStatus } from '../store/useConfigStore';
+import type { ShizukuState } from '../utils/shizuku';
 
 /**
  * The three permissions the wizard requests as independent OS dialogs
@@ -54,4 +55,45 @@ export function getMissingSetupPermissions(
     }
     return status === 'denied';
   });
+}
+
+// ---------------------------------------------------------------------------
+// #557: integration gaps in the "finish setup later" banner
+// ---------------------------------------------------------------------------
+export interface SetupIntegrationSnapshot {
+  connectionMode: string;
+  googlePending: boolean;
+  googleConnected: boolean;
+  shizukuState: string;
+}
+
+export type MissingSetupIntegration =
+  | { kind: 'google' }
+  | { kind: 'shizuku'; state: ShizukuState };
+
+export function getMissingSetupIntegrations(
+  snapshot: SetupIntegrationSnapshot
+): MissingSetupIntegration[] {
+  const result: MissingSetupIntegration[] = [];
+
+  // Google Workspace is a server-mode-only integration.
+  if (
+    snapshot.connectionMode === 'server' &&
+    snapshot.googlePending &&
+    !snapshot.googleConnected
+  ) {
+    result.push({ kind: 'google' });
+  }
+
+  // Shizuku surfaces concrete non-ready states only.
+  const shizukuState = snapshot.shizukuState;
+  if (
+    shizukuState === 'app_missing' ||
+    shizukuState === 'server_stopped' ||
+    shizukuState === 'permission_denied'
+  ) {
+    result.push({ kind: 'shizuku', state: shizukuState as ShizukuState });
+  }
+
+  return result;
 }
