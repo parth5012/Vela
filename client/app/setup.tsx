@@ -11,7 +11,6 @@ import {
   Keyboard,
   ScrollView,
   Animated,
-  Linking,
 } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { DURATIONS, EASING } from '../utils/motion';
@@ -37,6 +36,7 @@ import DeviceAgentNative from '../modules/device-agent';
 import {
   deriveShizukuState,
   describeShizukuState,
+  SHIZUKU_SETUP_GUIDE,
   type ShizukuState,
   type ShizukuStatus,
 } from '../utils/shizuku';
@@ -153,7 +153,7 @@ export default function SetupScreen() {
   const pendingTransition = useRef<(() => void | Promise<void>) | null>(null);
 
   // #557: Google Workspace integration row state (server mode only).
-  const [googleStatus, setGoogleStatus] = useState<'unknown' | 'checking' | 'connected' | 'not_connected'>('unknown');
+  const [googleStatus, setGoogleStatus] = useState<'unknown' | 'checking' | 'connected' | 'not_connected'>('checking');
   const [googleSigningIn, setGoogleSigningIn] = useState(false);
   const [googleError, setGoogleError] = useState<string | null>(null);
 
@@ -500,26 +500,48 @@ export default function SetupScreen() {
       const base = apiUrlRaw.replace(/\/+$/, '');
       const authUrl = `${base}/oauth/google/authorize?redirect_uri=${encodeURIComponent(redirectUri)}&api_key=${encodeURIComponent(apiKey || '')}`;
       const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
-      if (result.type === 'success') {
-        // Re-check status to confirm.
-        try {
-          const res = await fetch(`${base}/oauth/token/status`, {
-            headers: { Authorization: `Bearer ${(apiKey || '').trim()}` },
-          });
-          if (res.ok) {
-            const data = await res.json();
-            setGoogleStatus(data.connected === true ? 'connected' : 'not_connected');
-            useGoogleAuthStore.getState().setBackendConnected(data.connected === true);
-            if (data.connected && data.user) {
-              useGoogleAuthStore.getState().setUser({
-                name: data.user.name || 'Google User',
-                email: data.user.email || '',
-                picture: data.user.picture || undefined,
-              });
-            }
-          }
-        } catch {
+      if (result.type === 'success' && result.url) {
+        // Parse the backend's verdict from the redirect URL (canonical flow).
+        const callback = parseOAuthCallbackUrl(result.url);
+        if (callback.status === 'error') {
+          setGoogleError(callback.message || 'Google sign-in failed.');
           setGoogleStatus('not_connected');
+        } else {
+          // Poll briefly to confirm connection (canonical pattern, bounded).
+          for (let i = 0; i < 5; i++) {
+            try {
+              const res = await fetch(`${base}/oauth/token/status`, {
+                headers: { Authorization: `Bearer ${(apiKey || '').trim()}` },
+              });
+              if (res.ok) {
+                const data = await res.json();
+                if (data.connected === true) {
+                  setGoogleStatus('connected');
+                  useGoogleAuthStore.getState().setBackendConnected(true);
+                  if (data.user) {
+                    useGoogleAuthStore.getState().setUser({
+                      name: data.user.name || 'Google User',
+                      email: data.user.email || '',
+                      picture: data.user.picture || undefined,
+                    });
+                  }
+                  if (data.access_token) {
+                    useGoogleAuthStore.getState().setTokens({
+                      accessToken: data.access_token,
+                      refreshToken: data.refresh_token,
+                      idToken: data.id_token,
+                      expiresAt: data.expires_at ? new Date(data.expires_at).getTime() : 0,
+                    });
+                  }
+                  break;
+                }
+                setGoogleStatus('not_connected');
+              }
+            } catch {
+              setGoogleStatus('not_connected');
+            }
+            await new Promise((r) => setTimeout(r, 1500));
+          }
         }
       } else if (result.type === 'cancel') {
         setGoogleError('Google sign-in was cancelled.');

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   AppState,
   View,
@@ -70,7 +70,9 @@ import {
   shouldPrompt,
   type OSPermission,
 } from '../utils/permissionManager';
-import { getMissingSetupPermissions } from '../utils/setupPermissions';
+import { getMissingSetupPermissions, getMissingSetupIntegrations } from '../utils/setupPermissions';
+import { deriveShizukuState, type ShizukuStatus } from '../utils/shizuku';
+import DeviceAgentNative from '../modules/device-agent';
 import PermissionRequestCard from '../components/chat/PermissionRequestCard';
 
 const generateUUID = () => {
@@ -604,6 +606,34 @@ export default function ChatScreen() {
   // requested is granted.
   const osPermissions = useConfigStore((state) => state.osPermissions);
   const missingSetupPermissions = getMissingSetupPermissions(osPermissions);
+  const googleSetupPending = useConfigStore((state) => state.googleSetupPending);
+  const googleBackendConnected = useGoogleAuthStore((state) => state.backendConnected);
+  const googleIsConnected = useGoogleAuthStore((state) => state.isConnected);
+  const [shizukuStatusForBanner, setShizukuStatusForBanner] = React.useState<ShizukuStatus | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const native = DeviceAgentNative as any;
+        if (native && typeof native.getShizukuStatus === 'function') {
+          const s = await native.getShizukuStatus();
+          if (!cancelled) setShizukuStatusForBanner(s ?? null);
+        }
+      } catch {
+        // ignore — unknown state surfaces nothing
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  const shizukuStateForBanner: string = shizukuStatusForBanner
+    ? deriveShizukuState(shizukuStatusForBanner)
+    : 'unknown';
+  const missingSetupIntegrations = getMissingSetupIntegrations({
+    connectionMode,
+    googlePending: googleSetupPending,
+    googleConnected: googleBackendConnected === true || googleIsConnected,
+    shizukuState: shizukuStateForBanner,
+  });
 
   // Chat State
   const threads = useChatStore((state) => state.threads);
@@ -1509,6 +1539,28 @@ export default function ChatScreen() {
     </PressableScale>
   ) : null;
 
+  // #557: persistent "finish setup later" banner for integration gaps
+  // (Google Workspace / Shizuku) recorded by the onboarding wizard.
+  const setupIntegrationsBanner = missingSetupIntegrations.length > 0 ? (
+    <PressableScale
+      accessibilityRole="button"
+      accessibilityLabel="Finish setup: review integrations"
+      style={[styles.setupBanner, { backgroundColor: colors.glass, borderColor: colors.glassBorder }]}
+      onPress={() => {
+        const hasGoogle = missingSetupIntegrations.some((g) => g.kind === 'google');
+        if (hasGoogle) router.push('/settings/connection' as any);
+        else router.push('/settings/shizuku' as any);
+      }}
+    >
+      <Text style={[styles.setupBannerTitle, { color: colors.text, fontSize: sizes.text }]}>
+        Finish setup later
+      </Text>
+      <Text style={[styles.setupBannerText, { color: colors.textMuted, fontSize: sizes.sub }]}>
+        {missingSetupIntegrations.length} integration{missingSetupIntegrations.length > 1 ? 's' : ''} still need attention. Tap to review in Settings.
+      </Text>
+    </PressableScale>
+  ) : null;
+
   return (
     <LinearGradient
       colors={[colors.skyTop, colors.skyBottom]}
@@ -1531,6 +1583,7 @@ export default function ChatScreen() {
       {activeThreadId ? (
         <View style={styles.chatArea}>
           {setupPermissionsBanner}
+          {setupIntegrationsBanner}
           {/* Horizontal Agent Selector Bar */}
           <View style={{ height: agentBarShown ? AGENT_BAR_HEIGHT : 0, overflow: 'hidden' }}>
             <Animated.View style={{ transform: [{ translateY: agentBarSlide }] }}>
@@ -1678,6 +1731,7 @@ export default function ChatScreen() {
       ) : (
         <ScrollView contentContainerStyle={styles.welcomeScroll} keyboardShouldPersistTaps="handled">
           {setupPermissionsBanner}
+          {setupIntegrationsBanner}
           <EmptyChatState
             colors={colors}
             sizes={sizes}
