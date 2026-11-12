@@ -156,7 +156,12 @@ interface ConfigState {
   setDeviceAgentPermission: (action: keyof DeviceAgentPermissions, tier: PermissionTier) => void;
   osPermissions: Record<OSPermission, OSPermissionStatus>;
   setOSPermission: (perm: OSPermission, status: OSPermissionStatus) => void;
-  
+
+  // #557: whether the onboarding wizard recorded a (still unconnected)
+  // Google Workspace integration step.
+  googleSetupPending: boolean;
+  setGoogleSetupPending: (val: boolean) => void;
+
   // Connection and provider modes
   connectionMode: ConnectionMode;
   setConnectionMode: (mode: ConnectionMode) => void;
@@ -233,7 +238,8 @@ export const useConfigStore = create<ConfigState>()(
         phone: 'undetermined',
         contacts: 'undetermined',
       } as Record<OSPermission, OSPermissionStatus>,
-      
+      googleSetupPending: false,
+
       // Defaults for connection mode
       connectionMode: 'server',
       cloudProviders: DEFAULT_CLOUD_PROVIDERS,
@@ -311,6 +317,7 @@ export const useConfigStore = create<ConfigState>()(
             phone: 'undetermined',
             contacts: 'undetermined',
           } as Record<OSPermission, OSPermissionStatus>,
+          googleSetupPending: false,
           suggestionStarters: [
             { label: '👩🏫 Teach Concept', text: 'Teach intuition behind binary search trace example', agent: 'teacher' },
             { label: '📊 Data Analyst', text: 'Analyze key features 2026 FIFA World Cup matches', agent: 'analyst' },
@@ -353,6 +360,7 @@ export const useConfigStore = create<ConfigState>()(
             [perm]: status,
           },
         })),
+      setGoogleSetupPending: (val) => set({ googleSetupPending: val }),
       
       // Settors for connection & cloud mode
       setConnectionMode: (connectionMode) =>

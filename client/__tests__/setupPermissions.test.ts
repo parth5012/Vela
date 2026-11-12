@@ -1,8 +1,11 @@
 // #556: onboarding permission set + "finish setup later" banner logic.
+// #557: the same banner also surfaces integration gaps (Google Workspace,
+// Shizuku) recorded by the wizard.
 import {
   ONBOARDING_PERMISSIONS,
   REQUESTABLE_PERMISSIONS,
   getMissingSetupPermissions,
+  getMissingSetupIntegrations,
 } from '../utils/setupPermissions';
 import type { OSPermission, OSPermissionStatus } from '../store/useConfigStore';
 
@@ -108,6 +111,91 @@ describe('setupPermissions (#556)', () => {
         notifications: 'granted',
       });
       expect(getMissingSetupPermissions(store)).toEqual([]);
+    });
+  });
+
+  // ------------------------------------------------------------------
+  // #557: integration gaps in the "finish setup later" banner
+  // ------------------------------------------------------------------
+  describe('getMissingSetupIntegrations', () => {
+    const snapshotWith = (
+      overrides: Partial<Parameters<typeof getMissingSetupIntegrations>[0]> = {}
+    ): Parameters<typeof getMissingSetupIntegrations>[0] => ({
+      connectionMode: 'server',
+      googlePending: false,
+      googleConnected: false,
+      shizukuState: 'unknown',
+      ...overrides,
+    });
+
+    it('returns no gaps for a fully green snapshot', () => {
+      expect(
+        getMissingSetupIntegrations(
+          snapshotWith({ googleConnected: true, shizukuState: 'ready' })
+        )
+      ).toEqual([]);
+    });
+
+    it('surfaces the Google gap only in server mode when the wizard recorded pending', () => {
+      expect(
+        getMissingSetupIntegrations(snapshotWith({ googlePending: true }))
+      ).toEqual([{ kind: 'google' }]);
+    });
+
+    it('never surfaces the Google gap in standalone modes', () => {
+      expect(
+        getMissingSetupIntegrations(
+          snapshotWith({ connectionMode: 'cloud', googlePending: true })
+        )
+      ).toEqual([]);
+      expect(
+        getMissingSetupIntegrations(
+          snapshotWith({ connectionMode: 'local', googlePending: true })
+        )
+      ).toEqual([]);
+    });
+
+    it('clears the Google gap once connected even while the wizard flag lingers', () => {
+      // The flag is wizard-recorded; the live google store value is
+      // authoritative for dismissal (connecting via Settings hides the banner).
+      expect(
+        getMissingSetupIntegrations(
+          snapshotWith({ googlePending: true, googleConnected: true })
+        )
+      ).toEqual([]);
+    });
+
+    it('never surfaces the Google gap when the wizard never recorded pending', () => {
+      // Pre-#557 upgrades / users who never saw the wizard step are not nagged.
+      expect(getMissingSetupIntegrations(snapshotWith())).toEqual([]);
+    });
+
+    it('surfaces concrete non-ready Shizuku states as gaps', () => {
+      for (const state of ['app_missing', 'server_stopped', 'permission_denied'] as const) {
+        expect(
+          getMissingSetupIntegrations(snapshotWith({ shizukuState: state }))
+        ).toEqual([{ kind: 'shizuku', state }]);
+      }
+    });
+
+    it('does not surface ready or unreadable (unknown) Shizuku states', () => {
+      // 'unknown' = the native module could not determine status (e.g. a build
+      // without it) — nagging forever would be dishonest; only concrete
+      // non-ready states surface.
+      expect(
+        getMissingSetupIntegrations(snapshotWith({ shizukuState: 'ready' }))
+      ).toEqual([]);
+      expect(
+        getMissingSetupIntegrations(snapshotWith({ shizukuState: 'unknown' }))
+      ).toEqual([]);
+    });
+
+    it('lists google before shizuku when both are missing', () => {
+      expect(
+        getMissingSetupIntegrations(
+          snapshotWith({ googlePending: true, shizukuState: 'app_missing' })
+        )
+      ).toEqual([{ kind: 'google' }, { kind: 'shizuku', state: 'app_missing' }]);
     });
   });
 });

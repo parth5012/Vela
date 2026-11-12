@@ -47,6 +47,46 @@ export function deriveShizukuState(status: ShizukuStatus): ShizukuState {
   return 'server_stopped';
 }
 
+// #557: wizard-facing guide for each derived Shizuku state (plus 'unknown'
+// when the native module could not read status). Pure data — no RN deps, so
+// the mapping is unit-testable without a device.
+export interface ShizukuSetupGuideEntry {
+  title: string;
+  body: string;
+  actions: string[];
+}
+
+export const SHIZUKU_SETUP_GUIDE: Record<
+  ShizukuState | 'unknown',
+  ShizukuSetupGuideEntry
+> = {
+  app_missing: {
+    title: 'Install Shizuku',
+    body: 'The Shizuku app is not installed. Install it from the Play Store, then come back and recheck.',
+    actions: ['install', 'recheck'],
+  },
+  server_stopped: {
+    title: 'Start the Shizuku server',
+    body: 'The Shizuku app is installed but its server is not running — start it from the Shizuku app, then recheck.',
+    actions: ['recheck'],
+  },
+  permission_denied: {
+    title: 'Grant Shizuku permission',
+    body: 'The Shizuku server is running but Vela has not been granted permission yet. Request permission, then recheck.',
+    actions: ['request_permission', 'recheck'],
+  },
+  ready: {
+    title: 'Shizuku is ready',
+    body: 'Shizuku is ready for privileged automation.',
+    actions: ['recheck'],
+  },
+  unknown: {
+    title: 'Shizuku status unavailable',
+    body: 'Shizuku status could not be read right now. You can finish setup and configure it later from Settings.',
+    actions: ['recheck'],
+  },
+};
+
 export function describeShizukuState(state: ShizukuState): string {
   switch (state) {
     case 'app_missing':
