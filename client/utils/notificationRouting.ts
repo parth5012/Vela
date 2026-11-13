@@ -205,6 +205,18 @@ export function routeByType(
       router.replace('/');
       break;
     }
+    case 'approval': {
+      // Tap-only approval: deep-link into chat where the in-app SafetyDialog
+      // handles the pending approval. (No remote approve/deny this map.)
+      if (conversation_id) {
+        console.log(`[notifications] routing ${normalizedType} -> conversation/${conversation_id}`);
+        selectThread(conversation_id);
+      } else {
+        console.log(`[notifications] routing ${normalizedType} without conversation_id`);
+      }
+      router.replace('/');
+      break;
+    }
     default: {
       // generic / unknown / missing type
       if (conversation_id) {

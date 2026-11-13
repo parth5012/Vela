@@ -112,7 +112,11 @@ describe('SetupScreen', () => {
       textInputs[0].props.onChangeText('https://api.vela.local');
       textInputs[1].props.onChangeText('test-key');
     });
-    (globalThis as any).fetch = jest.fn().mockResolvedValue({ ok: true, status: 200 });
+    (globalThis as any).fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValue([]),
+    });
     await pressButtonWithText(root, 'Connect & Save');
   };
 
