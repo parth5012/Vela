@@ -255,19 +255,19 @@ export const styles = StyleSheet.create({
   },
   permTitle: {
     color: '#f4f4f5',
-    fontSize: 15,
+    fontSize: FONT_SIZES.medium.text,
     fontWeight: '700',
     marginBottom: 2,
   },
   permRationale: {
     color: '#a1a1aa',
-    fontSize: 13,
+    fontSize: FONT_SIZES.medium.sub,
     lineHeight: FONT_SIZES.medium.subLineHeight,
     marginBottom: 4,
   },
   permStatus: {
     color: '#71717a',
-    fontSize: 12,
+    fontSize: FONT_SIZES.medium.sub,
     fontWeight: '600',
   },
   permActions: {
@@ -285,7 +285,7 @@ export const styles = StyleSheet.create({
   },
   permBtnText: {
     color: '#ffffff',
-    fontSize: 13,
+    fontSize: FONT_SIZES.medium.sub,
     fontWeight: '600',
   },
   permSkip: {
@@ -297,7 +297,7 @@ export const styles = StyleSheet.create({
   },
   permSkipText: {
     color: '#a1a1aa',
-    fontSize: 13,
+    fontSize: FONT_SIZES.medium.sub,
     fontWeight: '600',
   },
 });
