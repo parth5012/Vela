@@ -67,7 +67,7 @@ export const SHIZUKU_SETUP_GUIDE: Record<
   },
   server_stopped: {
     title: 'Start the Shizuku server',
-    body: 'The Shizuku app is installed but its server is not running — start it from the Shizuku app, then recheck.',
+    body: 'The Shizuku app is installed but its server is not running. Start it from the Shizuku app, then recheck.',
     actions: ['recheck'],
   },
   permission_denied: {

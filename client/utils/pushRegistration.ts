@@ -45,7 +45,7 @@ async function postTokenToBackend(token: string): Promise<boolean> {
     const { apiUrl, apiKey } = useConfigStore.getState();
     if (!apiUrl || !apiKey) {
       console.log('[pushRegistration] Skipping token POST — apiUrl/apiKey not configured');
-      return false;
+      return true;
     }
     const url = `${apiUrl.replace(/\/+$/, '')}/api/config/device-token`;
     const res = await fetch(url, {
@@ -101,8 +101,8 @@ async function runRegistration(requestIfUndetermined: boolean): Promise<string |
     }
 
     console.log('[FCM Token]:', token);
-    await postTokenToBackend(token);
-    return token;
+    const posted = await postTokenToBackend(token);
+    return posted ? token : null;
   } catch (e) {
     console.warn('[pushRegistration] registerAndPostToken failed', e);
     return null;

@@ -12,6 +12,7 @@ import {
   type PermissionStatus,
 } from '../../utils/permissionManager';
 import { useConfigStore } from '../../store/useConfigStore';
+import { registerAndPostToken } from '../../utils/pushRegistration';
 import AccessibilityGuide from '../../components/ui/AccessibilityGuide';
 
 function StatusPill({
@@ -112,6 +113,9 @@ export default function PermissionsHubScreen() {
       setOSPermission(meta.perm, s);
     }
     setStatuses((prev) => ({ ...prev, ...next }));
+    if (next.notifications === 'granted' && useConfigStore.getState().connectionMode === 'server') {
+      void registerAndPostToken();
+    }
   }, [setOSPermission]);
 
   useEffect(() => {
@@ -141,6 +145,9 @@ export default function PermissionsHubScreen() {
           const result = await requestPermission(perm);
           setStatuses((prev) => ({ ...prev, [perm]: result }));
           setOSPermission(perm, result);
+          if (perm === 'notifications' && result === 'granted' && useConfigStore.getState().connectionMode === 'server') {
+            void registerAndPostToken();
+          }
           if (result === 'undetermined' || result === 'denied') {
             // If request didn't resolve, offer settings
             await openSettings(perm);

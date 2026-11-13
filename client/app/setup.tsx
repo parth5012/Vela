@@ -11,6 +11,7 @@ import {
   Keyboard,
   ScrollView,
   Animated,
+  Linking,
 } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { DURATIONS, EASING } from '../utils/motion';
@@ -55,9 +56,9 @@ const REQUESTABLE_ROWS: {
   label: string;
   icon: string;
 }[] = [
-  { perm: 'notifications', label: 'Notifications', icon: '🔔' },
-  { perm: 'camera', label: 'Camera', icon: '📷' },
-  { perm: 'microphone', label: 'Microphone', icon: '🎙️' },
+  { perm: 'notifications', label: 'Notifications', icon: 'N' },
+  { perm: 'camera', label: 'Camera', icon: 'C' },
+  { perm: 'microphone', label: 'Microphone', icon: 'M' },
 ];
 
 const CLOUD_OPTIONS: { slug: ProviderSlug; label: string }[] = [
@@ -91,11 +92,11 @@ const HEADER_TEXTS: Record<SetupStep, { title: string; subtitle: string }> = {
   },
   permissions: {
     title: 'Set Up Permissions',
-    subtitle: 'Vela asks only for what it needs. Each one is optional — skip any and finish anytime.',
+    subtitle: 'Vela asks only for what it needs. Each one is optional. Skip any and finish anytime.',
   },
   integrations: {
     title: 'Connect Integrations',
-    subtitle: 'Optional extras. Each one is skippable — connect now or finish later from Settings.',
+    subtitle: 'Optional extras. Each one is skippable. Connect now or finish later from Settings.',
   },
 };
 
@@ -423,17 +424,17 @@ export default function SetupScreen() {
 
     const checkGoogle = async () => {
       if (wizardMode !== 'server') return;
-      const apiUrlRaw = useConfigStore.getState().apiUrl;
-      const apiKey = useConfigStore.getState().apiKey;
-      if (!apiUrlRaw || !apiKey) {
+      const effectiveApiUrl = apiUrl.trim() || useConfigStore.getState().apiUrl;
+      const effectiveApiKey = apiKey.trim() || useConfigStore.getState().apiKey;
+      if (!effectiveApiUrl || !effectiveApiKey) {
         if (!cancelled) setGoogleStatus('not_connected');
         return;
       }
       if (!cancelled) setGoogleStatus('checking');
       try {
-        const base = apiUrlRaw.replace(/\/+$/, '');
+        const base = effectiveApiUrl.replace(/\/+$/, '');
         const res = await fetch(`${base}/oauth/token/status`, {
-          headers: { Authorization: `Bearer ${apiKey.trim()}` },
+          headers: { Authorization: `Bearer ${effectiveApiKey.trim()}` },
         });
         if (cancelled) return;
         if (res.ok) {
@@ -487,9 +488,9 @@ export default function SetupScreen() {
   }, [step, wizardMode]);
 
   const handleConnectGoogle = async () => {
-    const apiUrlRaw = useConfigStore.getState().apiUrl;
-    const apiKey = useConfigStore.getState().apiKey;
-    if (!apiUrlRaw) {
+    const effectiveApiUrl = apiUrl.trim() || useConfigStore.getState().apiUrl;
+    const effectiveApiKey = apiKey.trim() || useConfigStore.getState().apiKey;
+    if (!effectiveApiUrl) {
       setGoogleError('Server URL is not configured.');
       return;
     }
@@ -497,8 +498,8 @@ export default function SetupScreen() {
     setGoogleError(null);
     try {
       const redirectUri = 'vela-client://oauth/callback';
-      const base = apiUrlRaw.replace(/\/+$/, '');
-      const authUrl = `${base}/oauth/google/authorize?redirect_uri=${encodeURIComponent(redirectUri)}&api_key=${encodeURIComponent(apiKey || '')}`;
+      const base = effectiveApiUrl.replace(/\/+$/, '');
+      const authUrl = `${base}/oauth/google/authorize?redirect_uri=${encodeURIComponent(redirectUri)}&api_key=${encodeURIComponent(effectiveApiKey || '')}`;
       const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
       if (result.type === 'success' && result.url) {
         // Parse the backend's verdict from the redirect URL (canonical flow).
@@ -511,7 +512,7 @@ export default function SetupScreen() {
           for (let i = 0; i < 5; i++) {
             try {
               const res = await fetch(`${base}/oauth/token/status`, {
-                headers: { Authorization: `Bearer ${(apiKey || '').trim()}` },
+                headers: { Authorization: `Bearer ${(effectiveApiKey || '').trim()}` },
               });
               if (res.ok) {
                 const data = await res.json();
@@ -609,9 +610,11 @@ export default function SetupScreen() {
     }
 
     const transition = pendingTransition.current;
-    pendingTransition.current = null;
     if (transition) {
       await transition();
+      if (useConfigStore.getState().isConfigured) {
+        pendingTransition.current = null;
+      }
     }
     // Token registration is a server-mode concern: standalone-cloud/local
     // intentionally do not register push (no backend to post the token to).
@@ -946,7 +949,7 @@ export default function SetupScreen() {
               {/* #556: accessibility goes through the step-by-step guide, not
                   an OS dialog. */}
               <View style={styles.permRow}>
-                <Text style={styles.permIcon}>♿</Text>
+                <Text style={styles.permIcon}>A</Text>
                 <View style={styles.permTextContainer}>
                   <Text style={styles.permTitle}>Accessibility</Text>
                   <Text style={styles.permRationale}>{getRationale('accessibility')}</Text>
@@ -1000,6 +1003,8 @@ export default function SetupScreen() {
                     {googleStatus !== 'connected' && (
                       <Pressable
                         accessibilityLabel="Connect Google"
+                        accessibilityRole="button"
+                        accessibilityState={{ busy: googleSigningIn, disabled: googleSigningIn }}
                         style={({ pressed }) => [styles.permBtn, pressed && styles.permBtnPressed]}
                         onPress={() => void handleConnectGoogle()}
                         disabled={googleSigningIn}
@@ -1036,9 +1041,21 @@ export default function SetupScreen() {
                   ) : null}
                 </View>
                 <View style={styles.permActions}>
+                  {shizukuStatus && deriveShizukuState(shizukuStatus) === 'app_missing' && (
+                    <Pressable
+                      accessibilityLabel="Install Shizuku"
+                      accessibilityRole="button"
+                      style={({ pressed }) => [styles.permBtn, pressed && styles.permBtnPressed]}
+                      onPress={() => void Linking.openURL('https://play.google.com/store/apps/details?id=moe.shizuku.manager')}
+                    >
+                      <Text style={styles.permBtnText}>Install</Text>
+                    </Pressable>
+                  )}
                   {shizukuStatus && deriveShizukuState(shizukuStatus) === 'permission_denied' && (
                     <Pressable
                       accessibilityLabel="Request Shizuku permission"
+                      accessibilityRole="button"
+                      accessibilityState={{ busy: shizukuRequesting, disabled: shizukuRequesting }}
                       style={({ pressed }) => [styles.permBtn, pressed && styles.permBtnPressed]}
                       onPress={() => void handleRequestShizuku()}
                       disabled={shizukuRequesting}
@@ -1050,6 +1067,8 @@ export default function SetupScreen() {
                   )}
                   <Pressable
                     accessibilityLabel="Recheck Shizuku"
+                    accessibilityRole="button"
+                    accessibilityState={{ busy: shizukuChecking, disabled: shizukuChecking }}
                     style={({ pressed }) => [styles.permSkip, pressed && styles.permBtnPressed]}
                     onPress={() => void handleRecheckShizuku()}
                     disabled={shizukuChecking}

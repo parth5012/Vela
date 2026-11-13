@@ -210,16 +210,20 @@ async def wait_for_client_event(
             # return and approve in-app. Fire at most once per wait.
             if (not approval_push_sent) and loop.time() >= approval_threshold:
                 approval_push_sent = True
-                try:
-                    from tools.notify import send_push_async
 
-                    await send_push_async(
-                        title="Approval needed",
-                        body="Vela needs your approval to continue an action.",
-                        data={"type": "approval", "conversation_id": conversation_id},
-                    )
-                except Exception as e:  # noqa: BLE001
-                    logger.error("Approval push failed (non-fatal)", error=str(e))
+                async def _send_approval_nudge():
+                    try:
+                        from tools.notify import send_push_async
+
+                        await send_push_async(
+                            title="Approval needed",
+                            body="Vela needs your approval to continue an action.",
+                            data={"type": "approval", "conversation_id": conversation_id},
+                        )
+                    except Exception as e:  # noqa: BLE001
+                        logger.error("Approval push failed (non-fatal)", error=str(e))
+
+                asyncio.create_task(_send_approval_nudge())
             slice_timeout = min(MAILBOX_POLL_INTERVAL, remaining)
             if not approval_push_sent and approval_threshold < deadline:
                 time_to_approval = approval_threshold - loop.time()

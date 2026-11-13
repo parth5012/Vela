@@ -612,7 +612,7 @@ export default function ChatScreen() {
   const [shizukuStatusForBanner, setShizukuStatusForBanner] = React.useState<ShizukuStatus | null>(null);
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    const readStatus = async () => {
       try {
         const native = DeviceAgentNative as any;
         if (native && typeof native.getShizukuStatus === 'function') {
@@ -622,8 +622,17 @@ export default function ChatScreen() {
       } catch {
         // ignore — unknown state surfaces nothing
       }
-    })();
-    return () => { cancelled = true; };
+    };
+    void readStatus();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        void readStatus();
+      }
+    });
+    return () => {
+      cancelled = true;
+      sub.remove();
+    };
   }, []);
   const shizukuStateForBanner: string = shizukuStatusForBanner
     ? deriveShizukuState(shizukuStatusForBanner)
