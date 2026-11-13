@@ -1,6 +1,7 @@
 // #556: the onboarding wizard's permissions step is the canonical request
 // point for the notifications OS dialog. registerAndPostToken must support a
 // "never request" mode so _layout.tsx cannot double-fire the OS dialog.
+import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import {
   registerAndPostToken,
@@ -117,5 +118,25 @@ describe('pushRegistration (#556 wizard-owned request)', () => {
     await registerAndPostToken(); // still short-circuits
 
     expect(mocks.addPushTokenListener).toHaveBeenCalledTimes(1);
+  });
+
+  it('creates the vela_approval notification channel with high importance (#641)', async () => {
+    const originalOs = Platform.OS;
+    Platform.OS = 'android';
+    try {
+      mocks.getPermissionsAsync.mockResolvedValue({ status: 'granted' });
+      mocks.getDevicePushTokenAsync.mockResolvedValue({ data: 'ExponentPushToken[tok]' });
+
+      await registerAndPostToken();
+
+      expect(mocks.setNotificationChannelAsync).toHaveBeenCalledWith(
+        'vela_approval',
+        expect.objectContaining({
+          importance: Notifications.AndroidImportance.HIGH,
+        })
+      );
+    } finally {
+      Platform.OS = originalOs;
+    }
   });
 });

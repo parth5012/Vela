@@ -10,13 +10,14 @@ from utils.logger import StructuredLogger
 
 logger = StructuredLogger("Notify")
 
-_VALID_TYPES = {"task_completion", "calendar_reminder", "briefing", "checkin"}
+_VALID_TYPES = {"task_completion", "calendar_reminder", "briefing", "checkin", "approval"}
 
 _CHANNEL_MAP: dict[str, str] = {
     "task_completion": "vela_task_completion",
     "calendar_reminder": "vela_calendar_reminders",
     "briefing": "vela_briefing",
     "checkin": "vela_checkin",
+    "approval": "vela_approval",
 }
 
 
@@ -149,7 +150,7 @@ def send_push(
         else:
             effective_channel = _CHANNEL_MAP.get(effective_type)
 
-        is_high_priority = effective_channel == "vela_task_completion"
+        is_high_priority = effective_channel in ("vela_task_completion", "vela_approval")
 
         # --- Read token ---
         token = _get_token()

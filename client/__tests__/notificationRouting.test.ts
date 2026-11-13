@@ -151,6 +151,22 @@ describe('notificationRouting', () => {
       expect(router.replace).toHaveBeenCalledWith('/');
     });
 
+    it('approval with id selects thread and replaces /', () => {
+      const router = makeRouter();
+      const selectThread = makeSelectThread();
+      routeByType({ type: 'approval', conversation_id: 'appr-1' }, router, selectThread);
+      expect(selectThread).toHaveBeenCalledWith('appr-1');
+      expect(router.replace).toHaveBeenCalledWith('/');
+    });
+
+    it('approval without id routes to / without selectThread', () => {
+      const router = makeRouter();
+      const selectThread = makeSelectThread();
+      routeByType({ type: 'approval' }, router, selectThread);
+      expect(selectThread).not.toHaveBeenCalled();
+      expect(router.replace).toHaveBeenCalledWith('/');
+    });
+
     it('unknown type with id still selects thread', () => {
       const router = makeRouter();
       const selectThread = makeSelectThread();

@@ -29,6 +29,12 @@ async function ensureAndroidChannels(): Promise<void> {
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#FF231F71',
     });
+    await Notifications.setNotificationChannelAsync('vela_approval', {
+      name: 'Vela Approval Requests',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#FF231F71',
+    });
   } catch (e) {
     console.warn('[pushRegistration] Failed to create notification channels', e);
   }

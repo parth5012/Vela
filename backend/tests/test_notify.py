@@ -60,6 +60,30 @@ def test_send_push_success(mock_send, mock_init, mock_get_token):
     assert msg.android.priority == "high"
 
 
+@patch("tools.notify._get_token")
+@patch("tools.notify._ensure_firebase_initialized")
+@patch("firebase_admin.messaging.send")
+def test_send_push_approval_type_high_priority(mock_send, mock_init, mock_get_token):
+    mock_get_token.return_value = "fake-token-approval"
+    mock_init.return_value = True
+    mock_send.return_value = "projects/vela/messages/appr-123"
+
+    from tools.notify import _CHANNEL_MAP, _VALID_TYPES, send_push
+
+    assert "approval" in _VALID_TYPES
+    assert _CHANNEL_MAP.get("approval") == "vela_approval"
+
+    result = send_push("Approval needed", "Approve action", data={"type": "approval", "conversation_id": "conv-appr"})
+    assert result is True
+    assert mock_send.called
+    msg = mock_send.call_args[0][0]
+    assert msg.data["type"] == "approval"
+    assert msg.data["conversation_id"] == "conv-appr"
+    assert msg.android.notification.channel_id == "vela_approval"
+    assert msg.android.priority == "high"
+    assert msg.android.notification.priority == "high"
+
+
 @patch("tools.notify._delete_token")
 @patch("tools.notify._get_token")
 @patch("tools.notify._ensure_firebase_initialized")

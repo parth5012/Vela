@@ -6,6 +6,7 @@ another thread via `loop.call_soon_threadsafe`.
 """
 
 import asyncio
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -96,3 +97,59 @@ async def test_task_token_key_namespacing():
 
     assert status == "success"
     assert list(seen_keys.keys()) == ["conv-abc_tok-123"]
+
+
+@pytest.mark.asyncio
+async def test_wait_for_client_event_sends_approval_push_after_delay():
+    """#641: When client hasn't responded after approval_delay, send approval push."""
+    with patch("tools.notify.send_push_async", new_callable=AsyncMock) as mock_push:
+        mock_push.return_value = True
+        status, _ = await pt.wait_for_client_event(
+            "conv-approval-test",
+            timeout=0.15,
+            approval_delay=0.04,
+        )
+        assert status == "timeout"
+        mock_push.assert_awaited_once()
+        call_kwargs = mock_push.call_args.kwargs
+        assert call_kwargs["title"] == "Approval needed"
+        assert call_kwargs["data"] == {"type": "approval", "conversation_id": "conv-approval-test"}
+
+
+@pytest.mark.asyncio
+async def test_wait_for_client_event_no_approval_push_when_responded_early():
+    """#641: If client responds before approval_delay, no push should be sent."""
+    with patch("tools.notify.send_push_async", new_callable=AsyncMock) as mock_push:
+        async def fast_reply():
+            await asyncio.sleep(0.02)
+            entry = pt.PENDING_TASKS.get("conv-fast-reply")
+            if entry:
+                entry["response"] = {"status": "success", "result": "approved"}
+                entry["event"].set()
+
+        responder = asyncio.create_task(fast_reply())
+        status, result = await pt.wait_for_client_event(
+            "conv-fast-reply",
+            timeout=1.0,
+            approval_delay=0.5,
+        )
+        await responder
+        assert status == "success"
+        assert result == "approved"
+        mock_push.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_wait_for_client_event_push_failure_is_non_fatal():
+    """#641: If sending approval push fails/raises, wait_for_client_event continues."""
+    with patch("tools.notify.send_push_async", new_callable=AsyncMock) as mock_push:
+        mock_push.side_effect = RuntimeError("push server down")
+        status, result = await pt.wait_for_client_event(
+            "conv-push-fail",
+            timeout=0.15,
+            approval_delay=0.04,
+            timeout_message="graceful timeout",
+        )
+        assert status == "timeout"
+        assert result == "graceful timeout"
+        mock_push.assert_awaited_once()

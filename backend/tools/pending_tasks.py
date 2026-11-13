@@ -174,7 +174,8 @@ async def wait_for_client_event(
     value: Optional[str] = None,
     task_token: Optional[str] = None,
     timeout: float = 60.0,
-    timeout_message: str = "Timeout waiting for client response."
+    timeout_message: str = "Timeout waiting for client response.",
+    approval_delay: float = 10.0,
 ):
     """Blocks execution and awaits an event response from the mobile client."""
     event = asyncio.Event()
@@ -191,6 +192,8 @@ async def wait_for_client_event(
 
     status = "error"
     result = ""
+    approval_push_sent = False
+    approval_threshold = loop.time() + approval_delay if approval_delay is not None else float("inf")
     try:
         # Wait in short slices so a cross-worker mailbox response (polled
         # off the event loop via to_thread) can wake us even though our
@@ -202,9 +205,29 @@ async def wait_for_client_event(
                 status = "timeout"
                 result = timeout_message
                 break
+            # #641: if the client hasn't responded within ~10s (likely
+            # backgrounded), nudge them with an approval push so they can
+            # return and approve in-app. Fire at most once per wait.
+            if (not approval_push_sent) and loop.time() >= approval_threshold:
+                approval_push_sent = True
+                try:
+                    from tools.notify import send_push_async
+
+                    await send_push_async(
+                        title="Approval needed",
+                        body="Vela needs your approval to continue an action.",
+                        data={"type": "approval", "conversation_id": conversation_id},
+                    )
+                except Exception as e:  # noqa: BLE001
+                    logger.error("Approval push failed (non-fatal)", error=str(e))
+            slice_timeout = min(MAILBOX_POLL_INTERVAL, remaining)
+            if not approval_push_sent and approval_threshold < deadline:
+                time_to_approval = approval_threshold - loop.time()
+                if time_to_approval > 0:
+                    slice_timeout = min(slice_timeout, time_to_approval)
             try:
-                await asyncio.wait_for(event.wait(), timeout=min(MAILBOX_POLL_INTERVAL, remaining))
-            except asyncio.TimeoutError:
+                await asyncio.wait_for(event.wait(), timeout=slice_timeout)
+            except TimeoutError:
                 pass
             task_data = PENDING_TASKS.get(key)
             if task_data and task_data["response"]:
