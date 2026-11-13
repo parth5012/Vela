@@ -29,6 +29,10 @@ client/e2e/
 │   ├── offline.md
 │   └── fcm.md
 ├── lanes/              # Lane definitions for parallel execution
+│   ├── visual-regression.yaml
+│   └── ...
+├── baselines/          # Committed visual-regression baselines (per state)
+├── visual-diff.mjs     # pixelmatch diff (0.5% budget) for the visual lane
 │   ├── critical-path.yaml
 │   ├── extended-coverage.yaml
 │   └── parallel-surface.yaml
@@ -104,6 +108,36 @@ Lanes group features for parallel or sequential execution:
 - **critical-path**: Setup → Chat → Threads (sequential, must pass)
 - **extended-coverage**: Tasks, Browser, Settings (parallel after critical)
 - **parallel-surface**: Local-AI, Device-Agent, Offline, FCM (parallel, independent)
+- **visual-regression**: Pixel-iffed UI states (sequential, WF-447-07 — see below)
+
+## Visual Regression Lane
+
+Screenshot diffing of five UI states — `setup`, `chat-empty`, `chat-thread`,
+`settings-appearance`, `tasks-empty` — captured at the scroll-craft compact
+viewport (**360×640**) in two passes: normal, then reduced motion
+(`animator_duration_scale 0`). States are described declaratively in
+`lanes/visual-regression.yaml` and driven by `runner.sh`.
+
+```bash
+# Run the lane (captures both passes, diffs against baselines)
+bash client/e2e/runner.sh --lane visual-regression
+# or: npm run e2e:visual
+
+# Promote current shots to client/e2e/baselines/ (intentional use only)
+bash client/e2e/runner.sh --lane visual-regression --update-baselines
+
+# Tighter diff budget
+bash client/e2e/visual-diff.mjs --threshold 0.002
+```
+
+- Captures land in `e2e/results/visual/<state>[.rmd].png`; diff images in
+  `e2e/results/visual/diffs/`; a machine report in `report.json`.
+- `visual-diff.mjs` compares via `pixelmatch`; **failure when more than
+  0.5% of pixels differ** on any state. States without a committed baseline
+  pass with a WARN — capture one before trusting them.
+- The lane always restores `wm size` and `animator_duration_scale` on exit
+  (success or failure), and **never runs against a physical device**: it
+  exits unless `DEVICE` serial starts with `emulator-`.
 
 ## Runner Interface
 
