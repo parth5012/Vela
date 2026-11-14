@@ -203,6 +203,12 @@ interface ConfigState {
   setMaxTokens: (val: number) => void;
   setGpuBackendPreference: (val: GpuBackendPreference) => void;
   setGpuQuantPreference: (val: GpuQuantPreference) => void;
+
+  // Multimodal configuration (#559, #562)
+  maxImagesPerMessage: number;
+  cloudPrivacyConsent: boolean;
+  setMaxImagesPerMessage: (val: number) => void;
+  setCloudPrivacyConsent: (val: boolean) => void;
 }
 
 const SECURE_KEY = 'vela-api-key';
@@ -262,6 +268,10 @@ export const useConfigStore = create<ConfigState>()(
       maxTokens: 4096,
       gpuBackendPreference: 'auto',
       gpuQuantPreference: 'auto',
+
+      // Multimodal defaults (#559, #562)
+      maxImagesPerMessage: 2,
+      cloudPrivacyConsent: false,
 
       setConfig: (url, key) => {
         set((state) => ({
@@ -457,6 +467,16 @@ export const useConfigStore = create<ConfigState>()(
       setMaxTokens: (maxTokens) => set({ maxTokens }),
       setGpuBackendPreference: (gpuBackendPreference) => set({ gpuBackendPreference }),
       setGpuQuantPreference: (gpuQuantPreference) => set({ gpuQuantPreference }),
+
+      // Multimodal setters (#559, #562)
+      setMaxImagesPerMessage: (maxImagesPerMessage) =>
+        set({
+          maxImagesPerMessage: Math.max(
+            1,
+            Math.min(10, Math.floor(typeof maxImagesPerMessage === 'number' && !isNaN(maxImagesPerMessage) ? maxImagesPerMessage : 2))
+          ),
+        }),
+      setCloudPrivacyConsent: (cloudPrivacyConsent) => set({ cloudPrivacyConsent }),
     }),
     {
       name: 'vela-config-storage',

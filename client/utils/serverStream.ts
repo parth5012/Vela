@@ -10,7 +10,7 @@
  * Maintenance: Update this block when exports, invariants, side effects, or ownership change.
  */
 import type React from 'react';
-import { useChatStore, Message, Thread } from '../store/useChatStore';
+import { useChatStore, Message, Thread, ChatAttachment } from '../store/useChatStore';
 import { streamAgentResponse } from './sse';
 import { queueMessageForSync } from '../db/chatRepository';
 import { streamController } from './streamController';
@@ -27,6 +27,8 @@ export type ServerStreamParams = {
   threads?: Thread[];
   setThreads?: (threads: Thread[]) => void;
   setAuthRequired: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  attachments?: ChatAttachment[];
+  cloudPrivacyConsent?: boolean;
 };
 
 // Shared server-mode SSE dispatch used by send, regenerate, and new-thread:
@@ -65,7 +67,10 @@ export async function runServerStream(p: ServerStreamParams): Promise<void> {
           }
         },
         undefined,
-        undefined,
+        {
+          attachments: p.attachments,
+          cloudPrivacyConsent: p.cloudPrivacyConsent,
+        },
         streamGeneration
       );
     } catch (err: any) {

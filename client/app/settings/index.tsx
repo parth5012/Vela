@@ -39,6 +39,12 @@ const GROUPS: CategoryGroup[] = [
     ]
   },
   {
+    title: 'Multimodal',
+    rows: [
+      { icon: '🖼️', label: 'Multimodal Chat', hint: 'Image attachments, privacy, limits', route: '/settings/multimodal' },
+    ],
+  },
+  {
     title: 'Local AI',
     rows: [
       { icon: '📱', label: 'Local Mode & Models', hint: 'On-device inference, downloads', route: '/settings/local-ai' },

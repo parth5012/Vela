@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import type { ChatAttachment } from '../store/useChatStore';
 import { stripReasoning, EMPTY_RESPONSE_ERROR_HINT } from './reasoning';
 import { withRetry, isTransientError } from './retry';
 import { streamController } from './streamController';
@@ -49,7 +50,9 @@ async function executeStreamRequest(
   agent?: string,
   onAuthRequired?: (provider: string) => void,
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
-  streamGeneration?: number
+  streamGeneration?: number,
+  attachments?: ChatAttachment[],
+  cloudPrivacyConsent?: boolean
 ): Promise<void> {
   // Create a timeout controller to abort the request if it takes too long
   let resetTimeout: () => void = () => {};
@@ -109,6 +112,19 @@ async function executeStreamRequest(
     };
     if (effectiveGeneration !== undefined && effectiveGeneration > 0) {
       bodyObj.stream_generation = effectiveGeneration;
+    }
+    if (attachments && attachments.length > 0) {
+      bodyObj.attachments = attachments.map((att) => ({
+        storage_path: att.storage_path,
+        mime_type: att.mime_type,
+        file_size: att.file_size,
+        width: att.width,
+        height: att.height,
+        alt_text: att.alt_text,
+      }));
+    }
+    if (cloudPrivacyConsent !== undefined) {
+      bodyObj.cloud_privacy_consent = cloudPrivacyConsent;
     }
 
     const requestBody = JSON.stringify(bodyObj);
@@ -295,6 +311,8 @@ export interface StreamAgentResponseOptions {
   delays?: number[];
   maxRetries?: number;
   sleepFn?: (ms: number) => Promise<void>;
+  attachments?: ChatAttachment[];
+  cloudPrivacyConsent?: boolean;
 }
 
 export async function streamAgentResponse(
@@ -336,7 +354,9 @@ export async function streamAgentResponse(
           agent,
           onAuthRequired,
           timeoutMs,
-          streamGeneration
+          streamGeneration,
+          retryOptions?.attachments,
+          retryOptions?.cloudPrivacyConsent
         ),
       {
         signal,

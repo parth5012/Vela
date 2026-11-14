@@ -308,6 +308,19 @@ export const styles = StyleSheet.create({
     paddingVertical: 8,
     maxHeight: 120,
   },
+  attachButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attachButtonDisabled: {
+    opacity: 0.35,
+  },
+  attachButtonIcon: {
+    fontSize: 18,
+  },
   sendButton: {
     borderRadius: 22,
     minWidth: 44,
