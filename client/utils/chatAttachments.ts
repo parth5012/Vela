@@ -48,7 +48,7 @@ export async function pickChatImages(maxCount: number = 2): Promise<PickedImageF
       const name = asset.name || `image_${Date.now()}.jpg`;
 
       // Pre-compress asset according to Decision 4 & 5
-      const compressed = await compressImage(asset.uri);
+      const compressed = await compressImage(asset.uri, undefined, undefined, effectiveMime);
 
       files.push({
         uri: asset.uri,
@@ -128,7 +128,7 @@ export async function uploadChatAttachment(params: {
     id: data.id,
     storage_path: data.storage_path,
     mime_type: data.mime_type || mimeType,
-    file_size: data.file_size,
+    file_size: data.file_size ?? data.size_bytes ?? 0,
     width: data.width || params.width,
     height: data.height || params.height,
     alt_text: data.alt_text || altText,

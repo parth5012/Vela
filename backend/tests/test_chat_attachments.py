@@ -171,6 +171,9 @@ def test_chat_message_privacy_consent_enforcement(monkeypatch):
     assert res.status_code == 200
     body = res.text
     assert "Cloud privacy consent is disabled" in body
+    assert '"type": "content"' in body
+    assert '"delta":' in body
+    assert '"type": "done"' in body
 
 
 def test_chat_message_vision_unsupported_model(monkeypatch):
@@ -207,3 +210,64 @@ def test_chat_message_vision_unsupported_model(monkeypatch):
     assert res.status_code == 200
     body = res.text
     assert "does not support image or vision inputs" in body
+    assert '"type": "content"' in body
+    assert '"delta":' in body
+    assert '"type": "done"' in body
+
+
+def test_chat_message_attachment_limit(monkeypatch):
+    monkeypatch.setenv("VELA_API_KEY", "test-key")
+    client = TestClient(app)
+
+    payload = {
+        "thread_id": "thread-limit-1",
+        "message": "Analyze these photos",
+        "attachments": [
+            {
+                "path": f"thread-limit-1/msg-1/pic{i}.jpg",
+                "mime_type": "image/jpeg",
+                "url": f"https://fake.supabase.co/pic{i}.jpg",
+            }
+            for i in range(11)
+        ],
+        "cloud_privacy_consent": True,
+    }
+
+    res = client.post(
+        "/chat/message",
+        json=payload,
+        headers={"Authorization": "Bearer test-key"},
+    )
+    assert res.status_code == 200
+    body = res.text
+    assert "maximum of 10 image attachments" in body
+    assert '"type": "content"' in body
+    assert '"type": "done"' in body
+
+
+def test_path_traversal_rejection(monkeypatch):
+    monkeypatch.setenv("VELA_API_KEY", "test-key")
+    client = TestClient(app)
+
+    # Path traversal in message_id
+    file_content = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 20
+    files = {"file": ("test.jpg", io.BytesIO(file_content), "image/jpeg")}
+    data = {
+        "thread_id": "thread-1",
+        "message_id": "..",
+    }
+    res = client.post(
+        "/chat/attachments",
+        files=files,
+        data=data,
+        headers={"Authorization": "Bearer test-key"},
+    )
+    assert res.status_code == 400
+    assert "Invalid message_id" in res.json()["detail"]
+
+    # Path traversal in signed URL path
+    res_signed = client.get(
+        "/chat/attachments/signed-url?path=../../etc/passwd",
+        headers={"Authorization": "Bearer test-key"},
+    )
+    assert res_signed.status_code == 400

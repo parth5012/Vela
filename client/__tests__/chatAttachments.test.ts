@@ -194,6 +194,32 @@ describe('Multimodal Chat Attachments (#559, #562)', () => {
       expect(options.headers.Authorization).toBe('Bearer test-api-key');
       expect(attachment.storage_path).toBe('thread_abc/msg_123/att-123.jpg');
       expect(attachment.alt_text).toBe('sample diagram');
+      expect(attachment.file_size).toBe(45000);
+    });
+
+    it('handles size_bytes returned by backend when file_size is absent', async () => {
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          id: 'att-456',
+          storage_path: 'thread_abc/msg_123/att-456.jpg',
+          mime_type: 'image/jpeg',
+          size_bytes: 52000,
+          url: 'https://supabase.co/signed/att-456.jpg',
+        }),
+      });
+      global.fetch = mockFetch;
+
+      const attachment = await uploadChatAttachment({
+        apiUrl: 'https://api.vela.local',
+        apiKey: 'test-api-key',
+        threadId: 'thread_abc',
+        messageId: 'msg_123',
+        fileUri: 'file:///path/to/img.jpg',
+        mimeType: 'image/jpeg',
+      });
+
+      expect(attachment.file_size).toBe(52000);
     });
 
     it('throws error on failed response', async () => {

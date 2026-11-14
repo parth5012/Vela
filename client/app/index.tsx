@@ -1119,6 +1119,39 @@ export default function ChatScreen() {
 
     const originalHistory = messages[activeThreadId] || [];
 
+    const initialAttachments: ChatAttachment[] = attachmentsToUpload.map((att) => ({
+      storage_path: '',
+      mime_type: att.compressed?.mimeType || att.mimeType,
+      file_size: att.compressed?.size || att.size || 0,
+      width: att.compressed?.width,
+      height: att.compressed?.height,
+      alt_text: att.altText,
+      url: att.compressed?.uri || att.uri,
+    }));
+
+    // Instantaneous optimistic state commit (< 4ms synchronous blocking invariant)
+    addMessage(activeThreadId, {
+      id: userMsgId,
+      role: 'user',
+      content: userText,
+      created_at: nowIso,
+      attachments: initialAttachments.length > 0 ? initialAttachments : undefined,
+    });
+
+    addMessage(activeThreadId, {
+      id: assistantMsgId,
+      role: 'assistant',
+      content: '',
+      created_at: nowIso,
+    });
+
+    beginStreamOverlay(assistantMsgId);
+    setStreamingThread(activeThreadId, true);
+    triggerAutoScroll();
+
+    const syncDuration = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - syncStart;
+    perfTracker.recordMetric('sync_blocking_invariant_ms', syncDuration, 'ms');
+
     let uploadedAttachments: ChatAttachment[] = [];
     if (attachmentsToUpload.length > 0) {
       if (connectionMode === 'server' && apiUrl && apiKey) {
@@ -1142,51 +1175,14 @@ export default function ChatScreen() {
           );
         } catch (uploadErr) {
           console.error('[handleSend] Attachment upload error:', uploadErr);
-          uploadedAttachments = attachmentsToUpload.map((att) => ({
-            storage_path: att.uri,
-            mime_type: att.compressed?.mimeType || att.mimeType,
-            file_size: att.compressed?.size || att.size || 0,
-            width: att.compressed?.width,
-            height: att.compressed?.height,
-            alt_text: att.altText,
-            url: att.compressed?.uri || att.uri,
-          }));
+          Alert.alert('Upload Failed', 'Failed to upload image attachments. Please check your network and try again.');
+          setStreamingThread(activeThreadId, false);
+          return;
         }
       } else {
-        uploadedAttachments = attachmentsToUpload.map((att) => ({
-          storage_path: att.uri,
-          mime_type: att.compressed?.mimeType || att.mimeType,
-          file_size: att.compressed?.size || att.size || 0,
-          width: att.compressed?.width,
-          height: att.compressed?.height,
-          alt_text: att.altText,
-          url: att.compressed?.uri || att.uri,
-        }));
+        uploadedAttachments = initialAttachments;
       }
     }
-
-    // Instantaneous optimistic state commit (< 4ms synchronous blocking invariant)
-    addMessage(activeThreadId, {
-      id: userMsgId,
-      role: 'user',
-      content: userText,
-      created_at: nowIso,
-      attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
-    });
-
-    addMessage(activeThreadId, {
-      id: assistantMsgId,
-      role: 'assistant',
-      content: '',
-      created_at: nowIso,
-    });
-
-    beginStreamOverlay(assistantMsgId);
-    setStreamingThread(activeThreadId, true);
-    triggerAutoScroll();
-
-    const syncDuration = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - syncStart;
-    perfTracker.recordMetric('sync_blocking_invariant_ms', syncDuration, 'ms');
 
     try {
       if (isLocalMode) {
@@ -1397,6 +1393,35 @@ export default function ChatScreen() {
     const assistantMsgId = generateId('msg_assistant');
     const nowIso = new Date().toISOString();
 
+    const initialAttachments: ChatAttachment[] = attachmentsToUpload.map((att) => ({
+      storage_path: '',
+      mime_type: att.compressed?.mimeType || att.mimeType,
+      file_size: att.compressed?.size || att.size || 0,
+      width: att.compressed?.width,
+      height: att.compressed?.height,
+      alt_text: att.altText,
+      url: att.compressed?.uri || att.uri,
+    }));
+
+    addMessage(newThreadId, {
+      id: userMsgId,
+      role: 'user',
+      content: effectiveText,
+      created_at: nowIso,
+      attachments: initialAttachments.length > 0 ? initialAttachments : undefined,
+    });
+
+    addMessage(newThreadId, {
+      id: assistantMsgId,
+      role: 'assistant',
+      content: '',
+      created_at: nowIso,
+    });
+
+    beginStreamOverlay(assistantMsgId);
+    setStreamingThread(newThreadId, true);
+    triggerAutoScroll();
+
     let uploadedAttachments: ChatAttachment[] = [];
     if (attachmentsToUpload.length > 0) {
       if (connectionMode === 'server' && apiUrl && apiKey) {
@@ -1420,47 +1445,14 @@ export default function ChatScreen() {
           );
         } catch (uploadErr) {
           console.error('[handleSendWelcome] Upload error:', uploadErr);
-          uploadedAttachments = attachmentsToUpload.map((att) => ({
-            storage_path: att.uri,
-            mime_type: att.compressed?.mimeType || att.mimeType,
-            file_size: att.compressed?.size || att.size || 0,
-            width: att.compressed?.width,
-            height: att.compressed?.height,
-            alt_text: att.altText,
-            url: att.compressed?.uri || att.uri,
-          }));
+          Alert.alert('Upload Failed', 'Failed to upload image attachments. Please check your network and try again.');
+          setStreamingThread(newThreadId, false);
+          return;
         }
       } else {
-        uploadedAttachments = attachmentsToUpload.map((att) => ({
-          storage_path: att.uri,
-          mime_type: att.compressed?.mimeType || att.mimeType,
-          file_size: att.compressed?.size || att.size || 0,
-          width: att.compressed?.width,
-          height: att.compressed?.height,
-          alt_text: att.altText,
-          url: att.compressed?.uri || att.uri,
-        }));
+        uploadedAttachments = initialAttachments;
       }
     }
-
-    addMessage(newThreadId, {
-      id: userMsgId,
-      role: 'user',
-      content: effectiveText,
-      created_at: nowIso,
-      attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
-    });
-
-    addMessage(newThreadId, {
-      id: assistantMsgId,
-      role: 'assistant',
-      content: '',
-      created_at: nowIso,
-    });
-
-    beginStreamOverlay(assistantMsgId);
-    setStreamingThread(newThreadId, true);
-    triggerAutoScroll();
 
     try {
       if (isLocalMode) {

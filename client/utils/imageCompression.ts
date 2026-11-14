@@ -109,7 +109,8 @@ export function getImageDimensions(uri: string): Promise<{ width: number; height
 export async function compressImage(
   uri: string,
   explicitWidth?: number,
-  explicitHeight?: number
+  explicitHeight?: number,
+  explicitMimeType?: string
 ): Promise<CompressedImageResult> {
   const dimensions =
     explicitWidth && explicitHeight
@@ -191,6 +192,6 @@ export async function compressImage(
     width: scaled.width,
     height: scaled.height,
     size: fileSize || 1024 * 100,
-    mimeType: 'image/jpeg',
+    mimeType: explicitMimeType || 'image/jpeg',
   };
 }

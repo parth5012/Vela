@@ -1,5 +1,6 @@
 import mimetypes
 import os
+import re
 import time
 
 from utils.logger import StructuredLogger
@@ -24,9 +25,10 @@ def set_storage_client(client):
 
 
 def reset_storage_client():
-    """Reset storage client override."""
+    """Reset storage client override and clear in-memory cache."""
     global _STORAGE_CLIENT_OVERRIDE
     _STORAGE_CLIENT_OVERRIDE = None
+    _IN_MEMORY_STORAGE.clear()
 
 
 def get_supabase_client():
@@ -95,11 +97,17 @@ def upload_chat_attachment(
     if len(file_bytes) == 0:
         raise ValueError("Attachment file cannot be empty")
 
+    clean_thread_id = (thread_id or "").strip()
+    clean_message_id = (message_id or "").strip()
+
+    if not clean_thread_id or not re.match(r"^[a-zA-Z0-9_\-]+$", clean_thread_id):
+        raise ValueError(f"Invalid thread_id: '{thread_id}'")
+    if not clean_message_id or not re.match(r"^[a-zA-Z0-9_\-]+$", clean_message_id):
+        raise ValueError(f"Invalid message_id: '{message_id}'")
+
     attachment_id = generate_ulid()
     ext = get_extension_for_mime(content_type_clean, filename)
-    safe_thread_id = os.path.basename(thread_id.strip("/"))
-    safe_message_id = os.path.basename(message_id.strip("/"))
-    storage_path = f"{safe_thread_id}/{safe_message_id}/{attachment_id}.{ext}"
+    storage_path = f"{clean_thread_id}/{clean_message_id}/{attachment_id}.{ext}"
 
     client = get_supabase_client()
     signed_url = None
@@ -144,6 +152,7 @@ def upload_chat_attachment(
         "url": signed_url,
         "mime_type": content_type_clean,
         "size_bytes": len(file_bytes),
+        "file_size": len(file_bytes),
         "alt_text": alt_text,
         "expires_at": expires_at,
         "created_at": now_ts,
@@ -152,6 +161,8 @@ def upload_chat_attachment(
 
 def create_signed_url(storage_path: str, ttl_seconds: int = DEFAULT_SIGNED_URL_TTL) -> str:
     """Mint a fresh signed URL for an existing canonical storage path (decision 18)."""
+    if not storage_path or ".." in storage_path or storage_path.startswith(("/", "\\")):
+        raise ValueError(f"Invalid storage_path: '{storage_path}'")
     client = get_supabase_client()
     if client:
         try:
@@ -177,6 +188,8 @@ def create_signed_url(storage_path: str, ttl_seconds: int = DEFAULT_SIGNED_URL_T
 
 def get_attachment_bytes(storage_path: str) -> bytes | None:
     """Retrieve raw file bytes from in-memory cache or Supabase Storage."""
+    if not storage_path or ".." in storage_path or storage_path.startswith(("/", "\\")):
+        return None
     if storage_path in _IN_MEMORY_STORAGE:
         return _IN_MEMORY_STORAGE[storage_path]
 

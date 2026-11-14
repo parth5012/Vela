@@ -608,7 +608,7 @@ class AttachmentPayload(BaseModel):
     url: str | None = None
     mime_type: str | None = Field(default=None, validation_alias=AliasChoices("mime_type", "mimeType"))
     alt_text: str | None = Field(default=None, validation_alias=AliasChoices("alt_text", "altText"))
-    size_bytes: int | None = Field(default=None, validation_alias=AliasChoices("size_bytes", "sizeBytes"))
+    size_bytes: int | None = Field(default=None, validation_alias=AliasChoices("size_bytes", "sizeBytes", "file_size", "fileSize"))
 
 
 class MessagePayload(BaseModel):
@@ -702,7 +702,8 @@ async def upload_chat_attachment_endpoint(
 
     normalized_id = normalize_thread_id(thread_id)
     try:
-        result = upload_chat_attachment(
+        result = await asyncio.to_thread(
+            upload_chat_attachment,
             file_bytes=file_bytes,
             thread_id=normalized_id,
             message_id=message_id,
@@ -861,6 +862,15 @@ async def chat_message(payload: MessagePayload):
             else:
                 experience_id = None
 
+            if len(payload.attachments) > 10:
+                count_response = "A maximum of 10 image attachments per message is supported."
+                full_response = count_response
+                yield f"data: {json.dumps({'type': 'content', 'delta': count_response})}\n\n"
+                yield f"data: {json.dumps({'type': 'done', 'thread_title': thread_title, 'agent': thread_agent})}\n\n"
+                await _persist_once("too_many_attachments")
+                _release_once("too_many_attachments")
+                return
+
             if payload.attachments:
                 if not payload.cloud_privacy_consent:
                     consent_response = (
@@ -868,8 +878,8 @@ async def chat_message(payload: MessagePayload):
                         "without consent. Please enable 'Cloud AI Processing' in Settings to analyze images with cloud models."
                     )
                     full_response = consent_response
-                    yield f"data: {json.dumps({'content': consent_response})}\n\n"
-                    yield "data: [DONE]\n\n"
+                    yield f"data: {json.dumps({'type': 'content', 'delta': consent_response})}\n\n"
+                    yield f"data: {json.dumps({'type': 'done', 'thread_title': thread_title, 'agent': thread_agent})}\n\n"
                     await _persist_once("privacy_consent_required")
                     _release_once("privacy_consent_required")
                     return
@@ -881,8 +891,8 @@ async def chat_message(payload: MessagePayload):
                         "Please switch to a vision-capable model (such as Gemini) in Settings to analyze images."
                     )
                     full_response = unsupported_response
-                    yield f"data: {json.dumps({'content': unsupported_response})}\n\n"
-                    yield "data: [DONE]\n\n"
+                    yield f"data: {json.dumps({'type': 'content', 'delta': unsupported_response})}\n\n"
+                    yield f"data: {json.dumps({'type': 'done', 'thread_title': thread_title, 'agent': thread_agent})}\n\n"
                     await _persist_once("vision_unsupported")
                     _release_once("vision_unsupported")
                     return
@@ -893,7 +903,11 @@ async def chat_message(payload: MessagePayload):
             for att in payload.attachments:
                 att_path = att.storage_path or att.path
                 att_url = att.url
+                # Validate storage_path to reject path traversal (..) and invalid local/scheme URIs (e.g. file://)
                 if att_path:
+                    if ".." in att_path or att_path.startswith(("/", "\\")) or "://" in att_path:
+                        logger.warning("Rejected invalid attachment storage_path", path=att_path)
+                        continue
                     try:
                         fresh_url = create_signed_url(att_path, ttl_seconds=900)
                         if fresh_url:
