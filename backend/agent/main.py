@@ -4,7 +4,7 @@ from agent.registry import AGENT_REGISTRY
 import os
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, Query, responses, Request, BackgroundTasks, Security, HTTPException, status, WebSocket
+from fastapi import FastAPI, Depends, Query, responses, Request, BackgroundTasks, Security, HTTPException, status, WebSocket, UploadFile, File, Form
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from google_auth_oauthlib.flow import Flow
 from db.database import PostgresDB
@@ -28,7 +28,7 @@ from pydantic import BaseModel, Field, AliasChoices
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from agent.graph import graph
-from db.models import Conversation, Experience, SyncMessage, ToolInvocation, Base, utcnow_naive
+from db.models import Conversation, Experience, SyncMessage, ToolInvocation, ChatAttachment, Base, utcnow_naive
 from fastapi import Response
 from utils.ulid import generate_ulid
 from utils.auth_gate import GLOBAL_OAUTH_CONVERSATION_ID
@@ -594,12 +594,24 @@ class StopPayload(BaseModel):
     streamGeneration: int | None = None
 
 
+class AttachmentPayload(BaseModel):
+    id: str | None = None
+    path: str | None = None
+    storage_path: str | None = Field(default=None, validation_alias=AliasChoices("storage_path", "storagePath"))
+    url: str | None = None
+    mime_type: str | None = Field(default=None, validation_alias=AliasChoices("mime_type", "mimeType"))
+    alt_text: str | None = Field(default=None, validation_alias=AliasChoices("alt_text", "altText"))
+    size_bytes: int | None = Field(default=None, validation_alias=AliasChoices("size_bytes", "sizeBytes"))
+
+
 class MessagePayload(BaseModel):
     thread_id: str
     message: str
     agent: str = Field(default="personal assistant", validation_alias=AliasChoices("agent", "persona"))
     google_access_token: str | None = None
     stream_generation: int | None = Field(default=None, validation_alias=AliasChoices("stream_generation", "streamGeneration"))
+    attachments: list[AttachmentPayload] = Field(default_factory=list)
+    cloud_privacy_consent: bool = Field(default=False, validation_alias=AliasChoices("cloud_privacy_consent", "cloudPrivacyConsent", "privacy_consent"))
 
 
 from agent.concurrency import get_stream_semaphore
@@ -657,6 +669,83 @@ def _persist_sse_turn_sync(
             session.add(sync_msg)
     return found
 
+
+@app.post("/chat/attachments", dependencies=[Depends(verify_api_key)])
+async def upload_chat_attachment_endpoint(
+    file: UploadFile = File(...),
+    thread_id: str = Form(...),
+    message_id: str = Form(...),
+    alt_text: Optional[str] = Form(None),
+):
+    from db.storage import upload_chat_attachment, ALLOWED_MIME_TYPES, MAX_FILE_SIZE_BYTES
+    content_type = (file.content_type or "").lower().strip()
+    if not content_type or content_type not in ALLOWED_MIME_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported image type '{file.content_type}'. Allowed types: {sorted(ALLOWED_MIME_TYPES)}"
+        )
+
+    file_bytes = await file.read()
+    if len(file_bytes) == 0:
+        raise HTTPException(status_code=400, detail="Empty file uploaded.")
+    if len(file_bytes) > MAX_FILE_SIZE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large ({len(file_bytes)} bytes). Maximum allowed size is {MAX_FILE_SIZE_BYTES} bytes (10 MB)."
+        )
+
+    normalized_id = normalize_thread_id(thread_id)
+    try:
+        result = upload_chat_attachment(
+            file_bytes=file_bytes,
+            thread_id=normalized_id,
+            message_id=message_id,
+            content_type=content_type,
+            filename=file.filename,
+            alt_text=alt_text,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error("Failed to upload chat attachment", error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to upload attachment.")
+
+    try:
+        with get_db_session() as session:
+            client = DBClient(session)
+            conv = session.query(Conversation).filter_by(id=normalized_id).first()
+            if not conv:
+                conv = client.create_client_conversation(conversation_id=normalized_id)
+            att_row = ChatAttachment(
+                id=result["id"],
+                thread_id=normalized_id,
+                message_id=message_id,
+                storage_path=result["storage_path"],
+                mime_type=result["mime_type"],
+                size_bytes=result["size_bytes"],
+                alt_text=alt_text,
+                created_at=result["created_at"],
+            )
+            session.add(att_row)
+    except Exception as e:
+        logger.warning("Failed to persist attachment metadata to DB", error=str(e))
+
+    return result
+
+
+@app.get("/chat/attachments/signed-url", dependencies=[Depends(verify_api_key)])
+def get_attachment_signed_url(path: str = Query(...)):
+    if not path or ".." in path or path.startswith("/"):
+        raise HTTPException(status_code=400, detail="Invalid attachment storage path.")
+    from db.storage import create_signed_url, DEFAULT_SIGNED_URL_TTL
+    signed_url = create_signed_url(path, ttl_seconds=DEFAULT_SIGNED_URL_TTL)
+    return {
+        "path": path,
+        "url": signed_url,
+        "expires_at": int(time.time()) + DEFAULT_SIGNED_URL_TTL,
+    }
+
+
 @app.post("/chat/message", dependencies=[Depends(verify_api_key)])
 async def chat_message(payload: MessagePayload):
     allowed_agents = [config.identifier for config in AGENT_REGISTRY.list_agents()]
@@ -671,7 +760,7 @@ async def chat_message(payload: MessagePayload):
         await semaphore.acquire()
         normalized_id = None
         full_response = ""
-        initial_message = payload.message
+        initial_message = payload.message or (f"[Attached {len(payload.attachments)} image(s)]" if payload.attachments else "")
         experience_id = None
         persisted = False
         released = False
@@ -767,12 +856,63 @@ async def chat_message(payload: MessagePayload):
             else:
                 experience_id = None
 
+            if payload.attachments:
+                if not payload.cloud_privacy_consent:
+                    consent_response = (
+                        "Cloud privacy consent is disabled. Image attachments cannot be sent to cloud AI providers "
+                        "without consent. Please enable 'Cloud AI Processing' in Settings to analyze images with cloud models."
+                    )
+                    full_response = consent_response
+                    yield f"data: {json.dumps({'content': consent_response})}\n\n"
+                    yield "data: [DONE]\n\n"
+                    await _persist_once("privacy_consent_required")
+                    _release_once("privacy_consent_required")
+                    return
+
+                from utils.llm import is_vision_supported
+                if not is_vision_supported():
+                    unsupported_response = (
+                        "The current model does not support image or vision inputs. "
+                        "Please switch to a vision-capable model (such as Gemini) in Settings to analyze images."
+                    )
+                    full_response = unsupported_response
+                    yield f"data: {json.dumps({'content': unsupported_response})}\n\n"
+                    yield "data: [DONE]\n\n"
+                    await _persist_once("vision_unsupported")
+                    _release_once("vision_unsupported")
+                    return
+
+            content_blocks = []
+            if payload.message:
+                content_blocks.append({"type": "text", "text": payload.message})
+            for att in payload.attachments:
+                att_path = att.storage_path or att.path
+                att_url = att.url
+                if att_path:
+                    from db.storage import create_signed_url
+                    try:
+                        fresh_url = create_signed_url(att_path, ttl_seconds=900)
+                        if fresh_url:
+                            att_url = fresh_url
+                    except Exception as ex:
+                        logger.warning("Failed to mint fresh signed URL", path=att_path, error=str(ex))
+                if att_url:
+                    content_blocks.append({
+                        "type": "image_url",
+                        "image_url": {"url": att_url}
+                    })
+
+            if content_blocks:
+                human_msg = HumanMessage(content=content_blocks)
+            else:
+                human_msg = HumanMessage(content=payload.message)
+
             eval_key = str(payload.thread_id)
             if is_eval:
                 prior_messages = _EVAL_THREAD_HISTORY.get(eval_key) or _EVAL_THREAD_HISTORY.get(normalized_id, [])
-                initial_messages = list(prior_messages) + [HumanMessage(content=payload.message)]
+                initial_messages = list(prior_messages) + [human_msg]
             else:
-                initial_messages = [HumanMessage(content=payload.message)]
+                initial_messages = [human_msg]
 
             initial_state = {
                 "messages": initial_messages,

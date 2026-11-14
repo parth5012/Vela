@@ -25,7 +25,20 @@ if not DATABASE_URL:
 # Tables safe to create_all on SQLite. pgvector's Vector type has no SQLite
 # DDL, so memory_vectors is excluded here (Postgres-only, created via the
 # full create_all in ensure_prod_schema or schema.sql).
-SQLITE_SAFE_TABLES = ["conversations", "oauth_tokens", "experiences", "system_prompt_fragments", "skills_registry", "tool_invocations", "sync_messages", "system_settings", "briefings", "check_ins", "pending_client_mailbox"]
+SQLITE_SAFE_TABLES = [
+    "conversations",
+    "oauth_tokens",
+    "experiences",
+    "system_prompt_fragments",
+    "skills_registry",
+    "tool_invocations",
+    "sync_messages",
+    "system_settings",
+    "briefings",
+    "check_ins",
+    "pending_client_mailbox",
+    "chat_attachments",
+]
 
 # Create the engine
 if DATABASE_URL.startswith("sqlite"):

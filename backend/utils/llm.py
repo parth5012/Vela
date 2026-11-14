@@ -207,3 +207,40 @@ def get_embeddings():
     if len(embeddings_list) > 1:
         return FallbackEmbeddings(embeddings_list)
     return primary_emb
+
+
+def is_vision_supported(llm=None, model_name: str | None = None) -> bool:
+    """Determine whether an LLM or model identifier supports image/vision processing.
+
+    Per Map #559 Decision 15 & 16:
+    Vision-capable models include Gemini (gemini-*), GPT-4o, Claude 3/3.5, and vision-tuned models.
+    Text-only models return False.
+    """
+    if model_name:
+        mn = str(model_name).lower()
+    elif llm is not None:
+        target = llm
+        if hasattr(llm, "first"):
+            target = llm.first
+        mn = str(getattr(target, "model", getattr(target, "model_name", str(target)))).lower()
+    else:
+        try:
+            target = get_llm()
+            if hasattr(target, "first"):
+                target = target.first
+            mn = str(getattr(target, "model", getattr(target, "model_name", str(target)))).lower()
+        except Exception:
+            return False
+
+    # Check known vision-capable model identifiers
+    vision_keywords = ["gemini", "gpt-4o", "gpt-4-vision", "claude-3", "llava", "vision"]
+    if any(k in mn for k in vision_keywords):
+        return True
+
+    # Known text-only model identifiers
+    text_only_keywords = ["nemotron", "mixtral", "command-a", "command-r", "gpt-oss", "deepseek-r1"]
+    if any(k in mn for k in text_only_keywords):
+        return False
+
+    # Default to False for text-only safety
+    return False

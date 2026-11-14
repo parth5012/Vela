@@ -146,3 +146,17 @@ CREATE TABLE IF NOT EXISTS check_ins (
 CREATE INDEX IF NOT EXISTS idx_check_ins_conversation_id ON check_ins(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_check_ins_date ON check_ins(date);
 
+CREATE TABLE IF NOT EXISTS chat_attachments (
+    id VARCHAR(50) PRIMARY KEY,
+    thread_id UUID REFERENCES conversations(id) ON DELETE CASCADE NOT NULL,
+    message_id VARCHAR(50) NOT NULL,
+    storage_path VARCHAR(500) NOT NULL,
+    mime_type VARCHAR(100) NOT NULL,
+    size_bytes BIGINT NOT NULL,
+    alt_text TEXT,
+    created_at BIGINT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_attachments_thread_id ON chat_attachments(thread_id);
+CREATE INDEX IF NOT EXISTS idx_chat_attachments_message_id ON chat_attachments(message_id);
+
