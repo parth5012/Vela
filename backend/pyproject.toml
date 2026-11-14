@@ -75,4 +75,13 @@ exclude = ["__pycache__", ".venv", ".pytest_cache", "*.ipynb", "scratch", "previ
 line-length = 100
 
 [tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "F",      # Pyflakes
+    "I",      # isort (import sorting)
+    "B",      # flake8-bugbear (common bug patterns, mutable defaults)
+    "ASYNC",  # flake8-async (asyncio hazards)
+    "BLE",    # flake8-blind-except (bare except Exception: pass)
+    "RUF",    # ruff-specific rules
+]
 ignore = ["E501"]
