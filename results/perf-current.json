@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "timestamp": "2026-11-02T09:20:41.383Z",
+  "timestamp": "2026-11-14T17:26:04.439Z",
   "platform": "mobile-android",
   "environment": {
     "os": "linux",
@@ -9,6 +9,33 @@
     "runtime": "Node v26.8.2 / Jest"
   },
   "metrics": {
+    "cold_start_to_typeable_ms": {
+      "value": 0.67,
+      "unit": "ms",
+      "lower_is_better": true,
+      "target": 400,
+      "tier": 1,
+      "lane": 1,
+      "description": "Process launch & store rehydration to interactive text input (Target: < 400 ms headless, < 1200 ms native)"
+    },
+    "send_to_bubble_ms": {
+      "value": 0,
+      "unit": "ms",
+      "lower_is_better": true,
+      "target": 4,
+      "tier": 1,
+      "lane": 1,
+      "description": "Synchronous send action dispatch to optimistic state commit (Target: < 4.0 ms headless, < 16.6 ms native)"
+    },
+    "stream_100_token_settle_ms": {
+      "value": 2.67,
+      "unit": "ms",
+      "lower_is_better": true,
+      "target": 20,
+      "tier": 1,
+      "lane": 1,
+      "description": "End-to-end ingestion and settling of 100-token stream (Target: < 20.0 ms headless)"
+    },
     "stream_render_commits": {
       "value": 10,
       "unit": "commits",
@@ -28,7 +55,7 @@
       "description": "Historical cell re-render count during stream (Target: strictly 0)"
     },
     "stream_total_parse_ms": {
-      "value": 0.87,
+      "value": 0.88,
       "unit": "ms",
       "lower_is_better": true,
       "target": 2.5,
@@ -37,7 +64,7 @@
       "description": "Cumulative AST parse duration across 250 tokens (Target: < 2.5 ms)"
     },
     "parse_quadratic_ratio": {
-      "value": 1.96,
+      "value": 1.6,
       "unit": "ratio",
       "lower_is_better": true,
       "target": 2.2,
@@ -46,7 +73,7 @@
       "description": "Scaling ratio total_parse(250) / total_parse(125) (Target: < 2.20 ratio)"
     },
     "js_event_loop_lag_ms": {
-      "value": 0,
+      "value": 1,
       "unit": "ms",
       "lower_is_better": true,
       "target": 4,
@@ -89,33 +116,6 @@
       "tier": 1,
       "lane": 1,
       "description": "Synchronous dispatch delay before optimistic state commit (Target: < 4.0 ms)"
-    },
-    "cold_start_to_typeable_ms": {
-      "value": 0.33,
-      "unit": "ms",
-      "lower_is_better": true,
-      "target": 400,
-      "tier": 1,
-      "lane": 1,
-      "description": "Process launch & store rehydration to interactive text input (Target: < 400 ms headless, < 1200 ms native)"
-    },
-    "send_to_bubble_ms": {
-      "value": 0,
-      "unit": "ms",
-      "lower_is_better": true,
-      "target": 4,
-      "tier": 1,
-      "lane": 1,
-      "description": "Synchronous send action dispatch to optimistic state commit (Target: < 4.0 ms headless, < 16.6 ms native)"
-    },
-    "stream_100_token_settle_ms": {
-      "value": 2,
-      "unit": "ms",
-      "lower_is_better": true,
-      "target": 20,
-      "tier": 1,
-      "lane": 1,
-      "description": "End-to-end ingestion and settling of 100-token stream (Target: < 20.0 ms headless)"
     }
   }
 }
