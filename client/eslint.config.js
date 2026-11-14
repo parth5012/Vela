@@ -34,6 +34,10 @@ module.exports = [
     rules: {
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
+      'no-debugger': 'error',
+      'no-duplicate-case': 'error',
+      'no-unreachable': 'error',
+      'no-constant-condition': ['error', { checkLoops: false }],
     },
   },
 ];

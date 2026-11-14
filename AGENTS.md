@@ -37,6 +37,11 @@ The five canonical triage role labels are used as-is: needs-triage, needs-info, 
 
 Single-context: one `CONTEXT.md` plus `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
+- Edge cases and gotchas: consult [LEARNINGS.md](LEARNINGS.md) before implementing migrations, async lifecycle guards, streaming stores, or native bridges.
+- Historical bug catalog: consult and update [BUGS.toml](BUGS.toml) for fixed regressions and required failing tests.
+- Reviewer judgement calls: consult [CODING_STANDARDS.md](CODING_STANDARDS.md) during code review for non-mechanical architectural standards.
+- UI taste linter: run `npm run design:lint` in `client/` when adding or modifying UI components, screens, tokens, themes, or animations.
+
 ### Driving the app in a browser
 
 The client is agent-driveable on Expo web against a scripted LLM: `python vela_ci.py e2e`, or Playwright against the `/_e2e/*` control channel plus `window.__VELA_E2E__`. Use it before claiming a client change works. See `docs/agents/ui-e2e.md`.

@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import migrationConfig from '../db/migrations/migrations';
 import journal from '../db/migrations/meta/_journal.json';
 import snapshot0002 from '../db/migrations/meta/0002_snapshot.json';
@@ -91,6 +93,33 @@ describe('drizzle migration bundle (#147)', () => {
     journal.entries.forEach((entry, i) => {
       expect(entry.idx).toBe(i);
     });
+  });
+
+  it('has journal entries with strictly monotonically increasing timestamps (#356)', () => {
+    for (let i = 1; i < journal.entries.length; i++) {
+      const prev = journal.entries[i - 1];
+      const curr = journal.entries[i];
+      expect(curr.when).toBeGreaterThan(prev.when);
+    }
+  });
+
+  it('scans raw .sql migration files to ensure none end with a trailing statement-breakpoint (#147, #356)', () => {
+    const migrationsDir = path.resolve(__dirname, '../db/migrations');
+    const sqlFiles = fs.readdirSync(migrationsDir).filter((file) => file.endsWith('.sql'));
+    expect(sqlFiles.length).toBeGreaterThan(0);
+
+    for (const sqlFile of sqlFiles) {
+      const filePath = path.join(migrationsDir, sqlFile);
+      const content = fs.readFileSync(filePath, 'utf-8');
+      expect(content.trim().length).toBeGreaterThan(0);
+
+      const trimmed = content.trim();
+      expect(trimmed.endsWith('--> statement-breakpoint')).toBe(false);
+
+      const fragments = content.split('--> statement-breakpoint');
+      const hasTrailingEmptyFragment = fragments.length > 0 && fragments[fragments.length - 1].trim() === '';
+      expect(hasTrailingEmptyFragment).toBe(false);
+    }
   });
 
   it('maps each journal tag to its positional migration key (tag digits === idx === m#### key)', () => {
