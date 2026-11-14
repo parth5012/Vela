@@ -85,7 +85,7 @@ Example response format:
     # Fallback to heuristic checks if parsing fails or outputs are invalid
     if not parsed or intent not in ["activate", "deactivate", "continue", "none"]:
         user_msg = next((m for m in reversed(state["messages"]) if isinstance(m, HumanMessage)), None)
-        user_text = user_msg.content.lower() if (user_msg and user_msg.content) else ""
+        user_text = _normalize_content(user_msg.content).lower() if (user_msg and user_msg.content) else ""
         
         if active_skill and any(word in user_text for word in ["stop", "exit", "deactivate", "cancel", "quit"]):
             intent = "deactivate"
@@ -165,7 +165,7 @@ async def chatbot_node(state: AgentState) -> dict:
     
     # Extract the user's human message from history
     user_msg = next((m for m in reversed(state["messages"]) if isinstance(m, HumanMessage)), None)
-    user_message = user_msg.content if user_msg else ""
+    user_message = _normalize_content(user_msg.content) if user_msg else ""
     
     has_provider_override = False
     try:

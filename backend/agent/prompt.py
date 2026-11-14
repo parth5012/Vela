@@ -63,6 +63,24 @@ MAIN_PROMPT = """[Metadata]
 
 
 
+def _extract_text(content) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                parts.append(item.get("text", ""))
+            elif hasattr(item, "text"):
+                parts.append(getattr(item, "text", ""))
+        return "".join(parts)
+    if content is None:
+        return ""
+    return str(content)
+
+
 def build_context(state: AgentState) -> str:
     db_conv_id = state.get("db_conv_id")
     if not db_conv_id or db_conv_id == "conv-123":
@@ -77,7 +95,9 @@ def build_context(state: AgentState) -> str:
         user_msg = next((m for m in reversed(state["messages"]) if isinstance(m, HumanMessage)), None)
         if not user_msg or not user_msg.content:
             return ""
-        query_text = user_msg.content
+        query_text = _extract_text(user_msg.content)
+        if not query_text:
+            return ""
         
         # 2. Generate embedding for query
         embeddings = get_embeddings()
@@ -122,7 +142,7 @@ def build_recent_messages(state: AgentState) -> str:
             pass
 
     # 2. Format current messages in state
-    current_str = "\n".join([f"Human: {msg.content}" if isinstance(msg, HumanMessage) else f"AI: {msg.content}" for msg in state['messages']])
+    current_str = "\n".join([f"Human: {_extract_text(msg.content)}" if isinstance(msg, HumanMessage) else f"AI: {_extract_text(msg.content)}" for msg in state['messages']])
     
     return history_str + current_str
 

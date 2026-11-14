@@ -148,6 +148,19 @@ class SyncMessage(Base):
     created_at = Column(BigInteger, nullable=False)
 
 
+class ChatAttachment(Base):
+    __tablename__ = "chat_attachments"
+
+    id = Column(String(50), primary_key=True)  # ULID
+    thread_id = Column(String, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+    message_id = Column(String(50), nullable=False, index=True)
+    storage_path = Column(String(500), nullable=False)
+    mime_type = Column(String(100), nullable=False)
+    size_bytes = Column(BigInteger, nullable=False)
+    alt_text = Column(String, nullable=True)
+    created_at = Column(BigInteger, nullable=False)
+
+
 class SystemSetting(Base):
     __tablename__ = "system_settings"
 
