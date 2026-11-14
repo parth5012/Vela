@@ -28,7 +28,14 @@ from pydantic import BaseModel, Field, AliasChoices
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from agent.graph import graph
-from db.models import Conversation, Experience, SyncMessage, ToolInvocation, ChatAttachment, Base, utcnow_naive
+from db.models import Conversation, Experience, SyncMessage, ToolInvocation, ChatAttachment, utcnow_naive
+from db.storage import (
+    ALLOWED_MIME_TYPES,
+    DEFAULT_SIGNED_URL_TTL,
+    MAX_FILE_SIZE_BYTES,
+    create_signed_url,
+    upload_chat_attachment,
+)
 from fastapi import Response
 from utils.ulid import generate_ulid
 from utils.auth_gate import GLOBAL_OAUTH_CONVERSATION_ID
@@ -672,12 +679,11 @@ def _persist_sse_turn_sync(
 
 @app.post("/chat/attachments", dependencies=[Depends(verify_api_key)])
 async def upload_chat_attachment_endpoint(
-    file: UploadFile = File(...),
+    file: UploadFile = File(...),  # noqa: B008
     thread_id: str = Form(...),
     message_id: str = Form(...),
-    alt_text: Optional[str] = Form(None),
+    alt_text: str | None = Form(None),
 ):
-    from db.storage import upload_chat_attachment, ALLOWED_MIME_TYPES, MAX_FILE_SIZE_BYTES
     content_type = (file.content_type or "").lower().strip()
     if not content_type or content_type not in ALLOWED_MIME_TYPES:
         raise HTTPException(
@@ -706,7 +712,7 @@ async def upload_chat_attachment_endpoint(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.error("Failed to upload chat attachment", error=str(e))
         raise HTTPException(status_code=500, detail="Failed to upload attachment.")
 
@@ -727,7 +733,7 @@ async def upload_chat_attachment_endpoint(
                 created_at=result["created_at"],
             )
             session.add(att_row)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning("Failed to persist attachment metadata to DB", error=str(e))
 
     return result
@@ -737,7 +743,6 @@ async def upload_chat_attachment_endpoint(
 def get_attachment_signed_url(path: str = Query(...)):
     if not path or ".." in path or path.startswith("/"):
         raise HTTPException(status_code=400, detail="Invalid attachment storage path.")
-    from db.storage import create_signed_url, DEFAULT_SIGNED_URL_TTL
     signed_url = create_signed_url(path, ttl_seconds=DEFAULT_SIGNED_URL_TTL)
     return {
         "path": path,
@@ -889,12 +894,11 @@ async def chat_message(payload: MessagePayload):
                 att_path = att.storage_path or att.path
                 att_url = att.url
                 if att_path:
-                    from db.storage import create_signed_url
                     try:
                         fresh_url = create_signed_url(att_path, ttl_seconds=900)
                         if fresh_url:
                             att_url = fresh_url
-                    except Exception as ex:
+                    except Exception as ex:  # noqa: BLE001
                         logger.warning("Failed to mint fresh signed URL", path=att_path, error=str(ex))
                 if att_url:
                     content_blocks.append({

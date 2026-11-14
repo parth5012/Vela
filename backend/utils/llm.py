@@ -229,7 +229,7 @@ def is_vision_supported(llm=None, model_name: str | None = None) -> bool:
             if hasattr(target, "first"):
                 target = target.first
             mn = str(getattr(target, "model", getattr(target, "model_name", str(target)))).lower()
-        except Exception:
+        except Exception:  # noqa: BLE001
             return False
 
     # Check known vision-capable model identifiers

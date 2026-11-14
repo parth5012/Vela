@@ -1,7 +1,6 @@
 import mimetypes
 import os
 import time
-from typing import Optional
 
 from utils.logger import StructuredLogger
 from utils.ulid import generate_ulid
@@ -43,12 +42,12 @@ def get_supabase_client():
     try:
         from supabase import create_client
         return create_client(supabase_url, supabase_key)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning("Failed to create Supabase client", error=str(e))
         return None
 
 
-def get_extension_for_mime(mime_type: str, filename: Optional[str] = None) -> str:
+def get_extension_for_mime(mime_type: str, filename: str | None = None) -> str:
     """Resolve clean file extension based on MIME type and optional filename."""
     mime_lower = mime_type.lower()
     if mime_lower == "image/jpeg":
@@ -74,8 +73,8 @@ def upload_chat_attachment(
     thread_id: str,
     message_id: str,
     content_type: str,
-    filename: Optional[str] = None,
-    alt_text: Optional[str] = None,
+    filename: str | None = None,
+    alt_text: str | None = None,
     ttl_seconds: int = DEFAULT_SIGNED_URL_TTL,
 ) -> dict:
     """Upload attachment to Supabase Storage and return metadata with signed URL.
@@ -124,7 +123,7 @@ def upload_chat_attachment(
                 signed_url = signed_res.get("signedURL") or signed_res.get("signedUrl")
             if not signed_url:
                 signed_url = str(signed_res)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error("Supabase Storage upload failed, falling back to mock storage", error=str(e), path=storage_path)
             _IN_MEMORY_STORAGE[storage_path] = file_bytes
             supabase_url = os.getenv("SUPABASE_URL", "https://mock.supabase.co")
@@ -169,14 +168,14 @@ def create_signed_url(storage_path: str, ttl_seconds: int = DEFAULT_SIGNED_URL_T
                 signed_url = signed_res.get("signedURL") or signed_res.get("signedUrl")
             if signed_url:
                 return signed_url
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning("Failed to mint signed URL via Supabase client", error=str(e), path=storage_path)
 
     supabase_url = os.getenv("SUPABASE_URL", "https://mock.supabase.co")
     return f"{supabase_url}/storage/v1/object/sign/{ATTACHMENTS_BUCKET}/{storage_path}?token=mock-token&expires={int(time.time()) + ttl_seconds}"
 
 
-def get_attachment_bytes(storage_path: str) -> Optional[bytes]:
+def get_attachment_bytes(storage_path: str) -> bytes | None:
     """Retrieve raw file bytes from in-memory cache or Supabase Storage."""
     if storage_path in _IN_MEMORY_STORAGE:
         return _IN_MEMORY_STORAGE[storage_path]
@@ -185,7 +184,7 @@ def get_attachment_bytes(storage_path: str) -> Optional[bytes]:
     if client:
         try:
             return client.storage.from_(ATTACHMENTS_BUCKET).download(storage_path)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning("Failed to download attachment from Supabase Storage", error=str(e), path=storage_path)
 
     return None
