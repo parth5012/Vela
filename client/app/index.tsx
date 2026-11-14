@@ -41,6 +41,9 @@ import { getCachedParse } from '../utils/parseCache';
 import SourceCard from '../components/chat/SourceCard';
 import Grain from '../components/ui/Grain';
 import { styles } from '../styles/indexStyles';
+import { pickChatImages, uploadChatAttachment, type PickedImageFile } from '../utils/chatAttachments';
+import AttachmentPickerTray from '../components/chat/AttachmentPickerTray';
+import type { ChatAttachment } from '../store/useChatStore';
 import { useRouter } from 'expo-router';
 import { useBrowserStore } from '../store/useBrowserStore';
 import { useGoogleAuthStore } from '../store/useGoogleAuthStore';
@@ -357,6 +360,7 @@ export function handleSendPressAction(params: {
   isCurrentThreadStreaming: boolean;
   activeThreadId: string | null;
   input: string;
+  hasAttachments?: boolean;
   onStop: (threadId: string) => void | Promise<void>;
   onSend: () => void | Promise<void>;
   onSendWelcome: (input: string) => void | Promise<void>;
@@ -370,7 +374,7 @@ export function handleSendPressAction(params: {
     Promise.resolve(params.onSend()).catch((err) => console.error('[handleSendPress] error:', err));
     return;
   }
-  if (!params.input.trim()) return;
+  if (!params.input.trim() && !params.hasAttachments) return;
   Promise.resolve(params.onSendWelcome(params.input)).catch((err) => console.error('[handleSendPress] error:', err));
 }
 
@@ -599,6 +603,8 @@ export default function ChatScreen() {
   const localModelDownloadProgress = useConfigStore((state) => state.localModelDownloadProgress);
   const wifiOnlyDownload = useConfigStore((state) => state.wifiOnlyDownload);
   const setLocalModelDownloadProgress = useConfigStore((state) => state.setLocalModelDownloadProgress);
+  const maxImagesPerMessage = useConfigStore((state) => state.maxImagesPerMessage) || 2;
+  const cloudPrivacyConsent = useConfigStore((state) => state.cloudPrivacyConsent);
 
   // #556: persistent "finish setup later" banner — shown while any onboarding
   // permission was explicitly denied during setup; links to Settings →
@@ -713,6 +719,31 @@ export default function ChatScreen() {
   // permission is not re-prompted until the app restarts.
   const [permissionPrompt, setPermissionPrompt] = useState<OSPermission | null>(null);
   const sessionDeniedPermissionsRef = React.useRef<Set<OSPermission>>(new Set());
+
+  // Multimodal image attachment staging (#559, #562)
+  const [stagedAttachments, setStagedAttachments] = useState<PickedImageFile[]>([]);
+
+  const handlePickImages = useCallback(async () => {
+    const remainingSlots = Math.max(0, maxImagesPerMessage - stagedAttachments.length);
+    if (remainingSlots <= 0) {
+      Alert.alert('Limit Reached', `You can attach up to ${maxImagesPerMessage} images per message.`);
+      return;
+    }
+    const picked = await pickChatImages(remainingSlots);
+    if (picked.length > 0) {
+      setStagedAttachments((prev) => [...prev, ...picked].slice(0, maxImagesPerMessage));
+    }
+  }, [maxImagesPerMessage, stagedAttachments.length]);
+
+  const handleRemoveAttachment = useCallback((index: number) => {
+    setStagedAttachments((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const handleUpdateAttachmentAltText = useCallback((index: number, altText: string) => {
+    setStagedAttachments((prev) =>
+      prev.map((att, i) => (i === index ? { ...att, altText } : att))
+    );
+  }, []);
 
   // Theme values — Aurora: theme = atmosphere (colors), accent = energy (aurora)
   const { colors, sizes, aurora, theme } = useAurora();
@@ -1050,7 +1081,7 @@ export default function ChatScreen() {
       return;
     }
 
-    if (!input.trim()) return;
+    if (!input.trim() && stagedAttachments.length === 0) return;
 
     // Skill slash command handling (standalone modes only)
     if (connectionMode !== 'server' && activeThreadId && handleSkillCommand(activeThreadId, input)) {
@@ -1074,7 +1105,10 @@ export default function ChatScreen() {
 
     Keyboard.dismiss();
 
-    const userText = input.trim();
+    const attachmentsToUpload = [...stagedAttachments];
+    setStagedAttachments([]);
+
+    const userText = input.trim() || (attachmentsToUpload.length > 0 ? (attachmentsToUpload[0].altText || `[Attached ${attachmentsToUpload.length} image(s)]`) : '');
     setInput('');
 
     const syncStart = typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -1085,12 +1119,59 @@ export default function ChatScreen() {
 
     const originalHistory = messages[activeThreadId] || [];
 
+    let uploadedAttachments: ChatAttachment[] = [];
+    if (attachmentsToUpload.length > 0) {
+      if (connectionMode === 'server' && apiUrl && apiKey) {
+        try {
+          uploadedAttachments = await Promise.all(
+            attachmentsToUpload.map(async (att) => {
+              const fileUri = att.compressed?.uri || att.uri;
+              return await uploadChatAttachment({
+                apiUrl,
+                apiKey,
+                threadId: activeThreadId,
+                messageId: userMsgId,
+                fileUri,
+                mimeType: att.compressed?.mimeType || att.mimeType,
+                filename: att.name,
+                altText: att.altText,
+                width: att.compressed?.width,
+                height: att.compressed?.height,
+              });
+            })
+          );
+        } catch (uploadErr) {
+          console.error('[handleSend] Attachment upload error:', uploadErr);
+          uploadedAttachments = attachmentsToUpload.map((att) => ({
+            storage_path: att.uri,
+            mime_type: att.compressed?.mimeType || att.mimeType,
+            file_size: att.compressed?.size || att.size || 0,
+            width: att.compressed?.width,
+            height: att.compressed?.height,
+            alt_text: att.altText,
+            url: att.compressed?.uri || att.uri,
+          }));
+        }
+      } else {
+        uploadedAttachments = attachmentsToUpload.map((att) => ({
+          storage_path: att.uri,
+          mime_type: att.compressed?.mimeType || att.mimeType,
+          file_size: att.compressed?.size || att.size || 0,
+          width: att.compressed?.width,
+          height: att.compressed?.height,
+          alt_text: att.altText,
+          url: att.compressed?.uri || att.uri,
+        }));
+      }
+    }
+
     // Instantaneous optimistic state commit (< 4ms synchronous blocking invariant)
     addMessage(activeThreadId, {
       id: userMsgId,
       role: 'user',
       content: userText,
       created_at: nowIso,
+      attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
     });
 
     addMessage(activeThreadId, {
@@ -1109,12 +1190,12 @@ export default function ChatScreen() {
 
     try {
       if (isLocalMode) {
-        await streamLocalResponse(activeThreadId, userText, [...originalHistory, { id: userMsgId, role: 'user', content: userText }]);
+        await streamLocalResponse(activeThreadId, userText, [...originalHistory, { id: userMsgId, role: 'user', content: userText, attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined }]);
         return;
       }
 
       if (connectionMode === 'cloud') {
-        await streamCloudChatResponse(activeThreadId, [...originalHistory, { id: userMsgId, role: 'user', content: userText }]);
+        await streamCloudChatResponse(activeThreadId, [...originalHistory, { id: userMsgId, role: 'user', content: userText, attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined }]);
         return;
       }
 
@@ -1127,16 +1208,25 @@ export default function ChatScreen() {
         threadId: activeThreadId,
         prompt: userText,
         agent: selectedAgent,
-        syncUserEntry: { id: userMsgId, role: 'user', content: userText, created_at: nowIso },
+        syncUserEntry: {
+          id: userMsgId,
+          role: 'user',
+          content: userText,
+          created_at: nowIso,
+          attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
+        },
         threads,
         setThreads,
         setAuthRequired,
+        attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
+        cloudPrivacyConsent,
       });
     } catch (err: any) {
       console.error('[handleSend] Stream error:', err);
     }
   }, [
     input,
+    stagedAttachments,
     isCurrentThreadStreaming,
     activeThreadId,
     messages,
@@ -1149,6 +1239,7 @@ export default function ChatScreen() {
     setThreads,
     isLocalMode,
     connectionMode,
+    cloudPrivacyConsent,
     triggerAutoScroll,
     handleSkillCommand,
   ]);
@@ -1262,7 +1353,7 @@ export default function ChatScreen() {
   ]);
 
   const handleSendWelcome = useCallback(async (textToSend: string, agentId?: string) => {
-    if (!textToSend.trim()) return;
+    if (!textToSend.trim() && stagedAttachments.length === 0) return;
 
     // Skill slash commands are intercepted BEFORE the credential checks:
     // activation is local-only and must work without API URL/key configured
@@ -1292,21 +1383,72 @@ export default function ChatScreen() {
 
     Keyboard.dismiss();
 
+    const attachmentsToUpload = [...stagedAttachments];
+    setStagedAttachments([]);
+
     const newThreadId = generateUUID();
     const agent = resolveNewThreadAgent(agentId);
 
     createThread('New Conversation', newThreadId, agent);
     setInput('');
 
+    const effectiveText = textToSend.trim() || (attachmentsToUpload.length > 0 ? (attachmentsToUpload[0].altText || `[Attached ${attachmentsToUpload.length} image(s)]`) : '');
     const userMsgId = generateId('msg_user');
     const assistantMsgId = generateId('msg_assistant');
     const nowIso = new Date().toISOString();
 
+    let uploadedAttachments: ChatAttachment[] = [];
+    if (attachmentsToUpload.length > 0) {
+      if (connectionMode === 'server' && apiUrl && apiKey) {
+        try {
+          uploadedAttachments = await Promise.all(
+            attachmentsToUpload.map(async (att) => {
+              const fileUri = att.compressed?.uri || att.uri;
+              return await uploadChatAttachment({
+                apiUrl,
+                apiKey,
+                threadId: newThreadId,
+                messageId: userMsgId,
+                fileUri,
+                mimeType: att.compressed?.mimeType || att.mimeType,
+                filename: att.name,
+                altText: att.altText,
+                width: att.compressed?.width,
+                height: att.compressed?.height,
+              });
+            })
+          );
+        } catch (uploadErr) {
+          console.error('[handleSendWelcome] Upload error:', uploadErr);
+          uploadedAttachments = attachmentsToUpload.map((att) => ({
+            storage_path: att.uri,
+            mime_type: att.compressed?.mimeType || att.mimeType,
+            file_size: att.compressed?.size || att.size || 0,
+            width: att.compressed?.width,
+            height: att.compressed?.height,
+            alt_text: att.altText,
+            url: att.compressed?.uri || att.uri,
+          }));
+        }
+      } else {
+        uploadedAttachments = attachmentsToUpload.map((att) => ({
+          storage_path: att.uri,
+          mime_type: att.compressed?.mimeType || att.mimeType,
+          file_size: att.compressed?.size || att.size || 0,
+          width: att.compressed?.width,
+          height: att.compressed?.height,
+          alt_text: att.altText,
+          url: att.compressed?.uri || att.uri,
+        }));
+      }
+    }
+
     addMessage(newThreadId, {
       id: userMsgId,
       role: 'user',
-      content: textToSend.trim(),
+      content: effectiveText,
       created_at: nowIso,
+      attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
     });
 
     addMessage(newThreadId, {
@@ -1322,12 +1464,12 @@ export default function ChatScreen() {
 
     try {
       if (isLocalMode) {
-        await streamLocalResponse(newThreadId, textToSend.trim(), [{ id: userMsgId, role: 'user', content: textToSend.trim() }]);
+        await streamLocalResponse(newThreadId, effectiveText, [{ id: userMsgId, role: 'user', content: effectiveText, attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined }]);
         return;
       }
 
       if (connectionMode === 'cloud') {
-        await streamCloudChatResponse(newThreadId, [{ id: userMsgId, role: 'user', content: textToSend.trim() }]);
+        await streamCloudChatResponse(newThreadId, [{ id: userMsgId, role: 'user', content: effectiveText, attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined }]);
         return;
       }
 
@@ -1335,11 +1477,19 @@ export default function ChatScreen() {
         apiUrl,
         apiKey,
         threadId: newThreadId,
-        prompt: textToSend.trim(),
+        prompt: effectiveText,
         agent,
-        syncUserEntry: { id: userMsgId, role: 'user', content: textToSend.trim(), created_at: nowIso },
+        syncUserEntry: {
+          id: userMsgId,
+          role: 'user',
+          content: effectiveText,
+          created_at: nowIso,
+          attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
+        },
         setThreads,
         setAuthRequired,
+        attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
+        cloudPrivacyConsent,
       });
     } catch (err: any) {
       console.error('[handleSendWelcome] Stream error:', err);
@@ -1347,6 +1497,8 @@ export default function ChatScreen() {
   }, [
     apiUrl,
     apiKey,
+    stagedAttachments,
+    cloudPrivacyConsent,
     createThread,
     addMessage,
     beginStreamOverlay,
@@ -1362,6 +1514,7 @@ export default function ChatScreen() {
       isCurrentThreadStreaming,
       activeThreadId,
       input,
+      hasAttachments: stagedAttachments.length > 0,
       onStop: (threadId) => {
         streamController.stopStream(threadId);
       },
@@ -1805,12 +1958,35 @@ export default function ChatScreen() {
           { backgroundColor: colors.background, borderTopColor: colors.glassBorder, paddingBottom: Math.max(12, insets.bottom) }
         ]}
       >
+        {stagedAttachments.length > 0 && (
+          <AttachmentPickerTray
+            attachments={stagedAttachments}
+            onRemove={handleRemoveAttachment}
+            onUpdateAltText={handleUpdateAttachmentAltText}
+            maxCount={maxImagesPerMessage}
+            colors={colors}
+            accentColor={accentHex}
+          />
+        )}
         <View
           style={[
             styles.inputContainer,
             { backgroundColor: colors.card, borderColor: colors.border, borderRadius: 28, minHeight: 48 }
           ]}
         >
+          <PressableScale
+            scaleTo={0.92}
+            onPress={handlePickImages}
+            disabled={isCurrentThreadStreaming || stagedAttachments.length >= maxImagesPerMessage}
+            style={[
+              styles.attachButton,
+              (isCurrentThreadStreaming || stagedAttachments.length >= maxImagesPerMessage) && styles.attachButtonDisabled,
+            ]}
+            accessibilityLabel="Attach images"
+            accessibilityRole="button"
+          >
+            <Text style={[styles.attachButtonIcon, { color: aurora.acc1 }]}>📎</Text>
+          </PressableScale>
           <TextInput
             ref={inputRef}
             style={[styles.input, { color: colors.text, fontSize: sizes.text, backgroundColor: 'transparent' }]}
@@ -1833,23 +2009,23 @@ export default function ChatScreen() {
                 overflow: 'hidden',
                 backgroundColor: isCurrentThreadStreaming
                   ? '#ef4444'
-                  : input.trim()
+                  : (input.trim() || stagedAttachments.length > 0)
                     ? 'transparent'
                     : colors.textDark,
                 shadowColor: isCurrentThreadStreaming ? '#ef4444' : aurora.acc1,
-                shadowOpacity: isCurrentThreadStreaming || input.trim() ? 0.4 : 0,
+                shadowOpacity: isCurrentThreadStreaming || input.trim() || stagedAttachments.length > 0 ? 0.4 : 0,
                 shadowRadius: 12,
                 shadowOffset: { width: 0, height: 4 },
-                elevation: isCurrentThreadStreaming || input.trim() ? 8 : 0,
+                elevation: isCurrentThreadStreaming || input.trim() || stagedAttachments.length > 0 ? 8 : 0,
               },
               pressed && { opacity: 0.85 }
             ]}
             scaleTo={0.94}
             onPress={handleSendPress}
-            disabled={!isCurrentThreadStreaming && !input.trim()}
+            disabled={!isCurrentThreadStreaming && !input.trim() && stagedAttachments.length === 0}
             accessibilityLabel={isCurrentThreadStreaming ? 'Stop generating' : 'Send message'}
           >
-            {isCurrentThreadStreaming || !input.trim() ? (
+            {isCurrentThreadStreaming || (!input.trim() && stagedAttachments.length === 0) ? (
               <Text style={[styles.sendButtonText, { fontSize: sizes.text, color: '#ffffff' }]}>
                 {isCurrentThreadStreaming ? 'Stop' : 'Send'}
               </Text>

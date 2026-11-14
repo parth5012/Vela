@@ -105,11 +105,23 @@ const normalizeUrl = (url: string): string => {
   return formattedUrl.replace(/\/+$/, '');
 };
 
+export interface ChatAttachment {
+  id?: string;
+  storage_path: string;
+  mime_type: string;
+  file_size: number;
+  width?: number;
+  height?: number;
+  alt_text?: string;
+  url?: string;
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   created_at?: string;
+  attachments?: ChatAttachment[];
 }
 
 export interface Thread {

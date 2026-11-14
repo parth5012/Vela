@@ -3,6 +3,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import RichText from './RichText';
 import BubbleFooter from './BubbleFooter';
 import SourceCard from './SourceCard';
+import ImageAttachmentView from './ImageAttachmentView';
 import type { Message } from '../../store/useChatStore';
 import { useActiveStreamStore } from '../../store/useActiveStreamStore';
 import type { ThemeName } from '../../utils/theme';
@@ -177,6 +178,20 @@ function MessageItemBase({
             </View>
           )}
 
+          {message.attachments && message.attachments.length > 0 && (
+            <View style={styles.attachmentsContainer}>
+              {message.attachments.map((att, attIdx) => (
+                <ImageAttachmentView
+                  key={att.id || att.storage_path || attIdx}
+                  attachment={att}
+                  inViewport={inViewport}
+                  accentColor={accentHex}
+                  isUser={isUser}
+                />
+              ))}
+            </View>
+          )}
+
           <BubbleFooter
             createdAt={message.created_at}
             isUser={isUser}
@@ -257,6 +272,10 @@ const styles = StyleSheet.create({
   },
   userBubble: {},
   assistantBubble: {},
+  attachmentsContainer: {
+    gap: 8,
+    marginVertical: 4,
+  },
   senderLabel: {
     fontSize: 11,
     fontWeight: '700',
