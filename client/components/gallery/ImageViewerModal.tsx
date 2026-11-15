@@ -4,7 +4,7 @@ import {
   View,
   Text,
   StyleSheet,
-  Dimensions,
+  useWindowDimensions,
   Pressable,
   ScrollView,
   Alert,
@@ -35,8 +35,13 @@ export function ImageViewerModal({ image, visible, onClose }: ImageViewerModalPr
 
   if (!image) return null;
 
-  const screenDimensions = Dimensions.get('window');
-  const imageSize = Math.min(screenDimensions.width - 32, 480);
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const imageWidth = Math.min(windowWidth - 32, 480);
+  const aspectRatio = image.width && image.height ? image.width / image.height : 1;
+  const imageHeight = Math.min(
+    Math.round(imageWidth / aspectRatio),
+    Math.round(windowHeight * 0.65)
+  );
   const accent = aurora.acc1 || '#818cf8';
 
   const handleCopyPrompt = async () => {
@@ -159,12 +164,12 @@ export function ImageViewerModal({ image, visible, onClose }: ImageViewerModalPr
           showsVerticalScrollIndicator={false}
         >
           {/* Main Image Display */}
-          <View style={[styles.imageWrapper, { width: imageSize, height: imageSize }]}>
+          <View style={[styles.imageWrapper, { width: imageWidth, height: imageHeight }]}>
             <ImagePreview
               uri={image.uri}
               thumbnailUri={image.uri}
-              width={imageSize}
-              height={imageSize}
+              width={imageWidth}
+              height={imageHeight}
               alt={image.prompt}
               containerStyle={styles.previewContainer}
             />
@@ -239,7 +244,9 @@ export function ImageViewerModal({ image, visible, onClose }: ImageViewerModalPr
                 style={[styles.primaryActionButton, { backgroundColor: accent }]}
                 accessibilityLabel="Regenerate prompt in chat"
               >
-                <Text style={styles.primaryActionText}>Regenerate in Chat</Text>
+                <Text style={[styles.primaryActionText, { color: aurora.onAccent || '#ffffff' }]}>
+                  Regenerate in Chat
+                </Text>
               </PressableScale>
 
               <PressableScale
