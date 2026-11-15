@@ -401,6 +401,17 @@ export default function RootLayout() {
             },
           }}
         />
+        <Drawer.Screen
+          name="gallery"
+          options={{
+            headerTitle: 'Image Gallery',
+            headerTitleStyle: {
+              fontWeight: '600',
+              color: currentColors.text,
+              fontSize: 16,
+            },
+          }}
+        />
       </Drawer>
 
       {/* Persistent WebView — always mounted, visibility toggled by offscreen positioning */}

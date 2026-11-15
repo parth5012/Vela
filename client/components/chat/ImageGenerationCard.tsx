@@ -27,6 +27,7 @@ export interface ImageGenerationCardProps {
   durationMs?: number;
   onCancel?: () => void;
   onRetry?: () => void;
+  onOpenGallery?: () => void;
   accentColor?: string;
 }
 
@@ -43,6 +44,7 @@ export function ImageGenerationCard({
   durationMs,
   onCancel,
   onRetry,
+  onOpenGallery,
   accentColor,
 }: ImageGenerationCardProps) {
   const { colors, aurora } = useAurora();
@@ -129,6 +131,19 @@ export function ImageGenerationCard({
     } catch (err: any) {
       console.warn('[ImageGenerationCard] Failed to save image:', err);
       showActionError('Failed to save image');
+    }
+  };
+
+  const handleOpenGallery = () => {
+    if (onOpenGallery) {
+      onOpenGallery();
+      return;
+    }
+    try {
+      const { router } = require('expo-router');
+      router?.navigate?.('/gallery');
+    } catch {
+      // safe fallback in test environments
     }
   };
 
@@ -285,6 +300,18 @@ export function ImageGenerationCard({
             >
               <Text style={[styles.actionBtnText, { color: colors.text }]}>
                 {copiedPrompt ? '✓ Copied' : '📋 Prompt'}
+              </Text>
+            </PressableScale>
+
+            <PressableScale
+              scaleTo={0.95}
+              onPress={handleOpenGallery}
+              accessibilityRole="button"
+              accessibilityLabel="View in gallery"
+              style={[styles.actionBtn, { borderColor: colors.glassBorder }]}
+            >
+              <Text style={[styles.actionBtnText, { color: colors.text }]}>
+                🎨 Gallery
               </Text>
             </PressableScale>
           </View>
