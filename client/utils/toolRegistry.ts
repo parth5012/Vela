@@ -49,6 +49,20 @@ const serverOnly = (name: string, description: string): ToolDefinition => ({
 export const TOOL_REGISTRY: ToolDefinition[] = [
   serverOnly('run_python_code', 'Executes Python in a sandboxed server environment.'),
   {
+    name: 'generate_image',
+    description: 'Generates an image from a text prompt using on-device Stable Diffusion.',
+    requiresServer: false,
+    availableInLocal: true,
+    availableInCloud: true,
+    standaloneReady: true,
+    parameters: {
+      prompt: { type: 'string', description: 'Detailed prompt describing the image to generate.', required: true },
+      negative_prompt: { type: 'string', description: 'Negative prompt specifying elements to avoid.', required: false },
+      steps: { type: 'number', description: 'Inference step count (default 20, or 4 for LCM).', required: false },
+      seed: { type: 'number', description: 'Optional integer seed for reproducible generation.', required: false },
+    },
+  },
+  {
     name: 'web_search',
     description: 'Search the web for up-to-date information on a query.',
     requiresServer: false,
