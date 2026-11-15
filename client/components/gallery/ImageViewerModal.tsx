@@ -31,6 +31,7 @@ export function ImageViewerModal({ image, visible, onClose }: ImageViewerModalPr
   const [copied, setCopied] = useState(false);
   const deleteImage = useImageGalleryStore((state) => state.deleteImage);
   const togglePin = useImageGalleryStore((state) => state.togglePinImage);
+  const setPendingPrompt = useChatStore((state) => state.setPendingPrompt);
 
   if (!image) return null;
 
@@ -84,7 +85,7 @@ export function ImageViewerModal({ image, visible, onClose }: ImageViewerModalPr
   };
 
   const handleRegenerate = () => {
-    useChatStore.getState().setPendingPrompt(image.prompt);
+    setPendingPrompt(image.prompt);
     onClose();
     router.navigate('/');
   };

@@ -308,6 +308,7 @@ export function ImageGenerationCard({
               onPress={handleOpenGallery}
               accessibilityRole="button"
               accessibilityLabel="View in gallery"
+              accessibilityHint="Navigates to the generated image gallery"
               style={[styles.actionBtn, { borderColor: colors.glassBorder }]}
             >
               <Text style={[styles.actionBtnText, { color: colors.text }]}>
