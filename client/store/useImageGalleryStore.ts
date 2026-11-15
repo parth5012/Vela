@@ -70,7 +70,8 @@ export const useImageGalleryStore = create<ImageGalleryStoreState>()(
       hasHydrated: false,
 
       setHasHydrated: (hasHydrated: boolean) => set({ hasHydrated }),
-      setSearchQuery: (searchQuery: string) => set({ searchQuery }),
+      setSearchQuery: (searchQuery: string) =>
+        set({ searchQuery: (searchQuery || '').slice(0, 200) }),
       setUnlimitedStorage: (unlimitedStorage: boolean) => set({ unlimitedStorage }),
       setMaxCapacity: (maxCapacity: number) => set({ maxCapacity: Math.max(10, maxCapacity) }),
 
@@ -182,7 +183,11 @@ export const useImageGalleryStore = create<ImageGalleryStoreState>()(
         const images = get().images;
         for (const item of images) {
           if (item.uri && item.uri.startsWith('file://')) {
-            FileSystem.deleteAsync(item.uri, { idempotent: true }).catch(() => {});
+            try {
+              await FileSystem.deleteAsync(item.uri, { idempotent: true });
+            } catch (err) {
+              console.warn('[ImageGalleryStore] Error deleting file during clearAll:', err);
+            }
           }
         }
         set({ images: [] });
