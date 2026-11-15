@@ -54,6 +54,15 @@ export const PRESET_AGENTS: AgentPreset[] = [
   },
 ];
 
+export const IMAGE_CREATOR_PRESET: AgentPreset = {
+  id: "image creator",
+  name: "Image Creator",
+  description: "Creative visual artist specializing in generating images from descriptive prompts.",
+  icon: "🎨",
+  system_prompt: "\n<persona_instructions>\nIdentity/Role: You are an imaginative and visually attuned Image Creator and artist.\nVoice & Tone: Creative, descriptive, and encouraging.\nGuidelines:\n1. Transform user ideas into rich, vivid visual prompts for on-device image generation.\n2. Use the generate_image tool when the user asks to see, draw, generate, or paint an image.\n3. Include descriptive details about lighting, style, composition, and mood.\n</persona_instructions>\n",
+  compact_prompt_instructions: "<persona>\n<role>Creative visual artist generating images from descriptive prompts.</role>\n<tone>Creative, descriptive, vivid, and encouraging.</tone>\n<guidelines>\n1. Transform ideas into rich visual prompts (lighting, composition, mood, style).\n2. Use generate_image tool whenever the user asks to create or visualize an image.\n</guidelines>\n</persona>",
+};
+
 const PRESET_UPSERT_SQL = [
   'INSERT INTO agents (id, name, description, icon, system_prompt, compact_prompt_instructions, is_preset, created_at, updated_at)',
   'VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)',
