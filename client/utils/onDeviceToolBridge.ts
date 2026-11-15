@@ -100,6 +100,19 @@ export const ON_DEVICE_TOOL_SCHEMAS: OnDeviceToolSchema[] = [
       text: { type: 'string', description: 'Text to copy to clipboard', required: true },
     },
   },
+
+  // Image Generation
+  {
+    name: 'generate_image',
+    description: 'Generates an image from a text prompt using on-device Stable Diffusion.',
+    isMutating: true,
+    parameters: {
+      prompt: { type: 'string', description: 'Detailed prompt describing the image to generate.', required: true },
+      negative_prompt: { type: 'string', description: 'Negative prompt elements to avoid.', required: false },
+      steps: { type: 'number', description: 'Inference step count (1-50, default 20).', required: false },
+      seed: { type: 'number', description: 'Optional integer seed for reproducible generation.', required: false },
+    },
+  },
 ];
 
 export interface ToolCallRequest {

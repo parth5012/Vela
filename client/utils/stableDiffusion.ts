@@ -12,12 +12,14 @@ export let isSdModelLoaded = false;
 export let useSdFallback = false;
 export let sdFallbackReason: string | null = null;
 let isCancelled = false;
+let isGenerating = false;
 
 export function resetSdState() {
   isSdModelLoaded = false;
   useSdFallback = false;
   sdFallbackReason = null;
   isCancelled = false;
+  isGenerating = false;
 }
 
 export function cancelSDGeneration(): void {
@@ -30,6 +32,14 @@ export function resetSDCancellation(): void {
 
 export function isSDGenerationCancelled(): boolean {
   return isCancelled;
+}
+
+export function isSDGenerating(): boolean {
+  return isGenerating;
+}
+
+export function resetSDGenerating(): void {
+  isGenerating = false;
 }
 
 export const SD_MODEL_STORAGE_PREFIX = 'sd_model_downloaded_';
@@ -331,79 +341,88 @@ export async function generateSDImage(
   seed: number = -1,
   onProgress?: (step: number, totalSteps: number) => void
 ): Promise<string> {
-  const clampedSteps = Math.min(SD_MAX_STEPS, Math.max(SD_MIN_STEPS, Math.round(steps || SD_DEFAULT_STEPS)));
-  if (isCancelled) {
-    resetSDCancellation();
-    throw new Error('Image generation was cancelled by the user.');
+  if (isGenerating) {
+    throw new Error('On-device image generation is already running. Please wait for the active generation to complete.');
   }
+  isGenerating = true;
 
-  if (!isSdModelLoaded) {
-    await initializeSDModel();
-  }
-
-  const outputDir = `${FileSystem.documentDirectory}generated-images/`;
-  const fileUri = `${outputDir}img_${Date.now()}.png`;
-
-  // Ensure output directory exists
-  const dirInfo = await FileSystem.getInfoAsync(outputDir);
-  if (!dirInfo.exists) {
-    await FileSystem.makeDirectoryAsync(outputDir, { intermediates: true });
-  }
-
-  if (onProgress) {
-    onProgress(1, clampedSteps);
-  }
-
-  if (!useSdFallback && SDModule && typeof SDModule.generateImage === 'function') {
-    try {
-      const actualSeed = seed === -1 ? Math.floor(Math.random() * 1000000) : seed;
-      const resultPath: string = await SDModule.generateImage(
-        prompt,
-        negativePrompt,
-        clampedSteps,
-        width,
-        height,
-        actualSeed,
-        fileUri
-      );
-      if (onProgress) {
-        onProgress(clampedSteps, clampedSteps);
-      }
-      return resultPath;
-    } catch (error: any) {
-      console.warn('Native SD generation failed, falling back to mock generator:', error);
-    }
-  }
-
-  // Fallback mode: simulate generation with progressive steps
-  const totalSimulatedSteps = clampedSteps;
-  for (let s = 1; s <= totalSimulatedSteps; s++) {
+  try {
+    const clampedSteps = Math.min(SD_MAX_STEPS, Math.max(SD_MIN_STEPS, Math.round(steps || SD_DEFAULT_STEPS)));
     if (isCancelled) {
       resetSDCancellation();
       throw new Error('Image generation was cancelled by the user.');
     }
-    // Small delay per step (skip delay in tests)
-    if (process.env.NODE_ENV !== 'test') {
-      await new Promise((resolve) => setTimeout(resolve, 300));
+
+    if (!isSdModelLoaded) {
+      await initializeSDModel();
     }
+
+    const outputDir = `${FileSystem.documentDirectory}generated-images/`;
+    const fileUri = `${outputDir}img_${Date.now()}.png`;
+
+    // Ensure output directory exists
+    const dirInfo = await FileSystem.getInfoAsync(outputDir);
+    if (!dirInfo.exists) {
+      await FileSystem.makeDirectoryAsync(outputDir, { intermediates: true });
+    }
+
     if (onProgress) {
-      onProgress(s, totalSimulatedSteps);
+      onProgress(1, clampedSteps);
     }
+
+    if (!useSdFallback && SDModule && typeof SDModule.generateImage === 'function') {
+      try {
+        const actualSeed = seed === -1 ? Math.floor(Math.random() * 1000000) : seed;
+        const resultPath: string = await SDModule.generateImage(
+          prompt,
+          negativePrompt,
+          clampedSteps,
+          width,
+          height,
+          actualSeed,
+          fileUri
+        );
+        if (onProgress) {
+          onProgress(clampedSteps, clampedSteps);
+        }
+        return resultPath;
+      } catch (error: any) {
+        console.warn('Native SD generation failed, falling back to mock generator:', error);
+      }
+    }
+
+    // Fallback mode: simulate generation with progressive steps
+    const totalSimulatedSteps = clampedSteps;
+    for (let s = 1; s <= totalSimulatedSteps; s++) {
+      if (isCancelled) {
+        resetSDCancellation();
+        throw new Error('Image generation was cancelled by the user.');
+      }
+      // Small delay per step (skip delay in tests)
+      if (process.env.NODE_ENV !== 'test') {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
+      if (onProgress) {
+        onProgress(s, totalSimulatedSteps);
+      }
+    }
+
+    if (isCancelled) {
+      resetSDCancellation();
+      throw new Error('Image generation was cancelled by the user.');
+    }
+
+    // Create a placeholder local image
+    const svgPlaceholder = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="%232c3e50"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%23ecf0f1" font-size="24">${encodeURIComponent(prompt.slice(0, 30))}</text></svg>`;
+
+    await FileSystem.writeAsStringAsync(fileUri, svgPlaceholder, {
+      encoding: (FileSystem.EncodingType?.UTF8 || 'utf8') as any,
+    });
+
+    return fileUri;
+  } finally {
+    isGenerating = false;
   }
-
-  if (isCancelled) {
-    resetSDCancellation();
-    throw new Error('Image generation was cancelled by the user.');
-  }
-
-  // Create a placeholder local image
-  const svgPlaceholder = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="%232c3e50"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%23ecf0f1" font-size="24">${encodeURIComponent(prompt.slice(0, 30))}</text></svg>`;
-
-  await FileSystem.writeAsStringAsync(fileUri, svgPlaceholder, {
-    encoding: (FileSystem.EncodingType?.UTF8 || 'utf8') as any,
-  });
-
-  return fileUri;
 }
 
 export interface GenerateImageToolArgs {

@@ -242,5 +242,29 @@ export async function executeCloudTool(
     }
   }
 
+  if (toolName === 'generate_image') {
+    const prompt = String(args.prompt || args.text || args.target || '')
+    const negativePrompt = args.negative_prompt ? String(args.negative_prompt) : undefined
+    const steps = args.steps ? Number(args.steps) : undefined
+    const seed = args.seed ? Number(args.seed) : undefined
+    try {
+      const { executeGenerateImageTool } = await import('./stableDiffusion')
+      const result = await executeGenerateImageTool({
+        prompt,
+        negative_prompt: negativePrompt,
+        steps,
+        seed,
+      })
+      return {
+        success: result.success,
+        output: result.success
+          ? `Generated image: ${result.imageUri} (seed: ${result.seed}, steps: ${result.steps}, duration: ${result.durationMs}ms)`
+          : `Failed to generate image: ${result.error}`,
+      }
+    } catch (err: any) {
+      return { success: false, output: `Image generation error: ${err?.message || String(err)}` }
+    }
+  }
+
   return { success: false, output: `Unknown cloud tool "${toolName}".` }
 }

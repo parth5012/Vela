@@ -1159,6 +1159,64 @@ export async function runLocalAgentLoop(
       continue;
     }
 
+    if (toolCall.toolName === 'generate_image') {
+      const prompt = toolCall.arguments?.prompt || toolCall.target || toolCall.value || '';
+      const negativePrompt = toolCall.arguments?.negative_prompt || '';
+      const stepsParam = toolCall.arguments?.steps ? Number(toolCall.arguments.steps) : undefined;
+      const seedParam = toolCall.arguments?.seed ? Number(toolCall.arguments.seed) : undefined;
+
+      options.onEvent?.({
+        type: 'tool_executing',
+        toolName: 'generate_image',
+        target: prompt,
+        step,
+      });
+
+      let observation: string;
+      try {
+        const { executeGenerateImageTool } = await import('./stableDiffusion');
+        const res = await executeGenerateImageTool({
+          prompt,
+          negative_prompt: negativePrompt,
+          steps: stepsParam,
+          seed: seedParam,
+        });
+        observation = res.success
+          ? `Generated image successfully: ${res.imageUri} (seed: ${res.seed}, steps: ${res.steps}, duration: ${res.durationMs}ms)`
+          : `Failed to generate image: ${res.error}`;
+      } catch (err: any) {
+        observation = `Image generation failed: ${err?.message || String(err)}`;
+      }
+
+      steps.push({
+        step,
+        prompt: currentPrompt,
+        response: stepResponse,
+        toolCall,
+        safetyStatus: 'success',
+        observation,
+      });
+
+      options.onEvent?.({
+        type: 'tool_observation',
+        toolName: 'generate_image',
+        observation,
+        step,
+      });
+      options.onEvent?.({
+        type: 'step_complete',
+        step,
+      });
+      currentPrompt += `\n${stepResponse}\nObservation: ${observation}\n`;
+      if (maxStepsEnabled && step >= maxSteps) {
+        finalResponse = stepResponse;
+        completed = false;
+        break;
+      }
+      step++;
+      continue;
+    }
+
     // 1. Check safety policy
     const safety = await evaluateSafety(
       toolCall.toolName,
