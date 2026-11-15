@@ -198,4 +198,24 @@ describe('stableDiffusion utility', () => {
     expect(p1).toBe(p2);
     await Promise.all([p1, p2]);
   });
+
+  it('clamps execution steps within safe boundaries (1 to 50)', async () => {
+    (FileSystem.getInfoAsync as jest.Mock).mockResolvedValue({ exists: true });
+
+    // High step count clamped to 50
+    const resHigh = await executeGenerateImageTool({
+      prompt: 'a tranquil lake',
+      steps: 120,
+    });
+    expect(resHigh.success).toBe(true);
+    expect(resHigh.steps).toBe(50);
+
+    // Non-positive step count falls back to default 20
+    const resLow = await executeGenerateImageTool({
+      prompt: 'a tranquil lake',
+      steps: -10,
+    });
+    expect(resLow.success).toBe(true);
+    expect(resLow.steps).toBe(20);
+  });
 });
