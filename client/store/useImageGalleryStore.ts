@@ -72,7 +72,35 @@ export const useImageGalleryStore = create<ImageGalleryStoreState>()(
       setHasHydrated: (hasHydrated: boolean) => set({ hasHydrated }),
       setSearchQuery: (searchQuery: string) =>
         set({ searchQuery: (searchQuery || '').slice(0, 200) }),
-      setUnlimitedStorage: (unlimitedStorage: boolean) => set({ unlimitedStorage }),
+      setUnlimitedStorage: (unlimitedStorage: boolean) => {
+        set({ unlimitedStorage });
+        if (!unlimitedStorage) {
+          const { images, maxCapacity } = get();
+          if (maxCapacity > 0 && images.length > maxCapacity) {
+            const excessCount = images.length - maxCapacity;
+            const unpinned = images.filter((img) => !img.isPinned);
+            if (unpinned.length > 0) {
+              const indexMap = new Map(images.map((img, idx) => [img.id, idx]));
+              const oldestUnpinned = [...unpinned]
+                .sort((a, b) => {
+                  if (a.timestamp !== b.timestamp) {
+                    return a.timestamp - b.timestamp;
+                  }
+                  return (indexMap.get(b.id) ?? 0) - (indexMap.get(a.id) ?? 0);
+                })
+                .slice(0, excessCount);
+
+              const idsToEvict = new Set(oldestUnpinned.map((img) => img.id));
+              for (const item of oldestUnpinned) {
+                if (item.uri && item.uri.startsWith('file://')) {
+                  FileSystem.deleteAsync(item.uri, { idempotent: true }).catch(() => {});
+                }
+              }
+              set({ images: images.filter((img) => !idsToEvict.has(img.id)) });
+            }
+          }
+        }
+      },
       setMaxCapacity: (maxCapacity: number) => set({ maxCapacity: Math.max(10, maxCapacity) }),
 
       saveGeneratedImage: async (input: SaveImageInput): Promise<GeneratedImageItem> => {
@@ -82,7 +110,13 @@ export const useImageGalleryStore = create<ImageGalleryStoreState>()(
 
         let savedUri = input.sourceUri;
         try {
-          if (input.sourceUri.startsWith('data:') || input.sourceUri.includes('<svg')) {
+          if (input.sourceUri.startsWith('data:')) {
+            const base64Data = input.sourceUri.replace(/^data:[^;]+;base64,/, '');
+            await FileSystem.writeAsStringAsync(targetUri, base64Data, {
+              encoding: (FileSystem.EncodingType?.Base64 || 'base64') as any,
+            });
+            savedUri = targetUri;
+          } else if (input.sourceUri.includes('<svg')) {
             await FileSystem.writeAsStringAsync(targetUri, input.sourceUri, {
               encoding: (FileSystem.EncodingType?.UTF8 || 'utf8') as any,
             });
@@ -181,6 +215,7 @@ export const useImageGalleryStore = create<ImageGalleryStoreState>()(
 
       clearAllImages: async (): Promise<void> => {
         const images = get().images;
+        const clearedIds = new Set(images.map((item) => item.id));
         for (const item of images) {
           if (item.uri && item.uri.startsWith('file://')) {
             try {
@@ -190,7 +225,9 @@ export const useImageGalleryStore = create<ImageGalleryStoreState>()(
             }
           }
         }
-        set({ images: [] });
+        set((state) => ({
+          images: state.images.filter((img) => !clearedIds.has(img.id)),
+        }));
       },
 
       filteredImages: (): GeneratedImageItem[] => {

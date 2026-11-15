@@ -4,7 +4,7 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  Dimensions,
+  useWindowDimensions,
   TextInput,
   Pressable,
   Modal,
@@ -31,11 +31,16 @@ export default function ImageGalleryScreen() {
   const setUnlimitedStorage = useImageGalleryStore((state) => state.setUnlimitedStorage);
   const clearAllImages = useImageGalleryStore((state) => state.clearAllImages);
 
-  const [selectedImage, setSelectedImage] = useState<GeneratedImageItem | null>(null);
+  const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
 
-  const screenWidth = Dimensions.get('window').width;
+  const selectedImage = useMemo(
+    () => images.find((img) => img.id === selectedImageId) || null,
+    [images, selectedImageId]
+  );
+
+  const { width: screenWidth } = useWindowDimensions();
   const padding = 16;
   const gap = 8;
   const numColumns = 3;
@@ -75,7 +80,7 @@ export default function ImageGalleryScreen() {
     return (
       <PressableScale
         scaleTo={0.95}
-        onPress={() => setSelectedImage(item)}
+        onPress={() => setSelectedImageId(item.id)}
         style={[
           styles.gridCell,
           {
@@ -169,7 +174,13 @@ export default function ImageGalleryScreen() {
             autoFocus
           />
           {searchQuery ? (
-            <Pressable onPress={() => setSearchQuery('')} hitSlop={8} style={styles.clearSearchBtn}>
+            <Pressable
+              onPress={() => setSearchQuery('')}
+              hitSlop={8}
+              style={styles.clearSearchBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Clear search input"
+            >
               <Text style={styles.clearSearchText}>✕</Text>
             </Pressable>
           ) : null}
@@ -210,7 +221,7 @@ export default function ImageGalleryScreen() {
             style={[styles.emptyButton, { backgroundColor: accent }]}
             accessibilityLabel={searchQuery ? 'Clear search filter' : 'Go to chat to generate images'}
           >
-            <Text style={styles.emptyButtonText}>
+            <Text style={[styles.emptyButtonText, { color: aurora.onAccent || '#ffffff' }]}>
               {searchQuery ? 'Clear Search' : 'Open Chat'}
             </Text>
           </PressableScale>
@@ -233,7 +244,7 @@ export default function ImageGalleryScreen() {
       <ImageViewerModal
         image={selectedImage}
         visible={Boolean(selectedImage)}
-        onClose={() => setSelectedImage(null)}
+        onClose={() => setSelectedImageId(null)}
       />
 
       {/* Gallery Storage Settings Modal */}
@@ -257,7 +268,12 @@ export default function ImageGalleryScreen() {
               <Text style={[styles.settingsTitle, { color: colors.text || '#f8fafc' }]}>
                 Storage & Retention
               </Text>
-              <Pressable onPress={() => setShowSettingsModal(false)} hitSlop={8}>
+              <Pressable
+                onPress={() => setShowSettingsModal(false)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Close storage settings"
+              >
                 <Text style={[styles.settingsCloseBtn, { color: colors.textMuted || '#94a3b8' }]}>✕</Text>
               </Pressable>
             </View>
@@ -276,6 +292,8 @@ export default function ImageGalleryScreen() {
                   ? { borderColor: accent, backgroundColor: 'rgba(129, 140, 248, 0.12)' }
                   : { borderColor: 'rgba(255, 255, 255, 0.1)' },
               ]}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: !unlimitedStorage }}
               accessibilityLabel="Select 100 image capacity with LRU auto eviction"
             >
               <View style={styles.optionRadio}>
@@ -300,6 +318,8 @@ export default function ImageGalleryScreen() {
                   ? { borderColor: accent, backgroundColor: 'rgba(129, 140, 248, 0.12)' }
                   : { borderColor: 'rgba(255, 255, 255, 0.1)' },
               ]}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: unlimitedStorage }}
               accessibilityLabel="Select unlimited local storage"
             >
               <View style={styles.optionRadio}>
