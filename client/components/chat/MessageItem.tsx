@@ -4,6 +4,7 @@ import RichText from './RichText';
 import BubbleFooter from './BubbleFooter';
 import SourceCard from './SourceCard';
 import ImageAttachmentView from './ImageAttachmentView';
+import { ImageGenerationCard } from './ImageGenerationCard';
 import type { Message } from '../../store/useChatStore';
 import { useActiveStreamStore } from '../../store/useActiveStreamStore';
 import type { ThemeName } from '../../utils/theme';
@@ -180,15 +181,34 @@ function MessageItemBase({
 
           {message.attachments && message.attachments.length > 0 && (
             <View style={styles.attachmentsContainer}>
-              {message.attachments.map((att, attIdx) => (
-                <ImageAttachmentView
-                  key={att.id || att.storage_path || attIdx}
-                  attachment={att}
-                  inViewport={inViewport}
-                  accentColor={accentHex}
-                  isUser={isUser}
-                />
-              ))}
+              {message.attachments.map((att, attIdx) => {
+                const isGeneratedImage = Boolean(
+                  att.id?.startsWith('att-gen-') ||
+                  (att.url && att.url.includes('generated-images')) ||
+                  (att.storage_path && att.storage_path.includes('generated-images'))
+                );
+
+                if (isGeneratedImage) {
+                  return (
+                    <ImageGenerationCard
+                      key={att.id || att.storage_path || attIdx}
+                      prompt={att.alt_text || 'Generated image'}
+                      imageUri={att.url || att.storage_path}
+                      status="completed"
+                    />
+                  );
+                }
+
+                return (
+                  <ImageAttachmentView
+                    key={att.id || att.storage_path || attIdx}
+                    attachment={att}
+                    inViewport={inViewport}
+                    accentColor={accentHex}
+                    isUser={isUser}
+                  />
+                );
+              })}
             </View>
           )}
 

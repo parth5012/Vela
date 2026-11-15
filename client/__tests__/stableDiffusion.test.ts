@@ -16,6 +16,7 @@ import {
   checkSDHardwareReadiness,
   cancelSDGeneration,
   isSDGenerationCancelled,
+  isSDGenerating,
   executeGenerateImageTool,
 } from '../utils/stableDiffusion';
 
@@ -233,5 +234,21 @@ describe('stableDiffusion utility', () => {
     });
     expect(res.success).toBe(true);
     expect(isSDGenerationCancelled()).toBe(false);
+  });
+
+  it('prevents concurrent image generations via isSDGenerating mutex', async () => {
+    (FileSystem.getInfoAsync as jest.Mock).mockResolvedValue({ exists: true });
+
+    // Start first generation
+    const gen1 = generateSDImage('first prompt', '', 5);
+    expect(isSDGenerating()).toBe(true);
+
+    // Concurrent second generation should throw
+    await expect(generateSDImage('concurrent prompt')).rejects.toThrow(
+      'already running'
+    );
+
+    await gen1;
+    expect(isSDGenerating()).toBe(false);
   });
 });
