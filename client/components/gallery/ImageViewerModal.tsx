@@ -32,10 +32,10 @@ export function ImageViewerModal({ image, visible, onClose }: ImageViewerModalPr
   const deleteImage = useImageGalleryStore((state) => state.deleteImage);
   const togglePin = useImageGalleryStore((state) => state.togglePinImage);
   const setPendingPrompt = useChatStore((state) => state.setPendingPrompt);
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
 
   if (!image) return null;
 
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const imageWidth = Math.min(windowWidth - 32, 480);
   const aspectRatio = image.width && image.height ? image.width / image.height : 1;
   const imageHeight = Math.min(
