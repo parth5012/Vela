@@ -42,6 +42,7 @@ const GROUPS: CategoryGroup[] = [
     title: 'Multimodal',
     rows: [
       { icon: '🖼️', label: 'Multimodal Chat', hint: 'Image attachments, privacy, limits', route: '/settings/multimodal' },
+      { icon: '🎨', label: 'Generated Image Gallery', hint: 'History, storage capacity, regeneration', route: '/gallery' },
     ],
   },
   {

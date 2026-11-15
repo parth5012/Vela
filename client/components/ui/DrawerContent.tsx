@@ -132,6 +132,13 @@ const handleOmni = () => {
   }
 };
 
+const handleGallery = () => {
+  router.navigate('/gallery');
+  if (typeof navigation.closeDrawer === 'function') {
+    navigation.closeDrawer();
+  }
+};
+
   const sortedThreads = React.useMemo(() => {
     const list = Array.isArray(threads) ? threads : [];
     return [...list].sort((a, b) => {
@@ -314,6 +321,16 @@ const handleOmni = () => {
           onPress={handleOmni}
         >
           <Text style={[styles.settingsButtonText, { color: colors.textMuted }]}>🎙️ Omni Live</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          style={({ pressed }) => [
+            styles.settingsButton,
+            pressed && [styles.settingsButtonPressed, { backgroundColor: colors.card }],
+          ]}
+          onPress={handleGallery}
+        >
+          <Text style={[styles.settingsButtonText, { color: colors.textMuted }]}>🎨 Gallery</Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"

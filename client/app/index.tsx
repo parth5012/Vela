@@ -698,6 +698,14 @@ export default function ChatScreen() {
 
   // Local/UI States
   const [input, setInput] = useState('');
+  const pendingPrompt = useChatStore((state) => state.pendingPrompt);
+  useEffect(() => {
+    if (pendingPrompt) {
+      setInput(pendingPrompt);
+      useChatStore.getState().setPendingPrompt(null);
+      inputRef.current?.focus();
+    }
+  }, [pendingPrompt]);
   // WF-447-06: the empty state's primary CTA focuses the composer — the one
   // action the screen asks for is the first question.
   const inputRef = React.useRef<TextInput | null>(null);

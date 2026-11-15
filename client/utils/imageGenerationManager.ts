@@ -1,4 +1,5 @@
 import { useChatStore } from '../store/useChatStore';
+import { useImageGalleryStore } from '../store/useImageGalleryStore';
 import {
   checkSDHardwareReadiness,
   executeGenerateImageTool,
@@ -114,6 +115,24 @@ export async function runImageGenerationPipeline(
     };
 
     useChatStore.getState().addMessage(options.threadId, assistantMessage);
+  }
+
+  // 5. Gallery & History Persistence (Map #570)
+  if (toolResult.imageUri) {
+    try {
+      await useImageGalleryStore.getState().saveGeneratedImage({
+        prompt: toolResult.prompt,
+        negativePrompt: options.negative_prompt,
+        model: 'Stable Diffusion 1.5 (INT8)',
+        width: toolResult.width,
+        height: toolResult.height,
+        steps: toolResult.steps,
+        seed: toolResult.seed,
+        sourceUri: toolResult.imageUri,
+      });
+    } catch (galleryErr) {
+      console.warn('[ImageGenerationManager] Could not save to gallery store:', galleryErr);
+    }
   }
 
   return {

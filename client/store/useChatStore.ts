@@ -158,6 +158,8 @@ interface ChatState {
   setHasHydrated: (hasHydrated: boolean) => void;
   branchThread: (parentThreadId: string, uptoMessageId: string, newThreadId: string, title: string) => Promise<void>;
   truncateThreadHistory: (threadId: string, uptoMessageId: string) => Promise<void>;
+  pendingPrompt: string | null;
+  setPendingPrompt: (prompt: string | null) => void;
 }
 
 export const useChatStore = create<ChatState>()(
@@ -168,6 +170,8 @@ export const useChatStore = create<ChatState>()(
       messages: {},
       streamingThreadIds: new Set(),
       hasHydrated: false,
+      pendingPrompt: null,
+      setPendingPrompt: (pendingPrompt) => set({ pendingPrompt }),
       createThread: (title, id, agent) => {
         // #357: a new conversation reads the configured default agent
         // explicitly, so it never inherits whatever agent the previous
