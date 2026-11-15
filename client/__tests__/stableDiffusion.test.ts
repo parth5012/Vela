@@ -15,6 +15,7 @@ import {
   deleteSDModel,
   checkSDHardwareReadiness,
   cancelSDGeneration,
+  isSDGenerationCancelled,
   executeGenerateImageTool,
 } from '../utils/stableDiffusion';
 
@@ -217,5 +218,20 @@ describe('stableDiffusion utility', () => {
     });
     expect(resLow.success).toBe(true);
     expect(resLow.steps).toBe(20);
+  });
+
+  it('resets cancellation state on subsequent generation calls', async () => {
+    (FileSystem.getInfoAsync as jest.Mock).mockResolvedValue({ exists: true });
+
+    // Cancel active state
+    cancelSDGeneration();
+    expect(isSDGenerationCancelled()).toBe(true);
+
+    // Subsequent executeGenerateImageTool automatically resets cancellation and succeeds
+    const res = await executeGenerateImageTool({
+      prompt: 'a tranquil lake after cancellation',
+    });
+    expect(res.success).toBe(true);
+    expect(isSDGenerationCancelled()).toBe(false);
   });
 });

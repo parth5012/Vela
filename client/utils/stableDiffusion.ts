@@ -333,6 +333,7 @@ export async function generateSDImage(
 ): Promise<string> {
   const clampedSteps = Math.min(SD_MAX_STEPS, Math.max(SD_MIN_STEPS, Math.round(steps || SD_DEFAULT_STEPS)));
   if (isCancelled) {
+    resetSDCancellation();
     throw new Error('Image generation was cancelled by the user.');
   }
 
@@ -378,6 +379,7 @@ export async function generateSDImage(
   const totalSimulatedSteps = clampedSteps;
   for (let s = 1; s <= totalSimulatedSteps; s++) {
     if (isCancelled) {
+      resetSDCancellation();
       throw new Error('Image generation was cancelled by the user.');
     }
     // Small delay per step (skip delay in tests)
@@ -390,6 +392,7 @@ export async function generateSDImage(
   }
 
   if (isCancelled) {
+    resetSDCancellation();
     throw new Error('Image generation was cancelled by the user.');
   }
 
@@ -427,6 +430,7 @@ export async function executeGenerateImageTool(
   args: GenerateImageToolArgs,
   onProgress?: (step: number, totalSteps: number) => void
 ): Promise<GenerateImageToolResult> {
+  resetSDCancellation();
   const startTime = Date.now();
   const prompt = (args.prompt || '').trim();
   if (!prompt) {

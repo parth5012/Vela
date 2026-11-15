@@ -3,6 +3,7 @@ import {
   checkSDHardwareReadiness,
   executeGenerateImageTool,
   cancelSDGeneration,
+  resetSDCancellation,
   GenerateImageToolArgs,
   GenerateImageToolResult,
   SD_MIN_STEPS,
@@ -37,6 +38,7 @@ export interface ImageGenerationProcessResult {
 export async function runImageGenerationPipeline(
   options: ImageGenerationRequestOptions
 ): Promise<ImageGenerationProcessResult> {
+  resetSDCancellation();
   const requestedSteps = options.steps && options.steps > 0 ? Math.round(options.steps) : SD_DEFAULT_STEPS;
   const steps = Math.min(SD_MAX_STEPS, Math.max(SD_MIN_STEPS, requestedSteps));
 
