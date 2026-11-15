@@ -34,6 +34,9 @@ export function isSDGenerationCancelled(): boolean {
 
 export const SD_MODEL_STORAGE_PREFIX = 'sd_model_downloaded_';
 export const SD_DEFAULT_MODEL_NAME = 'SD 1.5 LCM Q4_0';
+export const SD_MIN_STEPS = 1;
+export const SD_MAX_STEPS = 50;
+export const SD_DEFAULT_STEPS = 20;
 
 const baseDocDir = (FileSystem.documentDirectory || '').endsWith('/')
   ? FileSystem.documentDirectory
@@ -322,12 +325,13 @@ export async function initializeSDModel(): Promise<void> {
 export async function generateSDImage(
   prompt: string,
   negativePrompt: string = '',
-  steps: number = 20,
+  steps: number = SD_DEFAULT_STEPS,
   width: number = 512,
   height: number = 512,
   seed: number = -1,
   onProgress?: (step: number, totalSteps: number) => void
 ): Promise<string> {
+  const clampedSteps = Math.min(SD_MAX_STEPS, Math.max(SD_MIN_STEPS, Math.round(steps || SD_DEFAULT_STEPS)));
   if (isCancelled) {
     throw new Error('Image generation was cancelled by the user.');
   }
@@ -346,7 +350,7 @@ export async function generateSDImage(
   }
 
   if (onProgress) {
-    onProgress(1, steps);
+    onProgress(1, clampedSteps);
   }
 
   if (!useSdFallback && SDModule && typeof SDModule.generateImage === 'function') {
@@ -355,14 +359,14 @@ export async function generateSDImage(
       const resultPath: string = await SDModule.generateImage(
         prompt,
         negativePrompt,
-        steps,
+        clampedSteps,
         width,
         height,
         actualSeed,
         fileUri
       );
       if (onProgress) {
-        onProgress(steps, steps);
+        onProgress(clampedSteps, clampedSteps);
       }
       return resultPath;
     } catch (error: any) {
@@ -371,13 +375,15 @@ export async function generateSDImage(
   }
 
   // Fallback mode: simulate generation with progressive steps
-  const totalSimulatedSteps = Math.max(1, steps);
+  const totalSimulatedSteps = clampedSteps;
   for (let s = 1; s <= totalSimulatedSteps; s++) {
     if (isCancelled) {
       throw new Error('Image generation was cancelled by the user.');
     }
-    // Small delay per step
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    // Small delay per step (skip delay in tests)
+    if (process.env.NODE_ENV !== 'test') {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
     if (onProgress) {
       onProgress(s, totalSimulatedSteps);
     }
@@ -449,7 +455,8 @@ export async function executeGenerateImageTool(
     };
   }
 
-  const steps = args.steps && args.steps > 0 ? args.steps : 20;
+  const requestedSteps = args.steps && args.steps > 0 ? Math.round(args.steps) : SD_DEFAULT_STEPS;
+  const steps = Math.min(SD_MAX_STEPS, Math.max(SD_MIN_STEPS, requestedSteps));
   const seed = args.seed !== undefined && args.seed >= 0 ? args.seed : Math.floor(Math.random() * 1000000);
   const negativePrompt = args.negative_prompt || '';
   const width = 512;
