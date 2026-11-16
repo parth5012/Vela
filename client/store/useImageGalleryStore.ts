@@ -149,14 +149,16 @@ export const useImageGalleryStore = create<ImageGalleryStoreState>()(
       saveGeneratedImage: async (input: SaveImageInput): Promise<GeneratedImageItem> => {
         await ensureGalleryDirectory();
         const id = `gen_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-        const targetUri = `${GALLERY_DIR}${id}.png`;
+        const isSvg =
+          input.sourceUri.startsWith('data:image/svg') ||
+          input.sourceUri.includes('<svg') ||
+          input.sourceUri.endsWith('.svg');
+        const extension = isSvg ? 'svg' : 'png';
+        const targetUri = `${GALLERY_DIR}${id}.${extension}`;
 
-        let savedUri = input.sourceUri;
+        let savedUri = targetUri;
         try {
-          if (input.sourceUri.startsWith(GALLERY_DIR)) {
-            // Already in gallery directory (single owner, avoids duplicate disk usage)
-            savedUri = input.sourceUri;
-          } else if (input.sourceUri.startsWith('data:image/svg') || input.sourceUri.includes('<svg')) {
+          if (isSvg) {
             let svgContent = input.sourceUri;
             if (/^data:[^;]+;base64,/.test(input.sourceUri)) {
               const base64Data = input.sourceUri.replace(/^data:[^;]+;base64,/, '');
@@ -184,6 +186,8 @@ export const useImageGalleryStore = create<ImageGalleryStoreState>()(
               to: targetUri,
             });
             savedUri = targetUri;
+          } else {
+            savedUri = input.sourceUri;
           }
         } catch (fileErr) {
           console.warn('[ImageGalleryStore] Could not persist file to gallery dir, keeping source URI:', fileErr);
@@ -279,8 +283,13 @@ export const useImageGalleryStore = create<ImageGalleryStoreState>()(
         unlimitedStorage: state.unlimitedStorage,
         maxCapacity: state.maxCapacity,
       }),
-      onRehydrateStorage: () => (state) => {
-        state?.setHasHydrated(true);
+      onRehydrateStorage: () => (state, error) => {
+        if (error) {
+          console.warn('[ImageGalleryStore] Error during rehydration:', error);
+          useImageGalleryStore.setState({ hasHydrated: true });
+        } else {
+          state?.setHasHydrated(true);
+        }
       },
     }
   )
