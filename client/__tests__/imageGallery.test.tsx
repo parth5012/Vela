@@ -208,16 +208,21 @@ describe('useImageGalleryStore', () => {
     );
   });
 
-  it('reuses existing file uri if sourceUri is already in GALLERY_DIR', async () => {
+  it('creates an independent gallery copy of file attachments to isolate gallery delete from chat', async () => {
     const store = useImageGalleryStore.getState();
-    const existingUri = 'file:///mock-doc-dir/generated-images/img_existing.png';
+    const chatAttachmentUri = 'file:///mock-doc-dir/generated-images/img_chat.png';
 
     const item = await store.saveGeneratedImage({
-      prompt: 'Existing image',
-      sourceUri: existingUri,
+      prompt: 'Chat generated image',
+      sourceUri: chatAttachmentUri,
     });
 
-    expect(item.uri).toBe(existingUri);
+    expect(item.uri).not.toBe(chatAttachmentUri);
+    expect(item.uri).toContain('generated-images/gen_');
+    expect(FileSystem.copyAsync).toHaveBeenCalledWith({
+      from: chatAttachmentUri,
+      to: item.uri,
+    });
   });
 
   it('updates maxCapacity and triggers eviction when capacity shrinks', async () => {
