@@ -35,7 +35,10 @@ function SyncStatusIndicator() {
 
     switch (syncState) {
       case 'online':
-        message = `✓ Connected and synced.\n\nNode: ${cleanUrl}\nPending queue: ${pendingQueueCount} items`;
+        message =
+          pendingQueueCount > 0
+            ? `✓ Connected.\n\nNode: ${cleanUrl}\nPending queue: ${pendingQueueCount} items queued for sync.`
+            : `✓ Connected and synced.\n\nNode: ${cleanUrl}\nPending queue: 0 items`;
         break;
       case 'syncing':
         message = `Syncing changes with backend...\n\nNode: ${cleanUrl}\nPending queue: ${pendingQueueCount} items`;
@@ -89,6 +92,7 @@ function SyncStatusIndicator() {
       hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ busy: isChecking || syncState === 'syncing' }}
       testID="sync-status-indicator"
     >
       {isChecking || syncState === 'syncing' ? (
