@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
+import { useImageGalleryStore } from '../store/useImageGalleryStore';
 
 let SDModule: any = null;
 try {
@@ -495,6 +496,20 @@ export async function executeGenerateImageTool(
       seed,
       onProgress
     );
+
+    // Auto-save generated image to Image Gallery store
+    try {
+      await useImageGalleryStore.getState().saveGeneratedImage({
+        prompt,
+        sourceUri: imageUri,
+        width,
+        height,
+        seed,
+        steps,
+      });
+    } catch (galleryErr) {
+      console.warn('[executeGenerateImageTool] Auto-save to gallery error:', galleryErr);
+    }
 
     return {
       success: true,
