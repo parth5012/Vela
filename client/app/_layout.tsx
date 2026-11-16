@@ -7,7 +7,6 @@ import { useConfigStore } from '../store/useConfigStore';
 import { checkPermission, type OSPermission } from '../utils/permissionManager';
 import { useChatStore } from '../store/useChatStore';
 import DrawerContent from '../components/ui/DrawerContent';
-import HealthIndicator from '../components/ui/HealthIndicator';
 import OfflineBanner from '../components/ui/OfflineBanner';
 import SyncStatusIndicator from '../components/ui/SyncStatusIndicator';
 import QueueBadge from '../components/ui/QueueBadge';

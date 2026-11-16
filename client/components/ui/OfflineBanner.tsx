@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOfflineStore } from '../../store/useOfflineStore';
 import { useConfigStore } from '../../store/useConfigStore';
 import { THEME_COLORS } from '../../utils/theme';
@@ -12,6 +13,7 @@ function OfflineBanner() {
   const isBackendReachable = useOfflineStore((state) => state.isBackendReachable);
   const syncState = useOfflineStore((state) => state.syncState);
   const theme = useConfigStore((state) => state.theme);
+  const insets = useSafeAreaInsets();
 
   const isOffline = !isOnline || !isBackendReachable || syncState === 'offline';
 
@@ -27,6 +29,7 @@ function OfflineBanner() {
       style={[
         styles.container,
         isDark ? styles.containerDark : styles.containerLight,
+        { paddingTop: Math.max(8, (insets?.top ?? 0) + 4) },
       ]}
       accessibilityRole="alert"
       accessibilityLiveRegion="polite"

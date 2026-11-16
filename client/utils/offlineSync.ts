@@ -3,12 +3,13 @@ import { useConfigStore } from '../store/useConfigStore';
 import { useChatStore } from '../store/useChatStore';
 import { useOfflineStore } from '../store/useOfflineStore';
 import { healthProbeManager } from './healthProbe';
-import { syncDatabase } from './syncManager';
+import { syncDatabase, subscribeToStandaloneSync } from './syncManager';
 import { flushUnsyncedCheckins, loadUnsyncedCheckins } from '../db/checkinRepository';
 import { db } from '../db/client';
 import { operationLog } from '../db/schema';
 
 let wired = false;
+let flushInFlight: Promise<void> | null = null;
 
 /**
  * Reads total pending offline queue count from operationLog and unsynced check-ins.
@@ -18,12 +19,12 @@ export async function getPendingQueueCount(): Promise<number> {
   if (!db) return 0;
 
   try {
-    const ops = await db.select().from(operationLog);
+    const ops = await db.select({ id: operationLog.id }).from(operationLog);
     if (ops && Array.isArray(ops)) {
       count += ops.length;
     }
   } catch (err) {
-    // ignore query failure in detached environments
+    console.warn('[offlineSync] Error reading pending operations:', err);
   }
 
   try {
@@ -32,7 +33,7 @@ export async function getPendingQueueCount(): Promise<number> {
       count += unsyncedCheckins.length;
     }
   } catch (err) {
-    // ignore query failure in detached environments
+    console.warn('[offlineSync] Error reading unsynced check-ins:', err);
   }
 
   return count;
@@ -49,14 +50,29 @@ export async function refreshPendingQueueCount(): Promise<number> {
 
 /**
  * Attempts to flush locally-queued (pending) messages to the backend.
+ * Single-flight: concurrent calls collapse into the in-flight execution.
  * Request-based per map decision #84: if the backend is unreachable the push
- * throws and we simply leave the queue pending for the next trigger.
+ * is skipped and we keep the queue pending for the next trigger.
  */
-export async function flushPendingMessages(): Promise<void> {
+export function flushPendingMessages(): Promise<void> {
+  if (flushInFlight) return flushInFlight;
+  flushInFlight = doFlushPendingMessages().finally(() => {
+    flushInFlight = null;
+  });
+  return flushInFlight;
+}
+
+async function doFlushPendingMessages(): Promise<void> {
   const config = useConfigStore.getState();
   const offlineStore = useOfflineStore.getState();
 
   if (config.connectionMode !== 'server' || !config.apiUrl || !config.apiKey) {
+    await refreshPendingQueueCount();
+    return;
+  }
+
+  // Decision #84: request-based — do not hammer an offline or unreachable node
+  if (!offlineStore.isOnline || !offlineStore.isBackendReachable) {
     await refreshPendingQueueCount();
     return;
   }
@@ -128,4 +144,11 @@ export function wireOfflineSync(): void {
       flushPendingMessages();
     }
   });
+  try {
+    subscribeToStandaloneSync(() => {
+      refreshPendingQueueCount();
+    });
+  } catch {
+    // ignore in environments where standalone sync is mocked
+  }
 }
