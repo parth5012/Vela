@@ -159,6 +159,84 @@ describe('useImageGalleryStore', () => {
     expect(currentIds).toContain(item4.id);
   });
 
+  it('never evicts newly saved image even when pinned items saturate capacity', async () => {
+    useImageGalleryStore.setState({ maxCapacity: 2, unlimitedStorage: false });
+    const store = useImageGalleryStore.getState();
+
+    // Add 2 items and pin BOTH
+    const item1 = await store.saveGeneratedImage({
+      prompt: 'Pinned 1',
+      sourceUri: 'file:///mock-doc-dir/p1.png',
+    });
+    const item2 = await store.saveGeneratedImage({
+      prompt: 'Pinned 2',
+      sourceUri: 'file:///mock-doc-dir/p2.png',
+    });
+    act(() => {
+      useImageGalleryStore.getState().togglePinImage(item1.id);
+      useImageGalleryStore.getState().togglePinImage(item2.id);
+    });
+
+    // Add 3rd item when capacity is saturated with pinned items
+    const item3 = await store.saveGeneratedImage({
+      prompt: 'New item 3',
+      sourceUri: 'file:///mock-doc-dir/p3.png',
+    });
+
+    // Newly saved item must NOT be evicted
+    const currentImages = useImageGalleryStore.getState().images;
+    const currentIds = currentImages.map((x) => x.id);
+    expect(currentIds).toContain(item3.id);
+    expect(currentIds).toContain(item1.id);
+    expect(currentIds).toContain(item2.id);
+  });
+
+  it('handles SVG data URI and plain SVG correctly without corrupting', async () => {
+    const store = useImageGalleryStore.getState();
+    const svgDataUri = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100"/></svg>';
+
+    const item = await store.saveGeneratedImage({
+      prompt: 'Vector icon',
+      sourceUri: svgDataUri,
+    });
+
+    expect(item.uri).toContain('generated-images/gen_');
+    expect(FileSystem.writeAsStringAsync).toHaveBeenCalledWith(
+      expect.stringContaining('generated-images/gen_'),
+      expect.stringContaining('<svg'),
+      expect.objectContaining({ encoding: 'utf8' })
+    );
+  });
+
+  it('reuses existing file uri if sourceUri is already in GALLERY_DIR', async () => {
+    const store = useImageGalleryStore.getState();
+    const existingUri = 'file:///mock-doc-dir/generated-images/img_existing.png';
+
+    const item = await store.saveGeneratedImage({
+      prompt: 'Existing image',
+      sourceUri: existingUri,
+    });
+
+    expect(item.uri).toBe(existingUri);
+  });
+
+  it('updates maxCapacity and triggers eviction when capacity shrinks', async () => {
+    useImageGalleryStore.setState({ maxCapacity: 5, unlimitedStorage: false });
+    const store = useImageGalleryStore.getState();
+
+    await store.saveGeneratedImage({ prompt: '1', sourceUri: 'file:///img1.png' });
+    await store.saveGeneratedImage({ prompt: '2', sourceUri: 'file:///img2.png' });
+    await store.saveGeneratedImage({ prompt: '3', sourceUri: 'file:///img3.png' });
+    expect(useImageGalleryStore.getState().images.length).toBe(3);
+
+    act(() => {
+      useImageGalleryStore.getState().setMaxCapacity(2);
+    });
+
+    // Evicted down to 2
+    expect(useImageGalleryStore.getState().images.length).toBe(2);
+  });
+
   it('unlimited storage preserves all images beyond capacity', async () => {
     useImageGalleryStore.setState({ maxCapacity: 2, unlimitedStorage: true });
     const store = useImageGalleryStore.getState();

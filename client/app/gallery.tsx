@@ -16,6 +16,7 @@ import { useAurora } from '../hooks/useAurora';
 import {
   useImageGalleryStore,
   GeneratedImageItem,
+  filterGalleryImages,
 } from '../store/useImageGalleryStore';
 import { ImageViewerModal } from '../components/gallery/ImageViewerModal';
 import ImagePreview from '../components/media/ImagePreview';
@@ -30,6 +31,7 @@ export default function ImageGalleryScreen() {
   const unlimitedStorage = useImageGalleryStore((state) => state.unlimitedStorage);
   const setUnlimitedStorage = useImageGalleryStore((state) => state.setUnlimitedStorage);
   const clearAllImages = useImageGalleryStore((state) => state.clearAllImages);
+  const hasHydrated = useImageGalleryStore((state) => state.hasHydrated);
 
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -48,14 +50,7 @@ export default function ImageGalleryScreen() {
   const accent = aurora.acc1 || '#818cf8';
 
   const filteredList = useMemo(() => {
-    const trimmed = searchQuery.trim().toLowerCase();
-    if (!trimmed) return images;
-    return images.filter(
-      (img) =>
-        img.prompt.toLowerCase().includes(trimmed) ||
-        img.negativePrompt?.toLowerCase().includes(trimmed) ||
-        img.model.toLowerCase().includes(trimmed)
-    );
+    return filterGalleryImages(images, searchQuery);
   }, [images, searchQuery]);
 
   const handleClearAll = () => {
@@ -81,6 +76,7 @@ export default function ImageGalleryScreen() {
       <PressableScale
         scaleTo={0.95}
         onPress={() => setSelectedImageId(item.id)}
+        accessibilityRole="button"
         style={[
           styles.gridCell,
           {
@@ -198,7 +194,9 @@ export default function ImageGalleryScreen() {
       </View>
 
       {/* Main Grid View */}
-      {filteredList.length === 0 ? (
+      {!hasHydrated ? (
+        <View style={styles.emptyContainer} />
+      ) : filteredList.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyIcon}>🎨</Text>
           <Text style={[styles.emptyTitle, { color: colors.text || '#f8fafc' }]}>

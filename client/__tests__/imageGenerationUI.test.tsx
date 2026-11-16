@@ -29,6 +29,19 @@ jest.mock('expo-clipboard', () => ({
   setStringAsync: jest.fn().mockResolvedValue(true),
 }));
 
+jest.mock('expo-router', () => ({
+  useRouter: () => ({
+    push: jest.fn(),
+    replace: jest.fn(),
+    navigate: jest.fn(),
+  }),
+  router: {
+    push: jest.fn(),
+    replace: jest.fn(),
+    navigate: jest.fn(),
+  },
+}));
+
 jest.mock('../db/client', () => ({
   db: null,
   expoDb: null,

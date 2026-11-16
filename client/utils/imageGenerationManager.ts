@@ -10,6 +10,7 @@ import {
   SD_MIN_STEPS,
   SD_MAX_STEPS,
   SD_DEFAULT_STEPS,
+  SD_DEFAULT_MODEL_NAME,
 } from './stableDiffusion';
 import { shouldPromptImageConsent } from './imageGenerationConsent';
 
@@ -94,22 +95,25 @@ export async function runImageGenerationPipeline(
   if (options.threadId && toolResult.imageUri) {
     createdMessageId = `msg-img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const nowIso = new Date().toISOString();
+    const width = toolResult.width || 512;
+    const height = toolResult.height || 512;
+    const model = SD_DEFAULT_MODEL_NAME;
 
     const assistantMessage = {
       id: createdMessageId,
       role: 'assistant' as const,
-      content: `Generated image for: "${toolResult.prompt}"\n\n*Parameters: 512×512, ${toolResult.steps} steps, seed #${toolResult.seed}*`,
+      content: `Generated image for: "${toolResult.prompt}"\n\n*Parameters: ${width}×${height}, ${toolResult.steps} steps, seed #${toolResult.seed}*`,
       created_at: nowIso,
       attachments: [
         {
           id: `att-gen-${Date.now()}`,
           storage_path: toolResult.imageUri,
           mime_type: 'image/png',
-          file_size: 512 * 512 * 4,
+          file_size: width * height * 4,
           url: toolResult.imageUri,
           alt_text: toolResult.prompt,
-          width: 512,
-          height: 512,
+          width,
+          height,
         },
       ],
     };
@@ -120,12 +124,16 @@ export async function runImageGenerationPipeline(
   // 5. Gallery & History Persistence (Map #570)
   if (toolResult.imageUri) {
     try {
+      const width = toolResult.width || 512;
+      const height = toolResult.height || 512;
+      const model = SD_DEFAULT_MODEL_NAME;
+
       await useImageGalleryStore.getState().saveGeneratedImage({
         prompt: toolResult.prompt,
         negativePrompt: options.negative_prompt,
-        model: 'Stable Diffusion 1.5 (INT8)',
-        width: toolResult.width,
-        height: toolResult.height,
+        model,
+        width,
+        height,
         steps: toolResult.steps,
         seed: toolResult.seed,
         sourceUri: toolResult.imageUri,
