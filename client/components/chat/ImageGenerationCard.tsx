@@ -140,8 +140,9 @@ export function ImageGenerationCard({
       return;
     }
     try {
+      // Lazy-load to avoid ESM syntax errors with standard-navigation in chat item test suites
       const { router } = require('expo-router');
-      router?.navigate?.('/gallery');
+      router.navigate('/gallery');
     } catch {
       // safe fallback in test environments
     }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -29,10 +29,21 @@ export function ImageViewerModal({ image, visible, onClose }: ImageViewerModalPr
   const router = useRouter();
   const { colors, aurora } = useAurora();
   const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<NodeJS.Timeout | null>(null);
   const deleteImage = useImageGalleryStore((state) => state.deleteImage);
   const togglePin = useImageGalleryStore((state) => state.togglePinImage);
   const setPendingPrompt = useChatStore((state) => state.setPendingPrompt);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+
+  useEffect(() => {
+    setCopied(false);
+    return () => {
+      if (copyTimerRef.current) {
+        clearTimeout(copyTimerRef.current);
+        copyTimerRef.current = null;
+      }
+    };
+  }, [image?.id]);
 
   if (!image) return null;
 
@@ -47,8 +58,9 @@ export function ImageViewerModal({ image, visible, onClose }: ImageViewerModalPr
   const handleCopyPrompt = async () => {
     try {
       await Clipboard.setStringAsync(image.prompt);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      copyTimerRef.current = setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.warn('[ImageViewerModal] Failed to copy prompt:', err);
     }
@@ -59,8 +71,9 @@ export function ImageViewerModal({ image, visible, onClose }: ImageViewerModalPr
     try {
       const isAvailable = await Sharing.isAvailableAsync();
       if (isAvailable) {
+        const isSvg = image.uri.endsWith('.svg') || image.uri.includes('svg');
         await Sharing.shareAsync(image.uri, {
-          mimeType: 'image/png',
+          mimeType: isSvg ? 'image/svg+xml' : 'image/png',
           dialogTitle: 'Share Generated Image',
         });
       } else {
@@ -68,6 +81,7 @@ export function ImageViewerModal({ image, visible, onClose }: ImageViewerModalPr
       }
     } catch (err) {
       console.warn('[ImageViewerModal] Share error:', err);
+      Alert.alert('Sharing Failed', 'Could not share image from device storage.');
     }
   };
 

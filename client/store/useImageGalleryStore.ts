@@ -60,6 +60,52 @@ export async function ensureGalleryDirectory(): Promise<string> {
   return GALLERY_DIR;
 }
 
+export function filterGalleryImages(
+  images: GeneratedImageItem[],
+  query: string
+): GeneratedImageItem[] {
+  const trimmed = (query || '').trim().toLowerCase();
+  if (!trimmed) return images;
+  return images.filter(
+    (img) =>
+      img.prompt.toLowerCase().includes(trimmed) ||
+      img.negativePrompt?.toLowerCase().includes(trimmed) ||
+      img.model.toLowerCase().includes(trimmed)
+  );
+}
+
+export function selectEvictions(
+  images: GeneratedImageItem[],
+  maxCapacity: number,
+  protectId?: string
+): { kept: GeneratedImageItem[]; evicted: GeneratedImageItem[] } {
+  if (maxCapacity <= 0 || images.length <= maxCapacity) {
+    return { kept: images, evicted: [] };
+  }
+  const excessCount = images.length - maxCapacity;
+  // Never evict pinned images or protected items (e.g. freshly added image)
+  const unpinned = images.filter((img) => !img.isPinned && img.id !== protectId);
+  if (unpinned.length === 0) {
+    return { kept: images, evicted: [] };
+  }
+
+  const indexMap = new Map(images.map((img, idx) => [img.id, idx]));
+  const oldestUnpinned = [...unpinned]
+    .sort((a, b) => {
+      if (a.timestamp !== b.timestamp) {
+        return a.timestamp - b.timestamp;
+      }
+      return (indexMap.get(b.id) ?? 0) - (indexMap.get(a.id) ?? 0);
+    })
+    .slice(0, excessCount);
+
+  const idsToEvict = new Set(oldestUnpinned.map((img) => img.id));
+  return {
+    kept: images.filter((img) => !idsToEvict.has(img.id)),
+    evicted: oldestUnpinned,
+  };
+}
+
 export const useImageGalleryStore = create<ImageGalleryStoreState>()(
   persist(
     (set, get) => ({
@@ -76,32 +122,29 @@ export const useImageGalleryStore = create<ImageGalleryStoreState>()(
         set({ unlimitedStorage });
         if (!unlimitedStorage) {
           const { images, maxCapacity } = get();
-          if (maxCapacity > 0 && images.length > maxCapacity) {
-            const excessCount = images.length - maxCapacity;
-            const unpinned = images.filter((img) => !img.isPinned);
-            if (unpinned.length > 0) {
-              const indexMap = new Map(images.map((img, idx) => [img.id, idx]));
-              const oldestUnpinned = [...unpinned]
-                .sort((a, b) => {
-                  if (a.timestamp !== b.timestamp) {
-                    return a.timestamp - b.timestamp;
-                  }
-                  return (indexMap.get(b.id) ?? 0) - (indexMap.get(a.id) ?? 0);
-                })
-                .slice(0, excessCount);
-
-              const idsToEvict = new Set(oldestUnpinned.map((img) => img.id));
-              for (const item of oldestUnpinned) {
-                if (item.uri && item.uri.startsWith('file://')) {
-                  FileSystem.deleteAsync(item.uri, { idempotent: true }).catch(() => {});
-                }
-              }
-              set({ images: images.filter((img) => !idsToEvict.has(img.id)) });
+          const { kept, evicted } = selectEvictions(images, maxCapacity);
+          for (const item of evicted) {
+            if (item.uri && item.uri.startsWith('file://')) {
+              FileSystem.deleteAsync(item.uri, { idempotent: true }).catch(() => {});
             }
           }
+          set({ images: kept });
         }
       },
-      setMaxCapacity: (maxCapacity: number) => set({ maxCapacity: Math.max(10, maxCapacity) }),
+      setMaxCapacity: (maxCapacity: number) => {
+        const capacity = Math.max(1, maxCapacity);
+        set({ maxCapacity: capacity });
+        if (!get().unlimitedStorage) {
+          const { images } = get();
+          const { kept, evicted } = selectEvictions(images, capacity);
+          for (const item of evicted) {
+            if (item.uri && item.uri.startsWith('file://')) {
+              FileSystem.deleteAsync(item.uri, { idempotent: true }).catch(() => {});
+            }
+          }
+          set({ images: kept });
+        }
+      },
 
       saveGeneratedImage: async (input: SaveImageInput): Promise<GeneratedImageItem> => {
         await ensureGalleryDirectory();
@@ -110,30 +153,40 @@ export const useImageGalleryStore = create<ImageGalleryStoreState>()(
 
         let savedUri = input.sourceUri;
         try {
-          if (input.sourceUri.startsWith('data:')) {
+          if (input.sourceUri.startsWith(GALLERY_DIR)) {
+            // Already in gallery directory (single owner, avoids duplicate disk usage)
+            savedUri = input.sourceUri;
+          } else if (input.sourceUri.startsWith('data:image/svg') || input.sourceUri.includes('<svg')) {
+            let svgContent = input.sourceUri;
+            if (/^data:[^;]+;base64,/.test(input.sourceUri)) {
+              const base64Data = input.sourceUri.replace(/^data:[^;]+;base64,/, '');
+              await FileSystem.writeAsStringAsync(targetUri, base64Data, {
+                encoding: (FileSystem.EncodingType?.Base64 || 'base64') as any,
+              });
+            } else {
+              if (svgContent.startsWith('data:')) {
+                svgContent = decodeURIComponent(svgContent.replace(/^data:[^,]+,/, ''));
+              }
+              await FileSystem.writeAsStringAsync(targetUri, svgContent, {
+                encoding: (FileSystem.EncodingType?.UTF8 || 'utf8') as any,
+              });
+            }
+            savedUri = targetUri;
+          } else if (/^data:[^;]+;base64,/.test(input.sourceUri)) {
             const base64Data = input.sourceUri.replace(/^data:[^;]+;base64,/, '');
             await FileSystem.writeAsStringAsync(targetUri, base64Data, {
               encoding: (FileSystem.EncodingType?.Base64 || 'base64') as any,
             });
             savedUri = targetUri;
-          } else if (input.sourceUri.includes('<svg')) {
-            await FileSystem.writeAsStringAsync(targetUri, input.sourceUri, {
-              encoding: (FileSystem.EncodingType?.UTF8 || 'utf8') as any,
+          } else if (input.sourceUri.startsWith('file:') && input.sourceUri !== targetUri) {
+            await FileSystem.copyAsync({
+              from: input.sourceUri,
+              to: targetUri,
             });
             savedUri = targetUri;
-          } else if (input.sourceUri.startsWith('file:') && input.sourceUri !== targetUri) {
-            if (typeof (FileSystem as any).copyAsync === 'function') {
-              await (FileSystem as any).copyAsync({
-                from: input.sourceUri,
-                to: targetUri,
-              });
-              savedUri = targetUri;
-            } else {
-              savedUri = input.sourceUri;
-            }
           }
         } catch (fileErr) {
-          console.warn('[ImageGalleryStore] Could not copy file to gallery dir, keeping source URI:', fileErr);
+          console.warn('[ImageGalleryStore] Could not persist file to gallery dir, keeping source URI:', fileErr);
           savedUri = input.sourceUri;
         }
 
@@ -145,7 +198,7 @@ export const useImageGalleryStore = create<ImageGalleryStoreState>()(
           id,
           prompt: input.prompt.trim(),
           negativePrompt: input.negativePrompt?.trim(),
-          model: input.model || 'Stable Diffusion 1.5 (INT8)',
+          model: input.model || 'SD 1.5 LCM Q4_0',
           timestamp,
           width: input.width || 512,
           height: input.height || 512,
@@ -156,35 +209,18 @@ export const useImageGalleryStore = create<ImageGalleryStoreState>()(
         };
         const { unlimitedStorage, maxCapacity } = get();
 
-        // Eviction logic: if capped at maxCapacity, auto-evict oldest unpinned images
-        let updatedList = [newItem, ...currentImages];
+        // Eviction logic: if capped at maxCapacity, auto-evict oldest unpinned images, protecting newItem
+        const listWithNew = [newItem, ...currentImages];
+        let updatedList = listWithNew;
 
-        if (!unlimitedStorage && maxCapacity > 0 && updatedList.length > maxCapacity) {
-          const excessCount = updatedList.length - maxCapacity;
-          const unpinned = updatedList.filter((img) => !img.isPinned);
-          if (unpinned.length > 0) {
-            // Updated list has newest items first; higher index in updatedList was added earlier
-            const indexMap = new Map(updatedList.map((img, idx) => [img.id, idx]));
-            const oldestUnpinned = [...unpinned]
-              .sort((a, b) => {
-                if (a.timestamp !== b.timestamp) {
-                  return a.timestamp - b.timestamp;
-                }
-                return (indexMap.get(b.id) ?? 0) - (indexMap.get(a.id) ?? 0);
-              })
-              .slice(0, excessCount);
-
-            const idsToEvict = new Set(oldestUnpinned.map((img) => img.id));
-
-            // Clean up files asynchronously
-            for (const item of oldestUnpinned) {
-              if (item.uri && item.uri.startsWith('file://')) {
-                FileSystem.deleteAsync(item.uri, { idempotent: true }).catch(() => {});
-              }
+        if (!unlimitedStorage && maxCapacity > 0) {
+          const { kept, evicted } = selectEvictions(listWithNew, maxCapacity, newItem.id);
+          for (const item of evicted) {
+            if (item.uri && item.uri.startsWith('file://')) {
+              FileSystem.deleteAsync(item.uri, { idempotent: true }).catch(() => {});
             }
-
-            updatedList = updatedList.filter((img) => !idsToEvict.has(img.id));
           }
+          updatedList = kept;
         }
 
         set({ images: updatedList });
@@ -216,15 +252,15 @@ export const useImageGalleryStore = create<ImageGalleryStoreState>()(
       clearAllImages: async (): Promise<void> => {
         const images = get().images;
         const clearedIds = new Set(images.map((item) => item.id));
-        for (const item of images) {
-          if (item.uri && item.uri.startsWith('file://')) {
-            try {
-              await FileSystem.deleteAsync(item.uri, { idempotent: true });
-            } catch (err) {
-              console.warn('[ImageGalleryStore] Error deleting file during clearAll:', err);
-            }
-          }
-        }
+        await Promise.allSettled(
+          images
+            .filter((item) => item.uri && item.uri.startsWith('file://'))
+            .map((item) =>
+              FileSystem.deleteAsync(item.uri, { idempotent: true }).catch((err) => {
+                console.warn('[ImageGalleryStore] Error deleting file during clearAll:', err);
+              })
+            )
+        );
         set((state) => ({
           images: state.images.filter((img) => !clearedIds.has(img.id)),
         }));
@@ -232,19 +268,17 @@ export const useImageGalleryStore = create<ImageGalleryStoreState>()(
 
       filteredImages: (): GeneratedImageItem[] => {
         const { images, searchQuery } = get();
-        const trimmed = searchQuery.trim().toLowerCase();
-        if (!trimmed) return images;
-        return images.filter(
-          (img) =>
-            img.prompt.toLowerCase().includes(trimmed) ||
-            img.negativePrompt?.toLowerCase().includes(trimmed) ||
-            img.model.toLowerCase().includes(trimmed)
-        );
+        return filterGalleryImages(images, searchQuery);
       },
     }),
     {
       name: 'vela-image-gallery-storage',
       storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
+        images: state.images,
+        unlimitedStorage: state.unlimitedStorage,
+        maxCapacity: state.maxCapacity,
+      }),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);
       },
