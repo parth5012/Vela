@@ -8,6 +8,10 @@ import { checkPermission, type OSPermission } from '../utils/permissionManager';
 import { useChatStore } from '../store/useChatStore';
 import DrawerContent from '../components/ui/DrawerContent';
 import HealthIndicator from '../components/ui/HealthIndicator';
+import OfflineBanner from '../components/ui/OfflineBanner';
+import SyncStatusIndicator from '../components/ui/SyncStatusIndicator';
+import QueueBadge from '../components/ui/QueueBadge';
+import { startHealthProbeService } from '../utils/healthProbe';
 import WebView from 'react-native-webview';
 import {
   useBrowserStore,
@@ -41,7 +45,7 @@ Notifications.setNotificationHandler({
 
 
 import { initializeDatabase } from '../db/client';
-import { wireOfflineSync, flushPendingMessages } from '../utils/offlineSync';
+import { wireOfflineSync, flushPendingMessages, refreshPendingQueueCount } from '../utils/offlineSync';
 import { runAgentDataBootstrap } from '../utils/seedAgents';
 import { THEME_COLORS, getAurora, hexToRgba } from '../utils/theme';
 
@@ -84,7 +88,8 @@ function HeaderRightActions() {
           {isBrowserRoute ? '💬 Chat' : '🌐 Webview'}
         </Text>
       </Pressable>
-      <HealthIndicator />
+      <QueueBadge />
+      <SyncStatusIndicator />
     </View>
   );
 }
@@ -127,8 +132,11 @@ export default function RootLayout() {
         // store is hydrated, and listen for app foreground to flush again.
         wireOfflineSync();
         flushPendingMessages();
+        refreshPendingQueueCount();
       });
+      const cleanupProbe = startHealthProbeService();
       return () => {
+        cleanupProbe();
         task.cancel();
       };
     }
@@ -305,6 +313,7 @@ export default function RootLayout() {
 
   return (
     <View style={{ flex: 1, backgroundColor: currentColors.background }}>
+      <OfflineBanner />
       <Drawer
         drawerContent={() => <DrawerContent />}
         screenOptions={{
