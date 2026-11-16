@@ -88,8 +88,13 @@ class HealthProbeManager {
   private appStateSubscription: { remove: () => void } | null = null;
   private onlineListener: (() => void) | null = null;
   private offlineListener: (() => void) | null = null;
-
   private intervalMs: number = 30000;
+  private probeSeq = 0;
+  private onConnectivityRestored: (() => void) | null = null;
+
+  setOnConnectivityRestored(callback: (() => void) | null) {
+    this.onConnectivityRestored = callback;
+  }
 
   start(intervalMs: number = 30000) {
     if (this.isRunning) return;
@@ -129,6 +134,9 @@ class HealthProbeManager {
       this.onlineListener = () => {
         useOfflineStore.getState().setOnline(true);
         this.debouncedProbe(2000);
+        if (this.onConnectivityRestored) {
+          this.onConnectivityRestored();
+        }
       };
       this.offlineListener = () => {
         useOfflineStore.getState().setOnline(false);
@@ -192,15 +200,24 @@ class HealthProbeManager {
     const offlineStore = useOfflineStore.getState();
 
     // If Vela node is not configured or in local mode, assume online
-    if (!config.isConfigured || !config.apiUrl) {
+    if (!config.isConfigured || !config.apiUrl || config.connectionMode !== 'server') {
       offlineStore.setBackendReachable(true);
       offlineStore.setIsChecking(false);
       offlineStore.setLastChecked(Date.now());
       return true;
     }
 
+    if (!offlineStore.isOnline) {
+      offlineStore.setIsChecking(false);
+      return false;
+    }
+
+    const currentSeq = ++this.probeSeq;
     offlineStore.setIsChecking(true);
     const result = await probeBackendHealth(config.apiUrl, config.apiKey);
+    if (currentSeq !== this.probeSeq) {
+      return result.ok;
+    }
     offlineStore.setIsChecking(false);
     offlineStore.setBackendReachable(result.ok);
     offlineStore.setLastChecked(Date.now());

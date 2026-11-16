@@ -2,6 +2,7 @@ import { AppState } from 'react-native';
 import { useConfigStore } from '../store/useConfigStore';
 import { useChatStore } from '../store/useChatStore';
 import { useOfflineStore } from '../store/useOfflineStore';
+import { healthProbeManager } from './healthProbe';
 import { syncDatabase } from './syncManager';
 import { flushUnsyncedCheckins, loadUnsyncedCheckins } from '../db/checkinRepository';
 import { db } from '../db/client';
@@ -71,17 +72,23 @@ export async function flushPendingMessages(): Promise<void> {
   }
 
   try {
-    await flushPendingCheckins(config.apiUrl, config.apiKey);
+    const checkinResult = await flushPendingCheckins(config.apiUrl, config.apiKey);
+    if (checkinResult.failedCount > 0) {
+      hadError = true;
+    }
   } catch (error) {
     hadError = true;
     console.warn('[offlineSync] Check-in flush failed:', error);
   }
 
-  const remaining = await refreshPendingQueueCount();
+  await refreshPendingQueueCount();
+  const latestOffline = useOfflineStore.getState();
   if (hadError) {
-    offlineStore.setSyncState('error');
+    latestOffline.setSyncState('error');
   } else {
-    offlineStore.setSyncState(offlineStore.isOnline && offlineStore.isBackendReachable ? 'online' : 'offline');
+    latestOffline.setSyncState(
+      latestOffline.isOnline && latestOffline.isBackendReachable ? 'online' : 'offline'
+    );
   }
 }
 
@@ -90,15 +97,19 @@ export async function flushPendingMessages(): Promise<void> {
  * Single-tenant device: rows flush under the most recent thread id.
  * Failures keep rows pending for the next trigger.
  */
-export async function flushPendingCheckins(apiUrl: string, apiKey: string): Promise<void> {
+export async function flushPendingCheckins(
+  apiUrl: string,
+  apiKey: string
+): Promise<{ syncedCount: number; failedCount: number }> {
   try {
     const conversationId = useChatStore.getState().threads?.[0]?.id;
     if (!conversationId) {
-      return;
+      return { syncedCount: 0, failedCount: 0 };
     }
-    await flushUnsyncedCheckins(apiUrl, apiKey, conversationId);
+    return await flushUnsyncedCheckins(apiUrl, apiKey, conversationId);
   } catch (error) {
     console.warn('[offlineSync] Check-in flush failed, keeping queue pending:', error);
+    return { syncedCount: 0, failedCount: 1 };
   }
 }
 
@@ -109,6 +120,9 @@ export async function flushPendingCheckins(apiUrl: string, apiKey: string): Prom
 export function wireOfflineSync(): void {
   if (wired) return;
   wired = true;
+  healthProbeManager.setOnConnectivityRestored(() => {
+    flushPendingMessages();
+  });
   AppState.addEventListener('change', (state) => {
     if (state === 'active') {
       flushPendingMessages();

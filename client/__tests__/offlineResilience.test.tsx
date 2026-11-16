@@ -47,6 +47,7 @@ describe('Offline Resilience & Health Probe', () => {
         theme: 'berry',
         accentColor: 'indigo',
         isConfigured: true,
+        connectionMode: 'server',
         apiUrl: 'https://test-node.vela.ai',
         apiKey: 'test-key',
       });
