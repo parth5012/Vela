@@ -134,9 +134,6 @@ class HealthProbeManager {
       this.onlineListener = () => {
         useOfflineStore.getState().setOnline(true);
         this.debouncedProbe(2000);
-        if (this.onConnectivityRestored) {
-          this.onConnectivityRestored();
-        }
       };
       this.offlineListener = () => {
         useOfflineStore.getState().setOnline(false);
@@ -218,9 +215,14 @@ class HealthProbeManager {
     if (currentSeq !== this.probeSeq) {
       return result.ok;
     }
+    const wasUnreachable = !offlineStore.isBackendReachable;
     offlineStore.setIsChecking(false);
     offlineStore.setBackendReachable(result.ok);
     offlineStore.setLastChecked(Date.now());
+
+    if (wasUnreachable && result.ok && this.onConnectivityRestored) {
+      this.onConnectivityRestored();
+    }
 
     return result.ok;
   }

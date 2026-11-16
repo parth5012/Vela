@@ -35,7 +35,7 @@ export const useOfflineStore = create<OfflineStoreState>((set) => ({
         ? 'offline'
         : !state.isBackendReachable
         ? 'offline'
-        : state.syncState === 'offline'
+        : state.syncState === 'offline' || state.syncState === 'error'
         ? 'online'
         : state.syncState;
       return {
@@ -48,7 +48,7 @@ export const useOfflineStore = create<OfflineStoreState>((set) => ({
     set((state) => {
       const nextSyncState: SyncState = !state.isOnline || !isBackendReachable
         ? 'offline'
-        : state.syncState === 'offline'
+        : state.syncState === 'offline' || state.syncState === 'error'
         ? 'online'
         : state.syncState;
       return {

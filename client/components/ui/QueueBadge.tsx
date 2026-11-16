@@ -15,20 +15,27 @@ function QueueBadge() {
   }
 
   const isDark = theme === 'noir';
+  const isSyncing = syncState === 'syncing';
   const label = `${pendingQueueCount} queued`;
-  const accessibilityLabel = `${pendingQueueCount} items queued for sync. Tap to flush.`;
+  const accessibilityLabel = `${pendingQueueCount} ${
+    pendingQueueCount === 1 ? 'item' : 'items'
+  } queued for sync. Tap to sync now.`;
 
   return (
     <Pressable
       onPress={() => flushPendingMessages()}
+      disabled={isSyncing}
       style={({ pressed }) => [
         styles.badge,
         isDark ? styles.badgeDark : styles.badgeLight,
         pressed && styles.badgePressed,
+        isSyncing && styles.badgeDisabled,
       ]}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      accessibilityHint="Attempts to sync queued messages with the server"
+      accessibilityState={{ disabled: isSyncing, busy: isSyncing }}
       testID="queue-badge"
     >
       <Text style={[styles.text, isDark ? styles.textDark : styles.textLight]}>
@@ -58,6 +65,9 @@ const styles = StyleSheet.create({
   },
   badgePressed: {
     opacity: 0.7,
+  },
+  badgeDisabled: {
+    opacity: 0.5,
   },
   text: {
     fontSize: 11,

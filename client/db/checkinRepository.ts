@@ -2,6 +2,7 @@ import { db } from './client';
 import { checkIns } from './schema';
 import { eq, desc } from 'drizzle-orm';
 import { instrumentQuery } from '../utils/storageMetrics';
+import { useOfflineStore } from '../store/useOfflineStore';
 
 export interface CheckInInput {
   /** Local calendar day as YYYY-MM-DD. Same-day saves replace each other. */
@@ -81,6 +82,7 @@ export async function saveCheckinLocal(input: CheckInInput) {
         created_at: row.created_at,
       },
     });
+  useOfflineStore.getState().incrementPendingQueue();
   return row;
 }
 
