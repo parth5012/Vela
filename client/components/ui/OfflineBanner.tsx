@@ -3,7 +3,6 @@ import { View, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOfflineStore } from '../../store/useOfflineStore';
 import { useConfigStore } from '../../store/useConfigStore';
-import { THEME_COLORS } from '../../utils/theme';
 
 export const OFFLINE_BANNER_COPY =
   "You're offline. Changes are saved locally and will sync when reconnected.";
@@ -22,7 +21,6 @@ function OfflineBanner() {
   }
 
   const isDark = theme === 'noir';
-  const currentTheme = THEME_COLORS[theme] || THEME_COLORS.berry;
 
   return (
     <View

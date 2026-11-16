@@ -10,6 +10,7 @@ import { operationLog } from '../db/schema';
 
 let wired = false;
 let flushInFlight: Promise<void> | null = null;
+let reflushNeeded = false;
 
 /**
  * Reads total pending offline queue count from operationLog and unsynced check-ins.
@@ -55,11 +56,21 @@ export async function refreshPendingQueueCount(): Promise<number> {
  * is skipped and we keep the queue pending for the next trigger.
  */
 export function flushPendingMessages(): Promise<void> {
-  if (flushInFlight) return flushInFlight;
-  flushInFlight = doFlushPendingMessages().finally(() => {
+  if (flushInFlight) {
+    reflushNeeded = true;
+    return flushInFlight;
+  }
+  flushInFlight = doFlushWithReflush().finally(() => {
     flushInFlight = null;
   });
   return flushInFlight;
+}
+
+async function doFlushWithReflush(): Promise<void> {
+  do {
+    reflushNeeded = false;
+    await doFlushPendingMessages();
+  } while (reflushNeeded);
 }
 
 async function doFlushPendingMessages(): Promise<void> {

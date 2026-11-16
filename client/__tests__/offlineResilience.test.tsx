@@ -24,14 +24,41 @@ jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 );
 
-jest.mock('../db/client', () => ({
-  db: {
-    select: jest.fn(() => ({
-      from: jest.fn(() => Promise.resolve([])),
-    })),
-  },
-  expoDb: null,
-  initializeDatabase: jest.fn(async () => {}),
+jest.mock('../db/client', () => {
+  const queryBuilder: any = {
+    from: jest.fn(() => queryBuilder),
+    orderBy: jest.fn(() => queryBuilder),
+    limit: jest.fn(() => Promise.resolve([])),
+    where: jest.fn(() => Promise.resolve([])),
+    then: (resolve: any) => Promise.resolve([]).then(resolve),
+  };
+  return {
+    db: {
+      select: jest.fn(() => queryBuilder),
+      insert: jest.fn(() => ({
+        values: jest.fn(() => ({
+          onConflictDoUpdate: jest.fn(() => Promise.resolve()),
+        })),
+      })),
+      update: jest.fn(() => ({
+        set: jest.fn(() => ({
+          where: jest.fn(() => Promise.resolve()),
+        })),
+      })),
+    },
+    expoDb: null,
+    initializeDatabase: jest.fn(async () => {}),
+  };
+});
+
+jest.mock('../store/useChatStore', () => ({
+  useChatStore: Object.assign(
+    jest.fn(() => ({ threads: [] })),
+    {
+      getState: () => ({ threads: [] }),
+      setState: jest.fn(),
+    }
+  ),
 }));
 
 jest.mock('../db/checkinRepository', () => ({
@@ -46,6 +73,16 @@ jest.mock('../utils/syncManager', () => ({
 
 describe('Offline Resilience & Health Probe', () => {
   const originalFetch = global.fetch;
+  let renderedTrees: renderer.ReactTestRenderer[] = [];
+
+  const render = (el: React.ReactElement): renderer.ReactTestRenderer => {
+    let tree!: renderer.ReactTestRenderer;
+    act(() => {
+      tree = renderer.create(el);
+    });
+    renderedTrees.push(tree);
+    return tree;
+  };
 
   beforeEach(() => {
     act(() => {
@@ -63,6 +100,14 @@ describe('Offline Resilience & Health Probe', () => {
   });
 
   afterEach(() => {
+    while (renderedTrees.length > 0) {
+      const t = renderedTrees.pop();
+      try {
+        act(() => {
+          t?.unmount();
+        });
+      } catch {}
+    }
     global.fetch = originalFetch;
     healthProbeManager.stop();
   });
@@ -104,7 +149,7 @@ describe('Offline Resilience & Health Probe', () => {
       expect(useOfflineStore.getState().syncState).toBe('online');
     });
 
-    it('recovers from error state back to online when backend becomes reachable', () => {
+    it('preserves error state until a sync succeeds, not merely from reachability', async () => {
       act(() => {
         useOfflineStore.getState().setSyncState('error');
       });
@@ -112,6 +157,13 @@ describe('Offline Resilience & Health Probe', () => {
 
       act(() => {
         useOfflineStore.getState().setBackendReachable(true);
+      });
+      // Reachability probe alone does not falsely clear sync errors
+      expect(useOfflineStore.getState().syncState).toBe('error');
+
+      // A successful flush clears error back to online
+      await act(async () => {
+        await offlineSync.flushPendingMessages();
       });
       expect(useOfflineStore.getState().syncState).toBe('online');
     });
@@ -190,7 +242,9 @@ describe('Offline Resilience & Health Probe', () => {
         status: 503,
       } as Response);
 
-      await healthProbeManager.executeProbe();
+      await act(async () => {
+        await healthProbeManager.executeProbe();
+      });
       expect(useOfflineStore.getState().isBackendReachable).toBe(false);
       expect(useOfflineStore.getState().syncState).toBe('offline');
 
@@ -199,7 +253,9 @@ describe('Offline Resilience & Health Probe', () => {
         status: 200,
       } as Response);
 
-      await healthProbeManager.executeProbe();
+      await act(async () => {
+        await healthProbeManager.executeProbe();
+      });
       expect(useOfflineStore.getState().isBackendReachable).toBe(true);
       expect(useOfflineStore.getState().syncState).toBe('online');
     });
@@ -207,11 +263,8 @@ describe('Offline Resilience & Health Probe', () => {
 
   describe('OfflineBanner Component', () => {
     it('renders null when app is online and reachable', () => {
-      let tree: renderer.ReactTestRenderer | null = null;
-      act(() => {
-        tree = renderer.create(<OfflineBanner />);
-      });
-      expect(tree!.toJSON()).toBeNull();
+      const tree = render(<OfflineBanner />);
+      expect(tree.toJSON()).toBeNull();
     });
 
     it('renders persistent offline banner with exact copy and safe area padding when offline', () => {
@@ -219,12 +272,8 @@ describe('Offline Resilience & Health Probe', () => {
         useOfflineStore.getState().setOnline(false);
       });
 
-      let tree: renderer.ReactTestRenderer | null = null;
-      act(() => {
-        tree = renderer.create(<OfflineBanner />);
-      });
-
-      const root = tree!.root;
+      const tree = render(<OfflineBanner />);
+      const root = tree.root;
       const banner = root.findByProps({ testID: 'offline-banner' });
       expect(banner).toBeDefined();
 
@@ -241,24 +290,16 @@ describe('Offline Resilience & Health Probe', () => {
         useOfflineStore.getState().setBackendReachable(false);
       });
 
-      let tree: renderer.ReactTestRenderer | null = null;
-      act(() => {
-        tree = renderer.create(<OfflineBanner />);
-      });
-
-      const root = tree!.root;
+      const tree = render(<OfflineBanner />);
+      const root = tree.root;
       expect(root.findByProps({ testID: 'offline-banner' })).toBeDefined();
     });
   });
 
   describe('SyncStatusIndicator Component', () => {
     it('renders status dot with appropriate accessibility label', () => {
-      let tree: renderer.ReactTestRenderer | null = null;
-      act(() => {
-        tree = renderer.create(<SyncStatusIndicator />);
-      });
-
-      const root = tree!.root;
+      const tree = render(<SyncStatusIndicator />);
+      const root = tree.root;
       const indicator = root.findByProps({ testID: 'sync-status-indicator' });
       expect(indicator.props.accessibilityLabel).toContain('Sync status: online');
     });
@@ -269,12 +310,8 @@ describe('Offline Resilience & Health Probe', () => {
         useOfflineStore.getState().setPendingQueueCount(3);
       });
 
-      let tree: renderer.ReactTestRenderer | null = null;
-      act(() => {
-        tree = renderer.create(<SyncStatusIndicator />);
-      });
-
-      const root = tree!.root;
+      const tree = render(<SyncStatusIndicator />);
+      const root = tree.root;
       const indicator = root.findByProps({ testID: 'sync-status-indicator' });
       expect(indicator.props.accessibilityLabel).toContain('Sync status: offline, 3 pending');
     });
@@ -286,11 +323,8 @@ describe('Offline Resilience & Health Probe', () => {
         useOfflineStore.getState().setPendingQueueCount(0);
       });
 
-      let tree: renderer.ReactTestRenderer | null = null;
-      act(() => {
-        tree = renderer.create(<QueueBadge />);
-      });
-      expect(tree!.toJSON()).toBeNull();
+      const tree = render(<QueueBadge />);
+      expect(tree.toJSON()).toBeNull();
     });
 
     it('renders count pill badge when pending queue count > 0', () => {
@@ -298,12 +332,8 @@ describe('Offline Resilience & Health Probe', () => {
         useOfflineStore.getState().setPendingQueueCount(4);
       });
 
-      let tree: renderer.ReactTestRenderer | null = null;
-      act(() => {
-        tree = renderer.create(<QueueBadge />);
-      });
-
-      const root = tree!.root;
+      const tree = render(<QueueBadge />);
+      const root = tree.root;
       const badge = root.findByProps({ testID: 'queue-badge' });
       expect(badge).toBeDefined();
       expect(badge.props.accessibilityLabel).toBe('4 items queued for sync. Tap to sync now.');
@@ -317,12 +347,8 @@ describe('Offline Resilience & Health Probe', () => {
         useOfflineStore.getState().setPendingQueueCount(1);
       });
 
-      let tree: renderer.ReactTestRenderer | null = null;
-      act(() => {
-        tree = renderer.create(<QueueBadge />);
-      });
-
-      const badge = tree!.root.findByProps({ testID: 'queue-badge' });
+      const tree = render(<QueueBadge />);
+      const badge = tree.root.findByProps({ testID: 'queue-badge' });
       expect(badge.props.accessibilityLabel).toBe('1 item queued for sync. Tap to sync now.');
     });
 
@@ -332,12 +358,8 @@ describe('Offline Resilience & Health Probe', () => {
         useOfflineStore.getState().setSyncState('syncing');
       });
 
-      let tree: renderer.ReactTestRenderer | null = null;
-      act(() => {
-        tree = renderer.create(<QueueBadge />);
-      });
-
-      const badge = tree!.root.findByProps({ testID: 'queue-badge' });
+      const tree = render(<QueueBadge />);
+      const badge = tree.root.findByProps({ testID: 'queue-badge' });
       expect(badge.props.accessibilityState).toEqual({ disabled: true, busy: true });
     });
 
@@ -348,12 +370,8 @@ describe('Offline Resilience & Health Probe', () => {
         useOfflineStore.getState().setPendingQueueCount(2);
       });
 
-      let tree: renderer.ReactTestRenderer | null = null;
-      act(() => {
-        tree = renderer.create(<QueueBadge />);
-      });
-
-      const badge = tree!.root.findByProps({ testID: 'queue-badge' });
+      const tree = render(<QueueBadge />);
+      const badge = tree.root.findByProps({ testID: 'queue-badge' });
       act(() => {
         badge.props.onPress();
       });
@@ -371,20 +389,66 @@ describe('Offline Resilience & Health Probe', () => {
       });
       (syncDatabase as jest.Mock).mockReturnValue(syncPromise);
 
-      const p1 = offlineSync.flushPendingMessages();
-      const p2 = offlineSync.flushPendingMessages();
+      let p1: Promise<void> | undefined;
+      let p2: Promise<void> | undefined;
+
+      act(() => {
+        p1 = offlineSync.flushPendingMessages();
+        p2 = offlineSync.flushPendingMessages();
+      });
 
       expect(p1).toBe(p2); // identical promise reference
       expect(syncDatabase).toHaveBeenCalledTimes(1);
 
-      resolveSync();
-      await p1;
+      await act(async () => {
+        resolveSync();
+        await p1;
+      });
+    });
+
+    it('triggers a trailing re-flush if flushPendingMessages is requested while in-flight', async () => {
+      let callCount = 0;
+      let resolveFirstSync: () => void = () => {};
+      (syncDatabase as jest.Mock).mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return new Promise<void>((resolve) => {
+            resolveFirstSync = resolve;
+          });
+        }
+        return Promise.resolve();
+      });
+
+      let p1: Promise<void> | undefined;
+      let p2: Promise<void> | undefined;
+
+      act(() => {
+        p1 = offlineSync.flushPendingMessages();
+      });
+      expect(callCount).toBe(1);
+
+      // Call flush while p1 is in flight
+      act(() => {
+        p2 = offlineSync.flushPendingMessages();
+      });
+      expect(p2).toBe(p1);
+
+      // Complete the first flush
+      await act(async () => {
+        resolveFirstSync();
+        await p1;
+      });
+
+      // Trailing re-flush executed
+      expect(callCount).toBe(2);
     });
 
     it('short-circuits flush without network call when device is offline', async () => {
       useOfflineStore.getState().setOnline(false);
 
-      await offlineSync.flushPendingMessages();
+      await act(async () => {
+        await offlineSync.flushPendingMessages();
+      });
 
       expect(syncDatabase).not.toHaveBeenCalled();
       expect(useOfflineStore.getState().syncState).toBe('offline');
@@ -393,7 +457,9 @@ describe('Offline Resilience & Health Probe', () => {
     it('short-circuits flush without network call when backend is unreachable', async () => {
       useOfflineStore.getState().setBackendReachable(false);
 
-      await offlineSync.flushPendingMessages();
+      await act(async () => {
+        await offlineSync.flushPendingMessages();
+      });
 
       expect(syncDatabase).not.toHaveBeenCalled();
       expect(useOfflineStore.getState().syncState).toBe('offline');

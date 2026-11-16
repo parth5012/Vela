@@ -215,10 +215,11 @@ class HealthProbeManager {
     if (currentSeq !== this.probeSeq) {
       return result.ok;
     }
-    const wasUnreachable = !offlineStore.isBackendReachable;
-    offlineStore.setIsChecking(false);
-    offlineStore.setBackendReachable(result.ok);
-    offlineStore.setLastChecked(Date.now());
+    const currentOffline = useOfflineStore.getState();
+    const wasUnreachable = !currentOffline.isBackendReachable;
+    currentOffline.setIsChecking(false);
+    currentOffline.setBackendReachable(result.ok);
+    currentOffline.setLastChecked(Date.now());
 
     if (wasUnreachable && result.ok && this.onConnectivityRestored) {
       this.onConnectivityRestored();
