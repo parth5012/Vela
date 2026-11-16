@@ -251,4 +251,23 @@ describe('stableDiffusion utility', () => {
     await gen1;
     expect(isSDGenerating()).toBe(false);
   });
+
+  it('automatically persists generated image to useImageGalleryStore on success', async () => {
+    (FileSystem.getInfoAsync as jest.Mock).mockResolvedValue({ exists: true });
+    const { useImageGalleryStore } = require('../store/useImageGalleryStore');
+    const prevCount = useImageGalleryStore.getState().images.length;
+
+    const res = await executeGenerateImageTool({
+      prompt: 'a picturesque mountain sunrise',
+      steps: 10,
+      seed: 42,
+    });
+
+    expect(res.success).toBe(true);
+    expect(res.imageUri).toBeDefined();
+    const images = useImageGalleryStore.getState().images;
+    expect(images.length).toBe(prevCount + 1);
+    expect(images[0].prompt).toBe('a picturesque mountain sunrise');
+    expect(images[0].seed).toBe(42);
+  });
 });
