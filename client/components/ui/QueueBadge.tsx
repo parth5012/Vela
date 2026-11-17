@@ -74,6 +74,14 @@ function QueueBadge() {
     }
   }, [pendingQueueCount, isSyncing, reducedMotion, scale, opacity]);
 
+  // If the motion preference changes mid-press, drop both press-feedback
+  // values back to rest (setValue also stops any animation on the value).
+  // Syncing keeps its disabled resting opacity.
+  useEffect(() => {
+    scale.setValue(1);
+    opacity.setValue(isSyncing ? 0.4 : 1);
+  }, [reducedMotion, scale, opacity]);
+
   const handlePressIn = () => {
     if (isSyncing) return;
     if (!reducedMotion) {
