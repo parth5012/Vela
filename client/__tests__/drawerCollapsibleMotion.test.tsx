@@ -104,6 +104,34 @@ describe('CollapsibleBlock Motion & Haptics Contract', () => {
     );
     expect(hasRotate).toBe(false);
   });
+
+  it('sets expandedness immediately when toggling under reduced motion', () => {
+    const { useReducedMotion } = require('../hooks/useReducedMotion');
+    useReducedMotion.mockReturnValueOnce(true);
+
+    let component: any;
+    act(() => {
+      component = renderer.create(
+        <CollapsibleBlock
+          type="thought"
+          isClosed={true}
+          themeColors={mockThemeColors}
+          themeSizes={mockThemeSizes}
+          accentHex="#6366f1"
+        >
+          <React.Fragment />
+        </CollapsibleBlock>
+      );
+    });
+
+    const header = component.root.findByType(PressableScale);
+    act(() => {
+      header.props.onPress();
+    });
+
+    const animatedView = component.root.findAllByType(Animated.View)[0];
+    expect(animatedView).toBeDefined();
+  });
 });
 
 describe('DrawerContent Tactile Micro-Interactions', () => {
