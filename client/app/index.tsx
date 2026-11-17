@@ -43,6 +43,7 @@ import Grain from '../components/ui/Grain';
 import { styles } from '../styles/indexStyles';
 import { pickChatImages, uploadChatAttachment, type PickedImageFile } from '../utils/chatAttachments';
 import AttachmentPickerTray from '../components/chat/AttachmentPickerTray';
+import SendStopButton from '../components/chat/SendStopButton';
 import type { ChatAttachment } from '../store/useChatStore';
 import { useRouter } from 'expo-router';
 import { useBrowserStore } from '../store/useBrowserStore';
@@ -1996,52 +1997,14 @@ export default function ChatScreen() {
             onChangeText={setInput}
             multiline
           />
-          <PressableScale
-            accessibilityState={{ busy: isCurrentThreadStreaming || false }}
-            style={({ pressed }) => [
-              styles.sendButton,
-              {
-                borderRadius: 999,
-                width: 48,
-                height: 48,
-                minWidth: 48,
-                paddingHorizontal: 0,
-                overflow: 'hidden',
-                backgroundColor: isCurrentThreadStreaming
-                  ? '#ef4444'
-                  : (input.trim() || stagedAttachments.length > 0)
-                    ? 'transparent'
-                    : colors.textDark,
-                shadowColor: isCurrentThreadStreaming ? '#ef4444' : aurora.acc1,
-                shadowOpacity: isCurrentThreadStreaming || input.trim() || stagedAttachments.length > 0 ? 0.4 : 0,
-                shadowRadius: 12,
-                shadowOffset: { width: 0, height: 4 },
-                elevation: isCurrentThreadStreaming || input.trim() || stagedAttachments.length > 0 ? 8 : 0,
-              },
-              pressed && { opacity: 0.85 }
-            ]}
-            scaleTo={0.94}
+          <SendStopButton
+            isStreaming={Boolean(isCurrentThreadStreaming)}
+            canSend={Boolean(input.trim() || stagedAttachments.length > 0)}
             onPress={handleSendPress}
-            disabled={!isCurrentThreadStreaming && !input.trim() && stagedAttachments.length === 0}
-            accessibilityLabel={isCurrentThreadStreaming ? 'Stop generating' : 'Send message'}
-          >
-            {isCurrentThreadStreaming || (!input.trim() && stagedAttachments.length === 0) ? (
-              <Text style={[styles.sendButtonText, { fontSize: sizes.text, color: '#ffffff' }]}>
-                {isCurrentThreadStreaming ? 'Stop' : 'Send'}
-              </Text>
-            ) : (
-              <LinearGradient
-                colors={[aurora.acc1, aurora.acc2]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, borderRadius: 999, justifyContent: 'center', alignItems: 'center' }}
-              >
-                <Text style={[styles.sendButtonText, { fontSize: sizes.text, color: aurora.onAccent }]}>
-                  Send
-                </Text>
-              </LinearGradient>
-            )}
-          </PressableScale>
+            aurora={aurora}
+            disabledColor={colors.textDark}
+            fontSize={sizes.text}
+          />
         </View>
       </View>
 
