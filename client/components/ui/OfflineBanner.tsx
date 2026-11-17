@@ -64,8 +64,18 @@ function OfflineBanner() {
     } else {
       if (!shouldRender) return;
       if (reducedMotion) {
-        setShouldRender(false);
-        return;
+        const exitFade = Animated.timing(opacity, {
+          toValue: 0,
+          duration: 150,
+          easing: EASING.out,
+          useNativeDriver: true,
+        });
+        exitFade.start(({ finished }) => {
+          if (finished && isMounted.current) {
+            setShouldRender(false);
+          }
+        });
+        return () => exitFade.stop();
       }
       const exitAnim = Animated.parallel([
         Animated.timing(translateY, {

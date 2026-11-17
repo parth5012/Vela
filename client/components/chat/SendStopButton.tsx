@@ -128,6 +128,7 @@ export default function SendStopButton({
   return (
     <PressableScale
       scaleTo={PRESS_SCALE.button}
+      haptic={false}
       onPress={handlePress}
       disabled={isDisabled}
       accessibilityRole="button"

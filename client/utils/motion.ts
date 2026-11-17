@@ -42,10 +42,13 @@ export const PRESS_SCALE = {
 } as const;
 
 /**
- * Standardized native-driver spring configs for snappy, natural tactile releases.
+ * Standardized native-driver spring configs with derived damping ratios (ζ = friction / 2√(tension · mass), mass = 1):
+ * - snappy: tension 260, friction 26 (ζ ≈ 0.81, crisp mechanical bite, eliminating subpixel text shimmer)
+ * - gentle: tension 140, friction 24 (ζ ≈ 1.01, critically damped settle, zero wobble)
+ * - pop:    tension 240, friction 16 (ζ ≈ 0.52, celebratory ~15% overshoot for badges and checkmarks)
  */
 export const SPRINGS = {
-  snappy: { tension: 180, friction: 12, useNativeDriver: true },
-  gentle: { tension: 120, friction: 9, useNativeDriver: true },
-  pop: { tension: 140, friction: 8, useNativeDriver: true },
+  snappy: { tension: 260, friction: 26, useNativeDriver: true },
+  gentle: { tension: 140, friction: 24, useNativeDriver: true },
+  pop: { tension: 240, friction: 16, useNativeDriver: true },
 } as const;

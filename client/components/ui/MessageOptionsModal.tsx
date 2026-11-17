@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Modal,
@@ -50,18 +50,45 @@ export default function MessageOptionsModal({
   isUser,
 }: MessageOptionsModalProps) {
   const overlayOpacity = useRef(new Animated.Value(0)).current;
-  const sheetTranslateY = useRef(new Animated.Value(28)).current;
+  const sheetTranslateY = useRef(new Animated.Value(64)).current;
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const reducedMotion = useReducedMotion();
+
+  const handleDismiss = useCallback(() => {
+    if (reducedMotion) {
+      onClose();
+      return;
+    }
+    Animated.parallel([
+      Animated.timing(overlayOpacity, {
+        toValue: 0,
+        duration: 160,
+        easing: EASING.out,
+        useNativeDriver: true,
+      }),
+      Animated.timing(sheetTranslateY, {
+        toValue: 64,
+        duration: 160,
+        easing: EASING.out,
+        useNativeDriver: true,
+      }),
+    ]).start(({ finished }) => {
+      if (finished) {
+        onClose();
+      }
+    });
+  }, [reducedMotion, overlayOpacity, sheetTranslateY, onClose]);
 
   useEffect(() => {
     if (visible) {
+      setCopiedId(null);
       if (reducedMotion) {
         overlayOpacity.setValue(1);
         sheetTranslateY.setValue(0);
         return;
       }
       overlayOpacity.setValue(0);
-      sheetTranslateY.setValue(28);
+      sheetTranslateY.setValue(64);
       const anim = Animated.parallel([
         Animated.timing(overlayOpacity, {
           toValue: 1,
@@ -124,9 +151,9 @@ export default function MessageOptionsModal({
       visible={visible}
       animationType="none"
       transparent={true}
-      onRequestClose={onClose}
+      onRequestClose={handleDismiss}
     >
-      <Pressable style={styles.overlay} onPress={onClose}>
+      <Pressable style={styles.overlay} onPress={handleDismiss}>
         <Animated.View
           style={[
             StyleSheet.absoluteFill,
@@ -156,16 +183,22 @@ export default function MessageOptionsModal({
                 onPress={() => {
                   if (opt.id.startsWith('copy')) {
                     triggerHaptic('success');
+                    setCopiedId(opt.id);
+                    opt.onPress();
+                    setTimeout(() => {
+                      handleDismiss();
+                    }, 400);
+                  } else {
+                    opt.onPress();
+                    handleDismiss();
                   }
-                  opt.onPress();
-                  onClose();
                 }}
                 accessibilityRole="button"
                 accessibilityLabel={opt.accessibilityLabel || opt.label}
               >
-                <Text style={styles.optionIcon}>{opt.icon}</Text>
-                <Text style={[styles.optionButtonText, { color: themeColors.text }]}>
-                  {opt.label}
+                <Text style={styles.optionIcon}>{copiedId === opt.id ? '✓' : opt.icon}</Text>
+                <Text style={[styles.optionButtonText, { color: copiedId === opt.id ? '#10b981' : themeColors.text }]}>
+                  {copiedId === opt.id ? 'Copied!' : opt.label}
                 </Text>
               </PressableScale>
             ))}
@@ -178,7 +211,7 @@ export default function MessageOptionsModal({
               styles.cancelButton,
               pressed && styles.cancelButtonPressed,
             ]}
-            onPress={onClose}
+            onPress={handleDismiss}
           >
             <Text style={styles.cancelButtonText}>Cancel</Text>
           </PressableScale>
