@@ -23,6 +23,16 @@ jest.mock('expo-router', () => ({
 }));
 
 describe('Micro-animations & Reduced Motion (WF-576)', () => {
+  const roots: any[] = [];
+  const render = (element: React.ReactElement) => {
+    let root: any;
+    act(() => {
+      root = renderer.create(element);
+    });
+    roots.push(root);
+    return root;
+  };
+
   beforeEach(() => {
     mockReducedMotion = false;
     act(() => {
@@ -37,13 +47,19 @@ describe('Micro-animations & Reduced Motion (WF-576)', () => {
     jest.clearAllMocks();
   });
 
+  afterEach(() => {
+    act(() => {
+      roots.splice(0).forEach((root) => root.unmount());
+    });
+    jest.restoreAllMocks();
+  });
+
   describe('SyncStatusIndicator animations', () => {
     it('triggers press-in scale animation with native driver and ease-out curve', () => {
       const timingSpy = jest.spyOn(Animated, 'timing');
-      let component: any;
-      act(() => {
-        component = renderer.create(<SyncStatusIndicator />);
-      });
+      const component: any = render(
+        <SyncStatusIndicator />
+      );
 
       const pressable = component.root.findByProps({ testID: 'sync-status-indicator' });
       act(() => {
@@ -70,10 +86,9 @@ describe('Micro-animations & Reduced Motion (WF-576)', () => {
 
     it('triggers status change animation on syncState update', () => {
       const timingSpy = jest.spyOn(Animated, 'timing');
-      let component: any;
-      act(() => {
-        component = renderer.create(<SyncStatusIndicator />);
-      });
+      const component: any = render(
+        <SyncStatusIndicator />
+      );
 
       act(() => {
         useOfflineStore.getState().setSyncState('offline');
@@ -92,10 +107,9 @@ describe('Micro-animations & Reduced Motion (WF-576)', () => {
       mockReducedMotion = true;
       const timingSpy = jest.spyOn(Animated, 'timing');
 
-      let component: any;
-      act(() => {
-        component = renderer.create(<SyncStatusIndicator />);
-      });
+      const component: any = render(
+        <SyncStatusIndicator />
+      );
 
       const pressable = component.root.findByProps({ testID: 'sync-status-indicator' });
       act(() => {
@@ -122,10 +136,9 @@ describe('Micro-animations & Reduced Motion (WF-576)', () => {
         useOfflineStore.getState().setPendingQueueCount(3);
       });
 
-      let component: any;
-      act(() => {
-        component = renderer.create(<QueueBadge />);
-      });
+      const component: any = render(
+        <QueueBadge />
+      );
 
       const badge = component.root.findByProps({ testID: 'queue-badge' });
       act(() => {
@@ -149,10 +162,9 @@ describe('Micro-animations & Reduced Motion (WF-576)', () => {
         useOfflineStore.getState().setPendingQueueCount(2);
       });
 
-      let component: any;
-      act(() => {
-        component = renderer.create(<QueueBadge />);
-      });
+      const component: any = render(
+        <QueueBadge />
+      );
 
       const badge = component.root.findByProps({ testID: 'queue-badge' });
       act(() => {
@@ -188,9 +200,7 @@ describe('Micro-animations & Reduced Motion (WF-576)', () => {
     it('animates press-in and press-out scale on native driver', () => {
       const timingSpy = jest.spyOn(Animated, 'timing');
 
-      let component: any;
-      act(() => {
-        component = renderer.create(
+      const component: any = render(
           <ThreadRow
             thread={mockThread as any}
             isActive={true}
@@ -200,8 +210,7 @@ describe('Micro-animations & Reduced Motion (WF-576)', () => {
             onSelect={jest.fn()}
             onOpenOptions={jest.fn()}
           />
-        );
-      });
+      );
 
       const animatedPressable = component.root.findByProps({ delayLongPress: 450 });
       expect(animatedPressable.props.accessibilityRole).toBe('button');
@@ -234,9 +243,7 @@ describe('Micro-animations & Reduced Motion (WF-576)', () => {
     it('starts pulsing loop when streaming is true, but suppresses loop under reduced motion', () => {
       const loopSpy = jest.spyOn(Animated, 'loop');
 
-      let component: any;
-      act(() => {
-        component = renderer.create(
+      const component: any = render(
           <ThreadRow
             thread={mockThread as any}
             isActive={false}
@@ -246,17 +253,14 @@ describe('Micro-animations & Reduced Motion (WF-576)', () => {
             onSelect={jest.fn()}
             onOpenOptions={jest.fn()}
           />
-        );
-      });
+      );
 
       expect(loopSpy).toHaveBeenCalled();
       loopSpy.mockClear();
 
       // Now with reduced motion
       mockReducedMotion = true;
-      let reducedComponent: any;
-      act(() => {
-        reducedComponent = renderer.create(
+      const reducedComponent: any = render(
           <ThreadRow
             thread={mockThread as any}
             isActive={false}
@@ -266,8 +270,7 @@ describe('Micro-animations & Reduced Motion (WF-576)', () => {
             onSelect={jest.fn()}
             onOpenOptions={jest.fn()}
           />
-        );
-      });
+      );
 
       // Loop should NOT have been started under reduced motion
       expect(loopSpy).not.toHaveBeenCalled();

@@ -96,7 +96,14 @@ function SyncStatusIndicator() {
         ]);
       }
       anim.start();
-      return () => anim.stop();
+      // Stopping an Animated.Value leaves it at its current value; reset so an
+      // interrupted pulse cannot leave the dot enlarged/dimmed when the next
+      // effect run skips animation (prevSyncState already matches syncState).
+      return () => {
+        anim.stop();
+        pulseScale.setValue(1);
+        pulseOpacity.setValue(1);
+      };
     }
   }, [syncState, reducedMotion, pulseScale, pulseOpacity]);
 
