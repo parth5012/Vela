@@ -13,6 +13,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { styles } from './threadOptionsStyles';
 import { Thread, useChatStore } from '../../store/useChatStore';
+import PressableScale from './PressableScale';
 
 interface ThreadOptionsModalProps {
   visible: boolean;
@@ -203,7 +204,8 @@ export default function ThreadOptionsModal({
                   {activeThread.title}
                 </Text>
 
-                <Pressable
+                <PressableScale
+                  scaleTo={0.97}
                   accessibilityRole="button"
                   accessibilityLabel="Share Conversation"
                   style={({ pressed }) => [
@@ -214,9 +216,10 @@ export default function ThreadOptionsModal({
                 >
                   <Text style={styles.optionIcon}>📤</Text>
                   <Text style={styles.optionButtonText}>Share Conversation</Text>
-                </Pressable>
+                </PressableScale>
 
-                <Pressable
+                <PressableScale
+                  scaleTo={0.97}
                   accessibilityRole="button"
                   accessibilityLabel="Export as Markdown"
                   style={({ pressed }) => [
@@ -227,9 +230,10 @@ export default function ThreadOptionsModal({
                 >
                   <Text style={styles.optionIcon}>📄</Text>
                   <Text style={styles.optionButtonText}>Export as Markdown (.md)</Text>
-                </Pressable>
+                </PressableScale>
 
-                <Pressable
+                <PressableScale
+                  scaleTo={0.97}
                   accessibilityRole="button"
                   accessibilityLabel="Export as JSON"
                   style={({ pressed }) => [
@@ -240,9 +244,10 @@ export default function ThreadOptionsModal({
                 >
                   <Text style={styles.optionIcon}>⚙️</Text>
                   <Text style={styles.optionButtonText}>Export as JSON (.json)</Text>
-                </Pressable>
+                </PressableScale>
 
-                <Pressable
+                <PressableScale
+                  scaleTo={0.97}
                   accessibilityRole="button"
                   accessibilityLabel={activeThread.is_pinned ? 'Unpin Thread' : 'Pin Thread'}
                   style={({ pressed }) => [
@@ -255,9 +260,10 @@ export default function ThreadOptionsModal({
                   <Text style={styles.optionButtonText}>
                     {activeThread.is_pinned ? 'Unpin Thread' : 'Pin Thread'}
                   </Text>
-                </Pressable>
+                </PressableScale>
 
-                <Pressable
+                <PressableScale
+                  scaleTo={0.97}
                   accessibilityRole="button"
                   accessibilityLabel="Rename Thread"
                   style={({ pressed }) => [
@@ -268,9 +274,10 @@ export default function ThreadOptionsModal({
                 >
                   <Text style={styles.optionIcon}>✏️</Text>
                   <Text style={styles.optionButtonText}>Rename Thread</Text>
-                </Pressable>
+                </PressableScale>
 
-                <Pressable
+                <PressableScale
+                  scaleTo={0.97}
                   accessibilityRole="button"
                   accessibilityLabel="Delete Thread"
                   style={({ pressed }) => [
@@ -284,9 +291,10 @@ export default function ThreadOptionsModal({
                   <Text style={[styles.optionButtonText, styles.destructiveButtonText]}>
                     Delete Thread
                   </Text>
-                </Pressable>
+                </PressableScale>
 
-                <Pressable
+                <PressableScale
+                  scaleTo={0.96}
                   accessibilityRole="button"
                   accessibilityLabel="Cancel"
                   style={({ pressed }) => [
@@ -296,7 +304,7 @@ export default function ThreadOptionsModal({
                   onPress={onClose}
                 >
                   <Text style={styles.cancelButtonText}>Cancel</Text>
-                </Pressable>
+                </PressableScale>
               </View>
             ) : (
               <View>
@@ -312,7 +320,8 @@ export default function ThreadOptionsModal({
                   selectTextOnFocus
                 />
                 <View style={styles.editActionRow}>
-                  <Pressable
+                  <PressableScale
+                    scaleTo={0.96}
                     accessibilityRole="button"
                     accessibilityLabel="Cancel"
                     style={({ pressed }) => [
@@ -323,8 +332,9 @@ export default function ThreadOptionsModal({
                     onPress={handleCancelRename}
                   >
                     <Text style={styles.editCancelButtonText}>Cancel</Text>
-                  </Pressable>
-                  <Pressable
+                  </PressableScale>
+                  <PressableScale
+                    scaleTo={0.96}
                     accessibilityRole="button"
                     accessibilityLabel="Save"
                     accessibilityState={{ disabled: isSaveDisabled }}
@@ -345,7 +355,7 @@ export default function ThreadOptionsModal({
                     >
                       Save
                     </Text>
-                  </Pressable>
+                  </PressableScale>
                 </View>
               </View>
             )}
