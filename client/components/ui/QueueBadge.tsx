@@ -25,10 +25,11 @@ function QueueBadge() {
   useEffect(() => {
     if (isSyncing) {
       opacity.setValue(0.5);
+      scale.setValue(1);
     } else {
       opacity.setValue(1);
     }
-  }, [isSyncing, opacity]);
+  }, [isSyncing, opacity, scale]);
 
   // Pulse animation on queue count update
   useEffect(() => {
@@ -91,7 +92,6 @@ function QueueBadge() {
   };
 
   const handlePressOut = () => {
-    if (isSyncing) return;
     if (!reducedMotion) {
       Animated.timing(scale, {
         toValue: 1,

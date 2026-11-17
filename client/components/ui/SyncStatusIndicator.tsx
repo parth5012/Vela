@@ -42,6 +42,8 @@ function SyncStatusIndicator() {
 
       // When syncing or checking, ActivityIndicator replaces the dot; skip pulsing the unmounted dot
       if (syncState === 'syncing') {
+        pulseScale.setValue(1);
+        pulseOpacity.setValue(1);
         return;
       }
 
