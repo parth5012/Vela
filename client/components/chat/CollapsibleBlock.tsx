@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { View, Text, StyleSheet, Animated, Platform, ScrollView } from 'react-native';
 import PressableScale from '../ui/PressableScale';
-import { DURATIONS, EASING } from '../../utils/motion';
+import { DURATIONS, EASING, PRESS_SCALE } from '../../utils/motion';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { triggerHaptic } from '../../utils/haptics';
 
 interface CollapsibleBlockProps {
   type: 'thought' | 'tool_call' | 'intent' | 'skill';
@@ -85,6 +86,7 @@ export default function CollapsibleBlock({
   }, [isClosed, measuredHeight, isLarge]);
 
   const toggleCollapse = () => {
+    triggerHaptic('selection');
     const nextCollapsed = !collapsed;
     if (onToggle) {
       onToggle(nextCollapsed);
@@ -154,6 +156,11 @@ export default function CollapsibleBlock({
     outputRange: [-measuredHeight, 0],
   });
 
+  const arrowRotation = expandedness.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '180deg'],
+  });
+
   return (
     <View style={[
       styles.container,
@@ -165,6 +172,7 @@ export default function CollapsibleBlock({
     ]}>
       {/* Header — button surface with press feedback and expanded state */}
       <PressableScale
+        scaleTo={PRESS_SCALE.button}
         accessibilityState={{ expanded: !collapsed }}
         accessibilityLabel={(collapsed ? 'Expand ' : 'Collapse ') + title}
         style={({ pressed }) => [
@@ -202,9 +210,15 @@ export default function CollapsibleBlock({
             ) : null}
           </View>
         </View>
-        <Text style={[styles.arrow, { color: themeColors.textDark, fontSize: themeSizes.sub }]}>
-          {collapsed ? '▼' : '▲'}
-        </Text>
+        <Animated.Text
+          style={[
+            styles.arrow,
+            { color: themeColors.textDark, fontSize: themeSizes.sub },
+            reduceMotion ? null : { transform: [{ rotate: arrowRotation }] },
+          ]}
+        >
+          {reduceMotion ? (collapsed ? '▼' : '▲') : '▼'}
+        </Animated.Text>
       </PressableScale>
 
       {/* Collapsible Content */}
