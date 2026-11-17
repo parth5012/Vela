@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  Animated,
   View,
   Text,
   Image,
@@ -10,6 +11,57 @@ import {
 import type { PickedImageFile } from '../../utils/chatAttachments';
 import { isTotalUploadOverWarnThreshold } from '../../utils/imageCompression';
 import PressableScale from '../ui/PressableScale';
+import { DURATIONS, EASING } from '../../utils/motion';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
+
+function AttachmentTrayCard({
+  children,
+  style,
+}: {
+  children: React.ReactNode;
+  style: any;
+}) {
+  const reducedMotion = useReducedMotion();
+  const enterAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (reducedMotion) {
+      enterAnim.setValue(1);
+      return;
+    }
+    const anim = Animated.timing(enterAnim, {
+      toValue: 1,
+      duration: DURATIONS.reveal,
+      easing: EASING.out,
+      useNativeDriver: true,
+    });
+    anim.start();
+    return () => anim.stop();
+  }, [enterAnim, reducedMotion]);
+
+  return (
+    <Animated.View
+      style={[
+        style,
+        {
+          opacity: enterAnim,
+          transform: reducedMotion
+            ? []
+            : [
+                {
+                  scale: enterAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.85, 1],
+                  }),
+                },
+              ],
+        },
+      ]}
+    >
+      {children}
+    </Animated.View>
+  );
+}
 
 export interface AttachmentPickerTrayProps {
   attachments: PickedImageFile[];
@@ -73,7 +125,7 @@ export function AttachmentPickerTray({
         {attachments.map((item, index) => {
           const isEditingAlt = editingAltIndex === index;
           return (
-            <View
+            <AttachmentTrayCard
               key={item.uri + index}
               style={[
                 styles.itemCard,
@@ -123,7 +175,7 @@ export function AttachmentPickerTray({
                   </PressableScale>
                 )}
               </View>
-            </View>
+            </AttachmentTrayCard>
           );
         })}
       </ScrollView>
