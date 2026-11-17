@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Animated,
   Modal,
@@ -36,8 +36,33 @@ export default function ThreadOptionsModal({
   const [cachedThread, setCachedThread] = useState<Thread | null>(null);
 
   const overlayOpacity = useRef(new Animated.Value(0)).current;
-  const sheetTranslateY = useRef(new Animated.Value(28)).current;
+  const sheetTranslateY = useRef(new Animated.Value(64)).current;
   const reducedMotion = useReducedMotion();
+
+  const handleDismiss = useCallback(() => {
+    if (reducedMotion) {
+      onClose();
+      return;
+    }
+    Animated.parallel([
+      Animated.timing(overlayOpacity, {
+        toValue: 0,
+        duration: 160,
+        easing: EASING.out,
+        useNativeDriver: true,
+      }),
+      Animated.timing(sheetTranslateY, {
+        toValue: 64,
+        duration: 160,
+        easing: EASING.out,
+        useNativeDriver: true,
+      }),
+    ]).start(({ finished }) => {
+      if (finished) {
+        onClose();
+      }
+    });
+  }, [reducedMotion, overlayOpacity, sheetTranslateY, onClose]);
 
   useEffect(() => {
     if (visible) {
@@ -47,7 +72,7 @@ export default function ThreadOptionsModal({
         return;
       }
       overlayOpacity.setValue(0);
-      sheetTranslateY.setValue(28);
+      sheetTranslateY.setValue(64);
       const anim = Animated.parallel([
         Animated.timing(overlayOpacity, {
           toValue: 1,
@@ -219,13 +244,13 @@ export default function ThreadOptionsModal({
       visible={visible}
       animationType="none"
       transparent={true}
-      onRequestClose={onClose}
+      onRequestClose={handleDismiss}
     >
       <Pressable
         style={styles.overlay}
         accessibilityRole="button"
         accessibilityLabel="Close thread options"
-        onPress={onClose}
+        onPress={handleDismiss}
       >
         <Animated.View
           style={[
@@ -350,7 +375,7 @@ export default function ThreadOptionsModal({
                     styles.cancelButton,
                     pressed && styles.cancelButtonPressed,
                   ]}
-                  onPress={onClose}
+                  onPress={handleDismiss}
                 >
                   <Text style={styles.cancelButtonText}>Cancel</Text>
                 </PressableScale>

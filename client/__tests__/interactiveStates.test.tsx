@@ -13,7 +13,7 @@ jest.mock('expo-router', () => ({
 
 import PressableScale from '../components/ui/PressableScale';
 import { PillGroup, PrimaryButton, SecondaryButton } from '../components/ui/settingsKit';
-import { EASING } from '../utils/motion';
+import { EASING, PRESS_SCALE } from '../utils/motion';
 
 /**
  * WF-447-04: interaction states and accessibility metadata.
@@ -83,7 +83,7 @@ describe('PressableScale a11y contract (WF-447-04)', () => {
       pressNode(component.root).props.onPressIn({ nativeEvent: {} });
     });
     const config = timingSpy.mock.calls.map((c) => c[1])[0] as any;
-    expect(config.toValue).toBe(0.97);
+    expect(config.toValue).toBe(PRESS_SCALE.card);
     expect(config.useNativeDriver).toBe(true);
     expect(config.easing).toBe(EASING.out);
     timingSpy.mockRestore();
