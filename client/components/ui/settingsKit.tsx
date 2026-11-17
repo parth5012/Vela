@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
+  Animated,
   View,
   Text,
   TextInput,
@@ -16,6 +17,7 @@ import { useRouter } from 'expo-router';
 import { useConfigStore } from '../../store/useConfigStore';
 import { ACCENT_COLORS, hexToRgba } from '../../utils/theme';
 import { useAurora } from '../../hooks/useAurora';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { styles } from './settingsKitStyles';
 
 export { useAurora };
@@ -317,6 +319,66 @@ export function SecondaryButton({
   );
 }
 
+export function AccentDotItem({
+  color,
+  selected,
+  auroraAcc1,
+  onPress,
+}: {
+  color: keyof typeof ACCENT_COLORS;
+  selected: boolean;
+  auroraAcc1: string;
+  onPress: () => void;
+}) {
+  const reducedMotion = useReducedMotion();
+  const popAnim = useRef(new Animated.Value(selected ? 1 : 0)).current;
+
+  useEffect(() => {
+    if (selected) {
+      if (reducedMotion) {
+        popAnim.setValue(1);
+        return;
+      }
+      popAnim.setValue(0.7);
+      const anim = Animated.spring(popAnim, {
+        toValue: 1,
+        friction: 5,
+        tension: 100,
+        useNativeDriver: true,
+      });
+      anim.start();
+      return () => anim.stop();
+    } else {
+      popAnim.setValue(0);
+    }
+  }, [selected, reducedMotion, popAnim]);
+
+  return (
+    <PressableScale
+      style={({ pressed }) => [
+        styles.accentDot,
+        { backgroundColor: ACCENT_COLORS[color] },
+        selected && { borderColor: auroraAcc1, borderWidth: 2.5 },
+        pressed && { opacity: 0.85 },
+      ]}
+      onPress={onPress}
+      accessibilityLabel={`Accent ${color}`}
+      accessibilityState={{ selected }}
+      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+    >
+      {selected ? (
+        <Animated.View
+          style={{
+            transform: reducedMotion ? [] : [{ scale: popAnim }],
+          }}
+        >
+          <Text style={{ color: '#0e0d0b', fontSize: 13, fontWeight: '800' }}>✓</Text>
+        </Animated.View>
+      ) : null}
+    </PressableScale>
+  );
+}
+
 /**
  * Wayfinder #173 Audit — settingsKit / Shell Polish
  * AuroraScreen headerTitle weight 600 (not 700/900 except VELA logo) via headerTitle fontWeight 600 — matches _layout formatter rule.
@@ -326,34 +388,20 @@ export function SecondaryButton({
  */
 export function AccentDots() {
   const aurora = useAurora().aurora;
-  const colors = useAurora().colors;
   const accentColor = useConfigStore((s) => s.accentColor);
   const setAccentColor = useConfigStore((s) => s.setAccentColor);
 
   return (
     <View style={[styles.rowWrap, { gap: 14 }]}>
-      {(Object.keys(ACCENT_COLORS) as Array<keyof typeof ACCENT_COLORS>).map((color) => {
-        const selected = accentColor === color;
-        return (
-          <PressableScale
-            key={color}
-            style={({ pressed }) => [
-              styles.accentDot,
-              { backgroundColor: ACCENT_COLORS[color] },
-              selected && { borderColor: aurora.acc1, borderWidth: 2.5 },
-              pressed && { opacity: 0.85 },
-            ]}
-            onPress={() => setAccentColor(color)}
-            accessibilityLabel={`Accent ${color}`}
-            accessibilityState={{ selected }}
-            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-          >
-            {selected ? (
-              <Text style={{ color: '#0e0d0b', fontSize: 13, fontWeight: '800' }}>✓</Text>
-            ) : null}
-          </PressableScale>
-        );
-      })}
+      {(Object.keys(ACCENT_COLORS) as Array<keyof typeof ACCENT_COLORS>).map((color) => (
+        <AccentDotItem
+          key={color}
+          color={color}
+          selected={accentColor === color}
+          auroraAcc1={aurora.acc1}
+          onPress={() => setAccentColor(color)}
+        />
+      ))}
     </View>
   );
 }
