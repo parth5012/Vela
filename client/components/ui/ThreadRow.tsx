@@ -92,7 +92,16 @@ export default function ThreadRow({
         easing: EASING.out,
         useNativeDriver: true,
       }).start();
+      Animated.timing(pressOpacity, {
+        toValue: 1,
+        duration: DURATIONS.press,
+        easing: EASING.out,
+        useNativeDriver: true,
+      }).start();
     } else {
+      // Reduced motion drops scale changes; restore resting values so a
+      // preference flip mid-press cannot leave the row scaled or dimmed.
+      scale.setValue(1);
       Animated.timing(pressOpacity, {
         toValue: 1,
         duration: DURATIONS.press,
@@ -101,6 +110,13 @@ export default function ThreadRow({
       }).start();
     }
   };
+
+  // If the motion preference changes mid-press, drop both press-feedback
+  // values back to rest (setValue also stops any animation on the value).
+  useEffect(() => {
+    scale.setValue(1);
+    pressOpacity.setValue(1);
+  }, [reducedMotion, scale, pressOpacity]);
 
   const accessibilityLabel = `Chat thread: ${thread.title}${
     thread.is_pinned ? ', pinned' : ''
