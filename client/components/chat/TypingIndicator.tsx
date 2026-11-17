@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import {
+  AccessibilityInfo,
   Animated,
   StyleSheet,
   View,
@@ -43,6 +44,10 @@ export default function TypingIndicator({
   const dot1 = useRef(new Animated.Value(0)).current;
   const dot2 = useRef(new Animated.Value(0)).current;
   const dot3 = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    AccessibilityInfo.announceForAccessibility(accessibilityLabel);
+  }, [accessibilityLabel]);
 
   useEffect(() => {
     if (reducedMotion) {
@@ -96,7 +101,7 @@ export default function TypingIndicator({
       {dots.map((dotAnim, index) => {
         const translateY = dotAnim.interpolate({
           inputRange: [0, 1],
-          outputRange: [0, -3],
+          outputRange: [0, -5],
         });
         const opacity = dotAnim.interpolate({
           inputRange: [0, 1],

@@ -361,6 +361,7 @@ export function AccentDotItem({
   }, [selected, reducedMotion, popAnim]);
 
   const handlePress = () => {
+    if (selected) return;
     triggerHaptic('selection');
     onPress();
   };
@@ -368,6 +369,7 @@ export function AccentDotItem({
   return (
     <PressableScale
       scaleTo={PRESS_SCALE.badge}
+      haptic={false}
       style={({ pressed }) => [
         styles.accentDot,
         { backgroundColor: ACCENT_COLORS[color] },
