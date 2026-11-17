@@ -1,16 +1,20 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   Pressable,
-  View,
   StyleSheet,
   Alert,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { useOfflineStore, SyncState } from '../../store/useOfflineStore';
 import { useConfigStore } from '../../store/useConfigStore';
 import { getAurora } from '../../utils/theme';
 import { healthProbeManager } from '../../utils/healthProbe';
 import { flushPendingMessages } from '../../utils/offlineSync';
+import { DURATIONS, EASING } from '../../utils/motion';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 function SyncStatusIndicator() {
   const syncState = useOfflineStore((state) => state.syncState);
@@ -18,6 +22,87 @@ function SyncStatusIndicator() {
   const pendingQueueCount = useOfflineStore((state) => state.pendingQueueCount);
   const { apiUrl, isConfigured, theme, accentColor } = useConfigStore();
   const aurora = getAurora(accentColor, theme);
+  const reducedMotion = useReducedMotion();
+
+  const pressScale = useRef(new Animated.Value(1)).current;
+  const pulseScale = useRef(new Animated.Value(1)).current;
+  const pulseOpacity = useRef(new Animated.Value(1)).current;
+  const prevSyncState = useRef(syncState);
+
+  useEffect(() => {
+    if (prevSyncState.current !== syncState) {
+      prevSyncState.current = syncState;
+      if (!reducedMotion) {
+        Animated.sequence([
+          Animated.parallel([
+            Animated.timing(pulseScale, {
+              toValue: 1.25,
+              duration: DURATIONS.press,
+              easing: EASING.out,
+              useNativeDriver: true,
+            }),
+            Animated.timing(pulseOpacity, {
+              toValue: 0.6,
+              duration: DURATIONS.press,
+              easing: EASING.out,
+              useNativeDriver: true,
+            }),
+          ]),
+          Animated.parallel([
+            Animated.timing(pulseScale, {
+              toValue: 1,
+              duration: DURATIONS.reveal,
+              easing: EASING.out,
+              useNativeDriver: true,
+            }),
+            Animated.timing(pulseOpacity, {
+              toValue: 1,
+              duration: DURATIONS.reveal,
+              easing: EASING.out,
+              useNativeDriver: true,
+            }),
+          ]),
+        ]).start();
+      } else {
+        Animated.sequence([
+          Animated.timing(pulseOpacity, {
+            toValue: 0.5,
+            duration: DURATIONS.press,
+            easing: EASING.out,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseOpacity, {
+            toValue: 1,
+            duration: DURATIONS.reveal,
+            easing: EASING.out,
+            useNativeDriver: true,
+          }),
+        ]).start();
+      }
+    }
+  }, [syncState, reducedMotion, pulseScale, pulseOpacity]);
+
+  const handlePressIn = () => {
+    if (!reducedMotion) {
+      Animated.timing(pressScale, {
+        toValue: 0.95,
+        duration: DURATIONS.press,
+        easing: EASING.out,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
+
+  const handlePressOut = () => {
+    if (!reducedMotion) {
+      Animated.timing(pressScale, {
+        toValue: 1,
+        duration: DURATIONS.press,
+        easing: EASING.out,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
 
   const handlePress = () => {
     let title = 'Sync Status';
@@ -83,11 +168,14 @@ function SyncStatusIndicator() {
   }`;
 
   return (
-    <Pressable
+    <AnimatedPressable
       onPress={handlePress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
       style={({ pressed }) => [
         styles.container,
         pressed && styles.containerPressed,
+        { transform: [{ scale: pressScale }] },
       ]}
       hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
       accessibilityRole="button"
@@ -98,9 +186,15 @@ function SyncStatusIndicator() {
       {isChecking || syncState === 'syncing' ? (
         <ActivityIndicator size="small" color={aurora.acc1} style={styles.loader} />
       ) : (
-        <View style={[styles.dot, getStatusDotStyle(syncState)]} />
+        <Animated.View
+          style={[
+            styles.dot,
+            getStatusDotStyle(syncState),
+            { transform: [{ scale: pulseScale }], opacity: pulseOpacity },
+          ]}
+        />
       )}
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 

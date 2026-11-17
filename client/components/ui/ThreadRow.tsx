@@ -1,7 +1,7 @@
 /**
  * Module: client/components/ui/ThreadRow
  * Intent: Single "Recent Chats" thread row (title + pin prefix + timestamp + streaming indicator),
- *   extracted verbatim from components/ui/DrawerContent.tsx.
+ *   extracted verbatim from components/ui/DrawerContent.tsx with subtle micro-interactions.
  * Public API: ThreadRow props { thread, isActive, streaming, colors, accentHex, onSelect, onOpenOptions }.
  * Invariants: delayLongPress={450} overflow via ThreadOptionsModal; timestamp via utils/timeAgo.
  * Side Effects: none (pure render).
@@ -12,6 +12,10 @@ import { Animated, Pressable, Text, View } from 'react-native';
 import { Thread } from '../../store/useChatStore';
 import { formatDistanceToNow } from '../../utils/timeAgo';
 import { styles } from './drawerContentStyles';
+import { DURATIONS, EASING } from '../../utils/motion';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 type ThreadRowProps = {
   thread: Thread;
@@ -34,28 +38,55 @@ export default function ThreadRow({
 }: ThreadRowProps) {
   const timeAgo = thread.updated_at ? formatDistanceToNow(thread.updated_at) : '';
   const pulse = useRef(new Animated.Value(0.4)).current;
+  const scale = useRef(new Animated.Value(1)).current;
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
     if (!streaming) return;
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulse, { toValue: 1.0, duration: 800, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0.4, duration: 800, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1.0, duration: 800, easing: EASING.out, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0.4, duration: 800, easing: EASING.out, useNativeDriver: true }),
       ])
     );
     loop.start();
     return () => loop.stop();
   }, [streaming, pulse]);
 
+  const handlePressIn = () => {
+    if (!reducedMotion) {
+      Animated.timing(scale, {
+        toValue: 0.98,
+        duration: DURATIONS.press,
+        easing: EASING.out,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
+
+  const handlePressOut = () => {
+    if (!reducedMotion) {
+      Animated.timing(scale, {
+        toValue: 1,
+        duration: DURATIONS.press,
+        easing: EASING.out,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
+
   return (
-    <Pressable
+    <AnimatedPressable
       style={({ pressed }) => [
         styles.threadItem,
         isActive && styles.activeThreadItem,
         isActive && { backgroundColor: colors.card, borderColor: colors.glassBorder },
-        pressed && { transform: [{ scale: 0.98 }], opacity: 0.85 },
+        pressed && { opacity: 0.85 },
+        { transform: [{ scale }] },
       ]}
       onPress={() => onSelect(thread.id)}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
       onLongPress={() => onOpenOptions(thread)}
       delayLongPress={450}
     >
@@ -92,6 +123,6 @@ export default function ThreadRow({
           </Text>
         ) : null}
       </View>
-    </Pressable>
+    </AnimatedPressable>
   );
 }
