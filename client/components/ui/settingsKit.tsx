@@ -18,6 +18,8 @@ import { useConfigStore } from '../../store/useConfigStore';
 import { ACCENT_COLORS, hexToRgba } from '../../utils/theme';
 import { useAurora } from '../../hooks/useAurora';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { SPRINGS, PRESS_SCALE } from '../../utils/motion';
+import { triggerHaptic } from '../../utils/haptics';
 import { styles } from './settingsKitStyles';
 
 export { useAurora };
@@ -332,8 +334,15 @@ export function AccentDotItem({
 }) {
   const reducedMotion = useReducedMotion();
   const popAnim = useRef(new Animated.Value(selected ? 1 : 0)).current;
+  const hasMounted = useRef(false);
 
   useEffect(() => {
+    if (!hasMounted.current) {
+      hasMounted.current = true;
+      popAnim.setValue(selected ? 1 : 0);
+      return;
+    }
+
     if (selected) {
       if (reducedMotion) {
         popAnim.setValue(1);
@@ -342,9 +351,7 @@ export function AccentDotItem({
       popAnim.setValue(0.7);
       const anim = Animated.spring(popAnim, {
         toValue: 1,
-        friction: 5,
-        tension: 100,
-        useNativeDriver: true,
+        ...SPRINGS.pop,
       });
       anim.start();
       return () => anim.stop();
@@ -353,15 +360,21 @@ export function AccentDotItem({
     }
   }, [selected, reducedMotion, popAnim]);
 
+  const handlePress = () => {
+    triggerHaptic('selection');
+    onPress();
+  };
+
   return (
     <PressableScale
+      scaleTo={PRESS_SCALE.badge}
       style={({ pressed }) => [
         styles.accentDot,
         { backgroundColor: ACCENT_COLORS[color] },
         selected && { borderColor: auroraAcc1, borderWidth: 2.5 },
         pressed && { opacity: 0.85 },
       ]}
-      onPress={onPress}
+      onPress={handlePress}
       accessibilityLabel={`Accent ${color}`}
       accessibilityState={{ selected }}
       hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}

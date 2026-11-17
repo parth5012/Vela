@@ -1,30 +1,31 @@
 import React, { useCallback, useRef, useState, type ComponentProps } from 'react';
 import { Animated, Pressable, type StyleProp, type ViewStyle } from 'react-native';
-import { DURATIONS, EASING } from '../../utils/motion';
+import { DURATIONS, EASING, SPRINGS } from '../../utils/motion';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { triggerHaptic } from '../../utils/haptics';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export interface PressableScaleProps extends Omit<ComponentProps<typeof Pressable>, 'style'> {
   /** Style for the pressable. May be a function receiving `{ pressed }`. */
   style?: StyleProp<ViewStyle> | ((state: { pressed: boolean }) => StyleProp<ViewStyle>);
-  /** Scale factor while pressed. Default 0.97 per the scroll-craft floor. */
+  /** Scale factor while pressed. Default 0.96 per the motion ladder. */
   scaleTo?: number;
+  /** Whether to fire tactile haptic on press. Defaults to true. */
+  haptic?: boolean;
   children?: React.ReactNode;
 }
 
 /**
- * Pressable with scroll-craft press feedback (WF-447-04):
- * scale 0.97 on press-in, back to 1 on press-out, only transform/opacity on
- * the native driver, ease-out curves, dissolved to opacity-only feedback under
- * reduced motion (call-site `pressed && { opacity: ... }` styles keep working —
- * the trailing style layer only forces opacity when disabled). Honours
- * `disabled` (opacity 0.4), defaults accessibilityRole to button, and forwards
- * accessibilityState (always reporting disabled) / accessibilityLabel.
+ * Pressable with scroll-craft tactile feedback (WF-447-04 / WF-576):
+ * Asymmetric press physics: rapid ease-out on press-in + snappy spring release
+ * on press-out. Only transform/opacity on native driver. Dissolved to opacity-only
+ * feedback under reduced motion.
  */
 export default function PressableScale({
   style,
-  scaleTo = 0.97,
+  scaleTo = 0.96,
+  haptic = true,
   onPressIn,
   onPressOut,
   disabled,
@@ -42,17 +43,20 @@ export default function PressableScale({
   const handlePressIn = useCallback(
     (e: any) => {
       setPressed(true);
+      if (haptic && !disabled) {
+        triggerHaptic('light');
+      }
       onPressIn?.(e);
       if (!disabled && !reducedMotion) {
         Animated.timing(scale, {
           toValue: scaleTo,
-          duration: DURATIONS.press,
+          duration: 110,
           easing: EASING.out,
           useNativeDriver: true,
         }).start();
       }
     },
-    [disabled, reducedMotion, onPressIn, scale, scaleTo]
+    [disabled, reducedMotion, haptic, onPressIn, scale, scaleTo]
   );
 
   const handlePressOut = useCallback(
@@ -60,11 +64,9 @@ export default function PressableScale({
       setPressed(false);
       onPressOut?.(e);
       if (!reducedMotion) {
-        Animated.timing(scale, {
+        Animated.spring(scale, {
           toValue: 1,
-          duration: DURATIONS.press,
-          easing: EASING.out,
-          useNativeDriver: true,
+          ...SPRINGS.snappy,
         }).start();
       }
     },

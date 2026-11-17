@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
+  Animated,
   Modal,
   View,
   Text,
@@ -8,12 +9,15 @@ import {
   Share,
   KeyboardAvoidingView,
   Alert,
+  StyleSheet,
 } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { styles } from './threadOptionsStyles';
 import { Thread, useChatStore } from '../../store/useChatStore';
 import PressableScale from './PressableScale';
+import { DURATIONS, EASING } from '../../utils/motion';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 
 interface ThreadOptionsModalProps {
   visible: boolean;
@@ -30,6 +34,38 @@ export default function ThreadOptionsModal({
   const [isEditing, setIsEditing] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [cachedThread, setCachedThread] = useState<Thread | null>(null);
+
+  const overlayOpacity = useRef(new Animated.Value(0)).current;
+  const sheetTranslateY = useRef(new Animated.Value(28)).current;
+  const reducedMotion = useReducedMotion();
+
+  useEffect(() => {
+    if (visible) {
+      if (reducedMotion) {
+        overlayOpacity.setValue(1);
+        sheetTranslateY.setValue(0);
+        return;
+      }
+      overlayOpacity.setValue(0);
+      sheetTranslateY.setValue(28);
+      const anim = Animated.parallel([
+        Animated.timing(overlayOpacity, {
+          toValue: 1,
+          duration: DURATIONS.reveal,
+          easing: EASING.out,
+          useNativeDriver: true,
+        }),
+        Animated.timing(sheetTranslateY, {
+          toValue: 0,
+          duration: DURATIONS.reveal,
+          easing: EASING.out,
+          useNativeDriver: true,
+        }),
+      ]);
+      anim.start();
+      return () => anim.stop();
+    }
+  }, [visible, reducedMotion, overlayOpacity, sheetTranslateY]);
 
   useEffect(() => {
     if (thread) {
@@ -181,7 +217,7 @@ export default function ThreadOptionsModal({
   return (
     <Modal
       visible={visible}
-      animationType="slide"
+      animationType="none"
       transparent={true}
       onRequestClose={onClose}
     >
@@ -191,11 +227,24 @@ export default function ThreadOptionsModal({
         accessibilityLabel="Close thread options"
         onPress={onClose}
       >
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFill,
+            { backgroundColor: 'rgba(2, 6, 23, 0.75)', opacity: overlayOpacity },
+          ]}
+          pointerEvents="none"
+        />
         <KeyboardAvoidingView
           behavior="padding"
           style={styles.keyboardAvoid}
         >
-          <Pressable style={styles.modalContent} accessible={false} onPress={() => {}}>
+          <Animated.View
+            style={[
+              styles.modalContent,
+              { transform: reducedMotion ? [] : [{ translateY: sheetTranslateY }] },
+            ]}
+            onStartShouldSetResponder={() => true}
+          >
             <View style={styles.dragHandle} />
 
             {!isEditing ? (
@@ -359,7 +408,7 @@ export default function ThreadOptionsModal({
                 </View>
               </View>
             )}
-          </Pressable>
+          </Animated.View>
         </KeyboardAvoidingView>
       </Pressable>
     </Modal>

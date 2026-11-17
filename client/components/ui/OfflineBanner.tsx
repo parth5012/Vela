@@ -18,12 +18,22 @@ function OfflineBanner() {
   const reducedMotion = useReducedMotion();
 
   const isOffline = !isOnline || !isBackendReachable || syncState === 'offline';
+  const [shouldRender, setShouldRender] = React.useState(isOffline);
 
   const translateY = useRef(new Animated.Value(-24)).current;
   const opacity = useRef(new Animated.Value(0)).current;
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (isOffline) {
+      setShouldRender(true);
       let anim: Animated.CompositeAnimation;
       if (!reducedMotion) {
         anim = Animated.parallel([
@@ -51,10 +61,36 @@ function OfflineBanner() {
       }
       anim.start();
       return () => anim.stop();
+    } else {
+      if (!shouldRender) return;
+      if (reducedMotion) {
+        setShouldRender(false);
+        return;
+      }
+      const exitAnim = Animated.parallel([
+        Animated.timing(translateY, {
+          toValue: -24,
+          duration: 150,
+          easing: EASING.out,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 0,
+          duration: 150,
+          easing: EASING.out,
+          useNativeDriver: true,
+        }),
+      ]);
+      exitAnim.start(({ finished }) => {
+        if (finished && isMounted.current) {
+          setShouldRender(false);
+        }
+      });
+      return () => exitAnim.stop();
     }
-  }, [isOffline, reducedMotion, translateY, opacity]);
+  }, [isOffline, reducedMotion, shouldRender, translateY, opacity]);
 
-  if (!isOffline) {
+  if (!shouldRender) {
     return null;
   }
 

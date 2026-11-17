@@ -9,6 +9,10 @@ jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 );
 
+jest.mock('../hooks/useReducedMotion', () => ({
+  useReducedMotion: () => false,
+}));
+
 // The store imports the SQLite layer; stub it out so tests never load
 // expo-sqlite (unavailable in jest). Null db makes repository calls no-op.
 jest.mock('../db/client', () => ({

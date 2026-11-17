@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
+  Animated,
   Modal,
   View,
   Text,
@@ -9,6 +10,9 @@ import {
 } from 'react-native';
 import { ThemeColors } from '../../utils/theme';
 import PressableScale from './PressableScale';
+import { DURATIONS, EASING } from '../../utils/motion';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { triggerHaptic } from '../../utils/haptics';
 
 interface MessageOptionsModalProps {
   visible: boolean;
@@ -45,6 +49,38 @@ export default function MessageOptionsModal({
   isRaw,
   isUser,
 }: MessageOptionsModalProps) {
+  const overlayOpacity = useRef(new Animated.Value(0)).current;
+  const sheetTranslateY = useRef(new Animated.Value(28)).current;
+  const reducedMotion = useReducedMotion();
+
+  useEffect(() => {
+    if (visible) {
+      if (reducedMotion) {
+        overlayOpacity.setValue(1);
+        sheetTranslateY.setValue(0);
+        return;
+      }
+      overlayOpacity.setValue(0);
+      sheetTranslateY.setValue(28);
+      const anim = Animated.parallel([
+        Animated.timing(overlayOpacity, {
+          toValue: 1,
+          duration: DURATIONS.reveal,
+          easing: EASING.out,
+          useNativeDriver: true,
+        }),
+        Animated.timing(sheetTranslateY, {
+          toValue: 0,
+          duration: DURATIONS.reveal,
+          easing: EASING.out,
+          useNativeDriver: true,
+        }),
+      ]);
+      anim.start();
+      return () => anim.stop();
+    }
+  }, [visible, reducedMotion, overlayOpacity, sheetTranslateY]);
+
   const optionButtonStyle = ({ pressed }: { pressed: boolean }) => [
     styles.optionButton,
     { backgroundColor: themeColors.card, borderColor: themeColors.border },
@@ -86,17 +122,26 @@ export default function MessageOptionsModal({
   return (
     <Modal
       visible={visible}
-      animationType="slide"
+      animationType="none"
       transparent={true}
       onRequestClose={onClose}
     >
       <Pressable style={styles.overlay} onPress={onClose}>
-        <Pressable
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFill,
+            styles.backdrop,
+            { opacity: overlayOpacity },
+          ]}
+          pointerEvents="none"
+        />
+        <Animated.View
           style={[
             styles.modalContent,
             { backgroundColor: themeColors.background, borderColor: themeColors.border },
+            { transform: reducedMotion ? [] : [{ translateY: sheetTranslateY }] },
           ]}
-          onPress={() => {}}
+          onStartShouldSetResponder={() => true}
         >
           <View style={[styles.dragHandle, { backgroundColor: themeColors.textDark }]} />
           <Text style={[styles.title, { color: themeColors.text }]}>Message Options</Text>
@@ -109,6 +154,9 @@ export default function MessageOptionsModal({
                 scaleTo={0.97}
                 style={optionButtonStyle}
                 onPress={() => {
+                  if (opt.id.startsWith('copy')) {
+                    triggerHaptic('success');
+                  }
                   opt.onPress();
                   onClose();
                 }}
@@ -134,7 +182,7 @@ export default function MessageOptionsModal({
           >
             <Text style={styles.cancelButtonText}>Cancel</Text>
           </PressableScale>
-        </Pressable>
+        </Animated.View>
       </Pressable>
     </Modal>
   );
@@ -143,8 +191,10 @@ export default function MessageOptionsModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(2, 6, 23, 0.75)',
     justifyContent: 'flex-end',
+  },
+  backdrop: {
+    backgroundColor: 'rgba(2, 6, 23, 0.75)',
   },
   modalContent: {
     backgroundColor: '#0b1329',

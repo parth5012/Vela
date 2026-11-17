@@ -96,5 +96,32 @@ describe('OfflineBanner & Route Toggle Motion', () => {
 
       timingSpy.mockRestore();
     });
+
+    it('animates exit transition with native driver when coming back online', async () => {
+      const timingSpy = jest.spyOn(Animated, 'timing');
+      let component: any;
+
+      act(() => {
+        useOfflineStore.getState().setOnline(false);
+        component = renderer.create(<OfflineBanner />);
+      });
+
+      // Now go back online and allow exit animation to complete inside act
+      await act(async () => {
+        useOfflineStore.getState().setOnline(true);
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      });
+
+      const calls = timingSpy.mock.calls.map((c) => c[1]);
+      const exitTranslateYCall = calls.find((c: any) => c && c.toValue === -24 && c.duration === 150);
+      expect(exitTranslateYCall).toBeDefined();
+      expect(exitTranslateYCall.useNativeDriver).toBe(true);
+
+      const exitOpacityCall = calls.find((c: any) => c && c.toValue === 0 && c.duration === 150);
+      expect(exitOpacityCall).toBeDefined();
+      expect(exitOpacityCall.useNativeDriver).toBe(true);
+
+      timingSpy.mockRestore();
+    });
   });
 });

@@ -11,7 +11,6 @@ import { Platform, StyleSheet } from 'react-native';
 export const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(2, 6, 23, 0.75)',
     justifyContent: 'flex-end',
   },
   keyboardAvoid: {
