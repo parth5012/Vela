@@ -1,5 +1,5 @@
 /**
- * Scroll-craft motion tokens (WF-447-04).
+ * Scroll-craft motion tokens (WF-447-04 / WF-576).
  *
  * Motion is intentional: transform/opacity only, ease-out curves exclusively
  * (decelerate-then-accelerate curves are banned), UI transitions under 300ms.
@@ -25,4 +25,27 @@ export const DURATIONS = {
   reveal: 200,
   transition: 280,
   stagger: 50,
+} as const;
+
+/**
+ * Codified press scale ladder across all UI components:
+ * - badge / icon: 0.94 (small targets need slightly clearer travel)
+ * - button: 0.95 (standard button compression)
+ * - card / chip: 0.96 (mid-sized surfaces)
+ * - row: 0.98 (full-width rows — subtle to avoid text subpixel shimmering)
+ */
+export const PRESS_SCALE = {
+  badge: 0.94,
+  button: 0.95,
+  card: 0.96,
+  row: 0.98,
+} as const;
+
+/**
+ * Standardized native-driver spring configs for snappy, natural tactile releases.
+ */
+export const SPRINGS = {
+  snappy: { tension: 180, friction: 12, useNativeDriver: true },
+  gentle: { tension: 120, friction: 9, useNativeDriver: true },
+  pop: { tension: 140, friction: 8, useNativeDriver: true },
 } as const;

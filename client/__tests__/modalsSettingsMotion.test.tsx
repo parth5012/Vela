@@ -147,5 +147,41 @@ describe('Modals & Settings Motion Micro-interactions', () => {
         tree!.unmount();
       });
     });
+
+    it('animates bottom sheet entrance translateY and backdrop fade with native driver', () => {
+      const timingSpy = jest.spyOn(Animated, 'timing');
+      let tree: renderer.ReactTestRenderer;
+
+      act(() => {
+        tree = renderer.create(
+          <MessageOptionsModal
+            visible={true}
+            onClose={jest.fn()}
+            onDownloadMd={jest.fn()}
+            onRegenerate={jest.fn()}
+            onToggleRaw={jest.fn()}
+            onBranch={jest.fn()}
+            onCopyText={jest.fn()}
+            onCopyCode={jest.fn()}
+            onShare={jest.fn()}
+            onShowInfo={jest.fn()}
+            themeColors={dummyColors as any}
+            isRaw={false}
+            isUser={false}
+          />
+        );
+      });
+
+      const calls = timingSpy.mock.calls.map((c) => c[1]);
+      const sheetCall = calls.find((c: any) => c && c.toValue === 0 && c.useNativeDriver === true);
+      expect(sheetCall).toBeDefined();
+
+      const overlayCall = calls.find((c: any) => c && c.toValue === 1 && c.useNativeDriver === true);
+      expect(overlayCall).toBeDefined();
+
+      act(() => {
+        tree!.unmount();
+      });
+    });
   });
 });
