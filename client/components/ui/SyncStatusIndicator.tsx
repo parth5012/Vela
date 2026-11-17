@@ -20,11 +20,18 @@ function SyncStatusIndicator() {
   const syncState = useOfflineStore((state) => state.syncState);
   const isChecking = useOfflineStore((state) => state.isChecking);
   const pendingQueueCount = useOfflineStore((state) => state.pendingQueueCount);
-  const { apiUrl, isConfigured, theme, accentColor } = useConfigStore();
+
+  // Granular store subscriptions to avoid re-renders on unrelated config changes
+  const apiUrl = useConfigStore((state) => state.apiUrl);
+  const isConfigured = useConfigStore((state) => state.isConfigured);
+  const theme = useConfigStore((state) => state.theme);
+  const accentColor = useConfigStore((state) => state.accentColor);
+
   const aurora = getAurora(accentColor, theme);
   const reducedMotion = useReducedMotion();
 
   const pressScale = useRef(new Animated.Value(1)).current;
+  const pressOpacity = useRef(new Animated.Value(1)).current;
   const pulseScale = useRef(new Animated.Value(1)).current;
   const pulseOpacity = useRef(new Animated.Value(1)).current;
   const prevSyncState = useRef(syncState);
@@ -32,8 +39,15 @@ function SyncStatusIndicator() {
   useEffect(() => {
     if (prevSyncState.current !== syncState) {
       prevSyncState.current = syncState;
+
+      // When syncing or checking, ActivityIndicator replaces the dot; skip pulsing the unmounted dot
+      if (syncState === 'syncing') {
+        return;
+      }
+
+      let anim: Animated.CompositeAnimation;
       if (!reducedMotion) {
-        Animated.sequence([
+        anim = Animated.sequence([
           Animated.parallel([
             Animated.timing(pulseScale, {
               toValue: 1.25,
@@ -62,9 +76,9 @@ function SyncStatusIndicator() {
               useNativeDriver: true,
             }),
           ]),
-        ]).start();
+        ]);
       } else {
-        Animated.sequence([
+        anim = Animated.sequence([
           Animated.timing(pulseOpacity, {
             toValue: 0.5,
             duration: DURATIONS.press,
@@ -77,8 +91,10 @@ function SyncStatusIndicator() {
             easing: EASING.out,
             useNativeDriver: true,
           }),
-        ]).start();
+        ]);
       }
+      anim.start();
+      return () => anim.stop();
     }
   }, [syncState, reducedMotion, pulseScale, pulseOpacity]);
 
@@ -90,12 +106,26 @@ function SyncStatusIndicator() {
         easing: EASING.out,
         useNativeDriver: true,
       }).start();
+    } else {
+      Animated.timing(pressOpacity, {
+        toValue: 0.6,
+        duration: DURATIONS.press,
+        easing: EASING.out,
+        useNativeDriver: true,
+      }).start();
     }
   };
 
   const handlePressOut = () => {
     if (!reducedMotion) {
       Animated.timing(pressScale, {
+        toValue: 1,
+        duration: DURATIONS.press,
+        easing: EASING.out,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      Animated.timing(pressOpacity, {
         toValue: 1,
         duration: DURATIONS.press,
         easing: EASING.out,
@@ -142,7 +172,7 @@ function SyncStatusIndicator() {
         text: 'Sync Now',
         onPress: () => {
           healthProbeManager.executeProbe();
-          flushPendingMessages();
+          void flushPendingMessages();
         },
       },
     ]);
@@ -172,14 +202,14 @@ function SyncStatusIndicator() {
       onPress={handlePress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
-      style={({ pressed }) => [
+      style={[
         styles.container,
-        pressed && styles.containerPressed,
-        { transform: [{ scale: pressScale }] },
+        { transform: [{ scale: pressScale }], opacity: pressOpacity },
       ]}
       hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      accessibilityHint="Displays sync connection details and allows triggering manual sync"
       accessibilityState={{ busy: isChecking || syncState === 'syncing' }}
       testID="sync-status-indicator"
     >
@@ -204,9 +234,6 @@ const styles = StyleSheet.create({
     marginRight: 8,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  containerPressed: {
-    opacity: 0.7,
   },
   loader: {
     width: 10,
