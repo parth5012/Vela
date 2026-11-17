@@ -1,8 +1,8 @@
 import '@stardazed/streams-text-encoding';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useRouter, useSegments, useRootNavigationState, Slot } from 'expo-router';
 import { Drawer } from 'expo-router/drawer';
-import { ActivityIndicator, View, StyleSheet, Pressable, Text, AppState, InteractionManager } from 'react-native';
+import { ActivityIndicator, View, StyleSheet, Pressable, Text, AppState, InteractionManager, Animated } from 'react-native';
 import { useConfigStore } from '../store/useConfigStore';
 import { checkPermission, type OSPermission } from '../utils/permissionManager';
 import { useChatStore } from '../store/useChatStore';
@@ -47,6 +47,10 @@ import { initializeDatabase } from '../db/client';
 import { wireOfflineSync, flushPendingMessages, refreshPendingQueueCount } from '../utils/offlineSync';
 import { runAgentDataBootstrap } from '../utils/seedAgents';
 import { THEME_COLORS, getAurora, hexToRgba } from '../utils/theme';
+import { DURATIONS, EASING } from '../utils/motion';
+import { useReducedMotion } from '../hooks/useReducedMotion';
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 function HeaderRightActions() {
   const router = useRouter();
@@ -56,6 +60,46 @@ function HeaderRightActions() {
   const colors = THEME_COLORS[theme] || THEME_COLORS.berry;
   const aurora = getAurora(accentColor, theme);
   const isBrowserRoute = segments[0] === 'browser';
+  const reducedMotion = useReducedMotion();
+
+  const scale = useRef(new Animated.Value(1)).current;
+  const pressOpacity = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    if (!reducedMotion) {
+      Animated.timing(scale, {
+        toValue: 0.94,
+        duration: DURATIONS.press,
+        easing: EASING.out,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      Animated.timing(pressOpacity, {
+        toValue: 0.75,
+        duration: DURATIONS.press,
+        easing: EASING.out,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
+
+  const handlePressOut = () => {
+    if (!reducedMotion) {
+      Animated.timing(scale, {
+        toValue: 1,
+        duration: DURATIONS.press,
+        easing: EASING.out,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      Animated.timing(pressOpacity, {
+        toValue: 1,
+        duration: DURATIONS.press,
+        easing: EASING.out,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
 
   const handleToggle = () => {
     if (isBrowserRoute) {
@@ -67,26 +111,28 @@ function HeaderRightActions() {
 
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 14, gap: 10 }}>
-      <Pressable
+      <AnimatedPressable
         onPress={handleToggle}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        style={({ pressed }) => ({
-          flexDirection: 'row',
-          alignItems: 'center',
-          backgroundColor: isBrowserRoute ? hexToRgba(aurora.acc1, 0.14) : colors.glass,
-          paddingHorizontal: 12,
-          paddingVertical: 7,
-          borderRadius: 20,
-          borderWidth: 1,
-          borderColor: isBrowserRoute ? aurora.acc1 : colors.glassBorder,
-          transform: [{ scale: pressed ? 0.96 : 1 }],
-          opacity: pressed ? 0.8 : 1,
-        })}
+        style={[
+          styles.headerRouteBtn,
+          {
+            backgroundColor: isBrowserRoute ? hexToRgba(aurora.acc1, 0.14) : colors.glass,
+            borderColor: isBrowserRoute ? aurora.acc1 : colors.glassBorder,
+            transform: [{ scale }],
+            opacity: pressOpacity,
+          },
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel={isBrowserRoute ? 'Switch to Chat view' : 'Switch to Webview'}
+        testID="header-route-toggle"
       >
         <Text style={{ color: isBrowserRoute ? aurora.acc1 : colors.text, fontSize: 12, fontWeight: '600', letterSpacing: 0.3 }}>
           {isBrowserRoute ? '💬 Chat' : '🌐 Webview'}
         </Text>
-      </Pressable>
+      </AnimatedPressable>
       <QueueBadge />
       <SyncStatusIndicator />
     </View>
@@ -452,5 +498,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#F2EAFA',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  headerRouteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
   },
 });

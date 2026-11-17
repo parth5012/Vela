@@ -1,8 +1,10 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, View, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOfflineStore } from '../../store/useOfflineStore';
 import { useConfigStore } from '../../store/useConfigStore';
+import { DURATIONS, EASING } from '../../utils/motion';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 
 export const OFFLINE_BANNER_COPY =
   "You're offline. Changes are saved locally and will sync when reconnected.";
@@ -13,8 +15,44 @@ function OfflineBanner() {
   const syncState = useOfflineStore((state) => state.syncState);
   const theme = useConfigStore((state) => state.theme);
   const insets = useSafeAreaInsets();
+  const reducedMotion = useReducedMotion();
 
   const isOffline = !isOnline || !isBackendReachable || syncState === 'offline';
+
+  const translateY = useRef(new Animated.Value(-24)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (isOffline) {
+      let anim: Animated.CompositeAnimation;
+      if (!reducedMotion) {
+        anim = Animated.parallel([
+          Animated.timing(translateY, {
+            toValue: 0,
+            duration: DURATIONS.reveal,
+            easing: EASING.out,
+            useNativeDriver: true,
+          }),
+          Animated.timing(opacity, {
+            toValue: 1,
+            duration: DURATIONS.reveal,
+            easing: EASING.out,
+            useNativeDriver: true,
+          }),
+        ]);
+      } else {
+        translateY.setValue(0);
+        anim = Animated.timing(opacity, {
+          toValue: 1,
+          duration: DURATIONS.reveal,
+          easing: EASING.out,
+          useNativeDriver: true,
+        });
+      }
+      anim.start();
+      return () => anim.stop();
+    }
+  }, [isOffline, reducedMotion, translateY, opacity]);
 
   if (!isOffline) {
     return null;
@@ -23,11 +61,15 @@ function OfflineBanner() {
   const isDark = theme === 'noir';
 
   return (
-    <View
+    <Animated.View
       style={[
         styles.container,
         isDark ? styles.containerDark : styles.containerLight,
-        { paddingTop: Math.max(8, (insets?.top ?? 0) + 4) },
+        {
+          paddingTop: Math.max(8, (insets?.top ?? 0) + 4),
+          transform: [{ translateY }],
+          opacity,
+        },
       ]}
       accessibilityRole="alert"
       accessibilityLiveRegion="polite"
@@ -45,7 +87,7 @@ function OfflineBanner() {
           {OFFLINE_BANNER_COPY}
         </Text>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
