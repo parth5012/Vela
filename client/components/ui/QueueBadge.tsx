@@ -103,7 +103,9 @@ function QueueBadge() {
       }).start();
     } else {
       Animated.timing(opacity, {
-        toValue: 1,
+        // Restore the disabled resting opacity if syncing started mid-press,
+        // since RN still delivers onPressOut for the active responder.
+        toValue: isSyncing ? 0.4 : 1,
         duration: DURATIONS.press,
         easing: EASING.out,
         useNativeDriver: true,
