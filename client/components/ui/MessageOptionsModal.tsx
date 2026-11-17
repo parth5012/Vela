@@ -8,6 +8,7 @@ import {
   Platform,
 } from 'react-native';
 import { ThemeColors } from '../../utils/theme';
+import PressableScale from './PressableScale';
 
 interface MessageOptionsModalProps {
   visible: boolean;
@@ -103,25 +104,28 @@ export default function MessageOptionsModal({
           {options
             .filter((opt) => opt.visible !== false)
             .map((opt) => (
-              <Pressable
+              <PressableScale
                 key={opt.id}
+                scaleTo={0.97}
                 style={optionButtonStyle}
                 onPress={() => {
                   opt.onPress();
                   onClose();
                 }}
-                {...(opt.accessibilityLabel
-                  ? { accessibilityRole: 'button' as const, accessibilityLabel: opt.accessibilityLabel }
-                  : {})}
+                accessibilityRole="button"
+                accessibilityLabel={opt.accessibilityLabel || opt.label}
               >
                 <Text style={styles.optionIcon}>{opt.icon}</Text>
                 <Text style={[styles.optionButtonText, { color: themeColors.text }]}>
                   {opt.label}
                 </Text>
-              </Pressable>
+              </PressableScale>
             ))}
 
-          <Pressable
+          <PressableScale
+            scaleTo={0.96}
+            accessibilityRole="button"
+            accessibilityLabel="Cancel"
             style={({ pressed }) => [
               styles.cancelButton,
               pressed && styles.cancelButtonPressed,
@@ -129,7 +133,7 @@ export default function MessageOptionsModal({
             onPress={onClose}
           >
             <Text style={styles.cancelButtonText}>Cancel</Text>
-          </Pressable>
+          </PressableScale>
         </Pressable>
       </Pressable>
     </Modal>
