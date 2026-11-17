@@ -14,6 +14,8 @@ import { useChatStore, Thread } from '../../store/useChatStore';
 import { useBrowserStore } from '../../store/useBrowserStore';
 import ThreadOptionsModal from './ThreadOptionsModal';
 import ThreadRow from './ThreadRow';
+import PressableScale from './PressableScale';
+import { PRESS_SCALE } from '../../utils/motion';
 import { THEME_COLORS, FONT_SIZES, ACCENT_COLORS, getAurora } from '../../utils/theme';
 import { syncHistoryWithBackend } from '../../utils/history';
 
@@ -171,17 +173,17 @@ const handleGallery = () => {
       </Pressable>
 
       {/* Browser — prominent top placement per #156 */}
-      <Pressable
+      <PressableScale
+        scaleTo={PRESS_SCALE.card}
         accessibilityRole="button"
         accessibilityLabel="Open Browser"
         onPress={handleBrowser}
-        style={({ pressed }) => [
+        style={[
           styles.browserRow,
           {
             backgroundColor: isBrowserActive ? colors.card : colors.bubbleAssistant,
             borderColor: isBrowserActive ? aurora.acc1 + '44' : colors.border,
           },
-          pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
         ]}
       >
         <View style={styles.browserRowInner}>
@@ -223,19 +225,19 @@ const handleGallery = () => {
             <ActivityIndicator size="small" color={aurora.acc1} style={{ marginLeft: 8 }} />
           ) : null}
         </View>
-      </Pressable>
+      </PressableScale>
 
-      <Pressable
-        style={({ pressed }) => [
+      <PressableScale
+        scaleTo={PRESS_SCALE.button}
+        style={[
           styles.newChatButton, 
           { backgroundColor: colors.card, borderColor: colors.border },
-          pressed && [styles.newChatButtonPressed, { transform: [{ scale: 0.96 }] }]
         ]}
         onPress={handleNewChat}
         accessibilityRole="button"
       >
         <Text style={[styles.newChatButtonText, { color: colors.text }]}>+ New Conversation</Text>
-      </Pressable>
+      </PressableScale>
 
       <ScrollView style={styles.threadsContainer} contentContainerStyle={styles.threadsContent}>
         <Text style={[styles.sectionTitle, { color: colors.textDark }]}>Recent Chats</Text>
@@ -258,12 +260,10 @@ const handleGallery = () => {
       </ScrollView>
 
       <View style={[styles.footer, { borderTopColor: colors.border }]}>
-        <Pressable
+        <PressableScale
+          scaleTo={PRESS_SCALE.row}
           accessibilityRole="button"
-          style={({ pressed }) => [
-            styles.settingsButton, 
-            pressed && [styles.settingsButtonPressed, { backgroundColor: colors.card }],
-          ]}
+          style={styles.settingsButton}
           onPress={() => {
             router.navigate('/');
             if (typeof navigation.closeDrawer === 'function') {
@@ -272,14 +272,11 @@ const handleGallery = () => {
           }}
         >
           <Text style={[styles.settingsButtonText, { color: colors.textMuted }]}>💬 Chat</Text>
-        </Pressable>
-        <Pressable
+        </PressableScale>
+        <PressableScale
+          scaleTo={PRESS_SCALE.row}
           accessibilityRole="button"
-          style={({ pressed }) => [
-            styles.settingsButton, 
-            { flexDirection: 'row', alignItems: 'center' },
-            pressed && [styles.settingsButtonPressed, { backgroundColor: colors.card }],
-          ]}
+          style={[styles.settingsButton, { flexDirection: 'row', alignItems: 'center' }]}
           onPress={handleRefresh}
           disabled={isSyncing}
         >
@@ -291,57 +288,47 @@ const handleGallery = () => {
           <Text style={[styles.settingsButtonText, { color: colors.textMuted }]}>
             {isSyncing ? 'Syncing...' : 'Refresh Chats'}
           </Text>
-        </Pressable>
-        <Pressable
+        </PressableScale>
+        <PressableScale
+          scaleTo={PRESS_SCALE.row}
           accessibilityRole="button"
-          style={({ pressed }) => [
-            styles.settingsButton,
-            pressed && [styles.settingsButtonPressed, { backgroundColor: colors.card }],
-          ]}
+          style={styles.settingsButton}
           onPress={handleTasks}
         >
           <Text style={[styles.settingsButtonText, { color: colors.textMuted }]}>📋 Tasks</Text>
-        </Pressable>
-        <Pressable
+        </PressableScale>
+        <PressableScale
+          scaleTo={PRESS_SCALE.row}
           accessibilityRole="button"
-          style={({ pressed }) => [
-            styles.settingsButton,
-            pressed && [styles.settingsButtonPressed, { backgroundColor: colors.card }],
-          ]}
+          style={styles.settingsButton}
           onPress={handleJournal}
         >
           <Text style={[styles.settingsButtonText, { color: colors.textMuted }]}>📝 Journal</Text>
-        </Pressable>
-        <Pressable
+        </PressableScale>
+        <PressableScale
+          scaleTo={PRESS_SCALE.row}
           accessibilityRole="button"
-          style={({ pressed }) => [
-            styles.settingsButton,
-            pressed && [styles.settingsButtonPressed, { backgroundColor: colors.card }],
-          ]}
+          style={styles.settingsButton}
           onPress={handleOmni}
         >
           <Text style={[styles.settingsButtonText, { color: colors.textMuted }]}>🎙️ Omni Live</Text>
-        </Pressable>
-        <Pressable
+        </PressableScale>
+        <PressableScale
+          scaleTo={PRESS_SCALE.row}
           accessibilityRole="button"
-          style={({ pressed }) => [
-            styles.settingsButton,
-            pressed && [styles.settingsButtonPressed, { backgroundColor: colors.card }],
-          ]}
+          style={styles.settingsButton}
           onPress={handleGallery}
         >
           <Text style={[styles.settingsButtonText, { color: colors.textMuted }]}>🎨 Gallery</Text>
-        </Pressable>
-        <Pressable
+        </PressableScale>
+        <PressableScale
+          scaleTo={PRESS_SCALE.row}
           accessibilityRole="button"
-          style={({ pressed }) => [
-            styles.settingsButton, 
-            pressed && [styles.settingsButtonPressed, { backgroundColor: colors.card }],
-          ]}
+          style={styles.settingsButton}
           onPress={handleSettings}
         >
           <Text style={[styles.settingsButtonText, { color: colors.textMuted }]}>⚙ Settings</Text>
-        </Pressable>
+        </PressableScale>
       </View>
 
       <ThreadOptionsModal
