@@ -39,10 +39,20 @@ export default function ThreadRow({
   const timeAgo = thread.updated_at ? formatDistanceToNow(thread.updated_at) : '';
   const pulse = useRef(new Animated.Value(0.4)).current;
   const scale = useRef(new Animated.Value(1)).current;
+  const pressOpacity = useRef(new Animated.Value(1)).current;
   const reducedMotion = useReducedMotion();
 
   useEffect(() => {
-    if (!streaming) return;
+    if (!streaming) {
+      pulse.setValue(0.4);
+      return;
+    }
+    // Under reduced motion, bypass continuous looping pulse and hold at constant visible opacity
+    if (reducedMotion) {
+      pulse.setValue(1.0);
+      return;
+    }
+    // 800ms ambient pulsing indicator for active LLM streaming response
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulse, { toValue: 1.0, duration: 800, easing: EASING.out, useNativeDriver: true }),
@@ -50,13 +60,23 @@ export default function ThreadRow({
       ])
     );
     loop.start();
-    return () => loop.stop();
-  }, [streaming, pulse]);
+    return () => {
+      loop.stop();
+      pulse.setValue(0.4);
+    };
+  }, [streaming, reducedMotion, pulse]);
 
   const handlePressIn = () => {
     if (!reducedMotion) {
       Animated.timing(scale, {
         toValue: 0.98,
+        duration: DURATIONS.press,
+        easing: EASING.out,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      Animated.timing(pressOpacity, {
+        toValue: 0.85,
         duration: DURATIONS.press,
         easing: EASING.out,
         useNativeDriver: true,
@@ -72,8 +92,19 @@ export default function ThreadRow({
         easing: EASING.out,
         useNativeDriver: true,
       }).start();
+    } else {
+      Animated.timing(pressOpacity, {
+        toValue: 1,
+        duration: DURATIONS.press,
+        easing: EASING.out,
+        useNativeDriver: true,
+      }).start();
     }
   };
+
+  const accessibilityLabel = `Chat thread: ${thread.title}${
+    thread.is_pinned ? ', pinned' : ''
+  }${streaming ? ', streaming response' : ''}${timeAgo ? `, ${timeAgo}` : ''}`;
 
   return (
     <AnimatedPressable
@@ -81,14 +112,17 @@ export default function ThreadRow({
         styles.threadItem,
         isActive && styles.activeThreadItem,
         isActive && { backgroundColor: colors.card, borderColor: colors.glassBorder },
-        pressed && { opacity: 0.85 },
-        { transform: [{ scale }] },
+        { transform: [{ scale }], opacity: pressOpacity },
       ]}
       onPress={() => onSelect(thread.id)}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       onLongPress={() => onOpenOptions(thread)}
       delayLongPress={450}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ selected: isActive }}
+      accessibilityHint="Double tap to open this chat thread, long press for thread options"
     >
       <View style={styles.threadTextCol}>
         <View style={styles.threadTitleRow}>

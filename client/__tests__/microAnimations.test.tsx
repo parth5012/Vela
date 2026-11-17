@@ -1,13 +1,18 @@
 // @ts-nocheck
 import React from 'react';
 import renderer, { act } from 'react-test-renderer';
-import { Animated, AccessibilityInfo } from 'react-native';
+import { Animated } from 'react-native';
 import SyncStatusIndicator from '../components/ui/SyncStatusIndicator';
 import QueueBadge from '../components/ui/QueueBadge';
 import ThreadRow from '../components/ui/ThreadRow';
 import { useOfflineStore } from '../store/useOfflineStore';
 import { useConfigStore } from '../store/useConfigStore';
 import { EASING, DURATIONS } from '../utils/motion';
+
+let mockReducedMotion = false;
+jest.mock('../hooks/useReducedMotion', () => ({
+  useReducedMotion: () => mockReducedMotion,
+}));
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({
@@ -19,6 +24,7 @@ jest.mock('expo-router', () => ({
 
 describe('Micro-animations & Reduced Motion (WF-576)', () => {
   beforeEach(() => {
+    mockReducedMotion = false;
     act(() => {
       useOfflineStore.getState().reset();
       useConfigStore.setState({
@@ -51,6 +57,14 @@ describe('Micro-animations & Reduced Motion (WF-576)', () => {
       expect(pressCall.easing).toBe(EASING.out);
       expect(pressCall.duration).toBe(DURATIONS.press);
 
+      act(() => {
+        pressable.props.onPressOut?.();
+      });
+      const releaseCall = timingSpy.mock.calls
+        .map((c) => c[1])
+        .find((c: any) => c && c.toValue === 1);
+      expect(releaseCall).toBeDefined();
+
       timingSpy.mockRestore();
     });
 
@@ -70,6 +84,32 @@ describe('Micro-animations & Reduced Motion (WF-576)', () => {
       expect(pulseCall).toBeDefined();
       expect(pulseCall.useNativeDriver).toBe(true);
       expect(pulseCall.duration).toBe(DURATIONS.press);
+
+      timingSpy.mockRestore();
+    });
+
+    it('uses opacity fallback for press and updates when reduced motion is enabled', () => {
+      mockReducedMotion = true;
+      const timingSpy = jest.spyOn(Animated, 'timing');
+
+      let component: any;
+      act(() => {
+        component = renderer.create(<SyncStatusIndicator />);
+      });
+
+      const pressable = component.root.findByProps({ testID: 'sync-status-indicator' });
+      act(() => {
+        pressable.props.onPressIn?.();
+      });
+
+      const calls = timingSpy.mock.calls.map((c) => c[1]);
+      const pressOpacityCall = calls.find((c: any) => c && c.toValue === 0.6);
+      expect(pressOpacityCall).toBeDefined();
+      expect(pressOpacityCall.useNativeDriver).toBe(true);
+
+      expect(pressable.props.accessibilityHint).toBe(
+        'Displays sync connection details and allows triggering manual sync'
+      );
 
       timingSpy.mockRestore();
     });
@@ -100,25 +140,60 @@ describe('Micro-animations & Reduced Motion (WF-576)', () => {
 
       timingSpy.mockRestore();
     });
+
+    it('falls back to opacity animation under reduced motion and sets disabled state when syncing', () => {
+      mockReducedMotion = true;
+      const timingSpy = jest.spyOn(Animated, 'timing');
+
+      act(() => {
+        useOfflineStore.getState().setPendingQueueCount(2);
+      });
+
+      let component: any;
+      act(() => {
+        component = renderer.create(<QueueBadge />);
+      });
+
+      const badge = component.root.findByProps({ testID: 'queue-badge' });
+      act(() => {
+        badge.props.onPressIn?.();
+      });
+
+      const calls = timingSpy.mock.calls.map((c) => c[1]);
+      const pressOpacityCall = calls.find((c: any) => c && c.toValue === 0.7);
+      expect(pressOpacityCall).toBeDefined();
+
+      // Setting sync state to syncing disables badge
+      act(() => {
+        useOfflineStore.getState().setSyncState('syncing');
+      });
+
+      const updatedBadge = component.root.findByProps({ testID: 'queue-badge' });
+      expect(updatedBadge.props.disabled).toBe(true);
+      expect(updatedBadge.props.accessibilityState.disabled).toBe(true);
+
+      timingSpy.mockRestore();
+    });
   });
 
   describe('ThreadRow animations', () => {
+    const mockThread = {
+      id: 'thread-1',
+      title: 'Test Thread',
+      created_at: Date.now(),
+      updated_at: Date.now(),
+      is_pinned: true,
+    };
+
     it('animates press-in and press-out scale on native driver', () => {
       const timingSpy = jest.spyOn(Animated, 'timing');
-      const mockThread = {
-        id: 'thread-1',
-        title: 'Test Thread',
-        created_at: Date.now(),
-        updated_at: Date.now(),
-        is_pinned: false,
-      };
 
       let component: any;
       act(() => {
         component = renderer.create(
           <ThreadRow
             thread={mockThread as any}
-            isActive={false}
+            isActive={true}
             streaming={false}
             colors={{ card: '#fff', glassBorder: '#ccc', textMuted: '#666', text: '#000', textDark: '#333' }}
             accentHex="#6366f1"
@@ -129,6 +204,11 @@ describe('Micro-animations & Reduced Motion (WF-576)', () => {
       });
 
       const animatedPressable = component.root.findByProps({ delayLongPress: 450 });
+      expect(animatedPressable.props.accessibilityRole).toBe('button');
+      expect(animatedPressable.props.accessibilityState).toEqual({ selected: true });
+      expect(animatedPressable.props.accessibilityLabel).toContain('Test Thread');
+      expect(animatedPressable.props.accessibilityLabel).toContain('pinned');
+
       act(() => {
         animatedPressable.props.onPressIn?.();
       });
@@ -149,6 +229,50 @@ describe('Micro-animations & Reduced Motion (WF-576)', () => {
       expect(pressOutCall.useNativeDriver).toBe(true);
 
       timingSpy.mockRestore();
+    });
+
+    it('starts pulsing loop when streaming is true, but suppresses loop under reduced motion', () => {
+      const loopSpy = jest.spyOn(Animated, 'loop');
+
+      let component: any;
+      act(() => {
+        component = renderer.create(
+          <ThreadRow
+            thread={mockThread as any}
+            isActive={false}
+            streaming={true}
+            colors={{ card: '#fff', glassBorder: '#ccc', textMuted: '#666', text: '#000', textDark: '#333' }}
+            accentHex="#6366f1"
+            onSelect={jest.fn()}
+            onOpenOptions={jest.fn()}
+          />
+        );
+      });
+
+      expect(loopSpy).toHaveBeenCalled();
+      loopSpy.mockClear();
+
+      // Now with reduced motion
+      mockReducedMotion = true;
+      let reducedComponent: any;
+      act(() => {
+        reducedComponent = renderer.create(
+          <ThreadRow
+            thread={mockThread as any}
+            isActive={false}
+            streaming={true}
+            colors={{ card: '#fff', glassBorder: '#ccc', textMuted: '#666', text: '#000', textDark: '#333' }}
+            accentHex="#6366f1"
+            onSelect={jest.fn()}
+            onOpenOptions={jest.fn()}
+          />
+        );
+      });
+
+      // Loop should NOT have been started under reduced motion
+      expect(loopSpy).not.toHaveBeenCalled();
+
+      loopSpy.mockRestore();
     });
   });
 });

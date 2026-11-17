@@ -14,15 +14,29 @@ function QueueBadge() {
   const theme = useConfigStore((state) => state.theme);
   const reducedMotion = useReducedMotion();
 
+  const isDark = theme === 'noir';
+  const isSyncing = syncState === 'syncing';
+
   const scale = useRef(new Animated.Value(1)).current;
   const opacity = useRef(new Animated.Value(1)).current;
   const prevCount = useRef(pendingQueueCount);
 
+  // Syncing state opacity control
+  useEffect(() => {
+    if (isSyncing) {
+      opacity.setValue(0.5);
+    } else {
+      opacity.setValue(1);
+    }
+  }, [isSyncing, opacity]);
+
+  // Pulse animation on queue count update
   useEffect(() => {
     if (pendingQueueCount > 0 && pendingQueueCount !== prevCount.current) {
       prevCount.current = pendingQueueCount;
+      let anim: Animated.CompositeAnimation;
       if (!reducedMotion) {
-        Animated.sequence([
+        anim = Animated.sequence([
           Animated.timing(scale, {
             toValue: 1.1,
             duration: DURATIONS.press,
@@ -35,9 +49,9 @@ function QueueBadge() {
             easing: EASING.out,
             useNativeDriver: true,
           }),
-        ]).start();
+        ]);
       } else {
-        Animated.sequence([
+        anim = Animated.sequence([
           Animated.timing(opacity, {
             toValue: 0.7,
             duration: DURATIONS.press,
@@ -50,15 +64,25 @@ function QueueBadge() {
             easing: EASING.out,
             useNativeDriver: true,
           }),
-        ]).start();
+        ]);
       }
+      anim.start();
+      return () => anim.stop();
     }
   }, [pendingQueueCount, reducedMotion, scale, opacity]);
 
   const handlePressIn = () => {
-    if (!isSyncing && !reducedMotion) {
+    if (isSyncing) return;
+    if (!reducedMotion) {
       Animated.timing(scale, {
         toValue: 0.95,
+        duration: DURATIONS.press,
+        easing: EASING.out,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      Animated.timing(opacity, {
+        toValue: 0.7,
         duration: DURATIONS.press,
         easing: EASING.out,
         useNativeDriver: true,
@@ -67,8 +91,16 @@ function QueueBadge() {
   };
 
   const handlePressOut = () => {
+    if (isSyncing) return;
     if (!reducedMotion) {
       Animated.timing(scale, {
+        toValue: 1,
+        duration: DURATIONS.press,
+        easing: EASING.out,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      Animated.timing(opacity, {
         toValue: 1,
         duration: DURATIONS.press,
         easing: EASING.out,
@@ -81,8 +113,6 @@ function QueueBadge() {
     return null;
   }
 
-  const isDark = theme === 'noir';
-  const isSyncing = syncState === 'syncing';
   const label = `${pendingQueueCount} queued`;
   const accessibilityLabel = `${pendingQueueCount} ${
     pendingQueueCount === 1 ? 'item' : 'items'
@@ -90,18 +120,18 @@ function QueueBadge() {
 
   return (
     <AnimatedPressable
-      onPress={() => flushPendingMessages()}
+      onPress={() => {
+        void flushPendingMessages();
+      }}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       disabled={isSyncing}
-      style={({ pressed }) => [
+      style={[
         styles.badge,
         isDark ? styles.badgeDark : styles.badgeLight,
-        pressed && styles.badgePressed,
-        isSyncing && styles.badgeDisabled,
         { transform: [{ scale }], opacity },
       ]}
-      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityHint="Attempts to sync queued messages with the server"
@@ -132,12 +162,6 @@ const styles = StyleSheet.create({
   badgeDark: {
     backgroundColor: '#271b05',
     borderColor: '#78350f',
-  },
-  badgePressed: {
-    opacity: 0.7,
-  },
-  badgeDisabled: {
-    opacity: 0.5,
   },
   text: {
     fontSize: 11,
