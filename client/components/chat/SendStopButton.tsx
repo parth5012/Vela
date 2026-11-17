@@ -9,8 +9,9 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import PressableScale from '../ui/PressableScale';
-import { DURATIONS, EASING } from '../../utils/motion';
+import { DURATIONS, EASING, PRESS_SCALE } from '../../utils/motion';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { triggerHaptic } from '../../utils/haptics';
 import type { AuroraGradient } from '../../utils/theme';
 
 export interface SendStopButtonProps {
@@ -74,7 +75,7 @@ export default function SendStopButton({
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
-          toValue: 1.08,
+          toValue: 1.04,
           duration: 650,
           easing: EASING.out,
           useNativeDriver: true,
@@ -115,10 +116,19 @@ export default function SendStopButton({
   const activeShadowColor = isStreaming ? '#ef4444' : aurora.acc1;
   const showShadow = isStreaming || canSend;
 
+  const handlePress = () => {
+    if (isStreaming) {
+      triggerHaptic('medium');
+    } else if (canSend) {
+      triggerHaptic('light');
+    }
+    onPress();
+  };
+
   return (
     <PressableScale
-      scaleTo={0.93}
-      onPress={onPress}
+      scaleTo={PRESS_SCALE.button}
+      onPress={handlePress}
       disabled={isDisabled}
       accessibilityRole="button"
       accessibilityLabel={isStreaming ? 'Stop generating' : 'Send message'}
