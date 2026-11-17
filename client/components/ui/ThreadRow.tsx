@@ -108,7 +108,7 @@ export default function ThreadRow({
 
   return (
     <AnimatedPressable
-      style={({ pressed }) => [
+      style={[
         styles.threadItem,
         isActive && styles.activeThreadItem,
         isActive && { backgroundColor: colors.card, borderColor: colors.glassBorder },

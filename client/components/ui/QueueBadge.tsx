@@ -24,15 +24,17 @@ function QueueBadge() {
   // Syncing state opacity control
   useEffect(() => {
     if (isSyncing) {
-      opacity.setValue(0.5);
+      opacity.setValue(0.4);
       scale.setValue(1);
     } else {
       opacity.setValue(1);
     }
   }, [isSyncing, opacity, scale]);
 
-  // Pulse animation on queue count update
+  // Pulse animation on queue count update (skipped while syncing so the
+  // count feedback cannot leave the disabled badge fully opaque)
   useEffect(() => {
+    if (isSyncing) return;
     if (pendingQueueCount > 0 && pendingQueueCount !== prevCount.current) {
       prevCount.current = pendingQueueCount;
       let anim: Animated.CompositeAnimation;
@@ -70,7 +72,7 @@ function QueueBadge() {
       anim.start();
       return () => anim.stop();
     }
-  }, [pendingQueueCount, reducedMotion, scale, opacity]);
+  }, [pendingQueueCount, isSyncing, reducedMotion, scale, opacity]);
 
   const handlePressIn = () => {
     if (isSyncing) return;
