@@ -50,7 +50,7 @@ export default function PressableScale({
       if (!disabled && !reducedMotion) {
         Animated.timing(scale, {
           toValue: scaleTo,
-          duration: 110,
+          duration: DURATIONS.press,
           easing: EASING.out,
           useNativeDriver: true,
         }).start();

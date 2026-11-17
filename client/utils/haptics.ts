@@ -12,13 +12,10 @@ const HAPTIC_THROTTLE_MS = 60;
  * Throttled to prevent double-buzz glitches on composite press targets.
  */
 export function triggerHaptic(type: HapticType = 'light'): void {
-  if (Platform.OS === 'web') return;
   // On iOS without expo-haptics, Vibration.vibrate() triggers a fixed ~400ms system buzz
-  // regardless of millisecond argument. We avoid jarring buzzes on routine press/selection
-  // events while preserving intentional multi-pulse alert patterns for success and warning.
-  if (Platform.OS === 'ios' && (type === 'light' || type === 'selection' || type === 'medium')) {
-    return;
-  }
+  // regardless of duration argument, producing a jarring phone-call feel on taps.
+  // We disable legacy Vibration on iOS and Web until expo-haptics is integrated.
+  if (Platform.OS === 'web' || Platform.OS === 'ios') return;
   const now = Date.now();
   if (now - lastHapticTimestamp < HAPTIC_THROTTLE_MS && type === 'light') {
     return;

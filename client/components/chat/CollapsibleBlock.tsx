@@ -57,6 +57,9 @@ export default function CollapsibleBlock({
       easing: EASING.out,
       useNativeDriver: true,
     };
+    if (reduceMotion) {
+      expandedness.setValue(toExpanded ? 1 : 0);
+    }
     Animated.parallel([
       Animated.timing(contentOpacity, config),
       // Under reduced motion, keep the opacity change that carries

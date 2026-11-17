@@ -50,7 +50,7 @@ export default function MessageOptionsModal({
   isUser,
 }: MessageOptionsModalProps) {
   const overlayOpacity = useRef(new Animated.Value(0)).current;
-  const sheetTranslateY = useRef(new Animated.Value(64)).current;
+  const sheetTranslateY = useRef(new Animated.Value(360)).current;
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const reducedMotion = useReducedMotion();
 
@@ -62,13 +62,13 @@ export default function MessageOptionsModal({
     Animated.parallel([
       Animated.timing(overlayOpacity, {
         toValue: 0,
-        duration: 160,
+        duration: 180,
         easing: EASING.out,
         useNativeDriver: true,
       }),
       Animated.timing(sheetTranslateY, {
-        toValue: 64,
-        duration: 160,
+        toValue: 360,
+        duration: 180,
         easing: EASING.out,
         useNativeDriver: true,
       }),
@@ -88,7 +88,7 @@ export default function MessageOptionsModal({
         return;
       }
       overlayOpacity.setValue(0);
-      sheetTranslateY.setValue(64);
+      sheetTranslateY.setValue(360);
       const anim = Animated.parallel([
         Animated.timing(overlayOpacity, {
           toValue: 1,
