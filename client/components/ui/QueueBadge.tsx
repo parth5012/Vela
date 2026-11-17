@@ -1,14 +1,81 @@
-import React from 'react';
-import { Pressable, Text, StyleSheet } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Pressable, Text, StyleSheet } from 'react-native';
 import { useOfflineStore } from '../../store/useOfflineStore';
 import { useConfigStore } from '../../store/useConfigStore';
-import { THEME_COLORS } from '../../utils/theme';
 import { flushPendingMessages } from '../../utils/offlineSync';
+import { DURATIONS, EASING } from '../../utils/motion';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 function QueueBadge() {
   const pendingQueueCount = useOfflineStore((state) => state.pendingQueueCount);
   const syncState = useOfflineStore((state) => state.syncState);
   const theme = useConfigStore((state) => state.theme);
+  const reducedMotion = useReducedMotion();
+
+  const scale = useRef(new Animated.Value(1)).current;
+  const opacity = useRef(new Animated.Value(1)).current;
+  const prevCount = useRef(pendingQueueCount);
+
+  useEffect(() => {
+    if (pendingQueueCount > 0 && pendingQueueCount !== prevCount.current) {
+      prevCount.current = pendingQueueCount;
+      if (!reducedMotion) {
+        Animated.sequence([
+          Animated.timing(scale, {
+            toValue: 1.1,
+            duration: DURATIONS.press,
+            easing: EASING.out,
+            useNativeDriver: true,
+          }),
+          Animated.timing(scale, {
+            toValue: 1,
+            duration: DURATIONS.reveal,
+            easing: EASING.out,
+            useNativeDriver: true,
+          }),
+        ]).start();
+      } else {
+        Animated.sequence([
+          Animated.timing(opacity, {
+            toValue: 0.7,
+            duration: DURATIONS.press,
+            easing: EASING.out,
+            useNativeDriver: true,
+          }),
+          Animated.timing(opacity, {
+            toValue: 1,
+            duration: DURATIONS.reveal,
+            easing: EASING.out,
+            useNativeDriver: true,
+          }),
+        ]).start();
+      }
+    }
+  }, [pendingQueueCount, reducedMotion, scale, opacity]);
+
+  const handlePressIn = () => {
+    if (!isSyncing && !reducedMotion) {
+      Animated.timing(scale, {
+        toValue: 0.95,
+        duration: DURATIONS.press,
+        easing: EASING.out,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
+
+  const handlePressOut = () => {
+    if (!reducedMotion) {
+      Animated.timing(scale, {
+        toValue: 1,
+        duration: DURATIONS.press,
+        easing: EASING.out,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
 
   if (pendingQueueCount <= 0) {
     return null;
@@ -22,14 +89,17 @@ function QueueBadge() {
   } queued for sync. Tap to sync now.`;
 
   return (
-    <Pressable
+    <AnimatedPressable
       onPress={() => flushPendingMessages()}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
       disabled={isSyncing}
       style={({ pressed }) => [
         styles.badge,
         isDark ? styles.badgeDark : styles.badgeLight,
         pressed && styles.badgePressed,
         isSyncing && styles.badgeDisabled,
+        { transform: [{ scale }], opacity },
       ]}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       accessibilityRole="button"
@@ -41,7 +111,7 @@ function QueueBadge() {
       <Text style={[styles.text, isDark ? styles.textDark : styles.textLight]}>
         {label}
       </Text>
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 

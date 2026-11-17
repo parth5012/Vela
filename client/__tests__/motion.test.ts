@@ -89,6 +89,9 @@ describe('motion source audit (WF-447-04)', () => {
     for (const f of [
       'components/ui/PressableScale.tsx',
       'components/chat/CollapsibleBlock.tsx',
+      'components/ui/SyncStatusIndicator.tsx',
+      'components/ui/QueueBadge.tsx',
+      'components/ui/ThreadRow.tsx',
       'app/index.tsx',
     ]) {
       const src = fs.readFileSync(path.join(clientRoot, f), 'utf8');
