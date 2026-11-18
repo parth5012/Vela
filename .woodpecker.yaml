@@ -18,6 +18,7 @@ clone:
   git:
     image: woodpeckerci/plugin-git
     settings:
+      partial: false
       depth: 0
 
 steps:
@@ -32,6 +33,7 @@ steps:
     commands:
       - pip install --quiet uv
       - cd backend && uv sync --frozen && cd ..
+      - "[ -f .git/shallow ] && git fetch --unshallow origin || true"
       - git fetch origin main:refs/remotes/origin/main || true
       - python vela_ci.py ci --stack backend --ruff-base "origin/${CI_COMMIT_TARGET_BRANCH:-main}"
       - python vela_ci.py bugs
@@ -67,8 +69,9 @@ steps:
 
   fallback:
     image: curlimages/curl:8.10.1
-    secrets:
-      - github_token
+    environment:
+      GITHUB_TOKEN:
+        from_secret: github_token
     when:
       - status: failure
     depends_on:
@@ -79,7 +82,7 @@ steps:
       - |
         echo "Woodpecker build failed; dispatching GitHub Actions fallback..."
         curl -sS -X POST \
-          -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+          -H "Authorization: Bearer $${GITHUB_TOKEN}" \
           -H "Accept: application/vnd.github+json" \
           "https://api.github.com/repos/parth5012/Vela/actions/workflows/ci.yml/dispatches" \
           -d "{\"ref\":\"${CI_COMMIT_BRANCH}\"}"
