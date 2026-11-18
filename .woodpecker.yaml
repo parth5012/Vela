@@ -67,15 +67,14 @@ steps:
 
   fallback:
     image: curlimages/curl:8.10.1
+    secrets:
+      - github_token
     when:
       - status: failure
     depends_on:
       - backend
       - client
       - corpus
-    environment:
-      GITHUB_TOKEN:
-        from_secret: github_token
     commands:
       - |
         echo "Woodpecker build failed; dispatching GitHub Actions fallback..."
