@@ -108,6 +108,20 @@ describe('useVoiceInput', () => {
     expect(voice().state.recording).toBe(false);
   });
 
+  it('a release that arrives before start is invoked still ends the recording', async () => {
+    const stopSpy = jest.fn(async (): Promise<TranscriberResult> => ({ text: '' }));
+    transcriber = makeTranscriber({ stop: stopSpy });
+    mount();
+    // Simulates press-in -> async permission check -> press-out -> permission granted.
+    await act(async () => {
+      (voice() as any).beginHold();
+      await (voice() as any).endHold();
+    });
+    await act(async () => { await voice().start(); });
+    expect(stopSpy).toHaveBeenCalled();
+    expect(voice().state.recording).toBe(false);
+  });
+
   it('a release that arrives before native start resolves still stops the recording', async () => {
     let resolveStart!: () => void;
     let resolveStop!: (r: TranscriberResult) => void;

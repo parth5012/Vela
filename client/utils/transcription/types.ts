@@ -21,6 +21,11 @@ export interface TranscriberResult {
   text: string;
   /** Native file:// URI of the captured audio, for optional cloud fallback. */
   audioUri?: string;
+  /**
+   * On-device recognition failure (e.g. ERROR_NO_MATCH). Must not discard
+   * `audioUri` — that audio is exactly what the consented cloud fallback uses.
+   */
+  error?: string;
 }
 
 export interface Transcriber {

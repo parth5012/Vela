@@ -1,5 +1,6 @@
 package com.vela.client.deviceagent
 
+import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import android.graphics.Bitmap
@@ -804,7 +805,7 @@ class DeviceAgentModule : Module() {
             } catch (e: Exception) {
                 promise.resolve(mapOf("success" to false, "status" to "undetermined", "error" to (e.message ?: "Permission request failed")))
             }
-        }
+        }.runOnQueue(Queues.MAIN)
 
         AsyncFunction("startSpeechRecognition") { options: Map<String, Any?> ->
             val context = appContext.reactContext
@@ -902,18 +903,18 @@ class DeviceAgentModule : Module() {
                 return@AsyncFunction mapOf("started" to false, "error" to (e.message ?: "Could not start speech recognition"))
             }
             mapOf("started" to true)
-        }
+        }.runOnQueue(Queues.MAIN)
 
         AsyncFunction("stopSpeechRecognition") { promise: Promise ->
             beginSpeechStop(promise)
-        }
+        }.runOnQueue(Queues.MAIN)
 
         AsyncFunction("cancelSpeechRecognition") {
             cleanupSpeech(deleteAudio = true)
             speechFinalTranscript = ""
             speechError = null
             Unit
-        }
+        }.runOnQueue(Queues.MAIN)
     }
 
     /** Emit an interim/final recognition result to JS listeners. */
@@ -931,7 +932,10 @@ class DeviceAgentModule : Module() {
         speechTimeoutRunnable = null
         speechTimeoutHandler = null
         if (promise == null) {
-            try { speechRecognizer?.stopListening() } catch (_: Exception) { resolveSpeechStop() }
+            try { speechRecognizer?.stopListening() } catch (_: Exception) { }
+            // 60s safety timeout with no JS waiter: release the recorder now
+            // instead of leaving the microphone open until a later start/cancel.
+            finalizeSpeechStop()
             return
         }
         if (speechRecognizer == null) {
@@ -950,17 +954,23 @@ class DeviceAgentModule : Module() {
 
     /** Resolve a pending stop after onResults (or the fallback timeout) lands. */
     private fun resolveSpeechStop() {
-        val promise = speechStopPromise ?: return
-        speechStopPromise = null
         speechStopRunnable?.let { speechStopHandler?.removeCallbacks(it) }
         speechStopRunnable = null
         speechStopHandler = null
+        val promise = speechStopPromise
+        speechStopPromise = null
+        // Always finalize — even when onResults/onError beats JS's stop(), or
+        // the 60s timer fired with no promise. Otherwise the recorder keeps the
+        // mic open and a later stop() stalls on the 2s fallback timer.
+        finalizeSpeechStop()
+        if (promise != null) resolveWithCurrent(promise)
+    }
+
+    /** Stop/release the recorder and tear down the recognizer, idempotently. */
+    private fun finalizeSpeechStop() {
         releaseSpeechRecorder()
         try { speechRecognizer?.destroy() } catch (_: Exception) { }
         speechRecognizer = null
-        // Keep the audio file until the next start/cancel so cloud fallback
-        // can read it after consent. cleanupSpeech() deletes it then.
-        resolveWithCurrent(promise)
     }
 
     /** Hand the final transcript and a usable file:// audio URI back to JS. */
