@@ -36,6 +36,11 @@ export default {
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
+      // WF-583: push-to-talk voice input. Runtime request is just-in-time on
+      // first mic tap via device-agent.requestMicrophonePermission().
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
       "package": IS_PROD ? "com.parth5012.client" : "com.parth5012.client.dev",
       ...(hasGoogleServicesFile ? { "googleServicesFile": googleServicesFilePath } : {}),
       "softwareKeyboardLayoutMode": "adjustResize"

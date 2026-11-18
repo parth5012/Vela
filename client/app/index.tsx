@@ -78,6 +78,9 @@ import { getMissingSetupPermissions, getMissingSetupIntegrations } from '../util
 import { deriveShizukuState, type ShizukuStatus } from '../utils/shizuku';
 import DeviceAgentNative from '../modules/device-agent';
 import PermissionRequestCard from '../components/chat/PermissionRequestCard';
+import { useVoiceInput } from '../hooks/useVoiceInput';
+import VoiceRecordingBar from '../components/chat/VoiceRecordingBar';
+import VoiceConsentModal from '../components/chat/VoiceConsentModal';
 
 const generateUUID = () => {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -727,6 +730,8 @@ export default function ChatScreen() {
   // #158: pending OS-permission prompt + session-scoped denial set so a denied
   // permission is not re-prompted until the app restarts.
   const [permissionPrompt, setPermissionPrompt] = useState<OSPermission | null>(null);
+  // #583: separate from the accessibility prompt so the #158 contract stays intact.
+  const [voicePermissionPrompt, setVoicePermissionPrompt] = useState(false);
   const sessionDeniedPermissionsRef = React.useRef<Set<OSPermission>>(new Set());
 
   // Multimodal image attachment staging (#559, #562)
@@ -875,6 +880,38 @@ export default function ChatScreen() {
   const lastMsg = activeMessages[activeMessages.length - 1];
 
   const isCurrentThreadStreaming = activeThreadId ? isThreadStreaming(activeThreadId) : false;
+
+  // #583: push-to-talk voice input. The transcript lands in the ordinary
+  // editable composer before send; no floating overlay.
+  const voice = useVoiceInput({
+    onTranscript: (text) => {
+      if (!text) return;
+      setInput((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text));
+      inputRef.current?.focus();
+    },
+  });
+
+  const handleMicPressIn = useCallback(async () => {
+    if (isCurrentThreadStreaming) return;
+    const status = await checkPermission('microphone');
+    if (status === 'granted') {
+      try {
+        await voice.start();
+      } catch {
+        // The hook surfaces the failure inline.
+      }
+      return;
+    }
+    if (shouldPrompt('microphone', sessionDeniedPermissionsRef.current)) {
+      setVoicePermissionPrompt(true);
+    }
+  }, [isCurrentThreadStreaming, voice]);
+
+  const handleMicPressOut = useCallback(() => {
+    // stop() is a no-op unless recording (or pending start), so a fast tap is
+    // safe and the hook's release-pending guard can catch the race.
+    void voice.stop();
+  }, [voice]);
 
   // Shared skill slash-command handling for handleSend, handleSendWelcome and
   // the indicator's deactivate tap. Returns true when the input was consumed.
@@ -1959,6 +1996,31 @@ export default function ChatScreen() {
           { backgroundColor: colors.background, borderTopColor: colors.glassBorder, paddingBottom: Math.max(12, insets.bottom) }
         ]}
       >
+        {voice.state.recording && (
+          <VoiceRecordingBar
+            elapsedMs={voice.state.elapsedMs}
+            levels={voice.state.levels}
+            partialText={voice.state.partialText}
+            onCancel={() => void voice.cancel()}
+          />
+        )}
+        {voice.state.failure && (
+          <View style={styles.voiceFailureRow}>
+            <Text numberOfLines={2} style={[styles.voiceFailureText, { color: colors.textMuted, fontSize: sizes.sub }]}>
+              {voice.state.failure}
+            </Text>
+            {voice.state.canRetry && (
+              <PressableScale
+                onPress={() => void voice.retry()}
+                accessibilityRole="button"
+                accessibilityLabel="Retry transcription"
+                style={({ pressed }) => [styles.voiceRetry, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={[styles.voiceRetryText, { color: aurora.acc1, fontSize: sizes.sub }]}>Retry</Text>
+              </PressableScale>
+            )}
+          </View>
+        )}
         {stagedAttachments.length > 0 && (
           <AttachmentPickerTray
             attachments={stagedAttachments}
@@ -1987,6 +2049,17 @@ export default function ChatScreen() {
             accessibilityRole="button"
           >
             <Text style={[styles.attachButtonIcon, { color: aurora.acc1 }]}>📎</Text>
+          </PressableScale>
+          <PressableScale
+            scaleTo={0.92}
+            onPressIn={handleMicPressIn}
+            onPressOut={handleMicPressOut}
+            disabled={isCurrentThreadStreaming}
+            style={[styles.attachButton, isCurrentThreadStreaming && styles.attachButtonDisabled]}
+            accessibilityLabel="Hold to speak"
+            accessibilityRole="button"
+          >
+            <Text style={[styles.attachButtonIcon, { color: aurora.acc1 }]}>🎙</Text>
           </PressableScale>
           <TextInput
             ref={inputRef}
@@ -2056,6 +2129,45 @@ export default function ChatScreen() {
             />
           </View>
         </Modal>
+        {/* #583: just-in-time microphone consent on first mic tap. */}
+        <Modal
+          visible={voicePermissionPrompt}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setVoicePermissionPrompt(false)}
+        >
+          <View style={styles.permissionPromptOverlay}>
+            <PermissionRequestCard
+              permission="microphone"
+              rationale={getRationale('microphone')}
+              onGrant={async () => {
+                setVoicePermissionPrompt(false);
+                const status = await requestPermission('microphone');
+                if (status === 'granted') {
+                  try {
+                    await voice.start();
+                  } catch {
+                    // Failure is surfaced inline by the hook.
+                  }
+                }
+              }}
+              onDeny={() => {
+                sessionDeniedPermissionsRef.current.add('microphone');
+                setVoicePermissionPrompt(false);
+              }}
+              onDontAskAgain={() => {
+                sessionDeniedPermissionsRef.current.add('microphone');
+                setVoicePermissionPrompt(false);
+              }}
+            />
+          </View>
+        </Modal>
+        <VoiceConsentModal
+          visible={voice.state.consentProvider !== null}
+          provider={voice.state.consentProvider ?? ''}
+          onAccept={voice.acceptCloud}
+          onDecline={voice.declineCloud}
+        />
     </KeyboardAvoidingView>
     </LinearGradient>
   );

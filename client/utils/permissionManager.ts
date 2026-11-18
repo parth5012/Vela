@@ -60,15 +60,19 @@ export async function checkPermission(perm: OSPermission): Promise<PermissionSta
         return 'undetermined';
       }
       case 'microphone': {
+        // #583: expo-av is not installed — check RECORD_AUDIO through the
+        // native device-agent bridge. Only a real granted/denied answer is
+        // trusted; an absent module or error stays honestly "undetermined".
         try {
-          // Try expo-av or expo-camera for microphone if available
-          const AvMod = require('expo-av');
-          if (AvMod?.Audio?.getPermissionsAsync) {
-            const { status } = await AvMod.Audio.getPermissionsAsync();
-            return mapExpoStatus(status);
+          const DeviceAgent = require('../modules/device-agent').default;
+          if (DeviceAgent && typeof DeviceAgent.checkSelfPermission === 'function') {
+            const res = await DeviceAgent.checkSelfPermission('android.permission.RECORD_AUDIO');
+            if (res && (res.status === 'granted' || res.status === 'denied')) {
+              return res.status;
+            }
           }
         } catch {
-          // not installed
+          // native module not available
         }
         return 'undetermined';
       }
@@ -158,14 +162,17 @@ export async function requestPermission(perm: OSPermission): Promise<PermissionS
         return 'undetermined';
       }
       case 'microphone': {
+        // #583: runtime RECORD_AUDIO dialog is owned by the native bridge.
         try {
-          const AvMod = require('expo-av');
-          if (AvMod?.Audio?.requestPermissionsAsync) {
-            const { status } = await AvMod.Audio.requestPermissionsAsync();
-            return mapExpoStatus(status);
+          const DeviceAgent = require('../modules/device-agent').default;
+          if (DeviceAgent && typeof DeviceAgent.requestMicrophonePermission === 'function') {
+            const res = await DeviceAgent.requestMicrophonePermission();
+            if (res && (res.status === 'granted' || res.status === 'denied')) {
+              return res.status;
+            }
           }
         } catch {
-          // not installed
+          // native module not available
         }
         return 'undetermined';
       }

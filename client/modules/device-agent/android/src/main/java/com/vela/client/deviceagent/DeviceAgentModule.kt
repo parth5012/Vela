@@ -12,13 +12,24 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.media.AudioManager
+import android.media.MediaRecorder
 import android.net.Uri
+import android.os.Bundle
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.provider.AlarmClock
 import android.provider.ContactsContract
 import android.provider.Settings
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
+import com.facebook.react.modules.core.PermissionAwareActivity
+import com.facebook.react.modules.core.PermissionListener
+import expo.modules.kotlin.Promise
 import java.io.File
 import java.io.FileOutputStream
+import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
@@ -29,6 +40,20 @@ class DeviceAgentModule : Module() {
     companion object {
         val nodeMap = mutableMapOf<String, AccessibilityNodeInfo>()
         private const val SHIZUKU_PERMISSION_REQUEST_CODE = 4401
+        // WF-583: push-to-talk voice input.
+        private const val RECORD_AUDIO_REQUEST_CODE = 4402
+        private const val SPEECH_PARTIAL_EVENT = "onSpeechPartial"
+        private var speechRecognizer: SpeechRecognizer? = null
+        private var speechAudioFile: File? = null
+        private var speechRecorder: MediaRecorder? = null
+        private var speechFinalTranscript: String = ""
+        private var speechError: String? = null
+        private var speechTimeoutHandler: Handler? = null
+        private var speechTimeoutRunnable: Runnable? = null
+        private var speechStopPromise: Promise? = null
+        private var speechStopHandler: Handler? = null
+        private var speechStopRunnable: Runnable? = null
+        private const val SPEECH_RESULT_TIMEOUT_MS = 2000L
         // applicationId of the Shizuku manager app — NOT its Gradle namespace
         // 'moe.shizuku.manager' (manager/build.gradle: applicationId
         // "moe.shizuku.privileged.api"); PackageManager only resolves the former.
@@ -53,6 +78,52 @@ class DeviceAgentModule : Module() {
             nodeMap.clear()
         }
 
+        /** Best-effort extraction of the top hypothesis from a recognition result bundle. */
+        private fun firstHypothesis(results: Bundle?): String {
+            val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+            return matches?.firstOrNull()?.trim() ?: ""
+        }
+
+        /** Stop and release the microphone recorder without deleting its file. */
+        private fun releaseSpeechRecorder() {
+            try {
+                speechRecorder?.stop()
+            } catch (_: Exception) { }
+            try {
+                speechRecorder?.release()
+            } catch (_: Exception) { }
+            speechRecorder = null
+        }
+
+        /** Tear down recognizer, recorder, audio file and timeout, idempotently. */
+        private fun cleanupSpeech(deleteAudio: Boolean) {
+            speechTimeoutRunnable?.let { speechTimeoutHandler?.removeCallbacks(it) }
+            speechTimeoutRunnable = null
+            speechTimeoutHandler = null
+            speechStopRunnable?.let { speechStopHandler?.removeCallbacks(it) }
+            speechStopRunnable = null
+            speechStopHandler = null
+            // A pending stop must always be settled — never leave a JS await hanging.
+            speechStopPromise?.resolve(
+                mapOf("transcript" to "", "audioUri" to null, "error" to "Recording was cancelled")
+            )
+            speechStopPromise = null
+            try {
+                speechRecognizer?.stopListening()
+            } catch (_: Exception) { }
+            try {
+                speechRecognizer?.destroy()
+            } catch (_: Exception) { }
+            speechRecognizer = null
+            releaseSpeechRecorder()
+            if (deleteAudio) {
+                try {
+                    speechAudioFile?.delete()
+                } catch (_: Exception) { }
+            }
+            speechAudioFile = null
+        }
+
         /** Parses an "x,y" tap target into pixel coords, or null for @e refs. */
         fun parseCoords(target: String): Pair<Float, Float>? {
             if (target.startsWith("@e")) return null
@@ -64,6 +135,10 @@ class DeviceAgentModule : Module() {
 
     override fun definition() = ModuleDefinition {
         Name("DeviceAgentModule")
+
+        // WF-583: interim speech-recognition results (final result is returned
+        // by stopSpeechRecognition()).
+        Events(SPEECH_PARTIAL_EVENT)
 
         AsyncFunction("getScreenTree") {
             val service = VelaAccessibilityService.instance
@@ -698,6 +773,211 @@ class DeviceAgentModule : Module() {
                 mapOf("success" to false, "error" to (e.message ?: "Failed to open settings action $action"))
             }
         }
+
+        // --- WF-583: push-to-talk voice input --------------------------------
+
+        AsyncFunction("isSpeechRecognitionAvailable") {
+            val context = appContext.reactContext
+            context != null && SpeechRecognizer.isRecognitionAvailable(context)
+        }
+
+        AsyncFunction("requestMicrophonePermission") { promise: Promise ->
+            val context = appContext.reactContext
+                ?: return@AsyncFunction promise.resolve(mapOf("success" to false, "status" to "undetermined", "error" to "App context unavailable"))
+            if (context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                return@AsyncFunction promise.resolve(mapOf("success" to true, "status" to "granted"))
+            }
+            val activity = appContext.currentActivity
+            if (activity !is PermissionAwareActivity) {
+                return@AsyncFunction promise.resolve(mapOf("success" to false, "status" to "undetermined", "error" to "No permission-aware activity"))
+            }
+            val listener = object : PermissionListener {
+                override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray): Boolean {
+                    if (requestCode != RECORD_AUDIO_REQUEST_CODE) return false
+                    val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
+                    promise.resolve(mapOf("success" to true, "status" to if (granted) "granted" else "denied"))
+                    return true
+                }
+            }
+            try {
+                activity.requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), RECORD_AUDIO_REQUEST_CODE, listener)
+            } catch (e: Exception) {
+                promise.resolve(mapOf("success" to false, "status" to "undetermined", "error" to (e.message ?: "Permission request failed")))
+            }
+        }
+
+        AsyncFunction("startSpeechRecognition") { options: Map<String, Any?> ->
+            val context = appContext.reactContext
+                ?: return@AsyncFunction mapOf("started" to false, "error" to "App context unavailable")
+            if (context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                return@AsyncFunction mapOf("started" to false, "error" to "RECORD_AUDIO permission not granted")
+            }
+            if (!SpeechRecognizer.isRecognitionAvailable(context)) {
+                return@AsyncFunction mapOf("started" to false, "error" to "No on-device speech recognizer is available")
+            }
+
+            cleanupSpeech(deleteAudio = true)
+            speechFinalTranscript = ""
+            speechError = null
+
+            val maxDurationMs = (options["maxDurationMs"] as? Number)?.toLong() ?: 60_000L
+            val language = options["language"] as? String
+
+            val audioFile = File.createTempFile("vela_voice_", ".m4a", context.cacheDir)
+            // EXTRA_AUDIO_SOURCE is an INPUT fd the recognizer reads from — it
+            // never writes mic audio into it. Capture the microphone separately
+            // with MediaRecorder so cloud fallback has a real audio file.
+            // MediaRecorder(Context) is API 26+; this module targets minSdk 24.
+            val recorder = try {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    MediaRecorder(context)
+                } else {
+                    @Suppress("DEPRECATION")
+                    MediaRecorder()
+                }
+            } catch (e: Exception) {
+                try { audioFile.delete() } catch (_: Exception) { }
+                return@AsyncFunction mapOf("started" to false, "error" to (e.message ?: "Could not create audio recorder"))
+            }
+            recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
+            recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+            recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+            recorder.setOutputFile(audioFile.absolutePath)
+            try {
+                recorder.prepare()
+                recorder.start()
+            } catch (e: Exception) {
+                try { recorder.release() } catch (_: Exception) { }
+                try { audioFile.delete() } catch (_: Exception) { }
+                return@AsyncFunction mapOf("started" to false, "error" to (e.message ?: "Could not start audio capture"))
+            }
+            speechAudioFile = audioFile
+            speechRecorder = recorder
+
+            val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
+            speechRecognizer = recognizer
+            recognizer.setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) {}
+                override fun onBeginningOfSpeech() {}
+                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() {}
+                override fun onError(error: Int) {
+                    speechError = "Speech recognition error: $error"
+                    resolveSpeechStop()
+                }
+                override fun onResults(results: Bundle?) {
+                    val text = firstHypothesis(results)
+                    if (text.isNotEmpty()) {
+                        speechFinalTranscript = text
+                        emitSpeechPartial(text, true)
+                    }
+                    resolveSpeechStop()
+                }
+                override fun onPartialResults(partialResults: Bundle?) {
+                    emitSpeechPartial(firstHypothesis(partialResults), false)
+                }
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+            })
+
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+                if (!language.isNullOrBlank()) putExtra(RecognizerIntent.EXTRA_LANGUAGE, language)
+            }
+
+            val handler = Handler(Looper.getMainLooper())
+            val runnable = Runnable {
+                try { beginSpeechStop() } catch (_: Exception) { }
+            }
+            speechTimeoutHandler = handler
+            speechTimeoutRunnable = runnable
+            handler.postDelayed(runnable, maxDurationMs)
+
+            try {
+                recognizer.startListening(intent)
+            } catch (e: Exception) {
+                cleanupSpeech(deleteAudio = true)
+                return@AsyncFunction mapOf("started" to false, "error" to (e.message ?: "Could not start speech recognition"))
+            }
+            mapOf("started" to true)
+        }
+
+        AsyncFunction("stopSpeechRecognition") { promise: Promise ->
+            beginSpeechStop(promise)
+        }
+
+        AsyncFunction("cancelSpeechRecognition") {
+            cleanupSpeech(deleteAudio = true)
+            speechFinalTranscript = ""
+            speechError = null
+            Unit
+        }
+    }
+
+    /** Emit an interim/final recognition result to JS listeners. */
+    private fun emitSpeechPartial(text: String, isFinal: Boolean) {
+        sendEvent(SPEECH_PARTIAL_EVENT, mapOf("text" to text, "isFinal" to isFinal))
+    }
+
+    /**
+     * Ask the recognizer to stop, then wait for its asynchronous onResults
+     * callback before resolving. Resolving inside stopListening() races
+     * onResults and yields an empty transcript in the common push-to-talk case.
+     */
+    private fun beginSpeechStop(promise: Promise? = null) {
+        speechTimeoutRunnable?.let { speechTimeoutHandler?.removeCallbacks(it) }
+        speechTimeoutRunnable = null
+        speechTimeoutHandler = null
+        if (promise == null) {
+            try { speechRecognizer?.stopListening() } catch (_: Exception) { resolveSpeechStop() }
+            return
+        }
+        if (speechRecognizer == null) {
+            resolveWithCurrent(promise)
+            return
+        }
+        speechStopPromise?.resolve(mapOf("transcript" to "", "audioUri" to null, "error" to "Superseded by a newer stop"))
+        speechStopPromise = promise
+        val handler = Handler(Looper.getMainLooper())
+        val runnable = Runnable { resolveSpeechStop() }
+        speechStopHandler = handler
+        speechStopRunnable = runnable
+        handler.postDelayed(runnable, SPEECH_RESULT_TIMEOUT_MS)
+        try { speechRecognizer?.stopListening() } catch (_: Exception) { resolveSpeechStop() }
+    }
+
+    /** Resolve a pending stop after onResults (or the fallback timeout) lands. */
+    private fun resolveSpeechStop() {
+        val promise = speechStopPromise ?: return
+        speechStopPromise = null
+        speechStopRunnable?.let { speechStopHandler?.removeCallbacks(it) }
+        speechStopRunnable = null
+        speechStopHandler = null
+        releaseSpeechRecorder()
+        try { speechRecognizer?.destroy() } catch (_: Exception) { }
+        speechRecognizer = null
+        // Keep the audio file until the next start/cancel so cloud fallback
+        // can read it after consent. cleanupSpeech() deletes it then.
+        resolveWithCurrent(promise)
+    }
+
+    /** Hand the final transcript and a usable file:// audio URI back to JS. */
+    private fun resolveWithCurrent(promise: Promise) {
+        val file = speechAudioFile
+        val audioUri = if (file != null && file.exists() && file.length() > 0) {
+            "file://${file.absolutePath}"
+        } else {
+            null
+        }
+        promise.resolve(
+            mapOf(
+                "transcript" to speechFinalTranscript,
+                "audioUri" to audioUri,
+                "error" to speechError
+            )
+        )
     }
 
     private fun shizukuAlive(): Boolean = try {

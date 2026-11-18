@@ -344,6 +344,25 @@ export const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     padding: 16,
   },
+  // #583: inline transcription failure + Retry above the composer.
+  voiceFailureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 4,
+    paddingBottom: 8,
+  },
+  voiceFailureText: {
+    flex: 1,
+    lineHeight: 16,
+  },
+  voiceRetry: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  voiceRetryText: {
+    fontWeight: '700',
+  },
   // #556: persistent "finish setup later" banner (Settings → Permissions link).
   setupBanner: {
     borderRadius: 14,
