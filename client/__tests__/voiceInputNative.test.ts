@@ -68,9 +68,34 @@ describe('WF-583 native voice bridge contract', () => {
     expect((kt.match(/runOnQueue\(Queues\.MAIN\)/g) ?? []).length).toBeGreaterThanOrEqual(4);
   });
 
-  it('finalizes recorder + recognizer even when no stop promise is pending', () => {
+  it('finalizes recorder + recognizer on the 60s cap even with no JS waiter', () => {
     const kt = read('../modules/device-agent/android/src/main/java/com/vela/client/deviceagent/DeviceAgentModule.kt');
     expect(kt).toContain('finalizeSpeechStop()');
-    expect(kt).toContain('if (promise != null) resolveWithCurrent(promise)');
+    const start = kt.indexOf('private fun beginSpeechStop');
+    const end = kt.indexOf('private fun resolveSpeechStop', start);
+    const body = kt.slice(start, end);
+    // The cap path (promise == null) must schedule finalization, but only
+    // after giving onResults a chance to deliver the final transcript.
+    expect(body).toContain('Runnable { finalizeSpeechStop() }');
+    expect(body.indexOf('Runnable { finalizeSpeechStop() }')).toBeGreaterThan(body.indexOf('if (promise == null)'));
+  });
+
+  it('does not destroy the recognizer on its own callback while the user still holds', () => {
+    const kt = read('../modules/device-agent/android/src/main/java/com/vela/client/deviceagent/DeviceAgentModule.kt');
+    const start = kt.indexOf('private fun resolveSpeechStop()');
+    const end = kt.indexOf('private fun resolveWithCurrent', start);
+    const body = kt.slice(start, end);
+    // onResults/onError can fire mid-hold (silence endpointing). Finalization
+    // must be gated on a pending JS stop promise, otherwise the recorder and
+    // recognizer are torn down while the user is still talking.
+    expect(body).toContain('val promise = speechStopPromise ?: return');
+    expect(body.indexOf('finalizeSpeechStop()')).toBeGreaterThan(body.indexOf('?: return'));
+  });
+
+  it('resolves a stop immediately when a result already landed instead of waiting 2s', () => {
+    const kt = read('../modules/device-agent/android/src/main/java/com/vela/client/deviceagent/DeviceAgentModule.kt');
+    const start = kt.indexOf('private fun beginSpeechStop');
+    const end = kt.indexOf('private fun resolveSpeechStop', start);
+    expect(kt.slice(start, end)).toContain('speechResultLanded');
   });
 });
