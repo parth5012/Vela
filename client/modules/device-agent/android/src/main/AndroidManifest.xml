@@ -7,6 +7,9 @@
          turns that into an honest success:false rather than a crash. -->
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
 
+    <!-- WF-583: push-to-talk voice input. Requested at runtime on first mic tap. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
     <!-- Package visibility (Android 11+): lets getShizukuStatus() see whether
          the Shizuku manager app is installed. applicationId, not the Gradle
          namespace 'moe.shizuku.manager'. -->

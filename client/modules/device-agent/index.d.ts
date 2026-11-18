@@ -31,6 +31,22 @@ export interface DeviceAgentNative {
   runPrivilegedOp(op: string, args: string[]): Promise<string>;
   checkSelfPermission?(permissionName: string): Promise<{ success: boolean; status: 'granted' | 'denied' | 'undetermined'; error?: string }>;
   openSettingsAction?(action: string, needsPackageUri: boolean): Promise<{ success: boolean; message?: string; error?: string }>;
+
+  // --- WF-583: push-to-talk voice input -----------------------------------
+  /** Whether an on-device SpeechRecognizer with offline support is available. */
+  isSpeechRecognitionAvailable?(): Promise<boolean>;
+  /** Requests the runtime RECORD_AUDIO permission. */
+  requestMicrophonePermission?(): Promise<{ success: boolean; status: 'granted' | 'denied' | 'undetermined'; error?: string }>;
+  /** Start recognition + audio capture; maxDurationMs is enforced natively. */
+  startSpeechRecognition?(options: { maxDurationMs: number; language?: string }): Promise<{ started: boolean; error?: string }>;
+  /** Stop, await the final recognizer result, and return the final transcript + file:// audio URI. */
+  stopSpeechRecognition?(): Promise<{ transcript?: string; audioUri?: string; error?: string }>;
+  /** Discard the in-flight recording without producing a transcript. */
+  cancelSpeechRecognition?(): Promise<void>;
+  /** Subscribe to interim recognition results; returns a subscription id. */
+  addSpeechPartialListener?(cb: (text: string, isFinal: boolean) => void): Promise<string>;
+  /** Remove an interim-results subscription by id. */
+  removeSpeechPartialListener?(id: string): Promise<void>;
 }
 
 declare const _default: DeviceAgentNative;

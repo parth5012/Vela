@@ -122,6 +122,26 @@ describe('permissionManager', () => {
     });
   });
 
+  // #583: microphone permission is checked/requested through the native
+  // device-agent bridge (expo-av is not installed). The fallback must be
+  // truthful: absent native module => undetermined, never "granted".
+  describe('microphone via native device-agent (#583)', () => {
+    it('reports undetermined for microphone check/request when native module is absent', async () => {
+      expect(await checkPermission('microphone')).toBe('undetermined');
+      expect(await requestPermission('microphone')).toBe('undetermined');
+    });
+
+    it('wires microphone to RECORD_AUDIO and the native request method, never to expo-av', () => {
+      const source = fs.readFileSync(path.resolve(__dirname, '../utils/permissionManager.ts'), 'utf8');
+      expect(source).toContain('android.permission.RECORD_AUDIO');
+      expect(source).toContain('requestMicrophonePermission');
+      expect(source).not.toContain("require('expo-av')");
+      // A truthful fallback: only granted/denied from native are mapped, the
+      // rest collapse to undetermined.
+      expect(source).toContain("return 'undetermined'");
+    });
+  });
+
   // #556: the onboarding wizard fires these three OS dialogs independently.
   describe('onboarding permission requests (#556)', () => {
     it('requests notifications through expo-notifications and maps the status', async () => {
@@ -134,7 +154,7 @@ describe('permissionManager', () => {
       expect(status).toBe('undetermined');
     });
 
-    it('returns honest undetermined for microphone when expo-av is not installed', async () => {
+    it('returns honest undetermined for microphone when the native device-agent is absent', async () => {
       const status = await requestPermission('microphone');
       expect(status).toBe('undetermined');
     });
