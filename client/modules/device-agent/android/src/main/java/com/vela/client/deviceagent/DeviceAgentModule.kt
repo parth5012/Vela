@@ -48,6 +48,10 @@ class DeviceAgentModule : Module() {
         private var speechAudioFile: File? = null
         private var speechRecorder: MediaRecorder? = null
         private var speechFinalTranscript: String = ""
+        // Set by onResults/onError. A terminal callback can arrive while the
+        // user is still holding (silence endpointing); JS's later stop() must
+        // resolve immediately instead of waiting for a result that already came.
+        private var speechResultLanded: Boolean = false
         private var speechError: String? = null
         private var speechTimeoutHandler: Handler? = null
         private var speechTimeoutRunnable: Runnable? = null
@@ -96,14 +100,20 @@ class DeviceAgentModule : Module() {
             speechRecorder = null
         }
 
-        /** Tear down recognizer, recorder, audio file and timeout, idempotently. */
-        private fun cleanupSpeech(deleteAudio: Boolean) {
+        /** Cancel both the 60s cap and any pending stop/finalize runnable. */
+        private fun clearPendingSpeechStop() {
             speechTimeoutRunnable?.let { speechTimeoutHandler?.removeCallbacks(it) }
             speechTimeoutRunnable = null
             speechTimeoutHandler = null
             speechStopRunnable?.let { speechStopHandler?.removeCallbacks(it) }
             speechStopRunnable = null
             speechStopHandler = null
+        }
+
+        /** Tear down recognizer, recorder, audio file and timeout, idempotently. */
+        private fun cleanupSpeech(deleteAudio: Boolean) {
+            clearPendingSpeechStop()
+            speechResultLanded = false
             // A pending stop must always be settled — never leave a JS await hanging.
             speechStopPromise?.resolve(
                 mapOf("transcript" to "", "audioUri" to null, "error" to "Recording was cancelled")
@@ -865,9 +875,11 @@ class DeviceAgentModule : Module() {
                 override fun onEndOfSpeech() {}
                 override fun onError(error: Int) {
                     speechError = "Speech recognition error: $error"
+                    speechResultLanded = true
                     resolveSpeechStop()
                 }
                 override fun onResults(results: Bundle?) {
+                    speechResultLanded = true
                     val text = firstHypothesis(results)
                     if (text.isNotEmpty()) {
                         speechFinalTranscript = text
@@ -928,17 +940,22 @@ class DeviceAgentModule : Module() {
      * onResults and yields an empty transcript in the common push-to-talk case.
      */
     private fun beginSpeechStop(promise: Promise? = null) {
-        speechTimeoutRunnable?.let { speechTimeoutHandler?.removeCallbacks(it) }
-        speechTimeoutRunnable = null
-        speechTimeoutHandler = null
+        clearPendingSpeechStop()
         if (promise == null) {
+            // 60s safety cap: let the final result land, then release the mic.
+            // Destroying the recognizer here would drop the final transcript.
             try { speechRecognizer?.stopListening() } catch (_: Exception) { }
-            // 60s safety timeout with no JS waiter: release the recorder now
-            // instead of leaving the microphone open until a later start/cancel.
-            finalizeSpeechStop()
+            val handler = Handler(Looper.getMainLooper())
+            val runnable = Runnable { finalizeSpeechStop() }
+            speechStopHandler = handler
+            speechStopRunnable = runnable
+            handler.postDelayed(runnable, SPEECH_RESULT_TIMEOUT_MS)
             return
         }
-        if (speechRecognizer == null) {
+        // A terminal callback may have arrived mid-hold (silence endpointing).
+        // Settle now instead of stalling on a 2s timer for a result that came.
+        if (speechRecognizer == null || speechResultLanded) {
+            finalizeSpeechStop()
             resolveWithCurrent(promise)
             return
         }
@@ -954,16 +971,11 @@ class DeviceAgentModule : Module() {
 
     /** Resolve a pending stop after onResults (or the fallback timeout) lands. */
     private fun resolveSpeechStop() {
-        speechStopRunnable?.let { speechStopHandler?.removeCallbacks(it) }
-        speechStopRunnable = null
-        speechStopHandler = null
-        val promise = speechStopPromise
+        val promise = speechStopPromise ?: return
         speechStopPromise = null
-        // Always finalize — even when onResults/onError beats JS's stop(), or
-        // the 60s timer fired with no promise. Otherwise the recorder keeps the
-        // mic open and a later stop() stalls on the 2s fallback timer.
+        clearPendingSpeechStop()
         finalizeSpeechStop()
-        if (promise != null) resolveWithCurrent(promise)
+        resolveWithCurrent(promise)
     }
 
     /** Stop/release the recorder and tear down the recognizer, idempotently. */
