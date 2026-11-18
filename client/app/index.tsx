@@ -893,6 +893,9 @@ export default function ChatScreen() {
 
   const handleMicPressIn = useCallback(async () => {
     if (isCurrentThreadStreaming) return;
+    // Mark the hold before the async permission check so a release during
+    // that check is not lost (it would otherwise start an orphaned recording).
+    voice.beginHold();
     const status = await checkPermission('microphone');
     if (status === 'granted') {
       try {
@@ -908,9 +911,9 @@ export default function ChatScreen() {
   }, [isCurrentThreadStreaming, voice]);
 
   const handleMicPressOut = useCallback(() => {
-    // stop() is a no-op unless recording (or pending start), so a fast tap is
-    // safe and the hook's release-pending guard can catch the race.
-    void voice.stop();
+    // Remember the release even if the permission check has not resolved and
+    // start() has not run yet; the hook consumes it after the hold starts.
+    voice.endHold();
   }, [voice]);
 
   // Shared skill slash-command handling for handleSend, handleSendWelcome and
@@ -2142,14 +2145,9 @@ export default function ChatScreen() {
               rationale={getRationale('microphone')}
               onGrant={async () => {
                 setVoicePermissionPrompt(false);
-                const status = await requestPermission('microphone');
-                if (status === 'granted') {
-                  try {
-                    await voice.start();
-                  } catch {
-                    // Failure is surfaced inline by the hook.
-                  }
-                }
+                // Do not auto-start: granting permission is a tap on a modal,
+                // not a hold on the mic. The user presses and holds again.
+                await requestPermission('microphone');
               }}
               onDeny={() => {
                 sessionDeniedPermissionsRef.current.add('microphone');

@@ -125,6 +125,29 @@ describe('WF-583 voice transcription', () => {
     });
   });
 
+  describe('on-device failure with captured audio', () => {
+    it('reaches consent and cloud fallback when on-device fails but audio exists', async () => {
+      const cloudTranscribe = jest.fn(async () => 'cloud text');
+      const requestConsent = jest.fn(async () => true);
+      const result = await finalizeRecording({
+        transcriber: {
+          id: 'failing-device',
+          isAvailable: async () => true,
+          start: async () => {},
+          stop: async () => ({ text: '', audioUri: 'file:///a.m4a', error: 'Speech recognition error: 7' }),
+          cancel: async () => {},
+        },
+        cloudTranscribe,
+        providerSlug: 'openai',
+        apiKey: 'sk-test-key',
+        requestConsent,
+      });
+      expect(requestConsent).toHaveBeenCalledWith('OpenAI');
+      expect(cloudTranscribe).toHaveBeenCalledWith(expect.objectContaining({ audioUri: 'file:///a.m4a' }));
+      expect(result).toEqual(expect.objectContaining({ text: 'cloud text', source: 'cloud' }));
+    });
+  });
+
   describe('waveform + elapsed helpers', () => {
     it('caps a recording at 60 seconds', () => {
       expect(MAX_RECORDING_MS).toBe(60_000);
@@ -270,6 +293,21 @@ describe('WF-583 voice transcription', () => {
       for (const [key, value] of Object.entries(base)) spied[key] = jest.fn(value as any);
       return spied;
     }
+
+    it('preserves the audio URI when the native recognizer reports an error', async () => {
+      const native = fakeNative({
+        stopSpeechRecognition: async () => ({
+          transcript: '',
+          audioUri: 'file:///a.m4a',
+          error: 'Speech recognition error: 7',
+        }),
+      });
+      await expect(createNativeTranscriber(native).stop()).resolves.toEqual({
+        text: '',
+        audioUri: 'file:///a.m4a',
+        error: 'Speech recognition error: 7',
+      });
+    });
 
     it('reports availability from the native capability probe', async () => {
       expect(await createNativeTranscriber(fakeNative()).isAvailable()).toBe(true);

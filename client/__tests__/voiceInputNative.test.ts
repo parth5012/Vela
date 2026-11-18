@@ -60,4 +60,17 @@ describe('WF-583 native voice bridge contract', () => {
     const kt = read('../modules/device-agent/android/src/main/java/com/vela/client/deviceagent/DeviceAgentModule.kt');
     expect(kt).toContain('"file://${file.absolutePath}"');
   });
+
+  it('runs SpeechRecognizer / permission functions on the main thread', () => {
+    const kt = read('../modules/device-agent/android/src/main/java/com/vela/client/deviceagent/DeviceAgentModule.kt');
+    // SpeechRecognizer enforces main-thread calls; Expo AsyncFunctions default
+    // to a background modulesQueue.
+    expect((kt.match(/runOnQueue\(Queues\.MAIN\)/g) ?? []).length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('finalizes recorder + recognizer even when no stop promise is pending', () => {
+    const kt = read('../modules/device-agent/android/src/main/java/com/vela/client/deviceagent/DeviceAgentModule.kt');
+    expect(kt).toContain('finalizeSpeechStop()');
+    expect(kt).toContain('if (promise != null) resolveWithCurrent(promise)');
+  });
 });

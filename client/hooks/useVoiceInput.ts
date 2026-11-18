@@ -51,6 +51,9 @@ export function useVoiceInput({
   const busyRef = useRef(false);
   const startPendingRef = useRef(false);
   const releasePendingRef = useRef(false);
+  // Gesture-level release: set by press-out even before start() is invoked
+  // (e.g. while the permission check is still in flight), consumed by start().
+  const releaseRequestedRef = useRef(false);
   const cancelledRef = useRef(false);
   const consentResolverRef = useRef<((value: boolean) => void) | null>(null);
   const retryAudioRef = useRef<string | undefined>(undefined);
@@ -112,11 +115,13 @@ export function useVoiceInput({
     if (!recordingRef.current || busyRef.current) return;
     busyRef.current = true;
     recordingRef.current = false;
+    // Stop the waveform/ticker immediately: the bar must not keep running
+    // while transcription or the consent dialog is pending.
+    setState((s) => ({ ...s, recording: false }));
     try {
       await finalize(transcriber);
     } finally {
       busyRef.current = false;
-      setState((s) => ({ ...s, recording: false }));
     }
   }, [finalize, transcriber]);
   stopRef.current = stop;
@@ -136,8 +141,9 @@ export function useVoiceInput({
       if (cancelledRef.current) return;
       recordingRef.current = true;
       setState((s) => ({ ...s, recording: true, levels: buildWaveformLevels(0) }));
-      if (releasePendingRef.current) {
+      if (releasePendingRef.current || releaseRequestedRef.current) {
         releasePendingRef.current = false;
+        releaseRequestedRef.current = false;
         startPendingRef.current = false;
         await stop();
       }
@@ -156,6 +162,7 @@ export function useVoiceInput({
     cancelledRef.current = true;
     startPendingRef.current = false;
     releasePendingRef.current = false;
+    releaseRequestedRef.current = false;
     recordingRef.current = false;
     busyRef.current = true;
     const pendingConsent = consentResolverRef.current;
@@ -171,7 +178,7 @@ export function useVoiceInput({
       busyRef.current = false;
       setState({ ...INITIAL_STATE });
     }
-  }, [clearConsent, transcriber]);
+  }, [transcriber]);
 
   const acceptCloud = useCallback(() => {
     consentResolverRef.current?.(true);
@@ -220,11 +227,24 @@ export function useVoiceInput({
     return () => clearInterval(id);
   }, [state.recording]);
 
+  /** Press-in: record that the user is holding, before any async permission check. */
+  const beginHold = useCallback(() => {
+    releaseRequestedRef.current = false;
+  }, []);
+
+  /** Press-out: remember the release even if start() has not been called yet. */
+  const endHold = useCallback(() => {
+    releaseRequestedRef.current = true;
+    void stopRef.current();
+  }, []);
+
   return {
     state,
     start,
     stop,
     cancel,
+    beginHold,
+    endHold,
     acceptCloud,
     declineCloud,
     retry,

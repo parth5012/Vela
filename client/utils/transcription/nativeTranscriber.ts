@@ -67,8 +67,11 @@ export function createNativeTranscriber(native: NativeVoice | null): Transcriber
         const res = native?.stopSpeechRecognition
           ? await native.stopSpeechRecognition()
           : { transcript: '', audioUri: undefined };
-        if (res?.error) throw new Error(res.error);
-        return { text: res?.transcript ?? '', audioUri: res?.audioUri };
+        // A recognizer error with captured audio is a normal failure path, not
+        // an adapter failure: keep the URI so finalizeRecording can offer the
+        // consented cloud fallback. Only throw when there is no audio to keep.
+        if (res?.error && !res?.audioUri) throw new Error(res.error);
+        return { text: res?.transcript ?? '', audioUri: res?.audioUri, error: res?.error };
       } finally {
         await detachPartial();
       }
