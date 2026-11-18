@@ -25,7 +25,8 @@ steps:
       PYTHONPATH: .
     commands:
       - pip install --quiet uv
-      - uv sync --frozen
+      - cd backend && uv sync --frozen && cd ..
+      - git fetch origin main --depth=50 || true
       - python vela_ci.py ci --stack backend --ruff-base "origin/${CI_COMMIT_TARGET_BRANCH:-main}"
       - python vela_ci.py bugs
 
@@ -37,8 +38,8 @@ steps:
     commands:
       - corepack enable
       - corepack prepare pnpm@9 --activate
-      - pnpm install --frozen-lockfile
-      - python ../vela_ci.py ci --stack client
+      - cd client && pnpm install --frozen-lockfile && cd ..
+      - python3 vela_ci.py ci --stack client
     when:
       - event: push
       - event: pull_request
@@ -53,7 +54,7 @@ steps:
       PYTHONPATH: .
     commands:
       - pip install --quiet uv
-      - uv sync --frozen
+      - cd backend && uv sync --frozen && cd ..
       - python vela_ci.py corpus
     depends_on:
       - backend
