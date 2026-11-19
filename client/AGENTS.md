@@ -68,3 +68,8 @@ Triage states use standard role strings (`needs-triage`, `needs-info`, `ready-fo
 
 Single-context repository layout using `CONTEXT.md` and `docs/adr/` at the root. See `docs/agents/domain.md`.
 
+### Driving the app in a browser & E2E Coverage
+
+The client is agent-driveable on Expo web against a scripted LLM via Playwright in `client/e2e/ui/`.
+- After any feature implementation, update `client/e2e/ui/COVERAGE.md` and the visual baselines.
+

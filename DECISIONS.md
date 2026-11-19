@@ -11,6 +11,7 @@ This file tracks architectural and product tradeoff decisions with context, deci
 5. [2026-10-22: On-Device AI — Tool-Calling Scope & Security Consent Gates for v0](#2026-10-22-on-device-ai--tool-calling-scope--security-consent-gates-for-v0)
 6. [2026-10-22: On-Device AI — Voice Stack Direction for v1 (Bridge Pipeline)](#2026-10-22-on-device-ai--voice-stack-direction-for-v1-bridge-pipeline)
 7. [2026-10-22: On-Device AI — Voice Lane Architecture & Latency SLA (WF-03)](#2026-10-22-on-device-ai--voice-lane-architecture--latency-sla-wf-03)
+8. [2026-11-19: Device-Free Playwright E2E Harness Architecture & Coverage Contract (Map #669)](#2026-11-19-device-free-playwright-e2e-harness-architecture--coverage-contract-map-669)
 
 ---
 
@@ -88,3 +89,24 @@ This file tracks architectural and product tradeoff decisions with context, deci
      - WF-V03: System TTS integration & Voice UI waveform visualizer (`vela-voice-ui`).
      - WF-V04: Opt-in MiniCPM-o 4.5 Cloud API WebSocket client with privacy banner.
 - **Consequences**: Guarantees snappy, battery-efficient on-device voice turns without risking LMK process kills on 6 GB devices while establishing a clear upgrade path for flagship conversational omni-modality.
+
+### 2026-11-19: Device-Free Playwright E2E Harness Architecture & Coverage Contract (Map #669)
+
+- **Status**: Accepted
+- **Context**: Comprehensive E2E test coverage was previously gated on an Android physical device or emulator with ADB, creating friction and preventing automated PR test runs. Map #669 establishes an automated, device-free Playwright harness covering all 20 client features.
+- **Decision**:
+  1. Scope is locked to the 20 features defined in `docs/e2e-verification-spec.md` §2 and `client/e2e/inventory.md`.
+  2. The ADB harness remains completely independent and untouched as the real proof for native Android install and execution.
+  3. Playwright covers all 20 features device-free via web-visible state; the 4 native-boundary features assert web/mock state with explicit caveats in `COVERAGE.md`.
+  4. Real in-browser SQLite engine (`sql.js` WASM + `drizzle-orm/sql-js`) gated strictly by `EXPO_PUBLIC_E2E === '1'`, seeded via `__VELA_E2E__.seedTasks()`.
+  5. Typed hybrid seam: per-domain `__VELA_E2E__` methods + `POST /_e2e/fixture {name}` for server-side state.
+  6. Visual regression testing is established as a separate advisory job with committed `toHaveScreenshot()` baselines at 360×640 (normal + reduced motion); never a blocking merge check.
+  7. `python vela_ci.py e2e` runs independently and is not folded into the default `python vela_ci.py ci` gate.
+  8. Dedicated `e2e` CI job runs on every PR without label gating.
+  9. Global `beforeEach(resetWorld)` guarantees test isolation by reseeding backend state, clearing Zustand stores, and wiping the SQLite shim DB.
+  10. `FakeProvider` script grammar adds `error` and `delay` turn kinds for deterministic error/timing assertions.
+  11. Feature specs live one-per-feature in `client/e2e/ui/specs/` backed by a shared helper module.
+  12. `COVERAGE.md` maps every feature to its spec; `npm run e2e:coverage` validates 100% manifest compliance.
+  13. Maintenance rule added to `AGENTS.md`: every feature implementation must update `COVERAGE.md` and visual baselines.
+- **Consequences**: Enables fast, reliable, device-free CI verification on every pull request while maintaining full integrity of physical device guarantees.
+
