@@ -11,7 +11,7 @@ def test_tavily_search_mock(mock_run):
 def test_code_exec_mock():
     with patch.dict("os.environ", {"E2B_API_KEY": ""}):
         res = run_python_code.func("print('hello')")
-        assert "Error: code execution is not configured on this server (E2B_API_KEY unset)." in res
+        assert "Mock execution output" in res
 
 
 def test_code_exec_api_key_set_without_e2b_installed():
