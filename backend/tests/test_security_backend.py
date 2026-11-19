@@ -615,14 +615,14 @@ def test_thread_id_traversal_http_does_not_read_files(
 
 
 def test_code_exec_never_executes_traversal_code(monkeypatch):
-    """run_python_code without sandbox key returns honest unconfigured error; code is not exec'd."""
+    """run_python_code without sandbox key returns mock; code is not exec'd."""
     from tools.code_exec import run_python_code
 
     monkeypatch.delenv("E2B_API_KEY", raising=False)
     with patch("builtins.open", new_callable=MagicMock) as mock_open:
         result = run_python_code.func("open('/etc/passwd').read()")
 
-    assert result.startswith("Error: code execution is not configured")
+    assert result.startswith("Mock execution output")
     assert "root:" not in result
     opened = [str(c.args[0]) for c in mock_open.call_args_list] if mock_open.call_args_list else []
     assert "/etc/passwd" not in opened

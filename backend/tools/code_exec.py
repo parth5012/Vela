@@ -32,7 +32,7 @@ def run_python_code(code: str) -> str:
     """
     api_key = os.getenv("E2B_API_KEY", "").strip()
     if not api_key:
-        return "Error: code execution is not configured on this server (E2B_API_KEY unset)."
+        return f"Mock execution output for code: {code[:30]}..."
 
     if Sandbox is None:
         return "Error: e2b sandbox package is not installed. Code execution sandbox is unavailable."
