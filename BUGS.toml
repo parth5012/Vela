@@ -53,3 +53,14 @@ repro_steps = [
 ]
 notes = "Added POST /oauth/google/authorize/start with Bearer auth issuing single-use opaque request tokens. GET /oauth/google/authorize now consumes request_token and rejects raw api_key query param."
 
+[BUG-182]
+title = "Unify OAuth token storage key — restore Gmail/Calendar connectivity (finding-012)"
+status = "fixed"
+failing_test = "backend/tests/test_auth_gate.py::test_google_drive_resolves_global_oauth_conversation_tokens"
+repro_steps = [
+  "Store OAuth tokens under GLOBAL_OAUTH_CONVERSATION_ID in DB",
+  "Attempt Google Drive authentication via get_google_credentials with a specific conversation ID",
+  "Observe: tokens not found because lookup did not fall back to GLOBAL_OAUTH_CONVERSATION_ID"
+]
+notes = "Unified storage key to GLOBAL_OAUTH_CONVERSATION_ID, added fallback from conversation ID to global sentinel, and added defensive lazy migration for legacy 'global' rows."
+
