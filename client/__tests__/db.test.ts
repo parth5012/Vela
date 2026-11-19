@@ -145,16 +145,17 @@ describe('message_vectors schema (#299)', () => {
     expect(messageVectors.created_at.notNull).toBe(true);
   });
 
-  it('registers migrations through 0008 in the drizzle bundle and journal', () => {
+  it('registers migrations through 0009 in the drizzle bundle and journal', () => {
     const keys = migrationKeys();
     expect(keys).toContain('m0005');
     expect(keys).toContain('m0006');
     expect(keys).toContain('m0007');
     expect(keys).toContain('m0008');
-    expect(keys[keys.length - 1]).toBe('m0008');
+    expect(keys).toContain('m0009');
+    expect(keys[keys.length - 1]).toBe('m0009');
 
     const tags = migrationTags();
-    expect(tags[tags.length - 1]).toMatch(/^0008_/);
+    expect(tags[tags.length - 1]).toMatch(/^0009_/);
   });
 
   it('creates message_vectors in the 0005 migration SQL', () => {
