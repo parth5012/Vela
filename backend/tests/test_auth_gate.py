@@ -157,3 +157,55 @@ def test_refresh_exception_returns_auth_required():
         result = ensure_google_auth("conv-bad", db)
 
     assert result is AUTH_REQUIRED
+
+
+# ---------------------------------------------------------------------------
+# Tests — storage key unification & defensive migration (finding-012)
+# ---------------------------------------------------------------------------
+
+def test_legacy_global_token_defensive_migration():
+    """Defensive migration: stray rows keyed 'global' are copied to GLOBAL_OAUTH_CONVERSATION_ID."""
+    token_data = {
+        "access_token": "at-legacy",
+        "refresh_token": "rt-legacy",
+        "expiry": "2027-12-31T23:59:59Z",
+    }
+    db = MagicMock()
+    def _mock_get_oauth_tokens(conv_id, provider):
+        if conv_id == "global":
+            return token_data
+        return None
+    db.get_oauth_tokens.side_effect = _mock_get_oauth_tokens
+    dummy_creds = MagicMock(expired=False)
+
+    with make_env_patch(), \
+         patch("utils.auth_gate.Credentials", return_value=dummy_creds):
+        result = ensure_google_auth("conv-new", db)
+
+    assert result is dummy_creds
+    db.store_oauth_tokens.assert_called_once_with(
+        GLOBAL_OAUTH_CONVERSATION_ID, "google", token_data
+    )
+
+
+def test_google_drive_resolves_global_oauth_conversation_tokens():
+    """Google Drive credentials lookup falls back to GLOBAL_OAUTH_CONVERSATION_ID."""
+    from utils.google_drive import get_google_credentials
+    token_data = {
+        "access_token": "at-drive",
+        "refresh_token": "rt-drive",
+        "expiry": "2027-12-31T23:59:59Z",
+    }
+    db = MagicMock()
+    def _mock_get_oauth_tokens(conv_id, provider):
+        if conv_id == GLOBAL_OAUTH_CONVERSATION_ID:
+            return token_data
+        return None
+    db.get_oauth_tokens.side_effect = _mock_get_oauth_tokens
+    dummy_creds = MagicMock(expired=False)
+
+    with make_env_patch({"GOOGLE_REFRESH_TOKEN": None}), \
+         patch("utils.google_drive.Credentials", return_value=dummy_creds):
+        creds = get_google_credentials("random-conv-uuid", db)
+
+    assert creds is dummy_creds

@@ -6,6 +6,7 @@ from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 from utils.logger import StructuredLogger
+from utils.auth_gate import GLOBAL_OAUTH_CONVERSATION_ID
 
 logger = StructuredLogger("GoogleDriveHelper")
 
@@ -41,8 +42,18 @@ def get_google_credentials(conversation_id: str, db) -> Credentials | None:
             # Fall back to database if global fails
             logger.info("Falling back to database-driven credentials")
 
-    # 2. Database lookup
-    token_data = db.get_oauth_tokens(conversation_id, "google")
+    # 2. Database lookup: conversation-specific first, fallback to GLOBAL_OAUTH_CONVERSATION_ID, then legacy 'global'
+    token_data = db.get_oauth_tokens(conversation_id, "google") if conversation_id else None
+    if not token_data and conversation_id != GLOBAL_OAUTH_CONVERSATION_ID:
+        token_data = db.get_oauth_tokens(GLOBAL_OAUTH_CONVERSATION_ID, "google")
+    if not token_data:
+        legacy_tokens = db.get_oauth_tokens("global", "google")
+        if legacy_tokens:
+            try:
+                db.store_oauth_tokens(GLOBAL_OAUTH_CONVERSATION_ID, "google", legacy_tokens)
+            except Exception:
+                pass
+            token_data = legacy_tokens
     
     if not token_data:
         logger.info("No Google OAuth credentials found for this conversation, checking latest available credentials in database")

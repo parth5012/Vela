@@ -59,8 +59,19 @@ def ensure_google_auth(
     resolved_scopes = scopes or DEFAULT_SCOPES
     logger.info("Running auth gate", conversation_id=conversation_id)
 
-    # 1. Read tokens from DB (global single-tenant Owner credentials)
+    # 1. Read tokens from DB (global single-tenant Owner credentials,
+    # fallback to conversation-specific if present, and defensively migrate legacy 'global' key).
     token_data = db.get_oauth_tokens(GLOBAL_OAUTH_CONVERSATION_ID, "google")
+    if not token_data and conversation_id and conversation_id != GLOBAL_OAUTH_CONVERSATION_ID:
+        token_data = db.get_oauth_tokens(conversation_id, "google")
+    if not token_data:
+        legacy_tokens = db.get_oauth_tokens("global", "google")
+        if legacy_tokens:
+            try:
+                db.store_oauth_tokens(GLOBAL_OAUTH_CONVERSATION_ID, "google", legacy_tokens)
+            except Exception:
+                pass
+            token_data = legacy_tokens
     if not token_data:
         logger.info("No OAuth tokens found, auth required", conversation_id=conversation_id)
         return AUTH_REQUIRED
