@@ -12,6 +12,7 @@ from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from utils.logger import StructuredLogger
+from utils.helpers import to_naive_utc
 
 logger = StructuredLogger("AuthGate")
 
@@ -116,20 +117,16 @@ def ensure_google_auth(
 # ---------------------------------------------------------------------------
 
 def _parse_expiry(expiry_str: str | None) -> datetime | None:
-    if not expiry_str:
-        return None
-    try:
-        return datetime.fromisoformat(expiry_str)
-    except Exception:
-        return None
+    return to_naive_utc(expiry_str)
 
 
 def _persist_tokens(db, conversation_id: str, creds: Credentials, scopes: list[str]) -> None:
     """Write refreshed credentials back to the database."""
+    expiry_naive = to_naive_utc(creds.expiry) if creds.expiry else None
     updated = {
         "access_token": creds.token,
         "refresh_token": creds.refresh_token,
-        "expiry": creds.expiry.isoformat() if creds.expiry else None,
+        "expiry": expiry_naive.isoformat() if expiry_naive else None,
         "scopes": creds.scopes or scopes,
     }
     db.store_oauth_tokens(conversation_id, "google", updated)

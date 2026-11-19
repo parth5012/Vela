@@ -7,6 +7,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 from utils.logger import StructuredLogger
 from utils.auth_gate import GLOBAL_OAUTH_CONVERSATION_ID
+from utils.helpers import to_naive_utc
 
 logger = StructuredLogger("GoogleDriveHelper")
 
@@ -70,14 +71,8 @@ def get_google_credentials(conversation_id: str, db) -> Credentials | None:
         logger.error("Google Client ID or Client Secret not configured in environment variables")
         return None
 
-    # Parse expiry string to datetime
-    expiry_str = token_data.get("expiry")
-    expiry = None
-    if expiry_str:
-        try:
-            expiry = datetime.fromisoformat(expiry_str)
-        except Exception:
-            pass
+    # Parse expiry string to naive UTC datetime
+    expiry = to_naive_utc(token_data.get("expiry"))
 
     try:
         # Construct credentials object
@@ -97,10 +92,15 @@ def get_google_credentials(conversation_id: str, db) -> Credentials | None:
             creds.refresh(Request())
             
             # Save updated credentials back to database
+            updated_expiry = to_naive_utc(creds.expiry) if creds.expiry else None
             updated_token_data = {
                 "access_token": creds.token,
                 "refresh_token": creds.refresh_token,
-                "expiry": creds.expiry.isoformat() if hasattr(creds.expiry, 'isoformat') else str(creds.expiry)
+                "token_uri": creds.token_uri,
+                "client_id": creds.client_id,
+                "client_secret": creds.client_secret,
+                "scopes": creds.scopes,
+                "expiry": updated_expiry.isoformat() if updated_expiry else None,
             }
             db.store_oauth_tokens(conversation_id, "google", updated_token_data)
             logger.info("Successfully refreshed and stored updated Google OAuth tokens", conversation_id=conversation_id)
