@@ -1789,7 +1789,7 @@ class WebViewResponsePayload(BaseModel):
     result: str
 
 @app.post("/chat/webview/response", dependencies=[Depends(verify_api_key)])
-def submit_webview_response(payload: WebViewResponsePayload):
+async def submit_webview_response(payload: WebViewResponsePayload):
     # T8 multi-worker: local PENDING_TASKS first, DB mailbox fallback so a
     # response landing on a different worker is accepted (no 404) and picked
     # up by the waiting worker's poll. Still 404s when no waiter exists.
@@ -1814,7 +1814,7 @@ class DeviceResponsePayload(BaseModel):
     task_token: Optional[str] = None
 
 @app.post("/chat/device/response", dependencies=[Depends(verify_api_key)])
-def submit_device_response(payload: DeviceResponsePayload):
+async def submit_device_response(payload: DeviceResponsePayload):
     # T8 multi-worker: same local-first + DB mailbox fallback as webview.
     from tools.pending_tasks import submit_cross_worker_response
     key = submit_cross_worker_response(
