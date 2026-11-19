@@ -1,11 +1,10 @@
 """Tests for the Google Workspace auth gate (utils/auth_gate.py)."""
 
-from unittest.mock import patch, MagicMock
 from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
 
-from utils.auth_gate import ensure_google_auth, AUTH_REQUIRED, GLOBAL_OAUTH_CONVERSATION_ID
+from utils.auth_gate import AUTH_REQUIRED, GLOBAL_OAUTH_CONVERSATION_ID, ensure_google_auth
 from utils.helpers import to_naive_utc
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -218,8 +217,9 @@ def test_google_drive_resolves_global_oauth_conversation_tokens():
 
 def test_to_naive_utc_normalizes_aware_and_strings():
     """Verify to_naive_utc handles aware datetime, naive datetime, ISO strings, and None."""
+    from datetime import timedelta, timezone
+
     from utils.helpers import to_naive_utc
-    from datetime import timezone, timedelta
 
     # None and empty
     assert to_naive_utc(None) is None
@@ -253,8 +253,9 @@ def test_to_naive_utc_normalizes_aware_and_strings():
 
 def test_auth_gate_aware_expiry_credentials_expired_comparison():
     """Real Credentials object with aware expiry string does not raise TypeError on .expired."""
-    from utils.auth_gate import ensure_google_auth
     from google.oauth2.credentials import Credentials
+
+    from utils.auth_gate import ensure_google_auth
 
     # Aware ISO string in DB tokens (finding-013 regression case)
     token_data = {

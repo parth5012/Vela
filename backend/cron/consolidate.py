@@ -1,10 +1,11 @@
 import os
 from typing import List, Tuple
-from db.session import get_db_session
+
+from cron.briefing import run_daily_briefing
 from db.models import Experience, SystemPromptFragment, utcnow_naive
+from db.session import get_db_session
 from utils.llm import get_llm
 from utils.logger import StructuredLogger
-from cron.briefing import run_daily_briefing
 
 __all__ = [
     "run_self_improvement",
@@ -159,7 +160,7 @@ def run_self_improvement(max_batches: int = MAX_CONSOLIDATION_BATCHES) -> str:
                 try:
                     response = llm.invoke(prompt)
                     updated_rules = _extract_rules_text(response)
-                except Exception as llm_err:
+                except Exception as llm_err:  # noqa: BLE001
                     logger.error("LLM invocation failed during consolidation batch", batch=batches_run + 1, error=str(llm_err))
                     break
 
@@ -201,10 +202,10 @@ def run_self_improvement(max_batches: int = MAX_CONSOLIDATION_BATCHES) -> str:
 
                 total_consolidated += len(experiences)
                 batches_run += 1
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error("Failed executing run_self_improvement batch", batch=batches_run + 1, error=str(e))
             if batches_run == 0:
-                return f"Consolidation failed: {str(e)}"
+                return f"Consolidation failed: {e!s}"
             break
 
     if total_consolidated == 0:

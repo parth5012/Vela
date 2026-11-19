@@ -1,12 +1,14 @@
 """Tests for OAuth endpoints — Google OAuth authorize, callback, token status."""
 
-import os
-import json
 import base64
+import json
+import os
+from unittest.mock import ANY, MagicMock, patch
+
 import httpx
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock, ANY
+
 from agent.main import app
 
 client = TestClient(app)
@@ -158,8 +160,9 @@ def test_google_authorize_success(mock_db_client_class, mock_flow_class):
 
 def test_google_authorize_expired_token():
     _set_env_vars()
-    from agent.main import _oauth_request_tokens
     import time
+
+    from agent.main import _oauth_request_tokens
     token = "test-expired-token"
     _oauth_request_tokens[token] = {
         "created_at": time.time() - 400,  # > 300s TTL

@@ -10,7 +10,7 @@ import asyncio
 import os
 import sys
 import uuid
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -26,6 +26,7 @@ VELA_API_KEY = os.environ.get("VELA_API_KEY", "vela5012")
 # `import tools.webview_browser` would resolve to the StructuredTool instance
 # because the @tool decorator replaces the module-level name.
 import tools.webview_browser as _wb_module  # noqa: F401 — triggers module load
+
 wb = sys.modules["tools.webview_browser"]
 
 client = TestClient(app)
@@ -412,7 +413,8 @@ class TestResponseRoutesAsync:
 
     def test_response_endpoints_are_coroutine_functions(self):
         import inspect
-        from agent.main import submit_webview_response, submit_device_response
+
+        from agent.main import submit_device_response, submit_webview_response
         assert inspect.iscoroutinefunction(submit_webview_response)
         assert inspect.iscoroutinefunction(submit_device_response)
 

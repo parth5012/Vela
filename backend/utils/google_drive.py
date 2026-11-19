@@ -1,13 +1,15 @@
-import os
 import io
+import os
 from datetime import datetime
-from google.oauth2.credentials import Credentials
+
 from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
-from utils.logger import StructuredLogger
+
 from utils.auth_gate import GLOBAL_OAUTH_CONVERSATION_ID
 from utils.helpers import to_naive_utc
+from utils.logger import StructuredLogger
 
 logger = StructuredLogger("GoogleDriveHelper")
 
@@ -52,7 +54,7 @@ def get_google_credentials(conversation_id: str, db) -> Credentials | None:
         if legacy_tokens:
             try:
                 db.store_oauth_tokens(GLOBAL_OAUTH_CONVERSATION_ID, "google", legacy_tokens)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
             token_data = legacy_tokens
     

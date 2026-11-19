@@ -1,4 +1,5 @@
 import os
+
 from langchain_core.tools import tool
 
 try:
@@ -60,5 +61,5 @@ def run_python_code(code: str) -> str:
 
             combined = "\n".join(outputs).strip()
             return combined if combined else "Code executed successfully with no output."
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return f"Error executing code in sandbox: {exc}"

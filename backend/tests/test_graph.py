@@ -1,10 +1,11 @@
 import asyncio
+from unittest.mock import MagicMock, patch
+
 import pytest
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
+
 from agent.graph import graph
 
-from unittest.mock import patch, MagicMock
-from langchain_core.messages import AIMessage
 
 @pytest.mark.asyncio
 async def test_supervisor_routing_to_end(fake_provider, seeded_db):
@@ -20,10 +21,12 @@ async def test_supervisor_routing_to_end(fake_provider, seeded_db):
     result = await graph.ainvoke(inputs)
     assert result["next_node"] == "__end__"
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 from agent.prompt import build_system_prompt
 from agent.state import AgentState
 from db.models import SystemPromptFragment
+
 
 @pytest.mark.asyncio
 @patch("agent.prompt.get_db_session")
@@ -69,7 +72,7 @@ async def test_build_system_prompt_offloads_io_to_thread(mock_build_hist, mock_b
         assert "Offloaded History" in prompt
         # Verify asyncio.to_thread was called for the blocking operations
         called_targets = [c.args[0] for c in spy_to_thread.call_args_list]
-        from agent.prompt import build_context, build_recent_messages, _fetch_agent_and_rules
+        from agent.prompt import _fetch_agent_and_rules, build_context, build_recent_messages
         assert build_context in called_targets
         assert build_recent_messages in called_targets
         assert _fetch_agent_and_rules in called_targets
@@ -116,9 +119,11 @@ async def test_build_system_prompt_injects_grill_me_skill_without_query_field(mo
     assert "Interview me relentlessly about every aspect of this plan" in prompt
 
 
-from db.models import Experience
 from datetime import datetime
+
 from agent.prompt import build_recent_messages
+from db.models import Experience
+
 
 @patch("agent.prompt.get_db_session")
 def test_build_recent_messages_loads_history(mock_get_db):
@@ -143,8 +148,9 @@ def test_build_recent_messages_loads_history(mock_get_db):
     assert "Human: Who are you?\nAI: I am Vela." in history
     assert "Human: What is my name?" in history
 
-from db.models import MemoryVector
 from agent.prompt import build_context
+from db.models import MemoryVector
+
 
 @patch("agent.prompt.get_embeddings")
 @patch("agent.prompt.get_db_session")
@@ -177,6 +183,7 @@ def test_build_context_retrieves_memories(mock_get_db, mock_embeddings_func):
 
 
 from agent.graph import supervisor_node
+
 
 @patch("agent.graph.get_db_session")
 @patch("agent.graph.get_llm")

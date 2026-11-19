@@ -8,11 +8,13 @@ when the user needs to authenticate via the Vela client app.
 
 import os
 from datetime import datetime
-from google.oauth2.credentials import Credentials
+
 from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
-from utils.logger import StructuredLogger
+
 from utils.helpers import to_naive_utc
+from utils.logger import StructuredLogger
 
 logger = StructuredLogger("AuthGate")
 
@@ -70,7 +72,7 @@ def ensure_google_auth(
         if legacy_tokens:
             try:
                 db.store_oauth_tokens(GLOBAL_OAUTH_CONVERSATION_ID, "google", legacy_tokens)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
             token_data = legacy_tokens
     if not token_data:
