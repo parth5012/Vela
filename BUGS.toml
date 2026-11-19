@@ -43,7 +43,7 @@ repro_steps = [
 ]
 notes = "Web is used for deterministic Playwright e2e only (server connection mode). Anything that depends on the on-device SQLite store is out of scope on web; native builds are unaffected."
 
-[BUG-180]
+[BUG-backend-180]
 title = "Move API key out of OAuth authorize URL query strings (finding-008)"
 status = "fixed"
 failing_test = "backend/tests/test_oauth.py::test_google_authorize_legacy_api_key_query_param_rejected"
@@ -53,7 +53,7 @@ repro_steps = [
 ]
 notes = "Added POST /oauth/google/authorize/start with Bearer auth issuing single-use opaque request tokens. GET /oauth/google/authorize now consumes request_token and rejects raw api_key query param."
 
-[BUG-182]
+[BUG-backend-182]
 title = "Unify OAuth token storage key — restore Gmail/Calendar connectivity (finding-012)"
 status = "fixed"
 failing_test = "backend/tests/test_auth_gate.py::test_google_drive_resolves_global_oauth_conversation_tokens"
@@ -64,7 +64,7 @@ repro_steps = [
 ]
 notes = "Unified storage key to GLOBAL_OAUTH_CONVERSATION_ID, added fallback from conversation ID to global sentinel, and added defensive lazy migration for legacy 'global' rows."
 
-[BUG-183]
+[BUG-backend-183]
 title = "Normalize OAuth expiry to naive UTC so Credentials.expired works (finding-013)"
 status = "fixed"
 failing_test = "backend/tests/test_auth_gate.py::test_auth_gate_aware_expiry_credentials_expired_comparison"
@@ -75,7 +75,7 @@ repro_steps = [
 ]
 notes = "Added to_naive_utc helper in utils.helpers, normalizing aware datetime and ISO strings to naive UTC across auth_gate, google_drive, and main.py token storage."
 
-[BUG-181]
+[BUG-client-181]
 title = "Persist executed-tool ledger in SQLite to prevent replay on restart (finding-011)"
 status = "fixed"
 failing_test = "client/__tests__/chatRepository.test.ts::executedToolMarks (#181)"
@@ -86,7 +86,7 @@ repro_steps = [
 ]
 notes = "Added executed_tool_marks table in SQLite (migration 0009), persisted lastExecutedId in Zustand partialize, and gated tool execution via isToolMarked/markToolExecuted."
 
-[BUG-184]
+[BUG-backend-184]
 title = "Replace run_python_code stub with real E2B or honest failure (finding-014)"
 status = "fixed"
 failing_test = "backend/tests/test_tools.py::test_code_exec_api_key_set_without_e2b_installed"
@@ -96,7 +96,7 @@ repro_steps = [
 ]
 notes = "Removed fabricated success string. Wired real E2B Sandbox execution if available with output capture/error handling, and honest failure when e2b package is missing."
 
-[BUG-185]
+[BUG-backend-185]
 title = "Fix GrillMeSkill state access + stuck-active recovery (finding-016)"
 status = "fixed"
 failing_test = "backend/tests/test_graph.py::test_build_system_prompt_injects_grill_me_skill_without_query_field"
@@ -107,7 +107,7 @@ repro_steps = [
 ]
 notes = "Added get_last_human_message_content helper in BaseSkill, updated GrillMeSkill to extract last query from messages safely and log via StructuredLogger, and verified deactivation recovery."
 
-[BUG-186]
+[BUG-backend-186]
 title = "Make webview/device response routes async (finding-017)"
 status = "fixed"
 failing_test = "backend/tests/test_webview_concurrency.py::TestResponseRoutesAsync::test_response_endpoints_are_coroutine_functions"
@@ -117,7 +117,7 @@ repro_steps = [
 ]
 notes = "Converted submit_webview_response and submit_device_response to async def in backend/agent/main.py."
 
-[BUG-187]
+[BUG-backend-187]
 title = "Offload blocking I/O in async paths to worker threads (finding-018)"
 status = "fixed"
 failing_test = "backend/tests/test_graph.py::test_build_system_prompt_offloads_io_to_thread"
@@ -126,6 +126,19 @@ repro_steps = [
   "Observe: build_context, build_recent_messages, Google Drive uploads, and webview DB logging executed synchronously on the event loop, stalling concurrent stream processing"
 ]
 notes = "Wrapped blocking DB operations and external API calls in asyncio.to_thread across agent/prompt.py, agent/main.py, gateway/carbonvoice.py, and tools/webview_browser.py."
+
+[BUG-backend-188]
+title = "Batch nightly consolidation so backlog drains instead of growing (finding-019)"
+status = "fixed"
+failing_test = "backend/tests/test_cron.py::test_consolidate_120_experiences_in_three_batches"
+repro_steps = [
+  "Accumulate more than 50 unconsolidated experiences in database",
+  "Run nightly consolidation cron job",
+  "Observe: job processes only single batch of 50 per run leaving backlog to grow, and mid-run failures fail entire backlog"
+]
+notes = "Implemented batching loop up to max_batches with transactional per-batch commits and graceful failure handling that preserves earlier batch marks in backend/cron/consolidate.py."
+
+
 
 
 
