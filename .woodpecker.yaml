@@ -1,9 +1,9 @@
 # Woodpecker CI — PRIMARY pipeline for Vela.
 #
-# GitHub Actions (ci.yml) is now workflow_dispatch-only and acts as the
-# FALLBACK: if any step here fails, the `fallback` step dispatches the
-# GitHub Actions workflow via its API. Woodpecker stays fully private
-# (polling for commits); the only outbound call is to api.github.com.
+# GitHub Actions (ci.yml and friends) act as FALLBACK / secondary gates.
+# If any step here fails, the `fallback` step dispatches the GitHub Actions
+# ci.yml workflow via its API. Woodpecker stays fully private (polling for
+# commits); the only outbound call is to api.github.com.
 #
 # Required Woodpecker repo secret:
 #   github_token  -> GitHub PAT with scopes: repo, actions:write
@@ -67,6 +67,58 @@ steps:
     depends_on:
       - backend
 
+  architecture-client:
+    image: node:24-bookworm
+    environment:
+      CI: "true"
+    commands:
+      - corepack enable
+      - corepack prepare pnpm@9 --activate
+      - cd client && pnpm install --frozen-lockfile && cd ..
+      - cd client && npm run arch:check
+    depends_on:
+      - client
+
+  architecture-backend:
+    image: python:3.12-bookworm
+    environment:
+      DATABASE_URL: sqlite:///test_vela_backend.db
+      VELA_API_KEY: vela5012
+      GOOGLE_API_KEY: dummy-ci-key
+      JWT_SECRET: dummy-ci-jwt-secret
+      PYTHONPATH: .
+    commands:
+      - pip install --quiet uv
+      - cd backend && uv sync --frozen && cd ..
+      - cd backend && uv run pytest tests/test_architecture_boundaries.py -q
+    depends_on:
+      - backend
+
+  ui-e2e:
+    image: node:24-bookworm
+    environment:
+      CI: "true"
+      EXPO_NO_TELEMETRY: "1"
+    commands:
+      - corepack enable
+      - corepack prepare pnpm@9 --activate
+      - curl -LsSf https://astral.sh/uv/install.sh | sh
+      - export PATH="$HOME/.local/bin:$PATH"
+      - cd backend && uv sync --frozen && cd ..
+      - cd client && pnpm install --frozen-lockfile && cd ..
+      - cd client && npx playwright install --with-deps chromium
+      - python3 vela_ci.py e2e
+    depends_on:
+      - backend
+      - client
+
+  e2e-dry-run:
+    image: python:3.12-bookworm
+    commands:
+      - bash client/e2e/runner.sh --dry-run
+    depends_on:
+      - client
+
   fallback:
     image: curlimages/curl:8.10.1
     environment:
@@ -78,6 +130,10 @@ steps:
       - backend
       - client
       - corpus
+      - architecture-client
+      - architecture-backend
+      - ui-e2e
+      - e2e-dry-run
     commands:
       - |
         echo "Woodpecker build failed; dispatching GitHub Actions fallback..."
