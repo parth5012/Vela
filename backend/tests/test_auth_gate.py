@@ -211,6 +211,41 @@ def test_google_drive_resolves_global_oauth_conversation_tokens():
     assert creds is dummy_creds
 
 
+def test_google_drive_refreshed_tokens_persist_to_global_oauth_conversation_id():
+    """When Google Drive refreshes tokens, it must persist to GLOBAL_OAUTH_CONVERSATION_ID and merge."""
+    from utils.google_drive import get_google_credentials
+
+    token_data = {
+        "access_token": "at-expired",
+        "refresh_token": "rt-drive",
+        "expiry": "2020-01-01T00:00:00Z",
+        "user_info": {"email": "test@example.com"},
+    }
+    db = MagicMock()
+    db.get_oauth_tokens.return_value = token_data
+
+    mock_creds = MagicMock(expired=True, refresh_token="rt-drive", token="at-new", expiry=datetime(2027, 1, 1, 0, 0, 0))
+    mock_creds.scopes = ["https://www.googleapis.com/auth/drive.file"]
+    mock_creds.token_uri = "https://oauth2.googleapis.com/token"
+    mock_creds.client_id = "test-client-id"
+    mock_creds.client_secret = "test-client-secret"
+
+    with make_env_patch({"GOOGLE_REFRESH_TOKEN": None, "GOOGLE_CLIENT_ID": "cid", "GOOGLE_CLIENT_SECRET": "sec"}), \
+         patch("utils.google_drive.Credentials", return_value=mock_creds), \
+         patch("utils.google_drive.Request"):
+        creds = get_google_credentials("thread-specific-uuid", db)
+
+    assert creds is mock_creds
+    mock_creds.refresh.assert_called_once()
+    db.store_oauth_tokens.assert_called_once()
+    target_cid, provider, stored = db.store_oauth_tokens.call_args[0]
+    assert target_cid == GLOBAL_OAUTH_CONVERSATION_ID
+    assert provider == "google"
+    assert stored["access_token"] == "at-new"
+    assert stored["user_info"] == {"email": "test@example.com"}
+    assert "client_secret" not in stored
+
+
 # ---------------------------------------------------------------------------
 # Tests — OAuth expiry normalized to naive UTC (finding-013)
 # ---------------------------------------------------------------------------

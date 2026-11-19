@@ -123,14 +123,17 @@ def _parse_expiry(expiry_str: str | None) -> datetime | None:
 
 
 def _persist_tokens(db, conversation_id: str, creds: Credentials, scopes: list[str]) -> None:
-    """Write refreshed credentials back to the database."""
+    """Write refreshed credentials back to the database, merging with existing metadata."""
+    existing = db.get_oauth_tokens(conversation_id, "google") or {}
     expiry_naive = to_naive_utc(creds.expiry) if creds.expiry else None
     updated = {
+        **existing,
         "access_token": creds.token,
         "refresh_token": creds.refresh_token,
         "expiry": expiry_naive.isoformat() if expiry_naive else None,
         "scopes": creds.scopes or scopes,
     }
+    updated.pop("client_secret", None)
     db.store_oauth_tokens(conversation_id, "google", updated)
 
 

@@ -108,9 +108,9 @@ def run_self_improvement(max_batches: int = MAX_CONSOLIDATION_BATCHES) -> str:
 
     while batches_run < max_batches:
         try:
-            with get_db_session() as session:
+            with get_db_session() as read_session:
                 experiences: List[Experience] = (
-                    session.query(Experience)
+                    read_session.query(Experience)
                     .filter_by(consolidated=False)
                     .order_by(Experience.created_at.asc())
                     .limit(CONSOLIDATION_BATCH_LIMIT)
@@ -118,6 +118,9 @@ def run_self_improvement(max_batches: int = MAX_CONSOLIDATION_BATCHES) -> str:
                 )
                 if not experiences:
                     break
+
+                exp_ids = [e.id for e in experiences]
+                num_exps = len(experiences)
 
                 # Format experiences
                 experiences_block = ""
@@ -132,12 +135,12 @@ def run_self_improvement(max_batches: int = MAX_CONSOLIDATION_BATCHES) -> str:
 
                 # Get existing rules
                 existing_rules = ""
-                rules_fragment = session.query(SystemPromptFragment).filter_by(key=DYNAMIC_RULES_KEY).first()
+                rules_fragment = read_session.query(SystemPromptFragment).filter_by(key=DYNAMIC_RULES_KEY).first()
                 if rules_fragment:
                     existing_rules = rules_fragment.content
 
-                # Build Prompt
-                prompt = f"""You are a Supervisor Self-Improvement System. Your job is to analyze recent user interaction experiences, identify conversational or technical weaknesses, and update the existing dynamic rules.
+            # Build Prompt
+            prompt = f"""You are a Supervisor Self-Improvement System. Your job is to analyze recent user interaction experiences, identify conversational or technical weaknesses, and update the existing dynamic rules.
 
 ### Input Data:
 1. **Existing Dynamic Rules**:
@@ -155,53 +158,54 @@ def run_self_improvement(max_batches: int = MAX_CONSOLIDATION_BATCHES) -> str:
 - Output ONLY the updated rules block. Do not include markdown preamble or conversational text outside of the rules format.
 """
 
-                logger.info("Triggering LLM for prompt consolidation", num_experiences=len(experiences), batch=batches_run + 1)
-                llm = get_llm()
-                try:
-                    response = llm.invoke(prompt)
-                    updated_rules = _extract_rules_text(response)
-                except Exception as llm_err:  # noqa: BLE001
-                    logger.error("LLM invocation failed during consolidation batch", batch=batches_run + 1, error=str(llm_err))
-                    break
+            logger.info("Triggering LLM for prompt consolidation", num_experiences=num_exps, batch=batches_run + 1)
+            llm = get_llm()
+            try:
+                response = llm.invoke(prompt)
+                updated_rules = _extract_rules_text(response)
+            except Exception as llm_err:  # noqa: BLE001
+                logger.error("LLM invocation failed during consolidation batch", batch=batches_run + 1, error=str(llm_err))
+                if batches_run == 0:
+                    return f"Consolidation aborted: LLM invocation failed ({llm_err!s})"
+                break
 
-                valid, reason = validate_consolidated_rules(updated_rules)
-                if not valid:
-                    logger.warning(
-                        "LLM consolidation output failed validation; retaining prior dynamic_rules",
-                        reason=reason,
-                        num_experiences=len(experiences),
-                        batch=batches_run + 1,
+            valid, reason = validate_consolidated_rules(updated_rules)
+            if not valid:
+                logger.warning(
+                    "LLM consolidation output failed validation; retaining prior dynamic_rules",
+                    reason=reason,
+                    num_experiences=num_exps,
+                    batch=batches_run + 1,
+                )
+                if batches_run == 0:
+                    return (
+                        f"Consolidation skipped: LLM rules failed validation ({reason}); "
+                        f"prior {DYNAMIC_RULES_KEY} retained, {num_exps} experiences left unconsolidated."
                     )
-                    if batches_run == 0:
-                        return (
-                            f"Consolidation skipped: LLM rules failed validation ({reason}); "
-                            f"prior {DYNAMIC_RULES_KEY} retained, {len(experiences)} experiences left unconsolidated."
-                        )
-                    break
+                break
 
-                # Rollback copy of prior rules (bounded single row) before overwrite.
+            # Short write transaction to update rules and mark experiences
+            with get_db_session() as write_session:
+                rules_fragment = write_session.query(SystemPromptFragment).filter_by(key=DYNAMIC_RULES_KEY).first()
                 if rules_fragment:
-                    backup = session.query(SystemPromptFragment).filter_by(key=DYNAMIC_RULES_BACKUP_KEY).first()
+                    backup = write_session.query(SystemPromptFragment).filter_by(key=DYNAMIC_RULES_BACKUP_KEY).first()
                     if backup:
                         backup.content = existing_rules
                         backup.updated_at = utcnow_naive()
                     else:
-                        session.add(SystemPromptFragment(key=DYNAMIC_RULES_BACKUP_KEY, content=existing_rules))
-
-                # Update database
-                if not rules_fragment:
-                    rules_fragment: SystemPromptFragment = SystemPromptFragment(key=DYNAMIC_RULES_KEY, content=updated_rules)
-                    session.add(rules_fragment)
-                else:
+                        write_session.add(SystemPromptFragment(key=DYNAMIC_RULES_BACKUP_KEY, content=existing_rules))
                     rules_fragment.content = updated_rules
                     rules_fragment.updated_at = utcnow_naive()
+                else:
+                    write_session.add(SystemPromptFragment(key=DYNAMIC_RULES_KEY, content=updated_rules))
 
                 # Mark experiences as consolidated
-                for exp in experiences:
-                    exp.consolidated = True
+                write_session.query(Experience).filter(Experience.id.in_(exp_ids)).update(
+                    {"consolidated": True}, synchronize_session=False
+                )
 
-                total_consolidated += len(experiences)
-                batches_run += 1
+            total_consolidated += num_exps
+            batches_run += 1
         except Exception as e:  # noqa: BLE001
             logger.error("Failed executing run_self_improvement batch", batch=batches_run + 1, error=str(e))
             if batches_run == 0:
