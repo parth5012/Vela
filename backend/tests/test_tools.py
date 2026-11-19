@@ -9,8 +9,66 @@ def test_tavily_search_mock(mock_run):
     assert "Mocked answer" in res
 
 def test_code_exec_mock():
-    res = run_python_code.func("print('hello')")
-    assert "Mock execution output" in res or "Sandbox execution" in res
+    with patch.dict("os.environ", {"E2B_API_KEY": ""}):
+        res = run_python_code.func("print('hello')")
+        assert "Mock execution output" in res
+
+
+def test_code_exec_api_key_set_without_e2b_installed():
+    import tools.code_exec as ce
+    with patch.dict("os.environ", {"E2B_API_KEY": "fake_e2b_key"}), patch.object(ce, "Sandbox", None):
+        res = run_python_code.func("print('hello')")
+        assert "e2b sandbox package is not installed" in res
+        assert "Sandbox execution output for code run: Success." not in res
+
+
+def test_code_exec_with_mocked_e2b_success():
+    import tools.code_exec as ce
+    mock_sandbox_instance = MagicMock()
+    mock_execution = MagicMock()
+    mock_execution.error = None
+    mock_execution.logs.stdout = ["42\n"]
+    mock_execution.logs.stderr = []
+    mock_execution.results = []
+    mock_sandbox_instance.run_code.return_value = mock_execution
+    mock_sandbox_instance.__enter__.return_value = mock_sandbox_instance
+    mock_sandbox_instance.__exit__.return_value = False
+
+    mock_sandbox_cls = MagicMock(return_value=mock_sandbox_instance)
+
+    with patch.dict("os.environ", {"E2B_API_KEY": "fake_e2b_key"}), patch.object(ce, "Sandbox", mock_sandbox_cls):
+        res = run_python_code.func("print(42)")
+        assert res == "42"
+        mock_sandbox_instance.run_code.assert_called_once_with("print(42)", timeout=30)
+
+
+def test_code_exec_with_mocked_e2b_error():
+    import tools.code_exec as ce
+    mock_sandbox_instance = MagicMock()
+    mock_execution = MagicMock()
+    mock_err = MagicMock()
+    mock_err.name = "ZeroDivisionError"
+    mock_err.value = "division by zero"
+    mock_execution.error = mock_err
+    mock_sandbox_instance.run_code.return_value = mock_execution
+    mock_sandbox_instance.__enter__.return_value = mock_sandbox_instance
+    mock_sandbox_instance.__exit__.return_value = False
+
+    mock_sandbox_cls = MagicMock(return_value=mock_sandbox_instance)
+
+    with patch.dict("os.environ", {"E2B_API_KEY": "fake_e2b_key"}), patch.object(ce, "Sandbox", mock_sandbox_cls):
+        res = run_python_code.func("1/0")
+        assert "ZeroDivisionError: division by zero" in res
+
+
+def test_code_exec_with_mocked_e2b_exception():
+    import tools.code_exec as ce
+    mock_sandbox_cls = MagicMock(side_effect=RuntimeError("Sandbox connection timeout"))
+
+    with patch.dict("os.environ", {"E2B_API_KEY": "fake_e2b_key"}), patch.object(ce, "Sandbox", mock_sandbox_cls):
+        res = run_python_code.func("print('hi')")
+        assert "Error executing code in sandbox: Sandbox connection timeout" in res
+
 
 from tools.memory import save_user_memory, delete_user_memory
 

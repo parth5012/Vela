@@ -86,3 +86,13 @@ repro_steps = [
 ]
 notes = "Added executed_tool_marks table in SQLite (migration 0009), persisted lastExecutedId in Zustand partialize, and gated tool execution via isToolMarked/markToolExecuted."
 
+[BUG-184]
+title = "Replace run_python_code stub with real E2B or honest failure (finding-014)"
+status = "fixed"
+failing_test = "backend/tests/test_tools.py::test_code_exec_api_key_set_without_e2b_installed"
+repro_steps = [
+  "Set E2B_API_KEY environment variable and invoke run_python_code tool with any code input",
+  "Observe: hardcoded string 'Sandbox execution output for code run: Success.' returned without executing code or checking for e2b library"
+]
+notes = "Removed fabricated success string. Wired real E2B Sandbox execution if available with output capture/error handling, and honest failure when e2b package is missing."
+
