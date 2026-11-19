@@ -1,4 +1,4 @@
-from utils.helpers import get_title
+from utils.helpers import get_title, to_naive_utc
 from agent.persona import PUBLIC_LIST as PERSONA_LIST
 from agent.registry import AGENT_REGISTRY
 import os
@@ -1659,8 +1659,8 @@ def oauth_callback(code: str, state: str):
     expires_in = google_tokens.get("expires_in", 3600)
     id_token_jwt = google_tokens.get("id_token", "")
 
-    # Calculate absolute expiry
-    expiry = (datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))).isoformat()
+    # Calculate absolute expiry (normalized to naive UTC)
+    expiry = to_naive_utc(datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))).isoformat()
 
     # ── Fetch user info from Google's userinfo endpoint ──
     user_info = {}

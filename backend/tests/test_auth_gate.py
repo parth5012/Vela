@@ -4,6 +4,7 @@ from unittest.mock import patch, MagicMock
 from datetime import datetime, timezone
 
 from utils.auth_gate import ensure_google_auth, AUTH_REQUIRED, GLOBAL_OAUTH_CONVERSATION_ID
+from utils.helpers import to_naive_utc
 
 
 # ---------------------------------------------------------------------------
@@ -110,7 +111,7 @@ def test_expired_tokens_refreshes_and_persists():
         {
             "access_token": "at-updated-xyz",
             "refresh_token": "rt-refresh-abc",
-            "expiry": refreshed_creds.expiry.isoformat(),
+            "expiry": to_naive_utc(refreshed_creds.expiry).isoformat(),
             "scopes": mock_creds.call_args[1].get("scopes"),
         },
     )
@@ -209,3 +210,65 @@ def test_google_drive_resolves_global_oauth_conversation_tokens():
         creds = get_google_credentials("random-conv-uuid", db)
 
     assert creds is dummy_creds
+
+
+# ---------------------------------------------------------------------------
+# Tests — OAuth expiry normalized to naive UTC (finding-013)
+# ---------------------------------------------------------------------------
+
+def test_to_naive_utc_normalizes_aware_and_strings():
+    """Verify to_naive_utc handles aware datetime, naive datetime, ISO strings, and None."""
+    from utils.helpers import to_naive_utc
+    from datetime import timezone, timedelta
+
+    # None and empty
+    assert to_naive_utc(None) is None
+    assert to_naive_utc("") is None
+    assert to_naive_utc("invalid-date") is None
+
+    # Naive datetime stays naive
+    naive_dt = datetime(2026, 11, 19, 12, 0, 0)
+    assert to_naive_utc(naive_dt) == naive_dt
+    assert to_naive_utc(naive_dt).tzinfo is None
+
+    # Aware datetime converted to UTC and made naive
+    aware_dt = datetime(2026, 11, 19, 17, 30, 0, tzinfo=timezone(timedelta(hours=5, minutes=30)))
+    expected_utc = datetime(2026, 11, 19, 12, 0, 0)
+    res_dt = to_naive_utc(aware_dt)
+    assert res_dt == expected_utc
+    assert res_dt.tzinfo is None
+
+    # ISO string with aware offset (+00:00)
+    iso_aware = "2026-11-19T12:00:00+00:00"
+    res_iso = to_naive_utc(iso_aware)
+    assert res_iso == expected_utc
+    assert res_iso.tzinfo is None
+
+    # ISO string with Z
+    iso_z = "2026-11-19T12:00:00Z"
+    res_z = to_naive_utc(iso_z)
+    assert res_z == expected_utc
+    assert res_z.tzinfo is None
+
+
+def test_auth_gate_aware_expiry_credentials_expired_comparison():
+    """Real Credentials object with aware expiry string does not raise TypeError on .expired."""
+    from utils.auth_gate import ensure_google_auth
+    from google.oauth2.credentials import Credentials
+
+    # Aware ISO string in DB tokens (finding-013 regression case)
+    token_data = {
+        "access_token": "at-aware",
+        "refresh_token": "rt-aware",
+        "expiry": "2024-01-01T00:00:00+00:00",  # Expired, aware ISO string
+    }
+    db = make_db(tokens=token_data)
+
+    with make_env_patch(), patch("utils.auth_gate.Request"):
+        # Without normalization, Credentials.expired raises TypeError swallowed by except -> AUTH_REQUIRED
+        # With normalization, creds.expired succeeds and triggers creds.refresh
+        with patch.object(Credentials, "refresh") as mock_refresh:
+            result = ensure_google_auth("conv-aware", db)
+            assert result is not AUTH_REQUIRED
+            mock_refresh.assert_called_once()
+            assert result.expiry.tzinfo is None

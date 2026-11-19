@@ -64,3 +64,14 @@ repro_steps = [
 ]
 notes = "Unified storage key to GLOBAL_OAUTH_CONVERSATION_ID, added fallback from conversation ID to global sentinel, and added defensive lazy migration for legacy 'global' rows."
 
+[BUG-183]
+title = "Normalize OAuth expiry to naive UTC so Credentials.expired works (finding-013)"
+status = "fixed"
+failing_test = "backend/tests/test_auth_gate.py::test_auth_gate_aware_expiry_credentials_expired_comparison"
+repro_steps = [
+  "Pass a timezone-aware ISO string for OAuth expiry into token data",
+  "Construct Google Credentials and evaluate creds.expired against naive datetime.utcnow()",
+  "Observe: TypeError raised on naive-vs-aware datetime comparison"
+]
+notes = "Added to_naive_utc helper in utils.helpers, normalizing aware datetime and ISO strings to naive UTC across auth_gate, google_drive, and main.py token storage."
+
