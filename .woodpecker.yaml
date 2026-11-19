@@ -119,6 +119,33 @@ steps:
     depends_on:
       - client
 
+  perf-ratchet:
+    image: node:24-bookworm
+    environment:
+      CI: "true"
+    commands:
+      - corepack enable
+      - corepack prepare pnpm@9 --activate
+      - pnpm --prefix client install --frozen-lockfile
+      - pnpm --prefix client run benchmark:ci
+      - |
+        python3 -c "
+        import time, subprocess, sys
+        t0 = time.perf_counter()
+        sum(i * i for i in range(2_000_000))
+        probe_ms = (time.perf_counter() - t0) * 1000
+        print(f'Runner calibration probe duration: {probe_ms:.2f} ms')
+        tolerance = 5.0
+        if probe_ms > 115.0:
+            print('::warning::Runner environment marked harness_noisy. Applying relative tolerance adjustment to 10.0%.')
+            tolerance = 10.0
+        cmd = [sys.executable, '.opencode/skills/deep-performance-engineering/scripts/ratchet.py', '--baseline', 'perf-baseline.json', '--current', 'results/perf-current.json', '--max-regression', str(tolerance), '--markdown-output', 'results/perf-report.md']
+        res = subprocess.run(cmd)
+        sys.exit(res.returncode)
+        "
+    depends_on:
+      - client
+
   fallback:
     image: curlimages/curl:8.10.1
     environment:
@@ -134,6 +161,7 @@ steps:
       - architecture-backend
       - ui-e2e
       - e2e-dry-run
+      - perf-ratchet
     commands:
       - |
         echo "Woodpecker build failed; dispatching GitHub Actions fallback..."
