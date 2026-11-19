@@ -1,5 +1,5 @@
 import { db } from './client';
-import { threads, messages, operationLog } from './schema';
+import { threads, messages, operationLog, executedToolMarks } from './schema';
 import { eq, asc, desc } from 'drizzle-orm';
 import { useChatStore, Thread, Message } from '../store/useChatStore';
 import { parseSafeDate } from '../utils/date';
@@ -365,5 +365,41 @@ export async function hydrateChatFromLocalDb(): Promise<void> {
     }
   } catch (error) {
     console.error('[ChatRepository] Failed to hydrate from local db:', error);
+  }
+}
+
+/**
+ * Check if a tool execution (message_key = messageId + '_' + callIndex) has already been dispatched.
+ */
+export async function isToolMarked(messageKey: string): Promise<boolean> {
+  if (!db) return false;
+  try {
+    const rows = await db
+      .select({ key: executedToolMarks.message_key })
+      .from(executedToolMarks)
+      .where(eq(executedToolMarks.message_key, messageKey))
+      .limit(1);
+    return rows.length > 0;
+  } catch (err) {
+    console.error('[ChatRepository] Failed to check tool mark:', err);
+    return false;
+  }
+}
+
+/**
+ * Persist an executed tool mark in SQLite before dispatching the action.
+ */
+export async function markToolExecuted(messageKey: string): Promise<void> {
+  if (!db) return;
+  try {
+    await db
+      .insert(executedToolMarks)
+      .values({
+        message_key: messageKey,
+        created_at: Date.now(),
+      })
+      .onConflictDoNothing();
+  } catch (err) {
+    console.error('[ChatRepository] Failed to mark tool executed:', err);
   }
 }

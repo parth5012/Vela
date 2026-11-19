@@ -23,9 +23,11 @@ import {
   deleteThreadLocal,
   hydrateChatFromLocalDb,
   isLocalDbAvailable,
+  isToolMarked,
   loadMessages,
   loadThreads,
   markMessageSynced,
+  markToolExecuted,
   queueMessageForSync,
   replaceThreadMessages,
   saveMessage,
@@ -49,6 +51,9 @@ function resetTables(): void {
   sqlite.exec('DELETE FROM operation_log');
   sqlite.exec('DELETE FROM messages');
   sqlite.exec('DELETE FROM threads');
+  try {
+    sqlite.exec('DELETE FROM executed_tool_marks');
+  } catch {}
 }
 
 function threadRow(id: string): any {
@@ -485,6 +490,23 @@ describe('chatRepository on real in-memory SQLite (#548)', () => {
       await hydrateChatFromLocalDb();
 
       expect(useChatStore.getState().threads.map((t) => t.id)).toEqual(['keep-me']);
+    });
+  });
+
+  describe('executedToolMarks (#181)', () => {
+    it('returns false for unmarked tools and true once marked', async () => {
+      const toolKey = 'msg-123_45';
+      expect(await isToolMarked(toolKey)).toBe(false);
+
+      await markToolExecuted(toolKey);
+      expect(await isToolMarked(toolKey)).toBe(true);
+    });
+
+    it('is idempotent on duplicate marks', async () => {
+      const toolKey = 'msg-dup_0';
+      await markToolExecuted(toolKey);
+      await markToolExecuted(toolKey);
+      expect(await isToolMarked(toolKey)).toBe(true);
     });
   });
 });
