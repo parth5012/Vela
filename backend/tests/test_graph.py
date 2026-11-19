@@ -1,10 +1,14 @@
 import asyncio
+from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
-from agent.graph import graph
+from agent.graph import graph, supervisor_node
+from agent.prompt import build_context, build_recent_messages, build_system_prompt
+from agent.state import AgentState
+from db.models import Experience, MemoryVector, SystemPromptFragment
 
 
 @pytest.mark.asyncio
@@ -20,12 +24,6 @@ async def test_supervisor_routing_to_end(fake_provider, seeded_db):
     }
     result = await graph.ainvoke(inputs)
     assert result["next_node"] == "__end__"
-
-from unittest.mock import MagicMock, patch
-
-from agent.prompt import build_system_prompt
-from agent.state import AgentState
-from db.models import SystemPromptFragment
 
 
 @pytest.mark.asyncio
@@ -119,12 +117,6 @@ async def test_build_system_prompt_injects_grill_me_skill_without_query_field(mo
     assert "Interview me relentlessly about every aspect of this plan" in prompt
 
 
-from datetime import datetime
-
-from agent.prompt import build_recent_messages
-from db.models import Experience
-
-
 @patch("agent.prompt.get_db_session")
 def test_build_recent_messages_loads_history(mock_get_db):
     mock_session = MagicMock()
@@ -147,9 +139,6 @@ def test_build_recent_messages_loads_history(mock_get_db):
     history = build_recent_messages(state)
     assert "Human: Who are you?\nAI: I am Vela." in history
     assert "Human: What is my name?" in history
-
-from agent.prompt import build_context
-from db.models import MemoryVector
 
 
 @patch("agent.prompt.get_embeddings")
@@ -180,9 +169,6 @@ def test_build_context_retrieves_memories(mock_get_db, mock_embeddings_func):
     with patch.dict("os.environ", {"GOOGLE_API_KEY": "AIzaSyFakeKey"}):
         context = build_context(state)
         assert "User's name is Parth" in context
-
-
-from agent.graph import supervisor_node
 
 
 @patch("agent.graph.get_db_session")

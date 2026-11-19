@@ -6,6 +6,7 @@ import secrets
 import time
 import urllib.parse
 import uuid
+from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import date as dt_date
 from datetime import datetime, timedelta, timezone
@@ -684,7 +685,7 @@ def _init_sse_turn_sync(
                     agent_response="",
                 )
                 experience_id = exp_row.id
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error("Failed to create experience row at turn start", error=str(e))
     return thread_uuid, thread_title, thread_agent, experience_id
 
@@ -2055,9 +2056,6 @@ def get_checkins_summary(conversation_id: Optional[str] = Query(None), days: int
 # ---------------------------------------------------------------------------
 # Tool Proxy and Sync Endpoints for Local LLM Integration
 # ---------------------------------------------------------------------------
-
-import time
-from collections import defaultdict
 
 RATE_LIMIT_STORE = defaultdict(list)
 
