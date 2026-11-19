@@ -1,0 +1,40 @@
+when:
+  - event: push
+  - event: pull_request
+
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      partial: false
+      depth: 0
+steps:
+  client:
+    image: node:24-bookworm
+    environment:
+      CI: "true"
+      EXPO_NO_TELEMETRY: "1"
+    commands:
+      - corepack enable
+      - corepack prepare pnpm@9 --activate
+      - cd client && pnpm install --frozen-lockfile && cd ..
+      - python3 vela_ci.py ci --stack client
+
+  fallback:
+    image: curlimages/curl:8.10.1
+    environment:
+      GITHUB_TOKEN:
+        from_secret: github_token
+    when:
+      - status: failure
+    depends_on:
+      - client
+    commands:
+      - |
+        echo "Woodpecker build failed; dispatching GitHub Actions fallback..."
+        curl -sS -X POST \
+          -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+          -H "Accept: application/vnd.github+json" \
+          "https://api.github.com/repos/parth5012/Vela/actions/workflows/ci.yml/dispatches" \
+          -d "{\"ref\":\"${CI_COMMIT_BRANCH}\"}"
+

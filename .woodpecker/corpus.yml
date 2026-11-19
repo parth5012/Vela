@@ -1,0 +1,42 @@
+when:
+  - event: push
+  - event: pull_request
+
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      partial: false
+      depth: 0
+steps:
+  corpus:
+    image: python:3.12-bookworm
+    environment:
+      DATABASE_URL: sqlite:///test_vela_backend.db
+      VELA_API_KEY: vela5012
+      GOOGLE_API_KEY: dummy-ci-key
+      JWT_SECRET: dummy-ci-jwt-secret
+      PYTHONPATH: .
+    commands:
+      - pip install --quiet uv
+      - cd backend && uv sync --frozen && cd ..
+      - python vela_ci.py corpus
+
+  fallback:
+    image: curlimages/curl:8.10.1
+    environment:
+      GITHUB_TOKEN:
+        from_secret: github_token
+    when:
+      - status: failure
+    depends_on:
+      - corpus
+    commands:
+      - |
+        echo "Woodpecker build failed; dispatching GitHub Actions fallback..."
+        curl -sS -X POST \
+          -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+          -H "Accept: application/vnd.github+json" \
+          "https://api.github.com/repos/parth5012/Vela/actions/workflows/ci.yml/dispatches" \
+          -d "{\"ref\":\"${CI_COMMIT_BRANCH}\"}"
+

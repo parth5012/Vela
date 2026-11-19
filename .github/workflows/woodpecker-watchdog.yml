@@ -27,7 +27,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          GRACE_MINUTES=30
+          GRACE_MINUTES=20
           now=$(date -u +%s)
 
           prs=$(gh pr list --state open --json number,headRefName,headRefOid,headRef 2>/dev/null || echo '[]')
