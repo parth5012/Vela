@@ -405,3 +405,14 @@ class TestLastToolStartTokens:
         conv_id = str(uuid.uuid4())
         task_token = wb.LAST_TOOL_START_TOKENS.pop(conv_id, None)
         assert task_token is None
+
+
+class TestResponseRoutesAsync:
+    """Verify that webview/device response routes are async def to avoid threadpool hops (#186)."""
+
+    def test_response_endpoints_are_coroutine_functions(self):
+        import inspect
+        from agent.main import submit_webview_response, submit_device_response
+        assert inspect.iscoroutinefunction(submit_webview_response)
+        assert inspect.iscoroutinefunction(submit_device_response)
+

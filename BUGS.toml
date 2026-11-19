@@ -107,4 +107,15 @@ repro_steps = [
 ]
 notes = "Added get_last_human_message_content helper in BaseSkill, updated GrillMeSkill to extract last query from messages safely and log via StructuredLogger, and verified deactivation recovery."
 
+[BUG-186]
+title = "Make webview/device response routes async (finding-017)"
+status = "fixed"
+failing_test = "backend/tests/test_webview_concurrency.py::TestResponseRoutesAsync::test_response_endpoints_are_coroutine_functions"
+repro_steps = [
+  "Call /chat/webview/response or /chat/device/response endpoint",
+  "Observe: sync def endpoint executed in Starlette threadpool instead of directly on main event loop, causing Event.set cross-thread race conditions"
+]
+notes = "Converted submit_webview_response and submit_device_response to async def in backend/agent/main.py."
+
+
 
