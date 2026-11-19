@@ -1,0 +1,28 @@
+when:
+  - event: cron
+
+cron:
+  - "0 3 * * *"
+
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      partial: false
+      depth: 0
+
+steps:
+  system-evals:
+    image: python:3.12-bookworm
+    environment:
+      VELA_SYSTEM_EVALS_ENABLED: "1"
+      OPENROUTER_API_KEY:
+        from_secret: openrouter_api_key
+      GOOGLE_AI_API_KEY:
+        from_secret: google_ai_api_key
+    commands:
+      - pip install --quiet uv
+      - uv python install 3.11
+      - uv pip install --system -r system-evals/requirements.txt
+      - uv pip install --system -r backend/requirements.txt
+      - python system-evals/runner.py --family all --mode nightly --live --output "system-evals/reports/eval_summary_nightly.json"
