@@ -3,6 +3,7 @@ import base64
 import json
 import os
 import secrets
+import threading
 import time
 import urllib.parse
 import uuid
@@ -1463,17 +1464,19 @@ class OAuthAuthorizeStartPayload(BaseModel):
 
 _DEFAULT_OAUTH_START_PAYLOAD = OAuthAuthorizeStartPayload()
 _oauth_request_tokens: dict[str, dict] = {}
+_oauth_tokens_lock = threading.Lock()
 OAUTH_REQUEST_TOKEN_TTL_SECONDS = 300
 
 
 def _clean_expired_oauth_tokens(now: float) -> None:
-    expired = [
-        t
-        for t, data in _oauth_request_tokens.items()
-        if now - data.get("created_at", 0) > OAUTH_REQUEST_TOKEN_TTL_SECONDS
-    ]
-    for t in expired:
-        _oauth_request_tokens.pop(t, None)
+    with _oauth_tokens_lock:
+        expired = [
+            t
+            for t, data in list(_oauth_request_tokens.items())
+            if now - data.get("created_at", 0) > OAUTH_REQUEST_TOKEN_TTL_SECONDS
+        ]
+        for t in expired:
+            _oauth_request_tokens.pop(t, None)
 
 
 @app.post("/oauth/google/authorize/start", dependencies=[Depends(verify_api_key)])
@@ -1489,10 +1492,11 @@ def oauth_google_authorize_start(
     _clean_expired_oauth_tokens(now)
     token = secrets.token_urlsafe(32)
     redirect_uri = payload.redirect_uri or "vela-client://oauth/callback"
-    _oauth_request_tokens[token] = {
-        "created_at": now,
-        "redirect_uri": redirect_uri,
-    }
+    with _oauth_tokens_lock:
+        _oauth_request_tokens[token] = {
+            "created_at": now,
+            "redirect_uri": redirect_uri,
+        }
     authorize_url = f"/oauth/google/authorize?request_token={token}"
     return {
         "status": "ok",
@@ -1518,7 +1522,8 @@ def oauth_google_authorize(
 
     now = time.time()
     _clean_expired_oauth_tokens(now)
-    token_data = _oauth_request_tokens.pop(request_token, None)
+    with _oauth_tokens_lock:
+        token_data = _oauth_request_tokens.pop(request_token, None)
     if not token_data or (now - token_data.get("created_at", 0) > OAUTH_REQUEST_TOKEN_TTL_SECONDS):
         logger.warning("Invalid or expired OAuth request token")
         raise HTTPException(status_code=401, detail="Invalid or expired OAuth request token")
@@ -1834,7 +1839,8 @@ async def submit_webview_response(payload: WebViewResponsePayload):
     # response landing on a different worker is accepted (no 404) and picked
     # up by the waiting worker's poll. Still 404s when no waiter exists.
     from tools.pending_tasks import submit_cross_worker_response
-    key = submit_cross_worker_response(
+    key = await asyncio.to_thread(
+        submit_cross_worker_response,
         payload.conversation_id, payload.status, payload.result
     )
     if key:
@@ -1857,7 +1863,8 @@ class DeviceResponsePayload(BaseModel):
 async def submit_device_response(payload: DeviceResponsePayload):
     # T8 multi-worker: same local-first + DB mailbox fallback as webview.
     from tools.pending_tasks import submit_cross_worker_response
-    key = submit_cross_worker_response(
+    key = await asyncio.to_thread(
+        submit_cross_worker_response,
         payload.conversation_id, payload.status, payload.result,
         task_token=payload.task_token,
     )

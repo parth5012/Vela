@@ -45,10 +45,10 @@ def get_google_credentials(conversation_id: str, db) -> Credentials | None:
             # Fall back to database if global fails
             logger.info("Falling back to database-driven credentials")
 
-    # 2. Database lookup: conversation-specific first, fallback to GLOBAL_OAUTH_CONVERSATION_ID, then legacy 'global'
-    token_data = db.get_oauth_tokens(conversation_id, "google") if conversation_id else None
-    if not token_data and conversation_id != GLOBAL_OAUTH_CONVERSATION_ID:
-        token_data = db.get_oauth_tokens(GLOBAL_OAUTH_CONVERSATION_ID, "google")
+    # 2. Database lookup: GLOBAL_OAUTH_CONVERSATION_ID first, fallback to conversation_id, then legacy 'global'
+    token_data = db.get_oauth_tokens(GLOBAL_OAUTH_CONVERSATION_ID, "google")
+    if not token_data and conversation_id and conversation_id != GLOBAL_OAUTH_CONVERSATION_ID:
+        token_data = db.get_oauth_tokens(conversation_id, "google")
     if not token_data:
         legacy_tokens = db.get_oauth_tokens("global", "google")
         if legacy_tokens:
@@ -93,19 +93,21 @@ def get_google_credentials(conversation_id: str, db) -> Credentials | None:
             logger.info("Google access token expired, refreshing...", conversation_id=conversation_id)
             creds.refresh(Request())
             
-            # Save updated credentials back to database
+            # Save updated credentials back to database at GLOBAL_OAUTH_CONVERSATION_ID
             updated_expiry = to_naive_utc(creds.expiry) if creds.expiry else None
+            existing_global = db.get_oauth_tokens(GLOBAL_OAUTH_CONVERSATION_ID, "google") or token_data or {}
             updated_token_data = {
+                **existing_global,
                 "access_token": creds.token,
                 "refresh_token": creds.refresh_token,
                 "token_uri": creds.token_uri,
                 "client_id": creds.client_id,
-                "client_secret": creds.client_secret,
                 "scopes": creds.scopes,
                 "expiry": updated_expiry.isoformat() if updated_expiry else None,
             }
-            db.store_oauth_tokens(conversation_id, "google", updated_token_data)
-            logger.info("Successfully refreshed and stored updated Google OAuth tokens", conversation_id=conversation_id)
+            updated_token_data.pop("client_secret", None)
+            db.store_oauth_tokens(GLOBAL_OAUTH_CONVERSATION_ID, "google", updated_token_data)
+            logger.info("Successfully refreshed and stored updated Google OAuth tokens", conversation_id=GLOBAL_OAUTH_CONVERSATION_ID)
             
         return creds
     except Exception as e:

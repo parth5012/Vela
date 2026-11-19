@@ -990,11 +990,11 @@ export default function ChatScreen() {
         useBrowserStore.getState().setLastExecutedId(executionId);
         (async () => {
           if (await isToolMarked(executionId)) return;
-          await markToolExecuted(executionId);
           try {
             const unescapedVal = rawInput.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
             const parsedInput = JSON.parse(unescapedVal);
             useBrowserStore.getState().handleWebviewAction(parsedInput);
+            await markToolExecuted(executionId);
             router.push('/browser');
           } catch (e) {
             console.error("Failed to parse webview_browser input:", e);
@@ -1028,10 +1028,10 @@ export default function ChatScreen() {
           if (await isToolMarked(executionId)) {
             return;
           }
-          await markToolExecuted(executionId);
           try {
             const unescapedVal = item.rawInput.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
             const parsedInput = JSON.parse(unescapedVal);
+            await markToolExecuted(executionId);
 
             // Extract conversation ID and task token
             const fullConvId = parsedInput.conversation_id || '';

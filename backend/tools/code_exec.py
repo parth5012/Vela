@@ -32,7 +32,7 @@ def run_python_code(code: str) -> str:
     """
     api_key = os.getenv("E2B_API_KEY", "").strip()
     if not api_key:
-        return f"Mock execution output for code: {code[:30]}..."
+        return "Error: code execution is not configured on this server (E2B_API_KEY unset)."
 
     if Sandbox is None:
         return "Error: e2b sandbox package is not installed. Code execution sandbox is unavailable."
@@ -50,9 +50,11 @@ def run_python_code(code: str) -> str:
             logs = getattr(execution, "logs", None)
             if logs:
                 for line in getattr(logs, "stdout", []):
-                    outputs.append(str(line))
+                    text = getattr(line, "line", None) or getattr(line, "text", None) or str(line)
+                    outputs.append(str(text))
                 for line in getattr(logs, "stderr", []):
-                    outputs.append(str(line))
+                    text = getattr(line, "line", None) or getattr(line, "text", None) or str(line)
+                    outputs.append(str(text))
 
             for res in getattr(execution, "results", []):
                 text = getattr(res, "text", None)
