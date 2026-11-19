@@ -102,18 +102,31 @@ export default function OAuthCallbackRoute() {
     }
   };
 
-  const handleTryAgain = () => {
+  const handleTryAgain = async () => {
     if (!apiUrlRaw) return;
     const redirectUri = Platform.OS === 'web'
       ? (typeof window !== 'undefined' ? `${window.location.origin}/oauth-callback` : '')
       : 'vela-client://oauth/callback';
     const formatted = apiUrlRaw.trim().replace(/\/+$/, '');
-    const authUrl = `${formatted}/oauth/google/authorize?redirect_uri=${encodeURIComponent(redirectUri)}&api_key=${encodeURIComponent(apiKey || '')}`;
-    
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      window.location.href = authUrl;
-    } else {
-      Linking.openURL(authUrl);
+    try {
+      const res = await fetch(`${formatted}/oauth/google/authorize/start`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        },
+        body: JSON.stringify({ redirect_uri: redirectUri }),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const authUrl = `${formatted}${data.authorize_url.startsWith('/') ? '' : '/'}${data.authorize_url}`;
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.location.href = authUrl;
+      } else {
+        Linking.openURL(authUrl);
+      }
+    } catch {
+      // ignore
     }
   };
 
