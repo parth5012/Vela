@@ -1,0 +1,69 @@
+name: Woodpecker Watchdog (fallback dispatcher)
+
+# If the self-hosted Woodpecker instance (Debian box) is unavailable, PRs
+# lose their primary CI status. This watchdog runs on a schedule and, for any
+# open PR whose head commit has no Woodpecker status after a grace period,
+# dispatches the GitHub Actions `ci.yml` workflow as a fallback.
+#
+# Requires: GITHUB_TOKEN with actions:write (default token has it).
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  pull-requests: read
+  contents: read
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Dispatch fallback for PRs missing Woodpecker status
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          GRACE_MINUTES=30
+          now=$(date -u +%s)
+
+          prs=$(gh pr list --state open --json number,headRefName,headRefOid,headRef 2>/dev/null || echo '[]')
+          echo "$prs" | jq -c '.[]' | while read -r pr; do
+            num=$(echo "$pr" | jq -r '.number')
+            branch=$(echo "$pr" | jq -r '.headRefName')
+            sha=$(echo "$pr" | jq -r '.headRefOid')
+            echo "Checking PR #$num ($branch @ ${sha:0:7})"
+
+            # Commit age gate
+            committed_at=$(gh api "repos/${GITHUB_REPOSITORY}/commits/$sha" --jq '.commit.committer.date' 2>/dev/null || echo '')
+            if [ -z "$committed_at" ]; then
+              echo "  could not read commit date; skipping"
+              continue
+            fi
+            committed_ts=$(date -u -d "$committed_at" +%s 2>/dev/null || date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "$committed_at" +%s 2>/dev/null || echo 0)
+            age_min=$(( (now - committed_ts) / 60 ))
+            if [ "$age_min" -lt "$GRACE_MINUTES" ]; then
+              echo "  commit only ${age_min}m old (< ${GRACE_MINUTES}m grace); skipping"
+              continue
+            fi
+
+            # Woodpecker status present?
+            wp_status=$(gh api "repos/${GITHUB_REPOSITORY}/commits/$sha/status" --jq '[.statuses[] | select(.context | test("woodpecker"; "i"))] | length' 2>/dev/null || echo 0)
+            if [ "$wp_status" -gt 0 ]; then
+              echo "  Woodpecker status present; OK"
+              continue
+            fi
+
+            # Already a running/successful ci.yml for this ref?
+            existing=$(gh run list --workflow ci.yml --branch "$branch" --limit 5 --json status,conclusion --jq '[.[] | select(.status=="in_progress" or .status=="queued" or .conclusion=="success")] | length' 2>/dev/null || echo 0)
+            if [ "$existing" -gt 0 ]; then
+              echo "  ci.yml already running/succeeded for $branch; skipping dispatch"
+              continue
+            fi
+
+            echo "  No Woodpecker status after ${age_min}m -> dispatching ci.yml for $branch"
+            gh workflow run ci.yml --ref "$branch" || gh api -X POST "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/dispatches" -f ref="$branch"
+          done
