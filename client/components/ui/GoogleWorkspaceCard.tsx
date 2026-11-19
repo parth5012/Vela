@@ -142,16 +142,24 @@ export default function GoogleWorkspaceCard({
       const redirectUri = Platform.OS === 'web'
         ? (typeof window !== 'undefined' ? `${window.location.origin}/oauth-callback` : '')
         : OAUTH_REDIRECT_URI;
-      const authUrl = apiUrl(
-        `/oauth/google/authorize?redirect_uri=${encodeURIComponent(redirectUri)}`,
-        apiUrlRaw
-      );
 
-      // Note: we still need the API key for the backend to associate the OAuth
-      // state with this user. The backend reads it from the Authorization header.
-      // We pass it as a query param since WebBrowser can't set custom headers.
+      const startUrl = apiUrl('/oauth/google/authorize/start', apiUrlRaw);
+      const startRes = await fetch(startUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        },
+        body: JSON.stringify({ redirect_uri: redirectUri }),
+      });
+      if (!startRes.ok) {
+        throw new Error(`Failed to initialize OAuth session (${startRes.status})`);
+      }
+      const startData = await startRes.json();
+      const authUrl = apiUrl(startData.authorize_url, apiUrlRaw);
+
       const result = await WebBrowser.openAuthSessionAsync(
-        `${authUrl}&api_key=${encodeURIComponent(apiKey || '')}`,
+        authUrl,
         redirectUri
       );
 

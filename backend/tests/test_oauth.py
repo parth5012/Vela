@@ -89,8 +89,36 @@ def test_oauth_login_redirect(mock_db, mock_flow_class):
 
 
 # ---------------------------------------------------------------------------
-# /oauth/google/authorize (mobile client flow)
+# /oauth/google/authorize/start & /oauth/google/authorize (mobile client flow)
 # ---------------------------------------------------------------------------
+
+def test_google_authorize_start_requires_auth():
+    _set_env_vars()
+    # Missing auth header -> 403 (verify_api_key standard for missing header)
+    resp = client.post("/oauth/google/authorize/start")
+    assert resp.status_code == 403
+
+    # Invalid auth header -> 401
+    resp = client.post(
+        "/oauth/google/authorize/start",
+        headers={"Authorization": "Bearer wrong-key"},
+    )
+    assert resp.status_code == 401
+
+
+def test_google_authorize_start_success():
+    _set_env_vars()
+    resp = client.post(
+        "/oauth/google/authorize/start",
+        headers={"Authorization": f"Bearer {TEST_API_KEY}"},
+        json={"redirect_uri": CLIENT_REDIRECT_URI},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ok"
+    assert "request_token" in data
+    assert data["authorize_url"].startswith("/oauth/google/authorize?request_token=")
+
 
 @patch("agent.main.Flow")
 @patch("agent.main.DBClient")
@@ -98,15 +126,29 @@ def test_google_authorize_success(mock_db_client_class, mock_flow_class):
     _set_env_vars()
     mock_flow = _make_flow_mock()
     mock_flow_class.from_client_config.return_value = mock_flow
-    mock_db_client_class.return_value.create_client_conversation.return_value.id = \
-        "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+
+    # Preflight start to get single-use request_token
+    start_resp = client.post(
+        "/oauth/google/authorize/start",
+        headers={"Authorization": f"Bearer {TEST_API_KEY}"},
+        json={"redirect_uri": CLIENT_REDIRECT_URI},
+    )
+    assert start_resp.status_code == 200
+    token = start_resp.json()["request_token"]
 
     response = client.get(
-        f"/oauth/google/authorize?redirect_uri={CLIENT_REDIRECT_URI}&api_key={TEST_API_KEY}",
+        f"/oauth/google/authorize?request_token={token}",
         follow_redirects=False,
     )
     assert response.status_code == 307
     assert "accounts.google.com" in response.headers["location"]
+
+    # Single-use check: reusing the token must fail with 401
+    reused = client.get(
+        f"/oauth/google/authorize?request_token={token}",
+        follow_redirects=False,
+    )
+    assert reused.status_code == 401
 
     # Regression: must NOT send a PKCE code_challenge to Google, because the
     # callback performs a manual token exchange without a code_verifier.
@@ -114,28 +156,36 @@ def test_google_authorize_success(mock_db_client_class, mock_flow_class):
     assert call_kwargs.get("autogenerate_code_verifier") is False
 
 
-@patch("agent.main.Flow")
-@patch("agent.main.DBClient")
-def test_google_authorize_invalid_api_key(mock_db_client_class, mock_flow_class):
+def test_google_authorize_expired_token():
     _set_env_vars()
+    from agent.main import _oauth_request_tokens
+    import time
+    token = "test-expired-token"
+    _oauth_request_tokens[token] = {
+        "created_at": time.time() - 400,  # > 300s TTL
+        "redirect_uri": CLIENT_REDIRECT_URI,
+    }
+    resp = client.get(f"/oauth/google/authorize?request_token={token}", follow_redirects=False)
+    assert resp.status_code == 401
+
+
+def test_google_authorize_legacy_api_key_query_param_rejected():
+    _set_env_vars()
+    # Passing api_key as query param without valid request_token must be rejected
     response = client.get(
-        f"/oauth/google/authorize?redirect_uri={CLIENT_REDIRECT_URI}&api_key=wrong-key",
+        f"/oauth/google/authorize?redirect_uri={CLIENT_REDIRECT_URI}&api_key={TEST_API_KEY}",
         follow_redirects=False,
     )
     assert response.status_code == 401
-    assert "Invalid API key" in response.text
 
 
-@patch("agent.main.Flow")
-@patch("agent.main.DBClient")
-def test_google_authorize_missing_api_key(mock_db_client_class, mock_flow_class):
+def test_google_authorize_missing_token():
     _set_env_vars()
     response = client.get(
         f"/oauth/google/authorize?redirect_uri={CLIENT_REDIRECT_URI}",
         follow_redirects=False,
     )
     assert response.status_code == 401
-    assert "Invalid API key" in response.text
 
 
 @patch("agent.main.Flow")
@@ -159,8 +209,16 @@ def test_google_authorize_state_encoding(mock_db_client_class, mock_flow_class):
     mock_flow.authorization_url.side_effect = _capture_authorization_url
     mock_flow_class.from_client_config.return_value = mock_flow
 
+    start_resp = client.post(
+        "/oauth/google/authorize/start",
+        headers={"Authorization": f"Bearer {TEST_API_KEY}"},
+        json={"redirect_uri": CLIENT_REDIRECT_URI},
+    )
+    assert start_resp.status_code == 200
+    token = start_resp.json()["request_token"]
+
     response = client.get(
-        f"/oauth/google/authorize?redirect_uri={CLIENT_REDIRECT_URI}&api_key={TEST_API_KEY}",
+        f"/oauth/google/authorize?request_token={token}",
         follow_redirects=False,
     )
     assert response.status_code == 307

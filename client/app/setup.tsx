@@ -499,7 +499,19 @@ export default function SetupScreen() {
     try {
       const redirectUri = 'vela-client://oauth/callback';
       const base = effectiveApiUrl.replace(/\/+$/, '');
-      const authUrl = `${base}/oauth/google/authorize?redirect_uri=${encodeURIComponent(redirectUri)}&api_key=${encodeURIComponent(effectiveApiKey || '')}`;
+      const startRes = await fetch(`${base}/oauth/google/authorize/start`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(effectiveApiKey ? { Authorization: `Bearer ${effectiveApiKey.trim()}` } : {}),
+        },
+        body: JSON.stringify({ redirect_uri: redirectUri }),
+      });
+      if (!startRes.ok) {
+        throw new Error(`Failed to initialize OAuth session (${startRes.status})`);
+      }
+      const startData = await startRes.json();
+      const authUrl = `${base}${startData.authorize_url.startsWith('/') ? '' : '/'}${startData.authorize_url}`;
       const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
       if (result.type === 'success' && result.url) {
         // Parse the backend's verdict from the redirect URL (canonical flow).

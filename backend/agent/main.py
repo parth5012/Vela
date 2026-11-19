@@ -17,6 +17,8 @@ from db.client import DBClient
 from db.session import get_db_session
 import json
 import uuid
+import secrets
+import time
 import base64
 import urllib.parse
 from datetime import date as dt_date, datetime, timedelta, timezone
@@ -1416,29 +1418,72 @@ def get_oauth_status(conversation_id: str = Query(default=None)):
         return {"connected": False}
 
 
+class OAuthAuthorizeStartPayload(BaseModel):
+    redirect_uri: str = "vela-client://oauth/callback"
+
+
+_oauth_request_tokens: dict[str, dict] = {}
+OAUTH_REQUEST_TOKEN_TTL_SECONDS = 300
+
+
+def _clean_expired_oauth_tokens(now: float) -> None:
+    expired = [
+        t
+        for t, data in _oauth_request_tokens.items()
+        if now - data.get("created_at", 0) > OAUTH_REQUEST_TOKEN_TTL_SECONDS
+    ]
+    for t in expired:
+        _oauth_request_tokens.pop(t, None)
+
+
+@app.post("/oauth/google/authorize/start", dependencies=[Depends(verify_api_key)])
+def oauth_google_authorize_start(
+    payload: OAuthAuthorizeStartPayload = OAuthAuthorizeStartPayload(),
+):
+    """Preflight endpoint to initiate mobile/client OAuth without exposing API key in URL query strings.
+
+    Validates API key via Authorization header, creates a short-lived (5 min) single-use
+    opaque request token bound to redirect_uri, and returns the authorize URL embedding that token.
+    """
+    now = time.time()
+    _clean_expired_oauth_tokens(now)
+    token = secrets.token_urlsafe(32)
+    redirect_uri = payload.redirect_uri or "vela-client://oauth/callback"
+    _oauth_request_tokens[token] = {
+        "created_at": now,
+        "redirect_uri": redirect_uri,
+    }
+    authorize_url = f"/oauth/google/authorize?request_token={token}"
+    return {
+        "status": "ok",
+        "request_token": token,
+        "authorize_url": authorize_url,
+    }
+
+
 @app.get("/oauth/google/authorize")
 def oauth_google_authorize(
-    redirect_uri: str = Query(default="vela-client://oauth/callback"),
-    api_key: str = Query(None),
+    request_token: Optional[str] = Query(None),
 ):
     """Mobile client OAuth entry point.
 
-    Called by the Vela Android client via ``WebBrowser.openAuthSessionAsync``.
-    Validates the API key, creates a client conversation, encodes the
-    conversation ID and redirect URI into the state parameter, then redirects
-    to Google's OAuth consent screen.
-
-    After the user authorizes, Google redirects to ``/oauth/callback`` which
-    exchanges the code for tokens and redirects back to the client's custom
-    scheme (e.g. ``vela-client://oauth/callback?status=success``).
+    Called by the Vela client via ``WebBrowser.openAuthSessionAsync``.
+    Consumes single-use opaque request token minted by ``/oauth/google/authorize/start``.
     """
     logger.info("Google OAuth authorize endpoint called")
 
-    # Validate the API key
-    expected_key = os.getenv("VELA_API_KEY", "vela5012")
-    if not api_key or api_key != expected_key:
-        logger.warning(f'Received invalid API key: {api_key}')
-        raise HTTPException(status_code=401, detail="Invalid API key")
+    if not request_token:
+        logger.warning("OAuth authorize called without request_token")
+        raise HTTPException(status_code=401, detail="Missing OAuth request token")
+
+    now = time.time()
+    _clean_expired_oauth_tokens(now)
+    token_data = _oauth_request_tokens.pop(request_token, None)
+    if not token_data or (now - token_data.get("created_at", 0) > OAUTH_REQUEST_TOKEN_TTL_SECONDS):
+        logger.warning("Invalid or expired OAuth request token")
+        raise HTTPException(status_code=401, detail="Invalid or expired OAuth request token")
+
+    redirect_uri = token_data.get("redirect_uri", "vela-client://oauth/callback")
 
     # Use global conversation ID for OAuth flow instead of creating throwaway ones
     conversation_id = GLOBAL_OAUTH_CONVERSATION_ID

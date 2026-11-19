@@ -186,13 +186,17 @@ def test_public_root_does_not_leak_and_is_documented_public(security_client):
 
 
 def test_oauth_authorize_has_its_own_key_gate(security_client):
-    """OAuth authorize (public route) enforces the same key via query param."""
+    """OAuth authorize enforces preflight token and rejects query-param api_key."""
     resp = security_client.get("/oauth/google/authorize")
     assert resp.status_code == 401
     resp = security_client.get(
         f"/oauth/google/authorize?api_key={WRONG_API_KEY}"
     )
     assert resp.status_code == 401
+
+    # Start preflight requires Bearer key
+    resp_start = security_client.post("/oauth/google/authorize/start")
+    assert resp_start.status_code == 403
 
 
 # ---------------------------------------------------------------------------

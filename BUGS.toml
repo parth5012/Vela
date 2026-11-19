@@ -42,3 +42,14 @@ repro_steps = [
   "Observe console: [Database] Database client not initialized, skipping migrations"
 ]
 notes = "Web is used for deterministic Playwright e2e only (server connection mode). Anything that depends on the on-device SQLite store is out of scope on web; native builds are unaffected."
+
+[BUG-180]
+title = "Move API key out of OAuth authorize URL query strings (finding-008)"
+status = "fixed"
+failing_test = "backend/tests/test_oauth.py::test_google_authorize_legacy_api_key_query_param_rejected"
+repro_steps = [
+  "Send GET request to /oauth/google/authorize with api_key in query string",
+  "Observe: API key accepted directly from query string instead of requiring authenticated preflight token"
+]
+notes = "Added POST /oauth/google/authorize/start with Bearer auth issuing single-use opaque request tokens. GET /oauth/google/authorize now consumes request_token and rejects raw api_key query param."
+
