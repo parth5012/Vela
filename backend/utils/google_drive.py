@@ -102,7 +102,7 @@ def get_google_credentials(conversation_id: str, db) -> Credentials | None:
                 "refresh_token": creds.refresh_token,
                 "token_uri": creds.token_uri,
                 "client_id": creds.client_id,
-                "scopes": creds.scopes,
+                "scopes": existing_global.get("scopes") or creds.scopes,
                 "expiry": updated_expiry.isoformat() if updated_expiry else None,
             }
             updated_token_data.pop("client_secret", None)

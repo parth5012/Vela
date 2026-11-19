@@ -1031,8 +1031,6 @@ export default function ChatScreen() {
           try {
             const unescapedVal = item.rawInput.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
             const parsedInput = JSON.parse(unescapedVal);
-            await markToolExecuted(executionId);
-
             // Extract conversation ID and task token
             const fullConvId = parsedInput.conversation_id || '';
             const lastUnderscore = fullConvId.lastIndexOf('_');
@@ -1057,6 +1055,7 @@ export default function ChatScreen() {
                   'error',
                   'Blocked: the Accessibility permission is required for this action.'
                 );
+                await markToolExecuted(executionId);
                 return;
               }
             }
@@ -1095,6 +1094,7 @@ export default function ChatScreen() {
             }
 
             await sendDeviceResponse(conversationId, taskToken, status, result);
+            await markToolExecuted(executionId);
           } catch (err) {
             console.error('Failed to execute safety or device action:', err);
           }
