@@ -339,8 +339,9 @@ export const useBrowserStore = create<BrowserState>()(
       name: 'vela-browser-storage',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
-        // persist only cookie sync + navigation; transient UI (isLoading, aiStatus etc) stays ephemeral
+        // persist only cookie sync + navigation + lastExecutedId; transient UI (isLoading, aiStatus etc) stays ephemeral
         currentUrl: state.currentUrl,
+        lastExecutedId: state.lastExecutedId,
         cookieSyncStatus: state.cookieSyncStatus,
         lastCookieSync: state.lastCookieSync,
         cookieSyncDomains: state.cookieSyncDomains,

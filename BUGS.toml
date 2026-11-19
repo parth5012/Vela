@@ -75,3 +75,14 @@ repro_steps = [
 ]
 notes = "Added to_naive_utc helper in utils.helpers, normalizing aware datetime and ISO strings to naive UTC across auth_gate, google_drive, and main.py token storage."
 
+[BUG-181]
+title = "Persist executed-tool ledger in SQLite to prevent replay on restart (finding-011)"
+status = "fixed"
+failing_test = "client/__tests__/chatRepository.test.ts::executedToolMarks (#181)"
+repro_steps = [
+  "Dispatch a device tool or webview browser tool",
+  "Restart application or remount chat component",
+  "Observe: in-memory executedDeviceToolsRef is lost and lastExecutedId was not persisted, causing re-execution of previous tool calls"
+]
+notes = "Added executed_tool_marks table in SQLite (migration 0009), persisted lastExecutedId in Zustand partialize, and gated tool execution via isToolMarked/markToolExecuted."
+

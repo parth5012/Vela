@@ -163,3 +163,12 @@ export const memories = sqliteTable('memories', {
 export type MemoryEntity = typeof memories.$inferSelect;
 export type InsertMemoryEntity = typeof memories.$inferInsert;
 
+export const executedToolMarks = sqliteTable('executed_tool_marks', {
+  message_key: text('message_key').primaryKey(),
+  created_at: integer('created_at').notNull(),
+});
+
+export type ExecutedToolMarkEntity = typeof executedToolMarks.$inferSelect;
+export type InsertExecutedToolMarkEntity = typeof executedToolMarks.$inferInsert;
+
+

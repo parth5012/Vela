@@ -27,6 +27,7 @@ import { healXmlTags } from '../utils/xmlHealer';
 import { useConfigStore } from '../store/useConfigStore';
 import type { ConnectionMode, SuggestionStarter } from '../store/useConfigStore';
 import { useChatStore, Message, Thread } from '../store/useChatStore';
+import { isToolMarked, markToolExecuted } from '../db/chatRepository';
 import { useAurora } from '../hooks/useAurora';
 import RichText from '../components/chat/RichText';
 import MessageItem from '../components/chat/MessageItem';
@@ -987,14 +988,18 @@ export default function ChatScreen() {
 
       if (lastExecutedId !== executionId) {
         useBrowserStore.getState().setLastExecutedId(executionId);
-        try {
-          const unescapedVal = rawInput.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-          const parsedInput = JSON.parse(unescapedVal);
-          useBrowserStore.getState().handleWebviewAction(parsedInput);
-          router.push('/browser');
-        } catch (e) {
-          console.error("Failed to parse webview_browser input:", e);
-        }
+        (async () => {
+          if (await isToolMarked(executionId)) return;
+          await markToolExecuted(executionId);
+          try {
+            const unescapedVal = rawInput.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+            const parsedInput = JSON.parse(unescapedVal);
+            useBrowserStore.getState().handleWebviewAction(parsedInput);
+            router.push('/browser');
+          } catch (e) {
+            console.error("Failed to parse webview_browser input:", e);
+          }
+        })();
       }
     }
   }, [lastMsg?.content, activeThreadId, router]);
@@ -1020,6 +1025,10 @@ export default function ChatScreen() {
         executedDeviceToolsRef.current.add(executionId);
 
         (async () => {
+          if (await isToolMarked(executionId)) {
+            return;
+          }
+          await markToolExecuted(executionId);
           try {
             const unescapedVal = item.rawInput.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
             const parsedInput = JSON.parse(unescapedVal);
