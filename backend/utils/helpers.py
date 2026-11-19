@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
-from utils.llm import get_llm
+
 from langsmith import traceable
+
+from utils.llm import get_llm
 
 
 def to_naive_utc(dt_or_iso: datetime | str | None) -> datetime | None:

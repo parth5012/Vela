@@ -1,36 +1,56 @@
-from utils.helpers import get_title, to_naive_utc
-from agent.persona import PUBLIC_LIST as PERSONA_LIST
-from agent.registry import AGENT_REGISTRY
-import os
 import asyncio
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, Query, responses, Request, BackgroundTasks, Security, HTTPException, status, WebSocket, UploadFile, File, Form
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from google_auth_oauthlib.flow import Flow
-from db.database import PostgresDB
-from gateway.telegram import TelegramGateway
-from gateway.discord import DiscordGateway
-from gateway.omni import handle_omni_session
-from cron.consolidate import run_self_improvement, run_daily_briefing
-from utils.logger import StructuredLogger
-from db.client import DBClient
-from db.session import get_db_session
+import base64
 import json
-import uuid
+import os
 import secrets
 import time
-import base64
 import urllib.parse
-from datetime import date as dt_date, datetime, timedelta, timezone
-from uuid import UUID
-import httpx
-from httpx import HTTPStatusError
+import uuid
+from contextlib import asynccontextmanager
+from datetime import date as dt_date
+from datetime import datetime, timedelta, timezone
 from typing import Optional
-from pydantic import BaseModel, Field, AliasChoices
+from uuid import UUID
+
+import httpx
+from fastapi import (
+    BackgroundTasks,
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    Security,
+    UploadFile,
+    WebSocket,
+    responses,
+    status,
+)
 from fastapi.responses import StreamingResponse
-from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from google_auth_oauthlib.flow import Flow
+from httpx import HTTPStatusError
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from pydantic import AliasChoices, BaseModel, Field
+
 from agent.graph import graph
-from db.models import Conversation, Experience, SyncMessage, ToolInvocation, ChatAttachment, utcnow_naive
+from agent.persona import PUBLIC_LIST as PERSONA_LIST
+from agent.registry import AGENT_REGISTRY
+from cron.consolidate import run_daily_briefing, run_self_improvement
+from db.client import DBClient
+from db.database import PostgresDB
+from db.models import (
+    ChatAttachment,
+    Conversation,
+    Experience,
+    SyncMessage,
+    ToolInvocation,
+    utcnow_naive,
+)
+from db.session import get_db_session
 from db.storage import (
     ALLOWED_MIME_TYPES,
     DEFAULT_SIGNED_URL_TTL,
@@ -38,9 +58,13 @@ from db.storage import (
     create_signed_url,
     upload_chat_attachment,
 )
-from fastapi import Response
-from utils.ulid import generate_ulid
+from gateway.discord import DiscordGateway
+from gateway.omni import handle_omni_session
+from gateway.telegram import TelegramGateway
 from utils.auth_gate import GLOBAL_OAUTH_CONVERSATION_ID
+from utils.helpers import get_title, to_naive_utc
+from utils.logger import StructuredLogger
+from utils.ulid import generate_ulid
 
 # Eval-only in-memory conversation history keyed by normalized thread_id.
 # Retains multi-turn dialogue state during evaluations without writing to Experience database.
@@ -171,8 +195,9 @@ discord_gateway = DiscordGateway(db=db)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Run database migrations with individual error boundaries
-    from db.session import engine, ensure_prod_schema
     from sqlalchemy import inspect, text
+
+    from db.session import engine, ensure_prod_schema
 
     # T8: idempotent prod DDL guard FIRST so a clean Postgres boots —
     # Base.metadata.create_all (check_first) converges both this path and
@@ -623,7 +648,7 @@ class MessagePayload(BaseModel):
     cloud_privacy_consent: bool = Field(default=False, validation_alias=AliasChoices("cloud_privacy_consent", "cloudPrivacyConsent", "privacy_consent"))
 
 
-from agent.concurrency import get_stream_semaphore
+from agent.concurrency import get_stream_semaphore  # noqa: E402
 
 
 def _init_sse_turn_sync(
@@ -976,8 +1001,8 @@ async def chat_message(payload: MessagePayload):
                     await queue.put(None)
                     # Check and evaluate any active running webview session for this thread
                     try:
-                        from tools.webview_browser import evaluate_webview_session
                         from db.models import WebViewAutomationSession
+                        from tools.webview_browser import evaluate_webview_session
                         with get_db_session() as db_session:
                             active_session = (
                                 db_session.query(WebViewAutomationSession)
@@ -1426,7 +1451,7 @@ def get_oauth_status(conversation_id: str = Query(default=None)):
                 "expires_at": token_data.get("expiry", ""),
             }
             return result
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.error("Failed to check OAuth token status", error=str(e))
         return {"connected": False}
 
@@ -1435,6 +1460,7 @@ class OAuthAuthorizeStartPayload(BaseModel):
     redirect_uri: str = "vela-client://oauth/callback"
 
 
+_DEFAULT_OAUTH_START_PAYLOAD = OAuthAuthorizeStartPayload()
 _oauth_request_tokens: dict[str, dict] = {}
 OAUTH_REQUEST_TOKEN_TTL_SECONDS = 300
 
@@ -1451,7 +1477,7 @@ def _clean_expired_oauth_tokens(now: float) -> None:
 
 @app.post("/oauth/google/authorize/start", dependencies=[Depends(verify_api_key)])
 def oauth_google_authorize_start(
-    payload: OAuthAuthorizeStartPayload = OAuthAuthorizeStartPayload(),
+    payload: OAuthAuthorizeStartPayload = _DEFAULT_OAUTH_START_PAYLOAD,
 ):
     """Preflight endpoint to initiate mobile/client OAuth without exposing API key in URL query strings.
 
@@ -1777,7 +1803,7 @@ async def carbonvoice_webhook(request: Request):
                 audio_mime_type = file_field.content_type
         except Exception as e:
             logger.error("Failed to parse form data", error=str(e))
-            raise HTTPException(status_code=400, detail="Invalid form data")
+            raise HTTPException(status_code=400, detail="Invalid form data") from e
     else:
         try:
             raw_body = await request.body()
@@ -2030,8 +2056,8 @@ def get_checkins_summary(conversation_id: Optional[str] = Query(None), days: int
 # Tool Proxy and Sync Endpoints for Local LLM Integration
 # ---------------------------------------------------------------------------
 
-from collections import defaultdict
 import time
+from collections import defaultdict
 
 RATE_LIMIT_STORE = defaultdict(list)
 
