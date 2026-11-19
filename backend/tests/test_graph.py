@@ -63,6 +63,28 @@ async def test_build_system_prompt_injects_active_skill(mock_get_db):
     assert "# Active Skill Instructions" in prompt
     assert "### Brainstorming Ideas Into Designs" in prompt
 
+
+@pytest.mark.asyncio
+@patch("agent.prompt.get_db_session")
+async def test_build_system_prompt_injects_grill_me_skill_without_query_field(mock_get_db):
+    mock_session = MagicMock()
+    mock_session.query().filter_by().first.return_value = None
+    mock_get_db.return_value.__enter__.return_value = mock_session
+
+    # AgentState does not contain 'query'; only messages
+    state: AgentState = {
+        "messages": [HumanMessage(content="Grill my database migration plan")],
+        "telegram_chat_id": 12345,
+        "db_conv_id": "conv-123",
+        "relevant_memories": [],
+        "next_node": "",
+        "active_skill": "GrillMeSkill"
+    }
+    prompt = await build_system_prompt(state)
+    assert "# Active Skill Instructions" in prompt
+    assert "Interview me relentlessly about every aspect of this plan" in prompt
+
+
 from db.models import Experience
 from datetime import datetime
 from agent.prompt import build_recent_messages
@@ -281,6 +303,49 @@ def test_supervisor_heuristic_activate(mock_get_llm, mock_get_db):
     assert result["next_node"] == "chatbot"
     assert mock_conv.active_skill == "BrainstormingSkill"
     mock_session.commit.assert_called_once()
+
+
+@patch("agent.graph.get_db_session")
+@patch("agent.graph.get_llm")
+def test_supervisor_grill_me_stuck_conversation_recovers(mock_get_llm, mock_get_db):
+    """A conversation stuck in GrillMeSkill recovers immediately when user cancels/quits."""
+    mock_session = MagicMock()
+    mock_get_db.return_value.__enter__.return_value = mock_session
+    mock_conv = MagicMock()
+    mock_conv.active_skill = "GrillMeSkill"
+    mock_session.query().filter_by().first.return_value = mock_conv
+
+    # User sends exit/quit to unstick the conversation
+    state = {
+        "messages": [HumanMessage(content="quit grilling me")],
+        "db_conv_id": "conv-stuck-grill",
+        "active_skill": "GrillMeSkill"
+    }
+
+    result = supervisor_node(state)
+    assert result["active_skill"] is None
+    assert result["next_node"] == "chatbot"
+    assert mock_conv.active_skill is None
+    mock_session.commit.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_grill_me_skill_execute_variants():
+    from skills.grill_me import GrillMeSkill
+    skill = GrillMeSkill()
+
+    # With messages containing HumanMessage
+    res1 = await skill.execute({"messages": [HumanMessage(content="Test plan query")]})
+    assert "Interview me relentlessly" in res1
+
+    # With legacy query dict
+    res2 = await skill.execute({"query": "Legacy query text"})
+    assert "Interview me relentlessly" in res2
+
+    # With empty dict
+    res3 = await skill.execute({})
+    assert "Interview me relentlessly" in res3
+
 
 
 

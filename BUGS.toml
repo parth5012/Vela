@@ -96,3 +96,15 @@ repro_steps = [
 ]
 notes = "Removed fabricated success string. Wired real E2B Sandbox execution if available with output capture/error handling, and honest failure when e2b package is missing."
 
+[BUG-185]
+title = "Fix GrillMeSkill state access + stuck-active recovery (finding-016)"
+status = "fixed"
+failing_test = "backend/tests/test_graph.py::test_build_system_prompt_injects_grill_me_skill_without_query_field"
+repro_steps = [
+  "Activate GrillMeSkill in conversation",
+  "Invoke build_system_prompt or graph turn with standard AgentState containing messages list",
+  "Observe: KeyError: 'query' raised and caught, causing conversation to fail and stay stuck in GrillMeSkill"
+]
+notes = "Added get_last_human_message_content helper in BaseSkill, updated GrillMeSkill to extract last query from messages safely and log via StructuredLogger, and verified deactivation recovery."
+
+
