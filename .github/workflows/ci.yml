@@ -1,16 +1,14 @@
 name: CI
 
+# PRIMARY CI now runs in Woodpecker (.woodpecker.yaml), triggered by polling.
+# This workflow is the FALLBACK, invoked by Woodpecker on failure (or manually).
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches:
-      - main
-      # Wayfinder / agent stacks open sub-PRs against their parent branch, so
-      # each layer has to be gated too (the workflow used by a pull_request run
-      # is the one in its head commit).
-      - 'wf/**'
   workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to build (dispatched by Woodpecker on failure)"
+        required: false
+        default: "main"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

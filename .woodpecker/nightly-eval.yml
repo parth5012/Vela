@@ -1,0 +1,29 @@
+when:
+  - event: cron
+
+cron:
+  - "0 4 * * *"
+
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      partial: false
+      depth: 0
+
+steps:
+  nightly-eval:
+    image: python:3.12-bookworm
+    environment:
+      DATABASE_URL: sqlite:///test_vela_backend.db
+      VELA_API_KEY: vela5012
+      GOOGLE_API_KEY: dummy-ci-key
+      JWT_SECRET: dummy-ci-jwt-secret
+      PYTHONPATH: .
+      OPENROUTER_API_KEY:
+        from_secret: openrouter_api_key
+    commands:
+      - pip install --quiet uv
+      - cd backend && uv sync --frozen && cd ..
+      - cd backend && uv run pytest tests/test_golden.py -v --durations=10
+      - cd backend && uv run python -m evals.judge "meta-llama/llama-3.3-70b-instruct"
