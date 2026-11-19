@@ -60,6 +60,33 @@ def is_safe_audio_url(url: str) -> bool:
     except Exception:
         return False
 
+def _sync_upload_drive_dataset(
+    conv_id, db, audio_bytes, audio_filename, audio_mime_type, message_text, timestamp, unique_id
+):
+    creds = get_google_credentials(conv_id, db)
+    if not creds:
+        return None, None
+    drive_audio_file_id = None
+    drive_text_file_id = None
+    if audio_bytes:
+        drive_audio_file_id = upload_to_google_drive(
+            credentials=creds,
+            file_name=audio_filename,
+            file_bytes=audio_bytes,
+            mime_type=audio_mime_type
+        )
+    if message_text:
+        text_filename = f"transcript_{timestamp}_{unique_id}.txt"
+        text_bytes = message_text.encode("utf-8")
+        drive_text_file_id = upload_to_google_drive(
+            credentials=creds,
+            file_name=text_filename,
+            file_bytes=text_bytes,
+            mime_type="text/plain"
+        )
+    return drive_audio_file_id, drive_text_file_id
+
+
 class CarbonVoiceGateway:
     """
     Gateway to handle incoming voice transcription messages from Carbon Voice,
@@ -219,30 +246,19 @@ class CarbonVoiceGateway:
         drive_text_file_id = None
 
         if message_text or audio_bytes:
-            # Check Google credentials
-            creds = get_google_credentials(conv_id, self.db)
-            if creds:
-                self.logger.info("Google credentials found. Proceeding with Google Drive dataset collection.")
-                
-                # Upload Audio
-                if audio_bytes:
-                    drive_audio_file_id = upload_to_google_drive(
-                        credentials=creds,
-                        file_name=audio_filename,
-                        file_bytes=audio_bytes,
-                        mime_type=audio_mime_type
-                    )
-                
-                # Upload matching Transcription Text
-                if message_text:
-                    text_filename = f"transcript_{timestamp}_{unique_id}.txt"
-                    text_bytes = message_text.encode("utf-8")
-                    drive_text_file_id = upload_to_google_drive(
-                        credentials=creds,
-                        file_name=text_filename,
-                        file_bytes=text_bytes,
-                        mime_type="text/plain"
-                    )
+            drive_audio_file_id, drive_text_file_id = await asyncio.to_thread(
+                _sync_upload_drive_dataset,
+                conv_id,
+                self.db,
+                audio_bytes,
+                audio_filename,
+                audio_mime_type,
+                message_text,
+                timestamp,
+                unique_id
+            )
+            if drive_audio_file_id or drive_text_file_id:
+                self.logger.info("Google credentials found. Google Drive dataset collection completed.")
             else:
                 self.logger.info("No Google credentials available for this conversation. Skipping dataset upload.")
 

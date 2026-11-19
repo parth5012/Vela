@@ -1,3 +1,4 @@
+import asyncio
 import pytest
 from langchain_core.messages import HumanMessage
 from agent.graph import graph
@@ -43,6 +44,36 @@ async def test_build_system_prompt_injects_dynamic_rules(mock_get_db):
     prompt = await build_system_prompt(state)
     assert "* Must be concise and funny." in prompt
     assert "# Dynamic Rules" in prompt
+
+
+@pytest.mark.asyncio
+@patch("agent.prompt.get_db_session")
+@patch("agent.prompt.build_context", return_value="Offloaded Context")
+@patch("agent.prompt.build_recent_messages", return_value="Offloaded History")
+async def test_build_system_prompt_offloads_io_to_thread(mock_build_hist, mock_build_ctx, mock_get_db):
+    mock_session = MagicMock()
+    mock_session.query().filter_by().first.return_value = None
+    mock_get_db.return_value.__enter__.return_value = mock_session
+
+    state: AgentState = {
+        "messages": [],
+        "telegram_chat_id": 12345,
+        "db_conv_id": "conv-123",
+        "relevant_memories": [],
+        "next_node": ""
+    }
+
+    with patch("asyncio.to_thread", wraps=asyncio.to_thread) as spy_to_thread:
+        prompt = await build_system_prompt(state)
+        assert "Offloaded Context" in prompt
+        assert "Offloaded History" in prompt
+        # Verify asyncio.to_thread was called for the blocking operations
+        called_targets = [c.args[0] for c in spy_to_thread.call_args_list]
+        from agent.prompt import build_context, build_recent_messages, _fetch_agent_and_rules
+        assert build_context in called_targets
+        assert build_recent_messages in called_targets
+        assert _fetch_agent_and_rules in called_targets
+
 
 @pytest.mark.asyncio
 @patch("agent.prompt.get_db_session")

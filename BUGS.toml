@@ -117,5 +117,16 @@ repro_steps = [
 ]
 notes = "Converted submit_webview_response and submit_device_response to async def in backend/agent/main.py."
 
+[BUG-187]
+title = "Offload blocking I/O in async paths to worker threads (finding-018)"
+status = "fixed"
+failing_test = "backend/tests/test_graph.py::test_build_system_prompt_offloads_io_to_thread"
+repro_steps = [
+  "Stream a reply via SSE or trigger async chatbot turn",
+  "Observe: build_context, build_recent_messages, Google Drive uploads, and webview DB logging executed synchronously on the event loop, stalling concurrent stream processing"
+]
+notes = "Wrapped blocking DB operations and external API calls in asyncio.to_thread across agent/prompt.py, agent/main.py, gateway/carbonvoice.py, and tools/webview_browser.py."
+
+
 
 
