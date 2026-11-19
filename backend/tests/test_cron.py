@@ -162,7 +162,7 @@ def test_consolidate_batch_cap_processes_50_of_500(mock_llm_func):
                 _seed_t7_experiences(session, 500)
                 session.commit()
 
-            msg = run_self_improvement()
+            msg = run_self_improvement(max_batches=1)
             assert "50" in msg
 
             with get_db_session() as session:
@@ -292,3 +292,72 @@ def test_consolidate_keeps_rollback_copy(mock_llm_func):
                 assert _read_rules(session, DYNAMIC_RULES_BACKUP_KEY) == _T7_PRIOR_RULES
     finally:
         _teardown_t7(original_rules, original_backup)
+
+
+@patch("cron.consolidate.get_llm")
+def test_consolidate_120_experiences_in_three_batches(mock_llm_func):
+    """120 seeded experiences consolidate in 3 marked batches (#188)."""
+    mock_llm_func.return_value = _mock_llm("* Be concise and friendly.")
+    with get_db_session() as session:
+        original_rules = _read_rules(session, DYNAMIC_RULES_KEY)
+        original_backup = _read_rules(session, DYNAMIC_RULES_BACKUP_KEY)
+    try:
+        with patch.dict("os.environ", {"GOOGLE_API_KEY": "AIzaSyFakeKey"}):
+            with get_db_session() as session:
+                session.query(Experience).filter_by(conversation_id=_T7_CONV_ID).delete()
+                session.query(Conversation).filter_by(id=_T7_CONV_ID).delete()
+                session.commit()
+                _seed_t7_experiences(session, 120)
+                session.commit()
+
+            msg = run_self_improvement()
+            assert "120 experiences" in msg
+            assert "3 batches" in msg
+
+            with get_db_session() as session:
+                done = session.query(Experience).filter_by(
+                    conversation_id=_T7_CONV_ID, consolidated=True).count()
+                pending = session.query(Experience).filter_by(
+                    conversation_id=_T7_CONV_ID, consolidated=False).count()
+                assert done == 120
+                assert pending == 0
+    finally:
+        _teardown_t7(original_rules, original_backup)
+
+
+@patch("cron.consolidate.get_llm")
+def test_consolidate_injected_mid_batch_llm_error_preserves_earlier_marks(mock_llm_func):
+    """Injected mid-batch LLM error preserves earlier marks (#188)."""
+    mock_llm = MagicMock()
+    mock_llm.invoke.side_effect = [
+        MagicMock(content="* First batch rule."),
+        RuntimeError("LLM quota exceeded or service unavailable"),
+    ]
+    mock_llm_func.return_value = mock_llm
+
+    with get_db_session() as session:
+        original_rules = _read_rules(session, DYNAMIC_RULES_KEY)
+        original_backup = _read_rules(session, DYNAMIC_RULES_BACKUP_KEY)
+    try:
+        with patch.dict("os.environ", {"GOOGLE_API_KEY": "AIzaSyFakeKey"}):
+            with get_db_session() as session:
+                session.query(Experience).filter_by(conversation_id=_T7_CONV_ID).delete()
+                session.query(Conversation).filter_by(id=_T7_CONV_ID).delete()
+                session.commit()
+                _seed_t7_experiences(session, 120)
+                session.commit()
+
+            msg = run_self_improvement()
+            assert "Consolidated 50 experiences" in msg
+
+            with get_db_session() as session:
+                done = session.query(Experience).filter_by(
+                    conversation_id=_T7_CONV_ID, consolidated=True).count()
+                pending = session.query(Experience).filter_by(
+                    conversation_id=_T7_CONV_ID, consolidated=False).count()
+                # Batch 1 was committed before batch 2 failed
+                assert done == 50
+                assert pending == 70
+    finally:
+        _teardown_t7(original_rules, original_backup)
+
