@@ -137,16 +137,17 @@ async def webview_browser(
     session_id = None
     step_number = 1
     
-    # 1. Initialize step trace in DB
+    # 1. Initialize step trace in DB (offloaded to threadpool)
     try:
-        session_id, step_number = db_log_step_start(
+        session_id, step_number = await asyncio.to_thread(
+            db_log_step_start,
             conversation_id=conversation_id,
             action=action,
             target=target,
             value=value,
             thoughts=thoughts,
             current_url=current_url,
-            minified_dom=minified_dom
+            minified_dom=minified_dom,
         )
     except Exception as e:
         logger.error("Failed to initialize session/step log", error=str(e))
@@ -161,16 +162,17 @@ async def webview_browser(
         task_token=task_token
     )
 
-    # 3. Save step results in DB
+    # 3. Save step results in DB (offloaded to threadpool)
     if session_id:
         try:
-            db_log_step_end(
+            await asyncio.to_thread(
+                db_log_step_end,
                 session_id=session_id,
                 step_number=step_number,
                 action=action,
                 value=value,
                 status=status,
-                result=result
+                result=result,
             )
         except Exception as e:
             logger.error("Failed to save step result", error=str(e))

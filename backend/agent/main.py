@@ -626,6 +626,44 @@ class MessagePayload(BaseModel):
 from agent.concurrency import get_stream_semaphore
 
 
+def _init_sse_turn_sync(
+    normalized_id: str,
+    agent: str,
+    is_eval: bool,
+    initial_message: str,
+) -> tuple[str, str, str, str | None]:
+    """Blocking DB initialization for an SSE turn: find/create conversation and initial experience row.
+
+    Offloaded from the async event loop via asyncio.to_thread to avoid blocking streamed replies.
+    """
+    with get_db_session() as session:
+        client = DBClient(session)
+        conv = session.query(Conversation).filter_by(id=normalized_id).first()
+        if not conv:
+            conv = client.create_client_conversation(agent=agent, conversation_id=normalized_id)
+        else:
+            if agent != conv.agent:
+                conv.agent = agent
+        thread_uuid = conv.id
+        thread_title = conv.title
+        thread_agent = conv.agent
+
+    experience_id = None
+    if not is_eval:
+        try:
+            with get_db_session() as session:
+                exp_client = DBClient(session)
+                exp_row = exp_client.save_experience(
+                    conversation_id=thread_uuid,
+                    user_query=initial_message,
+                    agent_response="",
+                )
+                experience_id = exp_row.id
+        except Exception as e:
+            logger.error("Failed to create experience row at turn start", error=str(e))
+    return thread_uuid, thread_title, thread_agent, experience_id
+
+
 def _persist_sse_turn_sync(
     experience_id: str | None,
     conversation_id: str | None,
@@ -827,42 +865,17 @@ async def chat_message(payload: MessagePayload):
                     raise
 
         try:
-            # Retrieve or create thread
+            # Retrieve or create thread (offloaded to threadpool)
             normalized_id = normalize_thread_id(payload.thread_id)
 
-            with get_db_session() as session:
-                client = DBClient(session)
-                conv = session.query(Conversation).filter_by(id=normalized_id).first()
-                if not conv:
-                    conv = client.create_client_conversation(agent=payload.agent, conversation_id=normalized_id)
-                else:
-                    if payload.agent != conv.agent:
-                        conv.agent = payload.agent
-                thread_uuid = conv.id
-                thread_title = conv.title
-                thread_agent = conv.agent
-
-            # T6 (issue #254): create the Experience row at turn start so the
-            # turn owns its row by ID. T3 transaction rule: flush-only here,
-            # get_db_session owns the commit.
-            # Bypass persistent Experience creation for eval turns or VELA_EVAL_MODE=1
-            # to prevent memory DB pollution (hardening rule for system evals).
             is_eval = os.getenv("VELA_EVAL_MODE") == "1" or str(payload.thread_id).startswith("eval-")
-            if not is_eval:
-                try:
-                    with get_db_session() as session:
-                        exp_client = DBClient(session)
-                        exp_row = exp_client.save_experience(
-                            conversation_id=thread_uuid,
-                            user_query=initial_message,
-                            agent_response="",
-                        )
-                        experience_id = exp_row.id
-                except Exception as e:
-                    logger.error("Failed to create experience row at turn start", error=str(e))
-                    experience_id = None
-            else:
-                experience_id = None
+            thread_uuid, thread_title, thread_agent, experience_id = await asyncio.to_thread(
+                _init_sse_turn_sync,
+                normalized_id,
+                payload.agent,
+                is_eval,
+                initial_message,
+            )
 
             if len(payload.attachments) > 10:
                 count_response = "A maximum of 10 image attachments per message is supported."

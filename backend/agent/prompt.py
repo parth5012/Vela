@@ -1,3 +1,4 @@
+import asyncio
 from agent.state import AgentState
 from agent.registry import AGENT_REGISTRY
 from db.models import SystemPromptFragment, Experience, MemoryVector, Conversation
@@ -148,35 +149,37 @@ def build_recent_messages(state: AgentState) -> str:
 
 
 
-async def build_system_prompt(state: AgentState) -> str:
-    context = build_context(state)
-    recent_messages = build_recent_messages(state)
-    db_conv_id = state.get("db_conv_id", "")
-    chat_id = state.get("telegram_chat_id", 0)
-
-    # Retrieve the active agent from state (gateways hardcode; API sets it explicitly)
-    agent_id = state.get("agent") or "personal assistant"
-    if agent_id == "personal assistant" and db_conv_id and db_conv_id != "conv-123":
-        try:
-            with get_db_session() as session:
-                conv = session.query(Conversation).filter_by(id=db_conv_id).first()
-                if conv and conv.agent:
-                    agent_id = conv.agent
-        except Exception:
-            pass
-
-    # Look up agent instructions from the formal registry
-    agent_config = AGENT_REGISTRY.get(agent_id)
-    persona_section = agent_config.prompt_instructions if agent_config else ""
-
+def _fetch_agent_and_rules(db_conv_id: str, default_agent_id: str) -> tuple[str, str]:
+    agent_id = default_agent_id
     dynamic_rules_section = ""
     try:
         with get_db_session() as session:
+            if agent_id == "personal assistant" and db_conv_id and db_conv_id != "conv-123":
+                conv = session.query(Conversation).filter_by(id=db_conv_id).first()
+                if conv and conv.agent:
+                    agent_id = conv.agent
+
             fragment = session.query(SystemPromptFragment).filter_by(key="dynamic_rules").first()
             if fragment and fragment.content:
                 dynamic_rules_section = f"\n\n# Dynamic Rules\n{fragment.content}\n"
     except Exception:
         pass
+    return agent_id, dynamic_rules_section
+
+
+async def build_system_prompt(state: AgentState) -> str:
+    context = await asyncio.to_thread(build_context, state)
+    recent_messages = await asyncio.to_thread(build_recent_messages, state)
+    db_conv_id = state.get("db_conv_id", "")
+    chat_id = state.get("telegram_chat_id", 0)
+
+    # Retrieve the active agent and dynamic rules from DB off the event loop
+    agent_id = state.get("agent") or "personal assistant"
+    agent_id, dynamic_rules_section = await asyncio.to_thread(_fetch_agent_and_rules, db_conv_id, agent_id)
+
+    # Look up agent instructions from the formal registry
+    agent_config = AGENT_REGISTRY.get(agent_id)
+    persona_section = agent_config.prompt_instructions if agent_config else ""
 
     if persona_section:
         dynamic_rules_section += f"\n{persona_section}"
