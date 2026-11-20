@@ -351,8 +351,14 @@ export function seedSettings(settings: E2ESettingsInput): E2EConfigState {
 /**
  * Seed tasks into the in-browser SQLite database shim.
  */
-export async function seedTasks(tasksList?: Array<Partial<TaskEntity>>): Promise<E2ETasksState> {
+export async function seedTasks(
+  tasksList?: Array<Partial<TaskEntity>>,
+  clearFirst = true,
+): Promise<E2ETasksState> {
   await initializeDatabase();
+  if (clearFirst) {
+    await db.delete(tasks);
+  }
 
   const defaultTasks: TaskEntity[] = [
     {
@@ -665,12 +671,14 @@ export async function resetWorld(): Promise<void> {
   });
   useSafetyStore.setState({ pendingTask: null });
   useOfflineStore.getState().reset();
+  useConfigStore.getState().clearConfig();
 
   await resetE2EDatabase();
   await configure();
 
   try {
-    const res = await fetch(`${E2E_DEFAULT_API_URL}/_e2e/reset`, { method: 'POST' });
+    const apiUrl = useConfigStore.getState().apiUrl || E2E_DEFAULT_API_URL;
+    const res = await fetch(`${apiUrl}/_e2e/reset`, { method: 'POST' });
     if (!res.ok) {
       console.warn('[e2e] resetWorld backend call returned:', res.status);
     }

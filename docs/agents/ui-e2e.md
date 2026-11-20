@@ -80,8 +80,8 @@ outside CI. One worker, zero retries — a failure is a real failure.
 | `backend/agent/testing/__init__.py` | Binds a disposable SQLite DB so no `.env` is needed |
 | `backend/tests/test_e2e_server_boot.py` | Proves the server boots in a bare environment |
 | `backend/tests/test_e2e_control_channel.py` | Validates `/fixture`, `/reset`, `/state`, and error/delay streaming |
-| `client/e2e/ui/e2e.ts` | Control-channel and in-page helper API (`resetWorld`, `seedChat`, `seedThreads`, `goTo`) |
-| `client/e2e/ui/loader.ts` | Type-safe in-browser window accessor (`__VELA_E2E__`) |
+| `client/e2e/ui/e2e.ts` | Playwright-side typed helper API (`resetWorld`, `seedChat`, `seedThreads`, `goTo`) |
+| `client/e2e/loader.ts` | Type-safe in-browser window seam installer (`window.__VELA_E2E__`) |
 | `client/e2e/ui/COVERAGE.md` | Feature matrix covering all 20 specs across Waves A, B, and C |
 | `client/e2e/ui/specs/*.spec.ts` | The 20 feature specs |
 | `client/playwright.config.ts` | Server boot, ports, single-worker policy for functional suite |

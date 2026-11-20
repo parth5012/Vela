@@ -52,7 +52,7 @@ export interface VelaE2EApi {
   getConfigState(): ConfigState;
   waitForIdle(timeoutMs?: number): Promise<ChatState>;
   goTo(path: string): void;
-  seedTasks(tasksList?: any[]): Promise<any>;
+  seedTasks(tasksList?: any[], clearFirst?: boolean): Promise<any>;
   getTasksState(): Promise<any>;
   seedExecution(task?: any, execution?: any): Promise<void>;
   seedSettings(settings: any): ConfigState;
@@ -206,12 +206,12 @@ export async function tasksState(page: Page): Promise<any> {
   });
 }
 
-export async function seedTasks(page: Page, tasksList?: any[]): Promise<any> {
-  return page.evaluate(async (list) => {
+export async function seedTasks(page: Page, tasksList?: any[], clearFirst?: boolean): Promise<any> {
+  return page.evaluate(async ({ list, clear }) => {
     const api = window.__VELA_E2E__;
     if (!api) throw new Error('__VELA_E2E__ missing');
-    return api.seedTasks(list);
-  }, tasksList);
+    return api.seedTasks(list, clear);
+  }, { list: tasksList, clear: clearFirst });
 }
 
 export async function seedExecution(page: Page, task?: any, execution?: any): Promise<void> {

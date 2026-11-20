@@ -41,9 +41,6 @@ importers:
       '@stardazed/streams-text-encoding':
         specifier: ^1.0.2
         version: 1.0.2
-      '@types/sql.js':
-        specifier: ^1.16.0
-        version: 1.16.0
       ai:
         specifier: ^7.0.124
         version: 7.0.124(zod@4.6.7)
@@ -164,9 +161,6 @@ importers:
       react-native-worklets:
         specifier: 0.10.3
         version: 0.10.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.86.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(react-native@0.86.0(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.2(@babel/core@7.29.7(supports-color@8.1.1))(react@19.2.3)(supports-color@8.1.1))(@react-native/metro-config@0.86.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.2.17)(react@19.2.3)(supports-color@8.1.1))(react@19.2.3)(supports-color@8.1.1)
-      sql.js:
-        specifier: ^1.17.0
-        version: 1.17.0
       stable-diffusion:
         specifier: file:./modules/stable-diffusion
         version: file:modules/stable-diffusion(expo@57.0.9)
@@ -201,6 +195,9 @@ importers:
       '@types/react-test-renderer':
         specifier: ^19.1.0
         version: 19.1.0
+      '@types/sql.js':
+        specifier: ^1.16.0
+        version: 1.16.0
       '@typescript-eslint/parser':
         specifier: ^8.67.0
         version: 8.68.0(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@6.0.3)
@@ -243,6 +240,9 @@ importers:
       react-test-renderer:
         specifier: 19.2.3
         version: 19.2.3(react@19.2.3)
+      sql.js:
+        specifier: ^1.17.0
+        version: 1.17.0
       typescript:
         specifier: ^6.0.3
         version: 6.0.3

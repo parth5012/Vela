@@ -1,7 +1,14 @@
-import { drizzle } from 'drizzle-orm/sql-js';
+import type { SQLJsDatabase } from 'drizzle-orm/sql-js';
 import * as schema from './schema';
 import migrations from './migrations/migrations';
-import type { SQLJsDatabase } from 'drizzle-orm/sql-js';
+
+let drizzleFn: any = null;
+function getDrizzle() {
+  if (!drizzleFn) {
+    drizzleFn = require('drizzle-orm/sql-js').drizzle;
+  }
+  return drizzleFn;
+}
 
 export const isE2E = process.env.EXPO_PUBLIC_E2E === '1';
 
@@ -74,7 +81,7 @@ export function applyMigrationsToSqlJs(db: any): void {
       db.run(stmt);
     }
 
-    db.run('INSERT INTO "__drizzle_migrations" (hash, created_at) VALUES (?, ?);', ['hash', entry.when]);
+    db.run('INSERT INTO "__drizzle_migrations" (hash, created_at) VALUES (?, ?);', [entry.tag || 'hash', entry.when]);
   }
 }
 
@@ -101,8 +108,8 @@ export async function initE2EDatabase(): Promise<SQLJsDatabase<typeof schema>> {
     isMigrated = true;
   }
 
-  drizzleDbInstance = drizzle(rawDbInstance, { schema });
-  return drizzleDbInstance;
+  drizzleDbInstance = getDrizzle()(rawDbInstance, { schema });
+  return drizzleDbInstance!;
 }
 
 export async function resetE2EDatabase(): Promise<void> {
@@ -121,5 +128,5 @@ export async function resetE2EDatabase(): Promise<void> {
   };
   applyMigrationsToSqlJs(rawDbInstance);
   isMigrated = true;
-  drizzleDbInstance = drizzle(rawDbInstance, { schema });
+  drizzleDbInstance = getDrizzle()(rawDbInstance, { schema });
 }
