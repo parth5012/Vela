@@ -38,10 +38,10 @@ npm run e2e:visual:update # update baseline snapshots (canonical in Linux)
 
 ```
 client/e2e/
+├── loader.ts           # Typed window.__VELA_E2E__ in-browser seam installer
 ├── ui/                 # Playwright device-free web harness (see docs/agents/ui-e2e.md)
 │   ├── COVERAGE.md     # 20-feature coverage manifest
-│   ├── e2e.ts          # Control channel helper API
-│   ├── loader.ts       # Typed window.__VELA_E2E__ accessor
+│   ├── e2e.ts          # Playwright-side typed helper API
 │   └── specs/          # 20 Playwright specs (Waves A, B, C)
 ├── visual/             # Visual baseline regression suite (playwright.visual.config.ts)
 │   ├── visual.spec.ts  # 5 canonical UI states at 360x640
@@ -133,7 +133,7 @@ viewport (**360×640**) in two passes: normal, then reduced motion
 ```bash
 # Run the lane (captures both passes, diffs against baselines)
 bash client/e2e/runner.sh --lane visual-regression
-# or: npm run e2e:visual
+# (Note: for device-free web Playwright visual regression, run: npm run e2e:visual)
 
 # Promote current shots to client/e2e/baselines/ (intentional use only)
 bash client/e2e/runner.sh --lane visual-regression --update-baselines

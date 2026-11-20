@@ -49,6 +49,13 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
       filePath: path.join(__dirname, 'stubs', 'expo-sqlite.web.ts'),
     };
   }
+  // Native builds: stub out in-browser e2eAdapter so sql.js and test shims are never bundled
+  if (platform !== 'web' && (moduleName === './e2eAdapter' || moduleName.endsWith('/db/e2eAdapter'))) {
+    return {
+      type: 'sourceFile',
+      filePath: path.join(__dirname, 'stubs', 'e2eAdapter.native.ts'),
+    };
+  }
   return context.resolveRequest(context, moduleName, platform);
 };
 

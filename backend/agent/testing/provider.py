@@ -37,7 +37,8 @@ class ScriptedToolCall:
 
 class DeterministicE2EError(RuntimeError):
     """Raised by FakeProvider when a scripted error turn is executed."""
-    pass
+
+    is_deterministic_e2e_error: bool = True
 
 
 class FakeProvider(BaseChatModel):
