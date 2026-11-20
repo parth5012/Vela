@@ -29,7 +29,7 @@ The factory tracks three core metrics per completed task to measure factory effi
 
 | Task / PR | Description | Contract Boundaries Touched | Catches (Mech / Agent) | Blueprint Corrections | Wall-Clock (min) | Human Touch (min) | Manual Est (min) | Verdict / Notes |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-<!-- Add rows below as factory tasks complete. Do not pre-populate with synthetic rows. -->
+| Map #669 (PRs #682, #695-#701, #710, #711) | Complete Device-Free Playwright E2E Harness (20 Features, Waves A/B/C, Visual Baselines, CI Wiring) | backend/agent/testing, client/e2e, client/store, client/app, .github/workflows, .woodpecker | 2 / 3 | 0 | 180 | 0 | 720 | PASS: 10 stacked PRs delivered bottom-up; 55/55 specs passing, advisory visual green, dedicated CI e2e job wired. |
 
 ---
 

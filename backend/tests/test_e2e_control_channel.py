@@ -11,7 +11,6 @@ Covers:
 
 from __future__ import annotations
 
-import os
 import time
 from typing import Any
 
@@ -20,8 +19,8 @@ from fastapi.testclient import TestClient
 
 from agent.spec import ErrorSSEEvent, validate_sse_line
 from agent.testing.e2e_server import (
-    E2E_API_KEY,
     _FIXTURE_REGISTRY,
+    E2E_API_KEY,
     create_e2e_app,
     teardown_e2e_app,
 )
