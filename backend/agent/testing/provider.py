@@ -6,7 +6,9 @@ Vela's LangGraph agent (via get_llm() or graph dependency injection).
 
 from __future__ import annotations
 
+import asyncio
 import json
+import time
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
@@ -31,6 +33,11 @@ class ScriptedToolCall:
     name: str
     args: dict[str, Any] | str = field(default_factory=dict)
     id: str = "call_test_1"
+
+
+class DeterministicE2EError(RuntimeError):
+    """Raised by FakeProvider when a scripted error turn is executed."""
+    pass
 
 
 class FakeProvider(BaseChatModel):
@@ -141,7 +148,18 @@ class FakeProvider(BaseChatModel):
             tc_chunk = ToolCallChunk(name=turn.name, args=args_str, id=turn.id, index=0)
             return [AIMessageChunk(content="", tool_call_chunks=[tc_chunk])]
 
-        # 2. Dict with tool calls: {"tool_calls": [...]}
+        # 2. Dict with error kind
+        if isinstance(turn, dict) and turn.get("kind") == "error":
+            raise DeterministicE2EError(turn.get("message", "Deterministic E2E simulated error"))
+
+        # 3. Dict with delay kind
+        if isinstance(turn, dict) and turn.get("kind") == "delay":
+            raw_chunks = turn.get("chunks")
+            if raw_chunks is not None and isinstance(raw_chunks, list):
+                return [AIMessageChunk(content=str(c)) for c in raw_chunks]
+            return [AIMessageChunk(content=str(turn.get("content", "")))]
+
+        # 4. Dict with tool calls: {"tool_calls": [...]}
         if isinstance(turn, dict) and "tool_calls" in turn:
             tc_chunks: list[ToolCallChunk] = []
             for i, tc in enumerate(turn["tool_calls"]):
@@ -205,7 +223,18 @@ class FakeProvider(BaseChatModel):
                 tool_calls=[{"name": turn.name, "args": args_dict, "id": turn.id}],
             )
 
-        # 2. Dict with tool calls
+        # 2. Dict with error kind
+        if isinstance(turn, dict) and turn.get("kind") == "error":
+            raise DeterministicE2EError(turn.get("message", "Deterministic E2E simulated error"))
+
+        # 3. Dict with delay kind
+        if isinstance(turn, dict) and turn.get("kind") == "delay":
+            raw_chunks = turn.get("chunks")
+            if raw_chunks is not None and isinstance(raw_chunks, list):
+                return AIMessage(content="".join(str(c) for c in raw_chunks))
+            return AIMessage(content=str(turn.get("content", "")))
+
+        # 4. Dict with tool calls
         if isinstance(turn, dict) and "tool_calls" in turn:
             tool_calls = []
             for i, tc in enumerate(turn["tool_calls"]):
@@ -264,6 +293,22 @@ class FakeProvider(BaseChatModel):
     ) -> ChatResult:
         """Synchronously generate a response turn."""
         turn, _ = self._pop_next_turn(messages)
+        if isinstance(turn, dict) and turn.get("kind") == "error":
+            if "ms" in turn and turn["ms"] > 0:
+                time.sleep(float(turn["ms"]) / 1000.0)
+            raise DeterministicE2EError(turn.get("message", "Deterministic E2E simulated error"))
+        if isinstance(turn, dict) and turn.get("kind") == "delay":
+            ms = turn.get("ms", 0)
+            if ms > 0:
+                time.sleep(float(ms) / 1000.0)
+            raw_chunks = turn.get("chunks")
+            content = (
+                "".join(str(c) for c in raw_chunks)
+                if isinstance(raw_chunks, list)
+                else str(turn.get("content", ""))
+            )
+            return ChatResult(generations=[ChatGeneration(message=AIMessage(content=content))])
+
         message = self._turn_to_message(turn, messages)
         return ChatResult(generations=[ChatGeneration(message=message)])
 
@@ -275,7 +320,25 @@ class FakeProvider(BaseChatModel):
         **kwargs: Any,
     ) -> ChatResult:
         """Asynchronously generate a response turn."""
-        return self._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
+        turn, _ = self._pop_next_turn(messages)
+        if isinstance(turn, dict) and turn.get("kind") == "error":
+            if "ms" in turn and turn["ms"] > 0:
+                await asyncio.sleep(float(turn["ms"]) / 1000.0)
+            raise DeterministicE2EError(turn.get("message", "Deterministic E2E simulated error"))
+        if isinstance(turn, dict) and turn.get("kind") == "delay":
+            ms = turn.get("ms", 0)
+            if ms > 0:
+                await asyncio.sleep(float(ms) / 1000.0)
+            raw_chunks = turn.get("chunks")
+            content = (
+                "".join(str(c) for c in raw_chunks)
+                if isinstance(raw_chunks, list)
+                else str(turn.get("content", ""))
+            )
+            return ChatResult(generations=[ChatGeneration(message=AIMessage(content=content))])
+
+        message = self._turn_to_message(turn, messages)
+        return ChatResult(generations=[ChatGeneration(message=message)])
 
     def _stream(
         self,
@@ -286,6 +349,25 @@ class FakeProvider(BaseChatModel):
     ) -> Iterator[ChatGenerationChunk]:
         """Synchronously stream response chunks."""
         turn, _ = self._pop_next_turn(messages)
+        if isinstance(turn, dict) and turn.get("kind") == "error":
+            if "ms" in turn and turn["ms"] > 0:
+                time.sleep(float(turn["ms"]) / 1000.0)
+            raise DeterministicE2EError(turn.get("message", "Deterministic E2E simulated error"))
+        if isinstance(turn, dict) and turn.get("kind") == "delay":
+            ms = turn.get("ms", 0)
+            delay_s = max(0.0, float(ms) / 1000.0)
+            raw_chunks = turn.get("chunks")
+            if raw_chunks is not None and isinstance(raw_chunks, list):
+                for c in raw_chunks:
+                    if delay_s > 0:
+                        time.sleep(delay_s)
+                    yield ChatGenerationChunk(message=AIMessageChunk(content=str(c)))
+                return
+            if delay_s > 0:
+                time.sleep(delay_s)
+            yield ChatGenerationChunk(message=AIMessageChunk(content=str(turn.get("content", ""))))
+            return
+
         chunks = self._turn_to_chunks(turn, messages)
         for chunk in chunks:
             yield ChatGenerationChunk(message=chunk)
@@ -299,6 +381,25 @@ class FakeProvider(BaseChatModel):
     ) -> AsyncIterator[ChatGenerationChunk]:
         """Asynchronously stream response chunks."""
         turn, _ = self._pop_next_turn(messages)
+        if isinstance(turn, dict) and turn.get("kind") == "error":
+            if "ms" in turn and turn["ms"] > 0:
+                await asyncio.sleep(float(turn["ms"]) / 1000.0)
+            raise DeterministicE2EError(turn.get("message", "Deterministic E2E simulated error"))
+        if isinstance(turn, dict) and turn.get("kind") == "delay":
+            ms = turn.get("ms", 0)
+            delay_s = max(0.0, float(ms) / 1000.0)
+            raw_chunks = turn.get("chunks")
+            if raw_chunks is not None and isinstance(raw_chunks, list):
+                for c in raw_chunks:
+                    if delay_s > 0:
+                        await asyncio.sleep(delay_s)
+                    yield ChatGenerationChunk(message=AIMessageChunk(content=str(c)))
+                return
+            if delay_s > 0:
+                await asyncio.sleep(delay_s)
+            yield ChatGenerationChunk(message=AIMessageChunk(content=str(turn.get("content", ""))))
+            return
+
         chunks = self._turn_to_chunks(turn, messages)
         for chunk in chunks:
             yield ChatGenerationChunk(message=chunk)
