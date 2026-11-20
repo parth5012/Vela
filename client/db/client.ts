@@ -3,6 +3,15 @@ import { openDatabaseSync } from 'expo-sqlite';
 import { migrate } from 'drizzle-orm/expo-sqlite/migrator';
 import migrations from './migrations/migrations';
 import * as schema from './schema';
+import {
+  isE2E,
+  initE2EDatabase,
+  resetE2EDatabase,
+  getE2EDb,
+  getE2ERawDb,
+} from './e2eAdapter';
+
+export { isE2E, resetE2EDatabase };
 
 const DATABASE_NAME = 'vela.db';
 
@@ -22,20 +31,11 @@ try {
   configurePragmas(expoDbInstance);
   dbInstance = drizzle(expoDbInstance, { schema });
 } catch (error) {
-  console.warn('[Database] Failed to open expo-sqlite database (likely in test or non-native environment).');
+  if (!isE2E) {
+    console.warn('[Database] Failed to open expo-sqlite database (likely in test or non-native environment).');
+  }
 }
 
-export const expoDb = expoDbInstance;
-export const db = dbInstance;
-export default dbInstance;
-
-/**
- * Strips whitespace-only statements and trailing breakpoints.
- * drizzle-orm's expo-sqlite migrator splits blindly on '--> statement-breakpoint',
- * which produces empty/whitespace statements if a migration ends with a breakpoint.
- * In expo-sqlite, preparing an empty string sets sqlite3_stmt* to NULL, causing
- * an immediate SIGSEGV crash in exsqlite3_clear_bindings+20 during executeSync().
- */
 export function sanitizeMigrationSql(sql: string): string {
   return sql
     .split('--> statement-breakpoint')
@@ -62,6 +62,16 @@ export function _resetInitPromiseForTest(): void {
 }
 
 export function initializeDatabase(): Promise<void> {
+  if (isE2E && !expoDbInstance) {
+    if (initPromise) {
+      return initPromise;
+    }
+    initPromise = (async () => {
+      await initE2EDatabase();
+    })();
+    return initPromise;
+  }
+
   if (!dbInstance) {
     console.warn('[Database] Database client not initialized, skipping migrations.');
     return Promise.resolve();
@@ -85,3 +95,38 @@ export function initializeDatabase(): Promise<void> {
 
   return initPromise;
 }
+
+// When in E2E web mode, export proxy objects that dynamically resolve to the E2E sql.js engine
+const dbProxy: any = isE2E && !expoDbInstance
+  ? new Proxy({}, {
+      get(_target, prop) {
+        const target = getE2EDb();
+        if (!target) return undefined;
+        const val = (target as any)[prop];
+        return typeof val === 'function' ? val.bind(target) : val;
+      },
+      has(_target, prop) {
+        const target = getE2EDb();
+        return target ? prop in target : false;
+      },
+    })
+  : dbInstance;
+
+const expoDbProxy: any = isE2E && !expoDbInstance
+  ? new Proxy({}, {
+      get(_target, prop) {
+        const target = getE2ERawDb();
+        if (!target) return undefined;
+        const val = (target as any)[prop];
+        return typeof val === 'function' ? val.bind(target) : val;
+      },
+      has(_target, prop) {
+        const target = getE2ERawDb();
+        return target ? prop in target : false;
+      },
+    })
+  : expoDbInstance;
+
+export const expoDb = expoDbProxy;
+export const db = dbProxy;
+export default dbProxy;
