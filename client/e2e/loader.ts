@@ -35,6 +35,7 @@ import { useSafetyStore } from '../store/useSafetyStore';
 import { db, initializeDatabase, resetE2EDatabase } from '../db/client';
 import { tasks, taskExecutions, type TaskEntity } from '../db/schema';
 import type { ThemeName } from '../utils/theme';
+import { parseNotificationData } from '../utils/notificationRouting';
 
 export const E2E_DEFAULT_API_URL = 'http://127.0.0.1:8123';
 export const E2E_DEFAULT_API_KEY = 'test-api-key';
@@ -67,6 +68,7 @@ export interface E2EConfigState {
   systemPrompt?: string;
   modelName?: string;
   userName?: string;
+  deviceAgentPermissions?: any;
 }
 
 export interface E2EThreadInput {
@@ -325,6 +327,7 @@ export function getConfigState(): E2EConfigState {
     systemPrompt: state.systemPrompt,
     modelName: state.modelName,
     userName: state.userName,
+    deviceAgentPermissions: state.deviceAgentPermissions,
   };
 }
 
@@ -575,6 +578,43 @@ export function getSafetyState(): E2ESafetyState {
 }
 
 /**
+ * Simulate push notification payload delivery and routing.
+ */
+export async function simulatePushNotification(data: Record<string, string>): Promise<void> {
+  const { selectThread } = useChatStore.getState();
+  const parsed = parseNotificationData(data);
+  if (parsed.conversation_id) {
+    selectThread(parsed.conversation_id);
+  }
+  if (parsed.route) {
+    goTo(parsed.route);
+  } else {
+    goTo('/');
+  }
+}
+
+/**
+ * Register push token with backend control channel.
+ */
+export async function simulateDeviceTokenRegistration(token: string): Promise<boolean> {
+  const { apiUrl, apiKey } = useConfigStore.getState();
+  if (!apiUrl || !apiKey) return false;
+  try {
+    const res = await fetch(`${apiUrl.replace(/\/+$/, '')}/api/config/device-token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({ token }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Seed briefing scenario.
  */
 export async function seedBriefing(): Promise<{ ok: boolean }> {
@@ -739,6 +779,8 @@ const api = {
   getOfflineState,
   seedSafety,
   getSafetyState,
+  simulatePushNotification,
+  simulateDeviceTokenRegistration,
   loadFixture,
   resetWorld,
   version: 2 as const,
