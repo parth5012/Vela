@@ -36,6 +36,7 @@ export interface ConfigState {
   systemPrompt?: string;
   modelName?: string;
   userName?: string;
+  deviceAgentPermissions?: any;
 }
 
 export interface VelaE2EApi {
@@ -66,6 +67,8 @@ export interface VelaE2EApi {
   getOfflineState(): any;
   seedSafety(safety?: any): any;
   getSafetyState(): any;
+  simulatePushNotification(data: Record<string, string>): Promise<void>;
+  simulateDeviceTokenRegistration(token: string): Promise<boolean>;
   loadFixture(name: string): Promise<any>;
   resetWorld(): Promise<void>;
   version: 2;
@@ -309,4 +312,20 @@ export async function seedSafety(page: Page, safety?: any): Promise<any> {
     if (!api) throw new Error('__VELA_E2E__ missing');
     return api.seedSafety(s);
   }, safety);
+}
+
+export async function simulatePushNotification(page: Page, data: Record<string, string>): Promise<void> {
+  return page.evaluate((d) => {
+    const api = window.__VELA_E2E__;
+    if (!api) throw new Error('__VELA_E2E__ missing');
+    return api.simulatePushNotification(d);
+  }, data);
+}
+
+export async function simulateDeviceTokenRegistration(page: Page, token: string): Promise<boolean> {
+  return page.evaluate((t) => {
+    const api = window.__VELA_E2E__;
+    if (!api) throw new Error('__VELA_E2E__ missing');
+    return api.simulateDeviceTokenRegistration(t);
+  }, token);
 }
