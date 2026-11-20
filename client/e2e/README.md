@@ -1,48 +1,60 @@
-# Vela E2E Verification Harness
+# Vela E2E Verification Harnesses
 
-Automated end-to-end verification for the Vela Android client using ADB automation
-against `emulator-5554` with a mock FastAPI backend.
+Vela maintains **two independent end-to-end verification harnesses**:
 
-## Architecture
+1. **Device-Free Playwright E2E Suite (Browser / Expo Web)**:
+   - **No device needed**: completely device-free, requiring no physical Android phone, no emulator, and no ADB installation.
+   - Runs against real Expo web in headless Chromium with the real FastAPI backend, disposable SQLite database, and scripted `FakeProvider`.
+   - Validates all 20 canonical client features under `client/e2e/ui/specs/` across 3 waves (Chat Core, Extended Surface, Native Boundary Mocked).
+   - Enforced by `npm run e2e:coverage` (validating coverage manifest in `client/e2e/ui/COVERAGE.md`) and executed via `python vela_ci.py e2e`.
+   - Accompanied by a dedicated advisory visual regression suite (`npm run e2e:visual` / `playwright.visual.config.ts`) at 360×640 mobile viewport.
+   - See [docs/agents/ui-e2e.md](../../docs/agents/ui-e2e.md) for full architectural documentation.
+
+2. **Android Native ADB Harness (APK / Emulator)**:
+   - Automated end-to-end verification for the compiled Vela Android client using ADB automation against `emulator-5554` with a mock FastAPI backend.
+   - Requires ADB, an Android emulator or test device, and a built release APK.
+   - Dry-run validation available without a running emulator via `bash client/e2e/runner.sh --dry-run`.
+   - **Completely independent** from the Playwright suite (zero shared runtime state or dependencies).
+
+---
+
+## 1. Device-Free Playwright Suite Quick Start
+
+```bash
+# Run all 20 specs (boots backend + Expo web automatically)
+python vela_ci.py e2e
+
+# Or from client/ directory
+cd client
+npm run e2e               # run functional Playwright specs
+npm run e2e:coverage      # validate all 20 specs in COVERAGE.md exist on disk
+npm run e2e:visual        # run advisory visual regression suite (360x640)
+npm run e2e:visual:update # update baseline snapshots (canonical in Linux)
+```
+
+---
+
+## 2. Android Native ADB Harness Architecture
 
 ```
 client/e2e/
-├── fixtures/           # Mock backend scenarios (per feature)
-│   ├── chat.json
-│   ├── threads.json
-│   ├── tasks.json
-│   ├── browser.json
-│   ├── settings.json
-│   ├── local-ai.json
-│   ├── device-agent.json
-│   ├── offline.json
-│   └── fcm.json
-├── oracles/            # Pass/fail criteria per feature
-│   ├── setup.md
-│   ├── chat.md
-│   ├── threads.md
-│   ├── tasks.md
-│   ├── browser.md
-│   ├── settings.md
-│   ├── local-ai.md
-│   ├── device-agent.md
-│   ├── offline.md
-│   └── fcm.md
-├── lanes/              # Lane definitions for parallel execution
-│   ├── visual-regression.yaml
-│   └── ...
-├── baselines/          # Committed visual-regression baselines (per state)
-├── visual-diff.mjs     # pixelmatch diff (0.5% budget) for the visual lane
-│   ├── critical-path.yaml
-│   ├── extended-coverage.yaml
-│   └── parallel-surface.yaml
-├── mock_server.py      # Parameterized mock backend (reads fixtures)
-├── runner.sh           # Main orchestrator
-├── report.sh           # Results formatter
+├── ui/                 # Playwright device-free web harness (see docs/agents/ui-e2e.md)
+│   ├── COVERAGE.md     # 20-feature coverage manifest
+│   ├── e2e.ts          # Control channel helper API
+│   ├── loader.ts       # Typed window.__VELA_E2E__ accessor
+│   └── specs/          # 20 Playwright specs (Waves A, B, C)
+├── visual/             # Visual baseline regression suite (playwright.visual.config.ts)
+│   ├── visual.spec.ts  # 5 canonical UI states at 360x640
+│   └── snapshots/      # Committed baseline PNGs (normal + reduced motion)
+├── fixtures/           # Mock backend scenarios for ADB runner
+├── oracles/            # Pass/fail criteria per feature for ADB runner
+├── lanes/              # ADB runner execution lanes
+├── mock_server.py      # Parameterized mock backend for ADB runner
+├── runner.sh           # Main ADB runner orchestrator
 └── README.md           # This file
 ```
 
-## Quick Start
+## Android ADB Harness Quick Start
 
 ```bash
 # 1. Start mock backend with default fixtures
