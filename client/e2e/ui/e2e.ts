@@ -53,6 +53,7 @@ export interface VelaE2EApi {
   goTo(path: string): void;
   seedTasks(tasksList?: any[]): Promise<any>;
   getTasksState(): Promise<any>;
+  seedExecution(task?: any, execution?: any): Promise<void>;
   seedSettings(settings: any): ConfigState;
   seedThreads(threadsList: any[], clearFirst?: boolean): any;
   getThreadsState(): any;
@@ -188,6 +189,12 @@ export async function loadFixture(
 
 // --- Domain Helpers ---
 
+export async function goTo(page: Page, path: string): Promise<void> {
+  await page.evaluate((p) => {
+    window.__VELA_E2E__?.goTo(p);
+  }, path);
+}
+
 export async function tasksState(page: Page): Promise<any> {
   return page.evaluate(async () => {
     const api = window.__VELA_E2E__;
@@ -202,6 +209,14 @@ export async function seedTasks(page: Page, tasksList?: any[]): Promise<any> {
     if (!api) throw new Error('__VELA_E2E__ missing');
     return api.seedTasks(list);
   }, tasksList);
+}
+
+export async function seedExecution(page: Page, task?: any, execution?: any): Promise<void> {
+  return page.evaluate(async ({ t, e }) => {
+    const api = window.__VELA_E2E__;
+    if (!api) throw new Error('__VELA_E2E__ missing');
+    return api.seedExecution(t, e);
+  }, { t: task, e: execution });
 }
 
 export async function settingsState(page: Page): Promise<ConfigState> {
