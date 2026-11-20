@@ -26,6 +26,12 @@ jest.mock('expo-notifications', () => ({
   setNotificationHandler: jest.fn(),
 }));
 
+const util = require('util');
+if (util.TextDecoder) {
+  global.TextDecoder = util.TextDecoder;
+  global.TextEncoder = util.TextEncoder;
+}
+
 if (typeof window !== 'undefined' && typeof window.dispatchEvent !== 'function') {
   window.dispatchEvent = jest.fn();
 }
