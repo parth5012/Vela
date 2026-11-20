@@ -62,7 +62,8 @@ export function _resetInitPromiseForTest(): void {
 }
 
 export function initializeDatabase(): Promise<void> {
-  if (isE2E && !expoDbInstance) {
+  const isE2EActive = isE2E || process.env.EXPO_PUBLIC_E2E === '1';
+  if (isE2EActive && !expoDbInstance) {
     if (initPromise) {
       return initPromise;
     }
@@ -97,7 +98,7 @@ export function initializeDatabase(): Promise<void> {
 }
 
 // When in E2E web mode, export proxy objects that dynamically resolve to the E2E sql.js engine
-const dbProxy: any = isE2E && !expoDbInstance
+const dbProxy: any = !expoDbInstance
   ? new Proxy({}, {
       get(_target, prop) {
         const target = getE2EDb();
@@ -112,7 +113,7 @@ const dbProxy: any = isE2E && !expoDbInstance
     })
   : dbInstance;
 
-const expoDbProxy: any = isE2E && !expoDbInstance
+const expoDbProxy: any = !expoDbInstance
   ? new Proxy({}, {
       get(_target, prop) {
         const target = getE2ERawDb();

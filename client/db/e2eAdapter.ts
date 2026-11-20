@@ -32,7 +32,19 @@ export async function getSqlModule(): Promise<any> {
     }
   }
   const initSqlJs = require('sql.js');
-  SQLModule = await initSqlJs();
+  const isNode = typeof process !== 'undefined' && Boolean(process.versions?.node);
+  const config: Record<string, any> = {};
+  if (isNode) {
+    try {
+      const path = require('path');
+      config.locateFile = (file: string) => path.join(path.dirname(require.resolve('sql.js')), file);
+    } catch {
+      // ignore in environments where path/require fails
+    }
+  } else {
+    config.locateFile = (file: string) => `/${file}`;
+  }
+  SQLModule = await initSqlJs(config);
   return SQLModule;
 }
 

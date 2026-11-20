@@ -28,6 +28,13 @@ export interface ConfigState {
   hasApiKey: boolean;
   isConfigured: boolean;
   hasHydrated: boolean;
+  theme?: string;
+  accentColor?: string;
+  fontSize?: string;
+  temperature?: number;
+  systemPrompt?: string;
+  modelName?: string;
+  userName?: string;
 }
 
 export interface VelaE2EApi {
@@ -43,7 +50,23 @@ export interface VelaE2EApi {
   getConfigState(): ConfigState;
   waitForIdle(timeoutMs?: number): Promise<ChatState>;
   goTo(path: string): void;
-  version: 1;
+  seedTasks(tasksList?: any[]): Promise<any>;
+  getTasksState(): Promise<any>;
+  seedSettings(settings: any): ConfigState;
+  seedThreads(threadsList: any[], clearFirst?: boolean): any;
+  getThreadsState(): any;
+  seedOAuth(oauth?: any): any;
+  getOAuthState(): any;
+  seedBriefing(): Promise<any>;
+  seedBrowser(browser?: any): any;
+  getBrowserState(): any;
+  seedOffline(offline?: any): any;
+  getOfflineState(): any;
+  seedSafety(safety?: any): any;
+  getSafetyState(): any;
+  loadFixture(name: string): Promise<any>;
+  resetWorld(): Promise<void>;
+  version: 2;
 }
 
 declare global {
@@ -74,7 +97,7 @@ export async function scriptBackend(
 /** Real server-side signal: how much of the script is still unconsumed. */
 export async function backendState(
   request: APIRequestContext,
-): Promise<{ remaining_turns: number; calls: number; threads: Array<{ id: string; title: string }> }> {
+): Promise<{ remaining_turns: number; calls: number; threads: Array<{ id: string; title: string }>; available_fixtures?: string[] }> {
   const response = await request.get(`${BACKEND_URL}/_e2e/state`);
   if (!response.ok()) {
     throw new Error(`/_e2e/state failed: ${response.status()}`);
@@ -117,4 +140,157 @@ export async function waitForIdle(page: Page, timeoutMs = 60_000): Promise<ChatS
 /** `role:content` for each active-thread message — compact exact comparison. */
 export function transcriptOf(state: ChatState): string[] {
   return state.messages.map((message) => `${message.role}:${message.content}`);
+}
+
+/**
+ * Universal reset across backend, Zustand stores, and SQLite DB.
+ * Can be called in test.beforeEach().
+ */
+export async function resetWorld(page?: Page, request?: APIRequestContext): Promise<void> {
+  if (request) {
+    await resetBackend(request);
+  }
+  if (page) {
+    await page.evaluate(async () => {
+      const api = window.__VELA_E2E__;
+      if (api && typeof api.resetWorld === 'function') {
+        await api.resetWorld();
+      }
+    });
+  }
+}
+
+/**
+ * Load a named fixture both server-side (if request available) and client-side.
+ */
+export async function loadFixture(
+  page: Page,
+  name: string,
+  request?: APIRequestContext,
+): Promise<any> {
+  const req = request ?? page.request;
+  try {
+    const res = await req.post(`${BACKEND_URL}/_e2e/fixture`, { data: { name } });
+    if (!res.ok()) {
+      // Backend might return 400 for client-only fixtures (e.g. "browser", "tasks"), which is fine
+    }
+  } catch (err) {
+    // Non-fatal if backend call fails for a purely client-side scenario
+  }
+
+  return page.evaluate(async (fixtureName) => {
+    const api = window.__VELA_E2E__;
+    if (!api) throw new Error('__VELA_E2E__ missing');
+    return api.loadFixture(fixtureName);
+  }, name);
+}
+
+// --- Domain Helpers ---
+
+export async function tasksState(page: Page): Promise<any> {
+  return page.evaluate(async () => {
+    const api = window.__VELA_E2E__;
+    if (!api) throw new Error('__VELA_E2E__ missing');
+    return api.getTasksState();
+  });
+}
+
+export async function seedTasks(page: Page, tasksList?: any[]): Promise<any> {
+  return page.evaluate(async (list) => {
+    const api = window.__VELA_E2E__;
+    if (!api) throw new Error('__VELA_E2E__ missing');
+    return api.seedTasks(list);
+  }, tasksList);
+}
+
+export async function settingsState(page: Page): Promise<ConfigState> {
+  return configState(page);
+}
+
+export async function seedSettings(page: Page, settings: any): Promise<ConfigState> {
+  return page.evaluate((s) => {
+    const api = window.__VELA_E2E__;
+    if (!api) throw new Error('__VELA_E2E__ missing');
+    return api.seedSettings(s);
+  }, settings);
+}
+
+export async function threadsState(page: Page): Promise<any> {
+  return page.evaluate(() => {
+    const api = window.__VELA_E2E__;
+    if (!api) throw new Error('__VELA_E2E__ missing');
+    return api.getThreadsState();
+  });
+}
+
+export async function seedThreads(page: Page, threadsList: any[], clearFirst?: boolean): Promise<any> {
+  return page.evaluate(({ list, clear }) => {
+    const api = window.__VELA_E2E__;
+    if (!api) throw new Error('__VELA_E2E__ missing');
+    return api.seedThreads(list, clear);
+  }, { list: threadsList, clear: clearFirst });
+}
+
+export async function oauthState(page: Page): Promise<any> {
+  return page.evaluate(() => {
+    const api = window.__VELA_E2E__;
+    if (!api) throw new Error('__VELA_E2E__ missing');
+    return api.getOAuthState();
+  });
+}
+
+export async function seedOAuth(page: Page, oauth?: any): Promise<any> {
+  return page.evaluate((o) => {
+    const api = window.__VELA_E2E__;
+    if (!api) throw new Error('__VELA_E2E__ missing');
+    return api.seedOAuth(o);
+  }, oauth);
+}
+
+export async function browserState(page: Page): Promise<any> {
+  return page.evaluate(() => {
+    const api = window.__VELA_E2E__;
+    if (!api) throw new Error('__VELA_E2E__ missing');
+    return api.getBrowserState();
+  });
+}
+
+export async function seedBrowser(page: Page, browser?: any): Promise<any> {
+  return page.evaluate((b) => {
+    const api = window.__VELA_E2E__;
+    if (!api) throw new Error('__VELA_E2E__ missing');
+    return api.seedBrowser(b);
+  }, browser);
+}
+
+export async function offlineState(page: Page): Promise<any> {
+  return page.evaluate(() => {
+    const api = window.__VELA_E2E__;
+    if (!api) throw new Error('__VELA_E2E__ missing');
+    return api.getOfflineState();
+  });
+}
+
+export async function seedOffline(page: Page, offline?: any): Promise<any> {
+  return page.evaluate((o) => {
+    const api = window.__VELA_E2E__;
+    if (!api) throw new Error('__VELA_E2E__ missing');
+    return api.seedOffline(o);
+  }, offline);
+}
+
+export async function safetyState(page: Page): Promise<any> {
+  return page.evaluate(() => {
+    const api = window.__VELA_E2E__;
+    if (!api) throw new Error('__VELA_E2E__ missing');
+    return api.getSafetyState();
+  });
+}
+
+export async function seedSafety(page: Page, safety?: any): Promise<any> {
+  return page.evaluate((s) => {
+    const api = window.__VELA_E2E__;
+    if (!api) throw new Error('__VELA_E2E__ missing');
+    return api.seedSafety(s);
+  }, safety);
 }
