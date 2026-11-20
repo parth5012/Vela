@@ -33,7 +33,7 @@ import { useBrowserStore } from '../store/useBrowserStore';
 import { useOfflineStore } from '../store/useOfflineStore';
 import { useSafetyStore } from '../store/useSafetyStore';
 import { db, initializeDatabase, resetE2EDatabase } from '../db/client';
-import { tasks, type TaskEntity } from '../db/schema';
+import { tasks, taskExecutions, type TaskEntity } from '../db/schema';
 import type { ThemeName } from '../utils/theme';
 
 export const E2E_DEFAULT_API_URL = 'http://127.0.0.1:8123';
@@ -112,6 +112,9 @@ export interface E2EBrowserInput {
   isVisible?: boolean;
   canGoBack?: boolean;
   canGoForward?: boolean;
+  cookieSyncStatus?: 'idle' | 'synced' | 'error';
+  lastCookieSync?: number | null;
+  cookieSyncDomains?: string[];
 }
 
 export interface E2EBrowserState {
@@ -120,6 +123,9 @@ export interface E2EBrowserState {
   isVisible: boolean;
   canGoBack: boolean;
   canGoForward: boolean;
+  cookieSyncStatus?: string;
+  lastCookieSync?: number | null;
+  cookieSyncDomains?: string[];
 }
 
 export interface E2EOfflineInput {
@@ -419,6 +425,28 @@ export async function getTasksState(): Promise<E2ETasksState> {
   };
 }
 
+export async function seedExecution(task: Partial<TaskEntity> = {}, execution: any = {}): Promise<void> {
+  await initializeDatabase();
+  const taskId = task.id || 'task-progress-demo';
+  await db.insert(tasks).values({
+    id: taskId,
+    title: task.title || 'Data Migration Workflow',
+    status: (task.status as any) || 'active',
+    recurrence_rule: task.recurrence_rule || '0 9 * * *',
+    linked_agent: task.linked_agent || 'analyst',
+    task_prompt: task.task_prompt || 'Run migration steps.',
+    connection_mode: (task.connection_mode as any) || 'server',
+    created_at: task.created_at || Date.now(),
+  });
+  await db.insert(taskExecutions).values({
+    id: execution.id || 'exec-demo-001',
+    task_id: taskId,
+    status: execution.status || 'running',
+    current_step_index: execution.current_step_index || 0,
+    started_at: execution.started_at || Date.now(),
+  });
+}
+
 /**
  * Seed Google OAuth authenticated state.
  */
@@ -476,6 +504,9 @@ export function seedBrowser(options: E2EBrowserInput = {}): E2EBrowserState {
     canGoBack: options.canGoBack ?? false,
     canGoForward: options.canGoForward ?? false,
     isLoading: false,
+    ...(options.cookieSyncStatus ? { cookieSyncStatus: options.cookieSyncStatus } : {}),
+    ...(options.lastCookieSync !== undefined ? { lastCookieSync: options.lastCookieSync } : {}),
+    ...(options.cookieSyncDomains ? { cookieSyncDomains: options.cookieSyncDomains } : {}),
   });
   return getBrowserState();
 }
@@ -488,6 +519,9 @@ export function getBrowserState(): E2EBrowserState {
     isVisible: state.isVisible,
     canGoBack: state.canGoBack,
     canGoForward: state.canGoForward,
+    cookieSyncStatus: state.cookieSyncStatus,
+    lastCookieSync: state.lastCookieSync,
+    cookieSyncDomains: state.cookieSyncDomains,
   };
 }
 
@@ -692,6 +726,7 @@ const api = {
   goTo,
   seedTasks,
   getTasksState,
+  seedExecution,
   seedSettings,
   seedThreads,
   getThreadsState,
