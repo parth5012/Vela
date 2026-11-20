@@ -8,8 +8,9 @@ clone:
     settings:
       partial: false
       depth: 0
+
 steps:
-  ui-e2e:
+  e2e:
     image: node:24-bookworm
     environment:
       CI: "true"
@@ -22,6 +23,7 @@ steps:
       - cd backend && uv sync --frozen && cd ..
       - cd client && pnpm install --frozen-lockfile && cd ..
       - cd client && npx playwright install --with-deps chromium
+      - cd client && npm run e2e:coverage && cd ..
       - python3 vela_ci.py e2e
 
   fallback:
@@ -32,7 +34,7 @@ steps:
     when:
       - status: failure
     depends_on:
-      - ui-e2e
+      - e2e
     commands:
       - |
         echo "Woodpecker build failed; dispatching GitHub Actions fallback..."
@@ -41,4 +43,3 @@ steps:
           -H "Accept: application/vnd.github+json" \
           "https://api.github.com/repos/parth5012/Vela/actions/workflows/ci.yml/dispatches" \
           -d "{\"ref\":\"${CI_COMMIT_BRANCH}\"}"
-
