@@ -158,6 +158,7 @@ describe('E2E Loader Seam', () => {
     await seedTasks();
     seedOAuth({ isConnected: true });
     seedBrowser({ isVisible: true });
+    seedSettings({ theme: 'warm', fontSize: 18, temperature: 0.9 });
 
     await resetWorld();
 
@@ -169,5 +170,10 @@ describe('E2E Loader Seam', () => {
 
     const browser = getBrowserState();
     expect(browser.isVisible).toBe(false);
+
+    const config = getConfigState();
+    expect(config.theme).toBe('berry');
+    expect(config.fontSize).toBe('medium');
+    expect(config.temperature).toBe(0.7);
   });
 });
