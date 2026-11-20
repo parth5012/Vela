@@ -71,5 +71,5 @@ Single-context repository layout using `CONTEXT.md` and `docs/adr/` at the root.
 ### Driving the app in a browser & E2E Coverage
 
 The client is agent-driveable on Expo web against a scripted LLM via Playwright in `client/e2e/ui/`.
-- After any feature implementation, update `client/e2e/ui/COVERAGE.md` and the visual baselines.
+- After any feature implementation, update `client/e2e/ui/COVERAGE.md` and the visual baselines (`npm run e2e:visual:update` in `client/`). Note: canonical baselines are generated in the Linux CI container at 360×640; local non-Linux runs are advisory.
 

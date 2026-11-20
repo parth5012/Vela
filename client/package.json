@@ -107,7 +107,9 @@
     "cuj:benchmark": "jest __tests__/perf.cuj.test.ts --runInBand",
     "test": "npm run lint && npm run design:lint && jest",
     "postinstall": "patch-package || echo \"patch-package: some patches failed but continuing\" && node scripts/fetch-llama-jni.js",
-    "e2e:visual": "bash e2e/runner.sh --lane visual-regression"
+    "e2e:visual": "playwright test --config=playwright.visual.config.ts",
+    "e2e:visual:update": "playwright test --config=playwright.visual.config.ts --update-snapshots",
+    "e2e:coverage": "node scripts/validate-coverage.mjs"
   },
   "jest": {
     "preset": "jest-expo",

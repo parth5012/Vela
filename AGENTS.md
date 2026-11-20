@@ -46,7 +46,7 @@ Single-context: one `CONTEXT.md` plus `docs/adr/` at the repo root. See `docs/ag
 
 The client is agent-driveable on Expo web against a scripted LLM: `python vela_ci.py e2e`, or Playwright against the `/_e2e/*` control channel plus `window.__VELA_E2E__`. Use it before claiming a client change works. See `docs/agents/ui-e2e.md`.
 
-- After any feature implementation, update `client/e2e/ui/COVERAGE.md` and the visual baselines.
+- After any feature implementation, update `client/e2e/ui/COVERAGE.md` and the visual baselines (`npm run e2e:visual:update` in `client/`). Note: canonical baselines are generated in the Linux CI container at 360×640; local non-Linux runs are advisory.
 
 ## Software Factory & Architecture Enforcement
 
