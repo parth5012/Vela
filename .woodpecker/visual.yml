@@ -1,0 +1,27 @@
+when:
+  - event: push
+  - event: pull_request
+
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      partial: false
+      depth: 0
+
+steps:
+  visual:
+    image: node:24-bookworm
+    environment:
+      CI: "true"
+      EXPO_NO_TELEMETRY: "1"
+    failure: ignore
+    commands:
+      - corepack enable
+      - corepack prepare pnpm@9 --activate
+      - curl -LsSf https://astral.sh/uv/install.sh | sh
+      - export PATH="$HOME/.local/bin:$PATH"
+      - cd backend && uv sync --frozen && cd ..
+      - cd client && pnpm install --frozen-lockfile && cd ..
+      - cd client && npx playwright install --with-deps chromium
+      - cd client && npm run e2e:visual
