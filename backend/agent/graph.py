@@ -76,7 +76,11 @@ Example response format:
                 skill_name = data.get("skill_name")
                 parsed = True
     except RuntimeError as e:
-        if "script exhausted" in str(e).lower() or type(e).__name__ == "DeterministicE2EError":
+        if (
+            "script exhausted" in str(e).lower()
+            or type(e).__name__ == "DeterministicE2EError"
+            or getattr(e, "is_deterministic_e2e_error", False)
+        ):
             raise
         logger.error("Failed to query or parse supervisor LLM classification, falling back to heuristics", error=str(e))
     except Exception as e:
@@ -221,7 +225,11 @@ async def chatbot_node(state: AgentState) -> dict:
             else:
                 response_msg = AIMessage(content="")
         except RuntimeError as e:
-            if "script exhausted" in str(e).lower() or type(e).__name__ == "DeterministicE2EError":
+            if (
+                "script exhausted" in str(e).lower()
+                or type(e).__name__ == "DeterministicE2EError"
+                or getattr(e, "is_deterministic_e2e_error", False)
+            ):
                 raise
             response_msg = AIMessage(content=f"Error invoking LLM: {str(e)}")
         except Exception as e:
