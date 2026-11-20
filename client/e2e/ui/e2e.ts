@@ -14,6 +14,7 @@ export const BACKEND_URL = process.env.E2E_BACKEND_URL || 'http://127.0.0.1:8123
 export const BACKEND_API_KEY = 'test-api-key';
 export const SEEDED_THREAD_ID = '00000000-0000-4000-8000-000000000001';
 export const SEEDED_BRIEFING_TEXT = 'E2E seeded briefing: inbox clear, 2 meetings, radar calm.';
+export const COMPOSER = /Ask Vela anything|Ask a question or request a task/;
 
 export interface ChatState {
   threadId: string | null;
@@ -43,7 +44,7 @@ export interface VelaE2EApi {
     threadId?: string;
     title?: string;
     agent?: string;
-    messages?: Array<{ role: 'user' | 'assistant'; content: string }>;
+    messages?: Array<{ id?: string; role: 'user' | 'assistant'; content: string }>;
     clearFirst?: boolean;
   }): ChatState;
   getChatState(): ChatState;

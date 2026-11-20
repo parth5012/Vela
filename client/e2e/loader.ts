@@ -209,7 +209,7 @@ export function seedChat(options: {
   threadId?: string;
   title?: string;
   agent?: string;
-  messages?: Array<Pick<Message, 'role' | 'content'>>;
+  messages?: Array<Pick<Message, 'role' | 'content'> & { id?: string }>;
   clearFirst?: boolean;
 } = {}): E2EChatState {
   const threadId = options.threadId || E2E_THREAD_ID;
@@ -229,7 +229,7 @@ export function seedChat(options: {
     useChatStore.getState().setHistory(
       threadId,
       options.messages.map((message, index) => ({
-        id: `e2e_seed_${index}`,
+        id: message.id || `e2e_seed_${index}`,
         role: message.role,
         content: message.content,
         created_at: '2026-01-01T12:00:00.000Z',
@@ -720,6 +720,12 @@ export function installE2ELoader(): VelaE2EApi {
   (globalThis as { __VELA_E2E__?: VelaE2EApi }).__VELA_E2E__ = api;
 
   const params = queryParams();
+  if (params.get('e2e_unconfigured') === '1' || params.get('e2e_seed') === 'setup') {
+    useConfigStore.getState().clearConfig();
+    useChatStore.getState().clearStore();
+    return api;
+  }
+
   void configure({
     apiUrl: params.get('e2e_api_url') ?? undefined,
     apiKey: params.get('e2e_api_key') ?? undefined,

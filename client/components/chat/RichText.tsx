@@ -58,7 +58,7 @@ export default function RichText({
   const rules = useMemo(() => ({
     fence: (node: any) => {
       const codeText = node.content || '';
-      const lang = node.info || '';
+      const lang = node.sourceInfo || node.info || '';
 
       if (lang.toLowerCase().trim() === 'mermaid') {
         if (isStreaming) {
