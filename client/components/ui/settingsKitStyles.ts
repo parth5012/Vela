@@ -8,6 +8,7 @@
  */
 import { StyleSheet } from 'react-native';
 import { DEFAULT_ELEVATION, edgeLight } from '../../utils/elevation';
+import { ASTRYX_RADII, ASTRYX_SPACING } from '../../utils/theme';
 
 // VELA "Flair" design language: soft tonal surfaces, oversized rounded shapes,
 // full-radius pills and buttons, gentle elevation instead of glass-dark fills.
@@ -29,7 +30,7 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 10,
     paddingHorizontal: 6,
-    borderRadius: 999,
+    borderRadius: ASTRYX_RADII.full,
   },
   backText: {
     fontWeight: '700',
@@ -56,16 +57,16 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   card: {
-    borderRadius: 28,
+    borderRadius: ASTRYX_RADII.surface,
     borderWidth: 1,
-    padding: 20,
+    padding: ASTRYX_SPACING.lg,
     gap: 14,
     ...edgeLight,
     shadowColor: DEFAULT_ELEVATION.e1.shadowColor,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.07,
-    shadowRadius: 12,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 1,
   },
   sectionTitle: {
     fontWeight: '800',
@@ -83,8 +84,8 @@ export const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderRadius: 18,
-    paddingHorizontal: 16,
+    borderRadius: ASTRYX_RADII.surface - ASTRYX_SPACING.lg,
+    paddingHorizontal: ASTRYX_SPACING.lg,
     paddingVertical: 12,
     minHeight: 50,
   },
@@ -97,7 +98,7 @@ export const styles = StyleSheet.create({
     flexGrow: 1,
     flexBasis: '28%',
     borderWidth: 1,
-    borderRadius: 999,
+    borderRadius: ASTRYX_RADII.full,
     paddingVertical: 12,
     paddingHorizontal: 14,
     alignItems: 'center',
@@ -110,10 +111,10 @@ export const styles = StyleSheet.create({
   },
   chip: {
     borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    minHeight: 38,
+    borderRadius: ASTRYX_RADII.full,
+    paddingHorizontal: ASTRYX_SPACING.lg,
+    paddingVertical: 10,
+    minHeight: 44,
   },
   chipText: {
     fontWeight: '600',

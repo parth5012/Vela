@@ -9,6 +9,7 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
+import Svg, { Path, Circle } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import PressableScale from '../components/ui/PressableScale';
 import { useRouter } from 'expo-router'; import { webViewRef } from '../store/useBrowserStore';
@@ -18,11 +19,35 @@ import { THEME_COLORS, FONT_SIZES, ACCENT_COLORS, getAurora } from '../utils/the
 import CookieSyncCard from '../components/ui/CookieSyncCard';
 import { styles } from '../styles/browserStyles';
 
-const QUICK_LINKS: { label: string; url: string; icon: string }[] = [
-  { label: 'Google', url: 'https://www.google.com', icon: '🔍' },
-  { label: 'GitHub', url: 'https://github.com', icon: '💻' },
-  { label: 'Vela Docs', url: 'https://vela.dev', icon: '📄' },
+const QUICK_LINKS: { label: string; url: string }[] = [
+  { label: 'Google', url: 'https://www.google.com' },
+  { label: 'GitHub', url: 'https://github.com' },
+  { label: 'Vela Docs', url: 'https://vela.dev' },
 ];
+
+function renderQuickIcon(label: string, color: string) {
+  if (label === 'Google') {
+    return (
+      <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+        <Circle cx="11" cy="11" r="8" />
+        <Path d="M21 21l-4.35-4.35" />
+      </Svg>
+    );
+  }
+  if (label === 'GitHub') {
+    return (
+      <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M16 18l6-6-6-6M8 6l-6 6 6 6" />
+      </Svg>
+    );
+  }
+  return (
+    <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <Path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
+    </Svg>
+  );
+}
 
 export default function BrowserScreen() {
   const router = useRouter();
@@ -144,9 +169,13 @@ export default function BrowserScreen() {
     >
       {/* AI Status Banner */}
       {aiStatus && (
-        <View style={[styles.aiBanner, { backgroundColor: accentHex }]}>
+        <View style={[styles.aiBanner, { backgroundColor: accentHex, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }]}>
+          <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6 }}>
+            <Circle cx="12" cy="12" r="10" />
+            <Path d="M12 2a14.5 14.5 0 0 0 0 20M12 2a14.5 14.5 0 0 1 0 20M2 12h20" />
+          </Svg>
           <Text style={styles.aiBannerText} numberOfLines={1}>
-            🤖 Vela is browsing... {aiStatus}
+            Vela is browsing... {aiStatus}
           </Text>
         </View>
       )}
@@ -226,9 +255,17 @@ export default function BrowserScreen() {
           style={[styles.toolbarButton, styles.cookieSyncButton, { borderColor: colors.border }]}
           accessibilityLabel="Cookie Sync"
         >
-          <Text style={[styles.toolbarButtonText, { color: colors.text, fontSize: 16 }]}>🍪</Text>
+          <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+            <Path
+              d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"
+              stroke={colors.text}
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </Svg>
           {lastCookieSync ? (
-            <View style={[styles.syncBadgeDot, { backgroundColor: '#22c55e', borderColor: colors.card }]} />
+            <View style={[styles.syncBadgeDot, { backgroundColor: '#10B981', borderColor: colors.card }]} />
           ) : null}
         </PressableScale>
 
@@ -258,7 +295,16 @@ export default function BrowserScreen() {
             pressed && { opacity: 0.8 },
           ]}
         >
-          <Text style={[styles.toolbarButtonText, { color: colors.text, fontSize: sizes.sub, fontWeight: '700' }]}>💬 Chat</Text>
+          <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" style={{ marginRight: 6 }}>
+            <Path
+              d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+              stroke={colors.text}
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </Svg>
+          <Text style={[styles.toolbarButtonText, { color: colors.text, fontSize: sizes.sub, fontWeight: '700' }]}>Chat</Text>
         </PressableScale>
       </View>
 
@@ -273,7 +319,16 @@ export default function BrowserScreen() {
             <View style={[styles.auroraGlow, { backgroundColor: aurora.glow, shadowColor: aurora.acc1 }]} />
             <View style={styles.emptyContent}>
               <View style={[styles.emptyIconWrap, { backgroundColor: colors.glass, borderColor: colors.glassBorder }]}>
-                <Text style={styles.emptyIcon}>🌐</Text>
+                <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
+                  <Circle cx="12" cy="12" r="10" stroke={aurora.acc1} strokeWidth={2} />
+                  <Path
+                    d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
+                    stroke={aurora.acc1}
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </Svg>
               </View>
               <Text style={[styles.emptyTitle, { color: colors.text, fontSize: sizes.title }]}>Browser</Text>
               <Text style={[styles.emptySubtitle, { color: colors.textMuted, fontSize: sizes.text }]}>
@@ -294,7 +349,9 @@ export default function BrowserScreen() {
                     ]}
                     accessibilityLabel={`Open ${link.label}`}
                   >
-                    <Text style={styles.quickIcon}>{link.icon}</Text>
+                    <View style={{ marginRight: 6 }}>
+                      {renderQuickIcon(link.label, aurora.acc1)}
+                    </View>
                     <Text style={[styles.quickLabel, { color: colors.text, fontSize: sizes.text }]}>{link.label}</Text>
                   </PressableScale>
                 ))}
@@ -309,7 +366,16 @@ export default function BrowserScreen() {
         ) : showError ? (
           <LinearGradient colors={[colors.skyTop, colors.skyBottom]} style={styles.errorOverlay}>
             <View style={[styles.errorCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Text style={[styles.errorIcon]}>⚠️</Text>
+              <Svg width={36} height={36} viewBox="0 0 24 24" fill="none" style={{ marginBottom: 12 }}>
+                <Path
+                  d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+                  stroke="#F59E0B"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <Path d="M12 9v4m0 4h.01" stroke="#F59E0B" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+              </Svg>
               <Text style={[styles.errorTitle, { color: colors.text, fontSize: sizes.title }]}>Couldn&apos;t load page</Text>
               <Text style={[styles.errorMessage, { color: colors.textMuted, fontSize: sizes.text }]} numberOfLines={3}>
                 {webError || 'The page failed to load. Check the URL or try again.'}

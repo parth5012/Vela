@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { View, Text, StyleSheet, Animated, Platform, ScrollView } from 'react-native';
+import Svg, { Path, Circle } from 'react-native-svg';
 import PressableScale from '../ui/PressableScale';
 import { DURATIONS, EASING, PRESS_SCALE } from '../../utils/motion';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { ASTRYX_RADII } from '../../utils/theme';
 import { triggerHaptic } from '../../utils/haptics';
 
 interface CollapsibleBlockProps {
@@ -108,21 +110,50 @@ export default function CollapsibleBlock({
   const isIntent = type === 'intent';
   const isSkill = type === 'skill';
 
-  let icon = '⚙️';
   let title = `Executed: ${name || 'Tool'}`;
 
   if (isThought) {
-    icon = '🧠';
     title = 'Thought Process';
   } else if (isIntent) {
-    icon = '🎯';
     title = 'Intent';
   } else if (isSkill) {
-    icon = '🧩';
     title = `Executing: ${name || 'Skill'}`;
   }
 
   const isThoughtOrIntent = isThought || isIntent;
+  const iconColor = isThoughtOrIntent ? (themeColors.status || '#e0a96d') : (accentHex || '#801D78');
+
+  const renderIcon = () => {
+    if (isThought) {
+      return (
+        <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <Path d="M12 2L14.4 9.6L22 12L14.4 14.4L12 22L9.6 14.4L2 12L9.6 9.6L12 2Z" />
+          <Path d="M19 3l.6 1.4L21 5l-1.4.6L19 7l-.6-1.4L17 5l1.4-.6L19 3z" />
+        </Svg>
+      );
+    }
+    if (isIntent) {
+      return (
+        <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <Circle cx="12" cy="12" r="10" />
+          <Circle cx="12" cy="12" r="6" />
+          <Circle cx="12" cy="12" r="2" />
+        </Svg>
+      );
+    }
+    if (isSkill) {
+      return (
+        <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <Path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+        </Svg>
+      );
+    }
+    return (
+      <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+      </Svg>
+    );
+  };
 
   // #160: Pretty-print JSON args: try JSON.parse then 2-space stringify else raw; limit 800 chars.
   const formattedInput = useMemo(() => {
@@ -145,10 +176,10 @@ export default function CollapsibleBlock({
   const safetyConfig =
     type === 'tool_call' && safetyTier
       ? safetyTier === 'auto'
-        ? { label: 'Auto', bg: '#22c55e', color: '#ffffff' }
+        ? { label: 'Auto', bg: '#10B981', color: '#ffffff' }
         : safetyTier === 'ask'
-          ? { label: 'Ask', bg: '#eab308', color: '#111827' }
-          : { label: 'Blocked', bg: '#ef4444', color: '#ffffff' }
+          ? { label: 'Ask', bg: '#F59E0B', color: '#111827' }
+          : { label: 'Blocked', bg: '#EF4444', color: '#ffffff' }
       : null;
 
   // WF-447-04: the collapse translate — content slides out of the clip window
@@ -185,7 +216,9 @@ export default function CollapsibleBlock({
         onPress={toggleCollapse}
       >
         <View style={styles.headerTextContainer}>
-          <Text style={[styles.icon, { fontSize: themeSizes.text }]}>{icon}</Text>
+          <View style={[styles.iconWrapper, { backgroundColor: isThoughtOrIntent ? (themeColors.status || '#e0a96d') + '15' : (accentHex || '#801D78') + '15' }]}>
+            {renderIcon()}
+          </View>
           <View style={{ flex: 1 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <Text style={[
@@ -216,7 +249,7 @@ export default function CollapsibleBlock({
         <Animated.Text
           style={[
             styles.arrow,
-            { color: themeColors.textDark, fontSize: themeSizes.sub },
+            { color: themeColors.textMuted || themeColors.textDark || '#6B7280', fontSize: 12 },
             reduceMotion ? null : { transform: [{ rotate: arrowRotation }] },
           ]}
         >
@@ -259,7 +292,7 @@ export default function CollapsibleBlock({
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 14,
+    borderRadius: ASTRYX_RADII.card,
     borderWidth: 1,
     marginVertical: 6,
     overflow: 'hidden',
@@ -278,13 +311,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    gap: 8,
+    gap: 10,
   },
-  icon: {
-    marginRight: 2,
+  iconWrapper: {
+    width: 28,
+    height: 28,
+    borderRadius: ASTRYX_RADII.element,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
-    fontWeight: '600',
+    fontWeight: '700',
     letterSpacing: 0.2,
   },
   inputLabel: {
@@ -292,13 +329,12 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
   arrow: {
-    fontWeight: 'bold',
     marginLeft: 8,
   },
   safetyPill: {
-    paddingHorizontal: 8,
+    paddingHorizontal: 7,
     paddingVertical: 2,
-    borderRadius: 8,
+    borderRadius: ASTRYX_RADII.inner,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -306,7 +342,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     lineHeight: 14,
-    letterSpacing: 0.3,
+    letterSpacing: 0.4,
   },
   content: {
     borderTopWidth: 1,
