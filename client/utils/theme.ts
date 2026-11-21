@@ -374,6 +374,32 @@ export const FONT_SIZES = {
   },
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ASTRYX DESIGN TOKENS (Meta Astryx Design System integration)
+// Concentric radius hierarchy & control rhythm
+// R_inner = max(0, R_outer - padding)
+// ─────────────────────────────────────────────────────────────────────────────
+export const ASTRYX_RADII = {
+  none: 0,
+  inner: 6,      // badges, small tags, nested indicators
+  element: 10,   // inputs, compact controls, segmented items
+  card: 16,      // standard content cards, messages, popovers
+  container: 20, // major sections, modals, empty state cards
+  surface: 26,   // screen containers, bottom sheets, composer shells
+  full: 9999,    // circular buttons, pills, status dots
+} as const;
+
+export const ASTRYX_SPACING = {
+  xs: 4,
+  sm: 6,
+  md: 8,
+  base: 12,
+  lg: 16,
+  xl: 20,
+  xxl: 24,
+  xxxl: 32,
+} as const;
+
 export interface FontSizes {
   text: number;
   sub: number;

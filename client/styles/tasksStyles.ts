@@ -8,7 +8,7 @@
  * Maintenance: Update this block when exports, invariants, side effects, or ownership change.
  */
 import { StyleSheet } from 'react-native';
-import { FONT_SIZES } from '../utils/theme';
+import { FONT_SIZES, ASTRYX_RADII, ASTRYX_SPACING } from '../utils/theme';
 import { DEFAULT_ELEVATION } from '../utils/elevation';
 
 export const styles = StyleSheet.create({
@@ -16,21 +16,21 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     marginVertical: 12,
     marginHorizontal: 16,
-    borderRadius: 14,
+    borderRadius: ASTRYX_RADII.card,
     borderWidth: 1,
-    padding: 3,
-    gap: 4,
+    padding: ASTRYX_SPACING.xs,
+    gap: ASTRYX_SPACING.xs,
   },
   filterTab: {
     flex: 1,
-    paddingVertical: 7,
-    borderRadius: 10,
-    minHeight: 34,
+    paddingVertical: 10,
+    borderRadius: ASTRYX_RADII.card - ASTRYX_SPACING.xs,
+    minHeight: 44,
     justifyContent: 'center',
     alignItems: 'center',
   },
   filterTabActive: {
-    borderRadius: 10,
+    borderRadius: ASTRYX_RADII.card - ASTRYX_SPACING.xs,
   },
   filterTabText: {
     fontSize: 12,
