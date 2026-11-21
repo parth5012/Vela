@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, Modal, Switch, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Path } from 'react-native-svg';
 import PressableScale from '../components/ui/PressableScale';
 import db, { initializeDatabase } from '../db/client';
 import { tasks, taskRuns, TaskEntity, TaskRunEntity } from '../db/schema';
@@ -304,14 +305,18 @@ export default function TasksScreen() {
               accessibilityLabel={`${filter} tasks`}
               style={({ pressed }) => [
                 styles.filterTab,
-                isSelected && [styles.filterTabActive, { backgroundColor: aurora.acc1 }],
+                {
+                  backgroundColor: isSelected ? aurora.acc1 + '1A' : colors.card,
+                  borderColor: isSelected ? aurora.acc1 : colors.border,
+                  borderWidth: 1,
+                },
                 pressed && { opacity: 0.85 },
               ]}
             >
               <Text
                 style={[
                   styles.filterTabText,
-                  { color: isSelected ? aurora.onAccent : colors.textMuted },
+                  { color: isSelected ? aurora.acc1 : colors.textMuted },
                 ]}
               >
                 {filter.charAt(0).toUpperCase() + filter.slice(1)}
@@ -343,7 +348,12 @@ export default function TasksScreen() {
               accessibilityLabel="Create task"
               accessibilityRole="button"
             >
-              <Text style={[styles.emptyCtaText, { color: aurora.onAccent }]}>+ Add New Task</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={aurora.onAccent} strokeWidth={2.8} strokeLinecap="round" strokeLinejoin="round">
+                  <Path d="M12 5v14M5 12h14" />
+                </Svg>
+                <Text style={[styles.emptyCtaText, { color: aurora.onAccent }]}>Add New Task</Text>
+              </View>
             </PressableScale>
           </View>
         ) : (

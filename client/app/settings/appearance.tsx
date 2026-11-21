@@ -73,7 +73,7 @@ export default function AppearanceScreen() {
         <Label>Color Scheme</Label>
         <PillGroup options={THEME_OPTIONS} value={theme} onChange={setTheme} />
         <Text style={{ color: colors.textMuted, fontSize: sizes.sub - 1, lineHeight: 16 }}>
-          Berry is the signature. Noir and Chrome are dark atmospheres. Current:{' '}
+          Current:{' '}
           <Text style={{ color: aurora.acc1, fontWeight: '800' }}>
             {THEME_OPTIONS.find((t) => t.value === theme)?.label}
           </Text>

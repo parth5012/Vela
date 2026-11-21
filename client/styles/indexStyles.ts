@@ -31,7 +31,9 @@ export const styles = StyleSheet.create({
   },
   agentBar: {
     borderBottomWidth: 1,
-    paddingVertical: 7,
+    paddingVertical: 5,
+    height: 46,
+    justifyContent: 'center',
   },
   agentBarRow: {
     flexDirection: 'row',

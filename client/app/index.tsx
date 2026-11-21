@@ -790,7 +790,7 @@ export default function ChatScreen() {
       }, 50);
     }
   }, []);
-  const AGENT_BAR_HEIGHT = 58;
+  const AGENT_BAR_HEIGHT = 46;
   // WF-447-04: bar collapse is transform/opacity only — the layout height is a
   // static prop switched once at animation end; the bar itself slides out via
   // translateY on the native driver. Under reduced motion the state flips
@@ -1998,7 +1998,7 @@ export default function ChatScreen() {
                 width: 6,
                 height: 6,
                 borderRadius: 3,
-                backgroundColor: aurora.acc1,
+                backgroundColor: colors.textMuted,
               }}
             />
             <Text style={[styles.switcherLabel, { color: colors.textMuted }]}>
@@ -2116,7 +2116,7 @@ export default function ChatScreen() {
           <TextInput
             ref={inputRef}
             style={[styles.input, { color: colors.text, fontSize: sizes.text, backgroundColor: 'transparent' }]}
-            placeholder={activeThreadId ? "Ask a question or request a task..." : "Ask Vela anything..."}
+            placeholder="Ask Vela anything..."
             placeholderTextColor={colors.textDark}
             value={input}
             onChangeText={setInput}

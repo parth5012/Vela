@@ -661,10 +661,10 @@ export default function SetupScreen() {
             <View style={styles.forkContainer}>
               <Animated.View style={forkCardMotion(forkEntrances[0], reduceMotion)}>
                 <Pressable
-                  style={({ pressed }) => [styles.forkCard, pressed && styles.forkCardPressed]}
+                  style={({ pressed }) => [styles.forkCard, styles.forkCardRecommended, pressed && styles.forkCardPressed]}
                   onPress={() => setStep('server')}
                 >
-                  <Svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="#801D78" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 16 }}>
+                  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="#801D78" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 16 }}>
                     <Rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
                     <Rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
                     <Path d="M6 6h.01M6 18h.01" />
@@ -677,7 +677,7 @@ export default function SetupScreen() {
                     </View>
                     <Text style={styles.forkTitle}>Connect to Server</Text>
                     <Text style={styles.forkSubtitle}>
-                      Connect to your self-hosted Vela FastAPI instance for syncing and agent orchestration.
+                      Connect to your self-hosted Vela instance for syncing and background orchestrations.
                     </Text>
                   </View>
                   <Text style={styles.forkArrow}>›</Text>
@@ -689,13 +689,14 @@ export default function SetupScreen() {
                   style={({ pressed }) => [styles.forkCard, pressed && styles.forkCardPressed]}
                   onPress={() => setStep('standalone')}
                 >
-                  <Svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="#801D78" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 16 }}>
-                    <Path d="M12 2l2.4 5.6L20 10l-4.4 4 1.4 6-5-3.2L7 20l1.4-6L4 10l5.6-2.4L12 2z" />
+                  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="#801D78" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 16 }}>
+                    <Rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
+                    <Path d="M12 18h.01" />
                   </Svg>
                   <View style={styles.forkTextContainer}>
                     <Text style={styles.forkTitle}>Run Standalone</Text>
                     <Text style={styles.forkSubtitle}>
-                      Run standalone without a server using direct Cloud APIs or On-Device Local AI.
+                      Run standalone without a server using direct Cloud APIs or on-device local models.
                     </Text>
                   </View>
                   <Text style={styles.forkArrow}>›</Text>

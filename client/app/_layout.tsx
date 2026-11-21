@@ -394,9 +394,9 @@ export default function RootLayout() {
             headerTitle: 'VELA',
             headerTitleStyle: {
               fontWeight: '900',
-              letterSpacing: 3,
+              letterSpacing: 4,
               color: currentAurora.acc1,
-              fontSize: 16,
+              fontSize: 18,
             },
           }}
         />

@@ -246,12 +246,8 @@ function SyncStatusIndicator() {
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 6,
+    paddingHorizontal: 4,
     paddingVertical: 4,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#E8E0F2',
-    backgroundColor: '#FFFFFF',
     marginRight: 4,
     justifyContent: 'center',
     alignItems: 'center',
