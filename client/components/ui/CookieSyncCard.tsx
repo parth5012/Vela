@@ -8,6 +8,7 @@ import {
   Modal,
   ScrollView,
 } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import { useCookieSync } from '../../hooks/useCookieSync';
 import { styles } from './cookieSyncCardStyles';
 
@@ -56,7 +57,11 @@ export default function CookieSyncCard({ colors, sizes, accentHex }: CookieSyncC
       {/* Header */}
       <View style={styles.headerRow}>
         <View style={styles.titleRow}>
-          <Text style={[styles.icon, { fontSize: sizes.title }]}>🍪</Text>
+          <View style={{ marginRight: 8, justifyContent: 'center' }}>
+            <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={colors.text} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <Path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </Svg>
+          </View>
           <Text style={[styles.title, { color: colors.text, fontSize: sizes.title }]}>Cookie Sync</Text>
         </View>
         {/* Sync Status Badge */}

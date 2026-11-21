@@ -8,7 +8,7 @@
  * Maintenance: Update this block when exports, invariants, side effects, or ownership change.
  */
 import { Platform, StyleSheet } from 'react-native';
-import { FONT_SIZES } from '../utils/theme';
+import { FONT_SIZES, ASTRYX_RADII, ASTRYX_SPACING } from '../utils/theme';
 import { DEFAULT_ELEVATION } from '../utils/elevation';
 
 export const styles = StyleSheet.create({
@@ -128,22 +128,22 @@ export const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   bubble: {
-    borderRadius: 22,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
+    borderRadius: ASTRYX_RADII.container,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderWidth: 1,
     maxWidth: '88%',
     shadowColor: '#1D1B20',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 1,
   },
   userBubble: {
-    borderTopRightRadius: 8,
+    borderTopRightRadius: ASTRYX_RADII.inner,
   },
   assistantBubble: {
-    borderTopLeftRadius: 8,
+    borderTopLeftRadius: ASTRYX_RADII.inner,
   },
   senderLabel: {
     fontSize: FONT_SIZES.small.sub,
@@ -229,13 +229,13 @@ export const styles = StyleSheet.create({
   },
   suggestionCard: {
     borderWidth: 1,
-    borderRadius: 16,
+    borderRadius: ASTRYX_RADII.card,
     padding: 16,
     shadowColor: DEFAULT_ELEVATION.e2.shadowColor,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 1,
   },
   suggestionText: {
     lineHeight: FONT_SIZES.medium.lineHeight,
@@ -248,10 +248,10 @@ export const styles = StyleSheet.create({
   },
   agentPill: {
     borderWidth: 1,
-    borderRadius: 24,
+    borderRadius: ASTRYX_RADII.full,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    minHeight: 38,
+    minHeight: 44,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -306,28 +306,29 @@ export const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 26,
+    borderRadius: ASTRYX_RADII.surface,
     borderWidth: 1,
-    paddingLeft: 16,
-    paddingRight: 6,
-    paddingVertical: 6,
+    paddingLeft: 14,
+    paddingRight: ASTRYX_SPACING.sm,
+    paddingVertical: ASTRYX_SPACING.sm,
     gap: 8,
     shadowColor: DEFAULT_ELEVATION.e2.shadowColor,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 2,
   },
   input: {
     flex: 1,
+    borderRadius: ASTRYX_RADII.surface - ASTRYX_SPACING.sm,
     paddingHorizontal: 0,
     paddingVertical: 8,
     maxHeight: 120,
   },
   attachButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: ASTRYX_RADII.full,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -338,16 +339,16 @@ export const styles = StyleSheet.create({
     fontSize: 18,
   },
   sendButton: {
-    borderRadius: 22,
+    borderRadius: ASTRYX_RADII.full,
     minWidth: 44,
     height: 44,
     paddingHorizontal: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowOpacity: 0.18,
+    shadowOpacity: 0.12,
     shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
   sendButtonText: {
     color: '#ffffff',
