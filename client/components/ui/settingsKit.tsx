@@ -11,6 +11,7 @@ import {
   type TextInputProps,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Path } from 'react-native-svg';
 import Grain from './Grain';
 import PressableScale from './PressableScale';
 import { useRouter } from 'expo-router';
@@ -53,10 +54,15 @@ export function AuroraScreen({
       {showHeader && (
         <View style={styles.header}>
           <PressableScale onPress={handleBack} hitSlop={10} style={styles.backBtn} accessibilityLabel="Back">
-            <Text style={[styles.backText, { color: colors.textMuted, fontSize: sizes.text }]}>‹ Back</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={colors.textMuted} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M15 18l-6-6 6-6" />
+              </Svg>
+              <Text style={[styles.backText, { color: colors.textMuted, fontSize: sizes.text }]}>Back</Text>
+            </View>
           </PressableScale>
           <Text
-            style={[styles.headerTitle, { color: colors.text, fontSize: sizes.title, fontWeight: '600' }]}
+            style={[styles.headerTitle, { color: colors.text, fontSize: 16, fontWeight: '600' }]}
             numberOfLines={1}
           >
             {title}
@@ -156,8 +162,8 @@ export function PillGroup<T extends string>({
             scaleTo={0.96}
             style={({ pressed }) => [
               styles.pill,
-              { backgroundColor: colors.bubbleAssistant, borderColor: colors.border },
-              selected && { borderColor: aurora.acc1, borderWidth: 1.5, backgroundColor: hexToRgba(aurora.acc1, 0.12) },
+              { backgroundColor: colors.card, borderColor: colors.border },
+              selected && { borderColor: aurora.acc1, borderWidth: 1.5, backgroundColor: hexToRgba(aurora.acc1, 0.14) },
               pressed && { opacity: 0.85 },
             ]}
             onPress={() => onChange(o.value)}
@@ -167,7 +173,7 @@ export function PillGroup<T extends string>({
             <Text
               style={[
                 styles.pillText,
-                { color: selected ? colors.text : colors.textMuted, fontSize: sizes.text - 1 },
+                { color: selected ? aurora.acc1 : colors.textMuted, fontSize: sizes.text - 1, fontWeight: selected ? '700' : '500' },
               ]}
             >
               {o.label}
@@ -377,7 +383,7 @@ export function AccentDotItem({
       style={({ pressed }) => [
         styles.accentDot,
         { backgroundColor: ACCENT_COLORS[color] },
-        selected && { borderColor: auroraAcc1, borderWidth: 2.5 },
+        selected && { borderColor: '#ffffff', shadowColor: '#1D1B20', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.35, shadowRadius: 2.5, elevation: 2 },
         pressed && { opacity: 0.85 },
       ]}
       onPress={handlePress}
@@ -391,7 +397,7 @@ export function AccentDotItem({
             transform: reducedMotion ? [] : [{ scale: popAnim }],
           }}
         >
-          <Text style={{ color: '#0e0d0b', fontSize: 13, fontWeight: '800' }}>✓</Text>
+          <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: '900' }}>✓</Text>
         </Animated.View>
       ) : null}
     </PressableScale>

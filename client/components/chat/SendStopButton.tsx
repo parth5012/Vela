@@ -164,14 +164,14 @@ export default function SendStopButton({
             end={{ x: 1, y: 1 }}
             style={styles.gradient}
           >
-            <Text style={[styles.buttonText, { fontSize, color: aurora.onAccent }]}>
-              Send
+            <Text style={[styles.buttonText, { fontSize: 20, color: aurora.onAccent }]}>
+              ↑
             </Text>
           </LinearGradient>
         ) : (
-          <View style={[styles.disabledBackground, { backgroundColor: '#EDE8F5', borderWidth: 1, borderColor: '#D9D0E6' }]}>
-            <Text style={[styles.buttonText, { fontSize, color: '#6A6375', fontWeight: '600' }]}>
-              Send
+          <View style={[styles.disabledBackground, { backgroundColor: '#EDE8F5', borderWidth: 1, borderColor: '#CDC2DC' }]}>
+            <Text style={[styles.buttonText, { fontSize: 20, color: '#4B4654', fontWeight: '800' }]}>
+              ↑
             </Text>
           </View>
         )}
@@ -193,8 +193,8 @@ export default function SendStopButton({
         ]}
         pointerEvents={isStreaming ? 'auto' : 'none'}
       >
-        <Text style={[styles.buttonText, { fontSize, color: '#ffffff' }]}>
-          Stop
+        <Text style={[styles.buttonText, { fontSize: 16, color: '#ffffff' }]}>
+          ■
         </Text>
       </Animated.View>
     </PressableScale>

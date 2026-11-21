@@ -23,14 +23,14 @@ export const styles = StyleSheet.create({
   },
   filterTab: {
     flex: 1,
-    paddingVertical: 8,
+    paddingVertical: 7,
     borderRadius: 10,
-    minHeight: 36,
+    minHeight: 34,
     justifyContent: 'center',
     alignItems: 'center',
   },
   filterTabActive: {
-    ...DEFAULT_ELEVATION.e1,
+    borderRadius: 10,
   },
   filterTabText: {
     fontSize: 12,

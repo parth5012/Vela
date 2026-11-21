@@ -59,6 +59,12 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E8E0F2',
   },
+  forkCardRecommended: {
+    backgroundColor: '#F7F0FA',
+    borderColor: '#801D78',
+    borderWidth: 1.5,
+    ...DEFAULT_ELEVATION.e1,
+  },
   forkCardPressed: {
     backgroundColor: '#F3F0F7',
     borderColor: '#801D78',
@@ -98,7 +104,7 @@ export const styles = StyleSheet.create({
   forkSubtitle: {
     fontSize: 13,
     color: '#4B4654',
-    lineHeight: FONT_SIZES.medium.subLineHeight,
+    lineHeight: 20,
   },
   forkArrow: {
     fontSize: 24,

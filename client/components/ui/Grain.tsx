@@ -1,5 +1,6 @@
 import React from 'react';
 import { Image, StyleSheet, View } from 'react-native';
+import { useAurora } from '../../hooks/useAurora';
 
 // Scroll-craft grain overlay (WF-447-03). A tiled 64x64 noise PNG at 4%
 // opacity breaks up gradient banding on flat dark grounds. Mounts absolutely,
@@ -11,10 +12,12 @@ const GRAIN_TILE = require('../../assets/grain.png');
  * positioned wrapper) so it sits behind the content layered above it.
  */
 export default function Grain() {
+  const { theme } = useAurora();
+  const isDark = theme === 'noir' || theme === 'chrome';
   return (
     <View
       testID="grain-overlay"
-      style={[StyleSheet.absoluteFill, styles.grain]}
+      style={[StyleSheet.absoluteFill, { opacity: isDark ? 0.04 : 0.012 }]}
       pointerEvents="none"
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
@@ -23,9 +26,3 @@ export default function Grain() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  grain: {
-    opacity: 0.04,
-  },
-});
