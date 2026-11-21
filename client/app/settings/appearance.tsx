@@ -67,7 +67,7 @@ export default function AppearanceScreen() {
   return (
     <AuroraScreen
       title="Appearance"
-      subtitle="Six tonal schemes, one expressive language. Tap a scheme — the whole app recolors instantly."
+      subtitle="Six tonal schemes, one expressive language. Tap a scheme to recolor the app instantly."
     >
       <Card>
         <Label>Color Scheme</Label>

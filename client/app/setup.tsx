@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import Svg, { Path, Rect } from 'react-native-svg';
 import {
   View,
   Text,
@@ -663,8 +664,17 @@ export default function SetupScreen() {
                   style={({ pressed }) => [styles.forkCard, pressed && styles.forkCardPressed]}
                   onPress={() => setStep('server')}
                 >
-                  <Text style={styles.forkIcon}>🖥️</Text>
+                  <Svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="#801D78" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 16 }}>
+                    <Rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
+                    <Rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
+                    <Path d="M6 6h.01M6 18h.01" />
+                  </Svg>
                   <View style={styles.forkTextContainer}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                      <View style={styles.recommendedBadge}>
+                        <Text style={styles.recommendedBadgeText}>RECOMMENDED</Text>
+                      </View>
+                    </View>
                     <Text style={styles.forkTitle}>Connect to Server</Text>
                     <Text style={styles.forkSubtitle}>
                       Connect to your self-hosted Vela FastAPI instance for syncing and agent orchestration.
@@ -679,7 +689,9 @@ export default function SetupScreen() {
                   style={({ pressed }) => [styles.forkCard, pressed && styles.forkCardPressed]}
                   onPress={() => setStep('standalone')}
                 >
-                  <Text style={styles.forkIcon}>✨</Text>
+                  <Svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="#801D78" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 16 }}>
+                    <Path d="M12 2l2.4 5.6L20 10l-4.4 4 1.4 6-5-3.2L7 20l1.4-6L4 10l5.6-2.4L12 2z" />
+                  </Svg>
                   <View style={styles.forkTextContainer}>
                     <Text style={styles.forkTitle}>Run Standalone</Text>
                     <Text style={styles.forkSubtitle}>

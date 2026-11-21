@@ -23,6 +23,7 @@ test.describe('Advisory Visual Baselines (360x640)', () => {
     await page.goto('/?e2e_seed=chat');
     await waitForControlHook(page);
     await expect(page.getByPlaceholder(COMPOSER)).toBeVisible();
+    await page.waitForTimeout(600);
     await expect(page).toHaveScreenshot('chat-empty.png');
   });
 
@@ -35,8 +36,16 @@ test.describe('Advisory Visual Baselines (360x640)', () => {
         id: 'thread-visual-demo',
         title: 'Status Report',
         messages: [
-          { role: 'user', content: 'What is the status of system services?' },
-          { role: 'assistant', content: 'All services are running normally with optimal response latency.' },
+          {
+            role: 'user',
+            content: 'What is the status of system services?',
+            created_at: '2026-01-01T18:14:00.000Z',
+          },
+          {
+            role: 'assistant',
+            content: 'All services are running normally with optimal response latency.',
+            created_at: '2026-01-01T18:15:00.000Z',
+          },
         ],
       },
     ]);

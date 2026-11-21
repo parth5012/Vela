@@ -16,6 +16,7 @@ import {
 import { FlashList, type FlashListRef, type FlashListProps } from '@shopify/flash-list';
 import { LinearGradient } from 'expo-linear-gradient';
 import PressableScale from '../components/ui/PressableScale';
+import Svg, { Path } from 'react-native-svg';
 import { DURATIONS, EASING } from '../utils/motion';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -448,7 +449,6 @@ export function EmptyChatState({
         },
       ]}
     >
-      <Text style={[styles.welcomeLogo, { color: aurora.acc1 }]}>VELA</Text>
       <Text
         testID="empty-headline"
         style={[styles.emptyHeadline, { color: colors.text, fontSize: sizes.title, letterSpacing: sizes.titleLetterSpacing }]}
@@ -457,7 +457,17 @@ export function EmptyChatState({
       </Text>
       <Text
         testID="empty-subtext"
-        style={[styles.emptySubtext, { color: colors.textMuted, fontSize: sizes.text, lineHeight: sizes.lineHeight, letterSpacing: sizes.letterSpacing }]}
+        style={[
+          styles.emptySubtext,
+          {
+            color: colors.textDark === '#5E5B6B' ? '#E0DCED' : '#2A2433',
+            opacity: 1,
+            fontWeight: '400',
+            fontSize: sizes.text - 1,
+            lineHeight: sizes.lineHeight,
+            letterSpacing: sizes.letterSpacing,
+          },
+        ]}
       >
         {EMPTY_SUBTEXT}
       </Text>
@@ -719,6 +729,10 @@ export default function ChatScreen() {
   }, []);
   // #357: agents come from the shared DB-backed selector (no local copy).
   const agents = useAgents();
+  const quickAgents = useMemo(
+    () => agents.filter((a) => a.id !== 'my-prompt').slice(0, 4),
+    [agents]
+  );
   const currentThread = useMemo(
     () => threads.find((t) => t.id === activeThreadId),
     [threads, activeThreadId]
@@ -1742,12 +1756,14 @@ export default function ChatScreen() {
       style={[styles.setupBanner, { backgroundColor: colors.glass, borderColor: colors.glassBorder }]}
       onPress={() => router.push('/settings/permissions')}
     >
-      <Text style={[styles.setupBannerTitle, { color: colors.text, fontSize: sizes.text }]}>
-        Finish setup later
-      </Text>
-      <Text style={[styles.setupBannerText, { color: colors.textMuted, fontSize: sizes.sub }]}>
-        {missingSetupPermissions.length} permission{missingSetupPermissions.length > 1 ? 's' : ''} still need your OK. Tap to review in Settings.
-      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text style={[styles.setupBannerText, { color: colors.textMuted, fontSize: sizes.sub, flex: 1 }]}>
+          {missingSetupPermissions.length === 1
+            ? '1 permission needs review in Settings'
+            : `${missingSetupPermissions.length} permissions need review in Settings`}
+        </Text>
+        <Text style={{ color: colors.textDark, fontSize: 16, fontWeight: '600' }}>›</Text>
+      </View>
     </PressableScale>
   ) : null;
 
@@ -1764,12 +1780,19 @@ export default function ChatScreen() {
         else router.push('/settings/shizuku' as any);
       }}
     >
-      <Text style={[styles.setupBannerTitle, { color: colors.text, fontSize: sizes.text }]}>
-        Finish setup later
-      </Text>
-      <Text style={[styles.setupBannerText, { color: colors.textMuted, fontSize: sizes.sub }]}>
-        {missingSetupIntegrations.length} integration{missingSetupIntegrations.length > 1 ? 's' : ''} still need attention. Tap to review in Settings.
-      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <View style={{ flex: 1, paddingRight: 8 }}>
+          <Text style={[styles.setupBannerTitle, { color: colors.text, fontSize: sizes.text }]}>
+            Finish setup later
+          </Text>
+          <Text style={[styles.setupBannerText, { color: colors.textMuted, fontSize: sizes.sub }]}>
+            {missingSetupIntegrations.length === 1
+              ? '1 integration still needs attention. Tap to review in Settings.'
+              : `${missingSetupIntegrations.length} integrations still need attention. Tap to review in Settings.`}
+          </Text>
+        </View>
+        <Text style={{ color: colors.textDark, fontSize: 18, fontWeight: '600' }}>›</Text>
+      </View>
     </PressableScale>
   ) : null;
 
@@ -1794,15 +1817,14 @@ export default function ChatScreen() {
     >
       {activeThreadId ? (
         <View style={styles.chatArea}>
-          {setupPermissionsBanner}
-          {setupIntegrationsBanner}
           {/* Horizontal Agent Selector Bar */}
           <View style={{ height: agentBarShown ? AGENT_BAR_HEIGHT : 0, overflow: 'hidden' }}>
             <Animated.View style={{ transform: [{ translateY: agentBarSlide }] }}>
             <View style={[styles.agentBar, { borderBottomColor: colors.glassBorder, backgroundColor: colors.glass }]}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.agentBarScroll}>
-                {agents.map((p) => {
+              <View style={styles.agentBarRow}>
+                {quickAgents.map((p) => {
                   const isSelected = currentAgentId === p.id;
+                  const displayName = p.name === 'Personal Assistant' ? 'Assistant' : p.name === 'Prompt Builder' ? 'Writer' : p.name;
                   return (
                     <PressableScale
                       key={p.id}
@@ -1817,13 +1839,16 @@ export default function ChatScreen() {
                         setThreadAgent(activeThreadId, p.id);
                       }}
                     >
-                      <Text style={[styles.agentBarText, { color: isSelected ? aurora.acc1 : colors.textMuted, fontSize: sizes.sub }]}>
-                        {p.icon} {p.name}
+                      <Text
+                        numberOfLines={1}
+                        style={[styles.agentBarText, { color: isSelected ? aurora.acc1 : colors.textMuted }]}
+                      >
+                        {displayName}
                       </Text>
                     </PressableScale>
                   );
                 })}
-              </ScrollView>
+              </View>
             </View>
             </Animated.View>
           </View>
@@ -1942,8 +1967,6 @@ export default function ChatScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.welcomeScroll} keyboardShouldPersistTaps="handled">
-          {setupPermissionsBanner}
-          {setupIntegrationsBanner}
           <EmptyChatState
             colors={colors}
             sizes={sizes}
@@ -1959,19 +1982,29 @@ export default function ChatScreen() {
       )}
 
       {/* Model Mode Selector */}
-      <View style={[styles.modelSwitcherContainer, { backgroundColor: colors.glass, borderTopColor: colors.glassBorder }]}>
+      <View style={styles.modelSwitcherContainer}>
         <PressableScale
           accessibilityLabel="Toggle engine mode"
           style={({ pressed }) => [
             styles.switcherButton,
-            { borderColor: colors.border, backgroundColor: colors.card },
+            { borderColor: colors.glassBorder, backgroundColor: colors.glass },
             pressed && { opacity: 0.85 }
           ]}
           onPress={handleToggleLocalMode}
         >
-          <Text style={[styles.switcherLabel, { color: colors.text }]}>
-            Engine: {connectionMode === 'local' ? `🤖 Local (${localModelName})` : connectionMode === 'cloud' ? `☁️ Cloud (${activeCloudProvider || 'gemini'})` : `🖥️ Server (${modelName || 'Gemini'})`}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <View
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: 3,
+                backgroundColor: aurora.acc1,
+              }}
+            />
+            <Text style={[styles.switcherLabel, { color: colors.textMuted }]}>
+              {connectionMode === 'local' ? `Local · ${localModelName}` : connectionMode === 'cloud' ? `Cloud · ${activeCloudProvider || 'gemini'}` : `Server · ${modelName || 'Gemini'}`}
+            </Text>
+          </View>
         </PressableScale>
         {localModelDownloadProgress !== null && (
           <Text style={[styles.downloadProgressText, { color: aurora.acc2 }]}>
@@ -2060,7 +2093,9 @@ export default function ChatScreen() {
             accessibilityLabel="Attach images"
             accessibilityRole="button"
           >
-            <Text style={[styles.attachButtonIcon, { color: aurora.acc1 }]}>📎</Text>
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={aurora.acc1} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <Path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+            </Svg>
           </PressableScale>
           <PressableScale
             scaleTo={0.92}
@@ -2071,7 +2106,12 @@ export default function ChatScreen() {
             accessibilityLabel="Hold to speak"
             accessibilityRole="button"
           >
-            <Text style={[styles.attachButtonIcon, { color: aurora.acc1 }]}>🎙</Text>
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={aurora.acc1} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <Path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+              <Path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              <Path d="M12 19v4" />
+              <Path d="M8 23h8" />
+            </Svg>
           </PressableScale>
           <TextInput
             ref={inputRef}

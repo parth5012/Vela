@@ -136,7 +136,7 @@ interface ConfigState {
   setHasHydrated: (val: boolean) => void;
   theme: ThemeName;
   fontSize: 'small' | 'medium' | 'large';
-  accentColor: 'indigo' | 'emerald' | 'rose' | 'amber' | 'violet' | 'pink' | 'orange' | 'blue';
+  accentColor: 'berry' | 'indigo' | 'emerald' | 'rose' | 'amber' | 'teal' | 'orange' | 'blue';
   systemPrompt: string;
   temperature: number;
   modelName: string;
@@ -145,7 +145,7 @@ interface ConfigState {
   suggestionStarters: SuggestionStarter[];
   setTheme: (theme: ThemeName) => void;
   setFontSize: (size: 'small' | 'medium' | 'large') => void;
-  setAccentColor: (color: 'indigo' | 'emerald' | 'rose' | 'amber' | 'violet' | 'pink' | 'orange' | 'blue') => void;
+  setAccentColor: (color: 'berry' | 'indigo' | 'emerald' | 'rose' | 'amber' | 'teal' | 'orange' | 'blue') => void;
   setSystemPrompt: (prompt: string) => void;
   setTemperature: (temp: number) => void;
   setModelName: (model: string) => void;
@@ -222,7 +222,7 @@ export const useConfigStore = create<ConfigState>()(
       hasHydrated: false,
       theme: 'berry',
       fontSize: 'medium',
-      accentColor: 'indigo',
+      accentColor: 'berry',
       systemPrompt: 'You are an autonomous research agent.',
       temperature: 0.7,
       modelName: 'gemini-1.5-pro',
@@ -292,7 +292,7 @@ export const useConfigStore = create<ConfigState>()(
           isConfigured: false,
           theme: 'berry',
           fontSize: 'medium',
-          accentColor: 'indigo',
+          accentColor: 'berry',
           systemPrompt: 'You are an autonomous research agent.',
           temperature: 0.7,
           modelName: 'gemini-1.5-pro',

@@ -56,10 +56,7 @@ export default function BubbleFooter({
       )}
       <Text
         accessibilityLabel={`Sent at ${formatted}`}
-        style={[
-          styles.timestamp,
-          { color: isUser ? aurora.onAccent : colors.textMuted, opacity: isUser ? 0.65 : 1 },
-        ]}
+        style={[styles.timestamp, { color: colors.textMuted, opacity: 1 }]}
       >
         {formatted}
       </Text>

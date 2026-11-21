@@ -110,7 +110,7 @@ function HeaderRightActions() {
   };
 
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 14, gap: 10 }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 8, gap: 6 }}>
       <AnimatedPressable
         onPress={handleToggle}
         onPressIn={handlePressIn}
@@ -130,7 +130,7 @@ function HeaderRightActions() {
         testID="header-route-toggle"
       >
         <Text style={{ color: isBrowserRoute ? aurora.acc1 : colors.text, fontSize: 12, fontWeight: '600', letterSpacing: 0.3 }}>
-          {isBrowserRoute ? '💬 Chat' : '🌐 Webview'}
+          {isBrowserRoute ? '💬 Chat' : '🌐 Browser'}
         </Text>
       </AnimatedPressable>
       <QueueBadge />
@@ -340,7 +340,7 @@ export default function RootLayout() {
   if (!hasHydrated || !chatHasHydrated || !isRouterReady || (!isConfigured && !inSetupGroup && !isOAuthCallback) || (isConfigured && inSetupGroup)) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#6D3AE8" />
+        <ActivityIndicator size="large" color="#801D78" />
       </View>
     );
   }
@@ -403,12 +403,7 @@ export default function RootLayout() {
         <Drawer.Screen
           name="settings"
           options={{
-            headerTitle: 'Settings',
-            headerTitleStyle: {
-              fontWeight: '600',
-              color: currentColors.text,
-              fontSize: 16,
-            },
+            headerShown: false,
           }}
         />
         <Drawer.Screen
@@ -425,11 +420,12 @@ export default function RootLayout() {
         <Drawer.Screen
           name="tasks"
           options={{
-            headerTitle: 'Tasks',
+            headerTitle: 'Task Scheduler',
             headerTitleStyle: {
               fontWeight: '600',
               color: currentColors.text,
-              fontSize: 16,
+              fontSize: 14,
+              letterSpacing: 0,
             },
           }}
         />
@@ -502,9 +498,9 @@ const styles = StyleSheet.create({
   headerRouteBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 16,
     borderWidth: 1,
   },
 });

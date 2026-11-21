@@ -60,13 +60,13 @@ describe('BubbleFooter', () => {
     act(() => component.unmount());
   });
 
-  it('renders a user bubble timestamp with onAccent at 0.65 opacity', () => {
+  it('renders a user bubble timestamp with textMuted at full opacity', () => {
     const component = renderFooter({ isUser: true });
     const text = timestampTextOf(component);
     expect(text.props.children).toBe(formatTimestamp(CREATED_AT));
     expect(text.props.style).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ color: aurora.onAccent, opacity: 0.65 }),
+        expect.objectContaining({ color: colors.textMuted, opacity: 1 }),
       ])
     );
     act(() => component.unmount());

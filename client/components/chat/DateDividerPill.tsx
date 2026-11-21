@@ -21,6 +21,7 @@ export default function DateDividerPill({ label, colors }: DateDividerPillProps)
       accessibilityRole="header"
       accessibilityLabel={`Date divider: ${label}`}
     >
+      <View style={[styles.hairline, { backgroundColor: colors.border }]} />
       <View
         style={[
           styles.pill,
@@ -37,13 +38,27 @@ const styles = StyleSheet.create({
   container: {
     width: '100%',
     alignItems: 'center',
-    marginVertical: 12,
+    justifyContent: 'center',
+    marginVertical: 14,
+    position: 'relative',
+  },
+  hairline: {
+    position: 'absolute',
+    left: 20,
+    right: 20,
+    height: StyleSheet.hairlineWidth,
+    opacity: 0.6,
   },
   pill: {
     borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
+    borderRadius: 14,
+    paddingHorizontal: 14,
     paddingVertical: 4,
+    shadowColor: '#1D1B20',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
   },
   text: {
     fontSize: 11,

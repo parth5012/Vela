@@ -158,7 +158,7 @@ describe('E2E Loader Seam', () => {
     await seedTasks();
     seedOAuth({ isConnected: true });
     seedBrowser({ isVisible: true });
-    seedSettings({ theme: 'warm', fontSize: 18, temperature: 0.9 });
+    seedSettings({ theme: 'noir', fontSize: 'medium', temperature: 0.9 });
 
     await resetWorld();
 
