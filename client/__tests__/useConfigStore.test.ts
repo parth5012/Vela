@@ -53,7 +53,7 @@ describe('useConfigStore', () => {
     const state = useConfigStore.getState();
     expect(state.theme).toBe('berry');
     expect(state.fontSize).toBe('medium');
-    expect(state.accentColor).toBe('indigo');
+    expect(state.accentColor).toBe('berry');
     expect(state.systemPrompt).toBe('You are an autonomous research agent.');
     expect(state.temperature).toBe(0.7);
     expect(state.maxTokens).toBe(4096);

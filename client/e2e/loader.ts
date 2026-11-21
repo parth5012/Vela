@@ -76,7 +76,7 @@ export interface E2EThreadInput {
   title: string;
   agent?: string;
   isPinned?: boolean;
-  messages?: Array<Pick<Message, 'role' | 'content'>>;
+  messages?: Array<Pick<Message, 'role' | 'content'> & { created_at?: string }>;
 }
 
 export interface E2EThreadsState {
@@ -160,7 +160,7 @@ export interface E2ESafetyState {
 export interface E2ESettingsInput {
   theme?: ThemeName;
   fontSize?: 'small' | 'medium' | 'large';
-  accentColor?: 'indigo' | 'emerald' | 'rose' | 'amber' | 'violet' | 'pink' | 'orange' | 'blue';
+  accentColor?: 'berry' | 'indigo' | 'emerald' | 'rose' | 'amber' | 'teal' | 'orange' | 'blue';
   systemPrompt?: string;
   temperature?: number;
   modelName?: string;
@@ -270,7 +270,7 @@ export function seedThreads(threadsList: E2EThreadInput[], clearFirst = true): E
         id: `seed_msg_${t.id}_${index}`,
         role: m.role,
         content: m.content,
-        created_at: '2026-01-01T12:00:00.000Z',
+        created_at: (m as any).created_at || new Date(Date.parse('2026-01-01T18:14:00.000Z') + index * 60000).toISOString(),
       }));
     } else if (!messagesMap[t.id]) {
       messagesMap[t.id] = [];

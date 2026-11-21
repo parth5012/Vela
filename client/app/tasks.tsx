@@ -291,32 +291,34 @@ export default function TasksScreen() {
   };
 
   return (
-    <AuroraScreen title="Task Scheduler">
+    <AuroraScreen title="Task Scheduler" showHeader={false}>
       {/* Filter Tabs */}
-      <View style={styles.filterContainer}>
-        {['all', 'active', 'paused'].map((filter) => (
-          <PressableScale
-            key={filter}
-            onPress={() => setActiveFilter(filter as any)}
-            accessibilityState={{ selected: activeFilter === filter }}
-            accessibilityLabel={`${filter} tasks`}
-            style={({ pressed }) => [
-              styles.filterTab,
-              { backgroundColor: colors.glass, borderColor: colors.glassBorder },
-              activeFilter === filter && { backgroundColor: aurora.acc1, borderColor: aurora.acc1 },
-              pressed && { opacity: 0.85 }
-            ]}
-          >
-            <Text
-              style={[
-                styles.filterTabText,
-                { color: activeFilter === filter ? aurora.onAccent : colors.textMuted }
+      <View style={[styles.filterContainer, { backgroundColor: colors.glass, borderColor: colors.glassBorder }]}>
+        {(['all', 'active', 'paused'] as const).map((filter) => {
+          const isSelected = activeFilter === filter;
+          return (
+            <PressableScale
+              key={filter}
+              onPress={() => setActiveFilter(filter)}
+              accessibilityState={{ selected: isSelected }}
+              accessibilityLabel={`${filter} tasks`}
+              style={({ pressed }) => [
+                styles.filterTab,
+                isSelected && [styles.filterTabActive, { backgroundColor: aurora.acc1 }],
+                pressed && { opacity: 0.85 },
               ]}
             >
-              {filter.toUpperCase()}
-            </Text>
-          </PressableScale>
-        ))}
+              <Text
+                style={[
+                  styles.filterTabText,
+                  { color: isSelected ? aurora.onAccent : colors.textMuted },
+                ]}
+              >
+                {filter.charAt(0).toUpperCase() + filter.slice(1)}
+              </Text>
+            </PressableScale>
+          );
+        })}
       </View>
 
       {/* Main List */}
@@ -324,9 +326,26 @@ export default function TasksScreen() {
         {loading ? (
           <ActivityIndicator color={aurora.acc1} style={{ marginVertical: 30 }} />
         ) : filteredTasks.length === 0 ? (
-          <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-            No tasks found in this category.
-          </Text>
+          <View style={styles.emptyContainer}>
+            <View style={[styles.emptyIconCircle, { backgroundColor: colors.glass, borderColor: colors.glassBorder }]}>
+              <View style={[styles.clockCenter, { borderColor: aurora.acc1 }]}>
+                <View style={[styles.clockHourHand, { backgroundColor: aurora.acc1 }]} />
+                <View style={[styles.clockMinuteHand, { backgroundColor: aurora.acc1 }]} />
+              </View>
+            </View>
+            <Text style={[styles.emptyHeadline, { color: colors.text }]}>No Scheduled Tasks</Text>
+            <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>
+              Automate recurring checks, daily briefings, or background device routines.
+            </Text>
+            <PressableScale
+              onPress={() => handleOpenForm()}
+              style={[styles.emptyCta, { backgroundColor: aurora.acc1 }]}
+              accessibilityLabel="Create task"
+              accessibilityRole="button"
+            >
+              <Text style={[styles.emptyCtaText, { color: aurora.onAccent }]}>+ Add New Task</Text>
+            </PressableScale>
+          </View>
         ) : (
           filteredTasks.map((task) => (
             <Card key={task.id} style={styles.taskCard}>
@@ -427,9 +446,11 @@ export default function TasksScreen() {
         )}
       </View>
 
-      <View style={{ marginVertical: 20 }}>
-        <PrimaryButton label="+ Add Task" onPress={() => handleOpenForm(null)} />
-      </View>
+      {filteredTasks.length > 0 && (
+        <View style={{ marginVertical: 20 }}>
+          <PrimaryButton label="+ Add Task" onPress={() => handleOpenForm(null)} />
+        </View>
+      )}
 
       {/* Add / Edit Task Modal */}
       <Modal visible={isFormModalVisible} animationType="slide" transparent>

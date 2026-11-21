@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import * as TaskManager from 'expo-task-manager';
 import * as BackgroundTask from 'expo-background-task';
 import db from '../db/client';
@@ -148,6 +149,7 @@ export async function executeVelaBackgroundTask(body?: any): Promise<BackgroundT
 TaskManager.defineTask(VELA_BACKGROUND_TASK, executeVelaBackgroundTask);
 
 export async function registerVelaBackgroundTask() {
+  if (Platform.OS === 'web') return;
   try {
     const isRegistered = await TaskManager.isTaskRegisteredAsync(VELA_BACKGROUND_TASK);
     if (!isRegistered) {
@@ -157,11 +159,12 @@ export async function registerVelaBackgroundTask() {
       console.log('[Background Task] Registered successfully.');
     }
   } catch (err) {
-    console.error('[Background Task] Register failed:', err);
+    console.warn('[Background Task] Register failed:', err);
   }
 }
 
 export async function unregisterVelaBackgroundTask() {
+  if (Platform.OS === 'web') return;
   try {
     const isRegistered = await TaskManager.isTaskRegisteredAsync(VELA_BACKGROUND_TASK);
     if (isRegistered) {
@@ -169,6 +172,6 @@ export async function unregisterVelaBackgroundTask() {
       console.log('[Background Task] Unregistered successfully.');
     }
   } catch (err) {
-    console.error('[Background Task] Unregister failed:', err);
+    console.warn('[Background Task] Unregister failed:', err);
   }
 }

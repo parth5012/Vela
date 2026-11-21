@@ -94,15 +94,25 @@ function MessageItemBase({
           style={({ pressed }) => [
             styles.bubble,
             isUser ? styles.userBubble : styles.assistantBubble,
+            { alignSelf: isUser ? 'flex-end' : 'flex-start' },
             pressed && { opacity: 0.85 },
             !isUser && { backgroundColor: colors.bubbleAssistant, borderColor: colors.bubbleAssistantBorder },
             isUser && { backgroundColor: colors.bubbleUser, borderColor: colors.bubbleUserBorder },
           ]}
         >
-          {!isUser && (
-            <Text style={[styles.senderLabel, { color: aurora.acc1 }]}>
-              {isLocalMode ? 'Gemma (Local)' : agentName}
-            </Text>
+          {isUser ? (
+            <View style={styles.userSenderHeader}>
+              <Text style={[styles.senderLabel, { color: aurora.acc1, fontWeight: '700' }]}>
+                You
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.senderHeader}>
+              <View style={[styles.senderDot, { backgroundColor: aurora.acc1 }]} />
+              <Text style={[styles.senderLabel, { color: colors.textMuted }]}>
+                {isLocalMode ? 'Gemma (Local)' : agentName === 'Personal Assistant' ? 'Assistant' : agentName}
+              </Text>
+            </View>
           )}
 
           {isUser ? (
@@ -252,13 +262,12 @@ export const MessageItem = memo(MessageItemBase, (prev, next) => {
   return (
     prev.message.id === next.message.id &&
     prev.message.content === next.message.content &&
+    prev.message.created_at === next.message.created_at &&
     prev.isStreaming === next.isStreaming &&
     prev.inViewport === next.inViewport &&
     prev.showRaw === next.showRaw &&
     prev.accentHex === next.accentHex &&
     prev.theme === next.theme &&
-    // getTypeScale caches per (theme, size), so identity flips require a real
-    // scale change (e.g. user switched font size or theme).
     prev.sizes === next.sizes &&
     prev.isUser === next.isUser
   );
@@ -290,16 +299,40 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 2,
   },
-  userBubble: {},
-  assistantBubble: {},
+  userBubble: {
+    borderBottomRightRadius: 6,
+    alignSelf: 'flex-end',
+    maxWidth: '82%',
+  },
+  assistantBubble: {
+    borderBottomLeftRadius: 6,
+    alignSelf: 'flex-start',
+    maxWidth: '88%',
+  },
   attachmentsContainer: {
     gap: 8,
     marginVertical: 4,
   },
+  userSenderHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginBottom: 6,
+  },
+  senderHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  senderDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
   senderLabel: {
     fontSize: 11,
     fontWeight: '700',
-    marginBottom: 4,
     letterSpacing: 0.3,
   },
   messageText: {

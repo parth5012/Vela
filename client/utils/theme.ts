@@ -12,28 +12,32 @@ import { Platform } from 'react-native';
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const ACCENT_COLORS = {
+  berry: '#801D78',
   amber: '#f59e0b',
   orange: '#ea580c',
   emerald: '#10b981',
+  teal: '#0d9488',
   indigo: '#6366f1',
-  violet: '#8b5cf6',
   rose: '#f43f5e',
-  pink: '#ec4899',
   blue: '#0284c7',
+  violet: '#801D78',
+  pink: '#f43f5e',
 };
 
 // Accent "energy": two-stop gradient that tints the send button and active
 // states. Curated as vivid, saturated pairs that stay legible on light and
 // dark surfaces.
 export const ACCENT_AURORA: Record<keyof typeof ACCENT_COLORS, [string, string]> = {
+  berry: ['#801D78', '#C97EB6'],
   amber: ['#ea8b0d', '#fbd788'],
   orange: ['#e65a1c', '#ffb488'],
   emerald: ['#0c9d6e', '#7ae2bf'],
+  teal: ['#0d9488', '#5eead4'],
   indigo: ['#5457ec', '#a4afff'],
-  violet: ['#7938ec', '#c0a1fa'],
   rose: ['#e01a4d', '#fb9fb9'],
-  pink: ['#d61e7c', '#f899cc'],
   blue: ['#0a70d4', '#7ec8fb'],
+  violet: ['#801D78', '#C97EB6'],
+  pink: ['#e01a4d', '#fb9fb9'],
 };
 
 export function hexToRgba(hex: string, alpha: number): string {
@@ -148,7 +152,7 @@ export const THEME_COLORS: Record<ThemeName, ThemeColors> & { oled: ThemeColors 
     border: '#E8E0F2',
     text: '#1D1B20',
     textMuted: '#4B4654',
-    textDark: '#79747E',
+    textDark: '#4B4654',
     bubbleUser: '#EFE7FF',
     bubbleUserBorder: '#DACCFA',
     bubbleAssistant: '#F3F0F7',
@@ -157,10 +161,10 @@ export const THEME_COLORS: Record<ThemeName, ThemeColors> & { oled: ThemeColors 
     skyBottom: '#FBF7FE',
     glass: 'rgba(255, 255, 255, 0.92)',
     glassBorder: '#E8E0F2',
-    aurora1: '#6D3AE8',
-    aurora2: '#B69BF7',
-    glow: 'rgba(109, 58, 232, 0.32)',
-    status: '#6D3AE8',
+    aurora1: '#801D78',
+    aurora2: '#C97EB6',
+    glow: 'rgba(128, 29, 120, 0.32)',
+    status: '#801D78',
     codeBg: '#221C2C',
     codeFg: '#EBE6F4',
   },

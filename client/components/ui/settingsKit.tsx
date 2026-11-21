@@ -33,33 +33,37 @@ export function AuroraScreen({
   subtitle,
   onBack,
   scrollable = true,
+  showHeader = true,
   children,
 }: {
   title: string;
   subtitle?: string;
   onBack?: () => void;
   scrollable?: boolean;
+  showHeader?: boolean;
   children: React.ReactNode;
 }) {
-  const { colors, sizes } = useAurora();
+  const { colors, sizes, aurora } = useAurora();
   const router = useRouter();
   const handleBack = onBack ?? (() => router.back());
 
   return (
     <LinearGradient colors={[colors.skyTop, colors.skyBottom]} style={styles.screen}>
       <Grain />
-      <View style={styles.header}>
-        <PressableScale onPress={handleBack} hitSlop={10} style={styles.backBtn} accessibilityLabel="Back">
-          <Text style={[styles.backText, { color: colors.textMuted, fontSize: sizes.text }]}>‹ Back</Text>
-        </PressableScale>
-        <Text
-          style={[styles.headerTitle, { color: colors.text, fontSize: sizes.title }]}
-          numberOfLines={1}
-        >
-          {title}
-        </Text>
-        <View style={styles.backBtn} />
-      </View>
+      {showHeader && (
+        <View style={styles.header}>
+          <PressableScale onPress={handleBack} hitSlop={10} style={styles.backBtn} accessibilityLabel="Back">
+            <Text style={[styles.backText, { color: colors.textMuted, fontSize: sizes.text }]}>‹ Back</Text>
+          </PressableScale>
+          <Text
+            style={[styles.headerTitle, { color: colors.text, fontSize: sizes.title, fontWeight: '600' }]}
+            numberOfLines={1}
+          >
+            {title}
+          </Text>
+          <View style={styles.backBtn} />
+        </View>
+      )}
       {subtitle ? (
         <Text style={[styles.subtitle, { color: colors.textMuted, fontSize: sizes.sub }]}>{subtitle}</Text>
       ) : null}
@@ -238,10 +242,10 @@ export function PrimaryButton({
         {
           backgroundColor: aurora.acc1,
           shadowColor: aurora.acc1,
-          shadowOpacity: 0.45,
-          shadowRadius: 12,
-          shadowOffset: { width: 0, height: 6 },
-          elevation: 8,
+          shadowOpacity: 0.18,
+          shadowRadius: 8,
+          shadowOffset: { width: 0, height: 3 },
+          elevation: 3,
         },
         pressed && { opacity: 0.9 },
         (disabled || loading) && { opacity: 0.6 },
@@ -405,18 +409,35 @@ export function AccentDots() {
   const aurora = useAurora().aurora;
   const accentColor = useConfigStore((s) => s.accentColor);
   const setAccentColor = useConfigStore((s) => s.setAccentColor);
+  const keys: Array<keyof typeof ACCENT_COLORS> = [
+    'berry', 'amber', 'orange', 'emerald',
+    'teal', 'indigo', 'rose', 'blue'
+  ];
 
   return (
-    <View style={[styles.rowWrap, { gap: 14 }]}>
-      {(Object.keys(ACCENT_COLORS) as Array<keyof typeof ACCENT_COLORS>).map((color) => (
-        <AccentDotItem
-          key={color}
-          color={color}
-          selected={accentColor === color}
-          auroraAcc1={aurora.acc1}
-          onPress={() => setAccentColor(color)}
-        />
-      ))}
+    <View style={{ gap: 16, alignItems: 'center' }}>
+      <View style={{ flexDirection: 'row', gap: 18, justifyContent: 'center' }}>
+        {keys.slice(0, 4).map((color) => (
+          <AccentDotItem
+            key={color}
+            color={color}
+            selected={accentColor === color}
+            auroraAcc1={aurora.acc1}
+            onPress={() => setAccentColor(color as any)}
+          />
+        ))}
+      </View>
+      <View style={{ flexDirection: 'row', gap: 18, justifyContent: 'center' }}>
+        {keys.slice(4, 8).map((color) => (
+          <AccentDotItem
+            key={color}
+            color={color}
+            selected={accentColor === color}
+            auroraAcc1={aurora.acc1}
+            onPress={() => setAccentColor(color as any)}
+          />
+        ))}
+      </View>
     </View>
   );
 }

@@ -5,6 +5,8 @@ import {
   Alert,
   ActivityIndicator,
   Animated,
+  Text,
+  View,
 } from 'react-native';
 import { useOfflineStore, SyncState } from '../../store/useOfflineStore';
 import { useConfigStore } from '../../store/useConfigStore';
@@ -222,36 +224,56 @@ function SyncStatusIndicator() {
       accessibilityState={{ busy: isChecking || syncState === 'syncing' }}
       testID="sync-status-indicator"
     >
-      {isChecking || syncState === 'syncing' ? (
-        <ActivityIndicator size="small" color={aurora.acc1} style={styles.loader} />
-      ) : (
-        <Animated.View
-          style={[
-            styles.dot,
-            getStatusDotStyle(syncState),
-            { transform: [{ scale: pulseScale }], opacity: pulseOpacity },
-          ]}
-        />
-      )}
+      <View style={styles.chipRow}>
+        {isChecking || syncState === 'syncing' ? (
+          <ActivityIndicator size="small" color={aurora.acc1} style={styles.loader} />
+        ) : (
+          <Animated.View
+            style={[
+              styles.dot,
+              getStatusDotStyle(syncState),
+              { transform: [{ scale: pulseScale }], opacity: pulseOpacity },
+            ]}
+          />
+        )}
+        <Text style={[styles.syncText, { color: syncState === 'online' ? '#047857' : '#6B7280' }]}>
+          {syncState === 'online' ? 'Online' : syncState === 'syncing' ? 'Sync' : 'Offline'}
+        </Text>
+      </View>
     </AnimatedPressable>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    padding: 8,
-    marginRight: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E8E0F2',
+    backgroundColor: '#FFFFFF',
+    marginRight: 4,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  chipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  syncText: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
   loader: {
-    width: 10,
-    height: 10,
+    width: 8,
+    height: 8,
   },
   dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   dotOnline: {
     backgroundColor: '#10b981',

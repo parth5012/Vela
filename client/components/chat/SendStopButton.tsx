@@ -169,8 +169,8 @@ export default function SendStopButton({
             </Text>
           </LinearGradient>
         ) : (
-          <View style={[styles.disabledBackground, { backgroundColor: disabledColor }]}>
-            <Text style={[styles.buttonText, { fontSize, color: '#94a3b8' }]}>
+          <View style={[styles.disabledBackground, { backgroundColor: '#EDE8F5', borderWidth: 1, borderColor: '#D9D0E6' }]}>
+            <Text style={[styles.buttonText, { fontSize, color: '#6A6375', fontWeight: '600' }]}>
               Send
             </Text>
           </View>
@@ -228,6 +228,8 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(128, 29, 120, 0.25)',
   },
   stopBackground: {
     backgroundColor: '#ef4444',
