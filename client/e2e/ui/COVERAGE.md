@@ -28,3 +28,9 @@ This document maps all 20 Vela client-surface features from `docs/e2e-verificati
 | 18 | Device Agent | `client/e2e/ui/specs/device-agent.spec.ts` | Device automation status, permission requirements, and safety-tier confirmation UI. | **Native-boundary caveat**: Playwright spec asserts web/mock state; the ADB harness remains the real proof for Android Accessibility, Shizuku, and JNI actions. |
 | 19 | Offline Sync | `client/e2e/ui/specs/offline.spec.ts` | Offline queueing state indicator, queued message retention, and simulated reconnection flush. | **Native-boundary caveat**: Playwright spec asserts web/mock state; the ADB harness remains the real proof for native network listeners and disk persistence across kills. |
 | 20 | FCM Push | `client/e2e/ui/specs/fcm.spec.ts` | Push notification registration token display, deep-link handling from notification payloads. | **Native-boundary caveat**: Playwright spec asserts web/mock state; the ADB harness remains the real proof for native Android Firebase notification delivery and system tray interactions. |
+
+## Extended Features (Wayfinder Maps)
+
+| Feature | Subsystem | Validation |
+|---|---|---|
+| Floating Overlay (Mini-Chat Bubble) (#596) | `client/components/overlay/` | Unit tests (`client/__tests__/floatingOverlay.test.tsx`), Sync tests (`client/__tests__/quickChatSync.test.ts`), Permission tests (`client/__tests__/permissionManager.test.ts`) |

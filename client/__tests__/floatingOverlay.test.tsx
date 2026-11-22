@@ -34,6 +34,10 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 44, bottom: 34, left: 0, right: 0 }),
 }));
 
+const mockStopVoice = jest.fn();
+const mockStartVoice = jest.fn();
+const mockCancelVoice = jest.fn();
+
 jest.mock('../hooks/useVoiceInput', () => ({
   useVoiceInput: () => ({
     state: {
@@ -46,9 +50,11 @@ jest.mock('../hooks/useVoiceInput', () => ({
       canRetry: false,
     },
     isAvailable: true,
-    start: jest.fn(),
-    stopAndCommit: jest.fn(),
-    cancel: jest.fn(),
+    start: mockStartVoice,
+    stop: mockStopVoice,
+    cancel: mockCancelVoice,
+    acceptCloud: jest.fn(),
+    declineCloud: jest.fn(),
     retry: jest.fn(),
   }),
 }));
@@ -58,14 +64,18 @@ import renderer, { act } from 'react-test-renderer';
 import { useConfigStore } from '../store/useConfigStore';
 import { useChatStore } from '../store/useChatStore';
 import { QUICK_CHAT_THREAD_ID } from '../utils/quickChatSync';
+import { streamController } from '../utils/streamController';
 import FloatingOverlayRoot from '../components/overlay/FloatingOverlayRoot';
+import FloatingBubble from '../components/overlay/FloatingBubble';
 import DismissDropZone from '../components/overlay/DismissDropZone';
 import MiniChatPanel from '../components/overlay/MiniChatPanel';
 
 describe('Floating Overlay UI Components (#596, #599)', () => {
   beforeEach(() => {
-    useConfigStore.getState().clearConfig();
-    useChatStore.getState().clearStore();
+    act(() => {
+      useConfigStore.getState().clearConfig();
+      useChatStore.getState().clearStore();
+    });
     jest.clearAllMocks();
   });
 
@@ -145,9 +155,11 @@ describe('Floating Overlay UI Components (#596, #599)', () => {
     });
 
     it('respects capability toggles for voice and image attachments', () => {
-      useConfigStore.setState((s) => ({
-        floatingOverlay: { ...s.floatingOverlay, enableVoice: false, enableImages: false },
-      }));
+      act(() => {
+        useConfigStore.setState((s) => ({
+          floatingOverlay: { ...s.floatingOverlay, enableVoice: false, enableImages: false },
+        }));
+      });
 
       let tree: renderer.ReactTestRenderer | undefined;
       act(() => {
@@ -162,6 +174,82 @@ describe('Floating Overlay UI Components (#596, #599)', () => {
 
       const voiceBtn = root?.findAllByProps({ accessibilityLabel: 'Start voice recording' }) ?? [];
       expect(voiceBtn.length).toBe(0);
+    });
+
+    it('renders stop button when thread is streaming and allows stopping', () => {
+      act(() => {
+        useChatStore.getState().setStreamingThread(QUICK_CHAT_THREAD_ID, true);
+      });
+
+      const stopSpy = jest.spyOn(streamController, 'stopStream').mockResolvedValue(undefined as never);
+
+      let tree: renderer.ReactTestRenderer | undefined;
+      act(() => {
+        tree = renderer.create(
+          <MiniChatPanel onMinimize={jest.fn()} onClose={jest.fn()} />
+        );
+      });
+
+      const root = tree?.root;
+      const stopBtn = root?.findByProps({ accessibilityLabel: 'Stop generating response' });
+      expect(stopBtn).toBeTruthy();
+
+      act(() => {
+        stopBtn!.props.onPress();
+      });
+
+      expect(stopSpy).toHaveBeenCalledWith(QUICK_CHAT_THREAD_ID);
+      stopSpy.mockRestore();
+    });
+
+    it('renders attachment previews in sent messages', () => {
+      act(() => {
+        useChatStore.getState().addMessage(QUICK_CHAT_THREAD_ID, {
+          id: 'msg-img',
+          role: 'user',
+          content: '',
+          attachments: [
+            {
+              storage_path: 'file:///photo.jpg',
+              mime_type: 'image/jpeg',
+              file_size: 1024,
+              alt_text: 'Dashboard Preview',
+            },
+          ],
+        });
+      });
+
+      let tree: renderer.ReactTestRenderer | undefined;
+      act(() => {
+        tree = renderer.create(
+          <MiniChatPanel onMinimize={jest.fn()} onClose={jest.fn()} />
+        );
+      });
+
+      const str = JSON.stringify(tree?.toJSON());
+      expect(str).toContain('Dashboard Preview');
+    });
+  });
+
+  describe('FloatingBubble', () => {
+    it('supports accessibility activate action to trigger expand', () => {
+      const onExpand = jest.fn();
+      let tree: renderer.ReactTestRenderer | undefined;
+      act(() => {
+        tree = renderer.create(
+          <FloatingBubble onExpand={onExpand} onDismiss={jest.fn()} onDragStateChange={jest.fn()} />
+        );
+      });
+
+      const root = tree?.root;
+      const bubble = root?.findByProps({ accessibilityLabel: 'Open Quick Chat floating overlay' });
+      expect(bubble).toBeTruthy();
+
+      act(() => {
+        bubble!.props.onAccessibilityAction({ nativeEvent: { actionName: 'activate' } });
+      });
+
+      expect(onExpand).toHaveBeenCalledTimes(1);
     });
   });
 });

@@ -14,8 +14,9 @@ import { runServerStream } from './serverStream';
 import { streamCloudResponse } from './providers';
 import { streamLocalLlmResponse } from './localLlm';
 import { getCachedAgents } from '../db/agentRepository';
+import { uploadChatAttachment } from './chatAttachments';
 
-export const QUICK_CHAT_THREAD_ID = 'quick-chat-thread';
+export const QUICK_CHAT_THREAD_ID = '1db65310-8cf7-52aa-a370-c2f0ab8ce187';
 
 /**
  * Returns the existing Quick Chat thread or creates one if it does not yet exist.
@@ -73,12 +74,38 @@ export async function sendQuickChatMessage(
   const effectiveContent = trimmed || (attachments && attachments.length > 0 ? (attachments[0].alt_text || `[Attached ${attachments.length} image(s)]`) : '');
   const userMsgId = generateUlid();
 
+  const config = useConfigStore.getState();
+  const connectionMode = config.connectionMode;
+
+  let finalAttachments: ChatAttachment[] = attachments || [];
+  if (attachments && attachments.length > 0 && connectionMode === 'server' && config.apiUrl && config.apiKey) {
+    try {
+      finalAttachments = await Promise.all(
+        attachments.map(async (att) => {
+          return await uploadChatAttachment({
+            apiUrl: config.apiUrl!,
+            apiKey: config.apiKey!,
+            threadId,
+            messageId: userMsgId,
+            fileUri: att.storage_path,
+            mimeType: att.mime_type,
+            filename: att.alt_text || 'image.jpg',
+            altText: att.alt_text,
+          });
+        })
+      );
+    } catch (uploadErr) {
+      console.warn('[QuickChat] Attachment upload failed, using staged attachments:', uploadErr);
+      finalAttachments = attachments;
+    }
+  }
+
   const userMessage: Message = {
     id: userMsgId,
     role: 'user',
     content: effectiveContent,
     created_at: new Date().toISOString(),
-    attachments: attachments && attachments.length > 0 ? attachments : undefined,
+    attachments: finalAttachments.length > 0 ? finalAttachments : undefined,
   };
 
   const assistantMsgId = generateUlid();
@@ -93,9 +120,6 @@ export async function sendQuickChatMessage(
   useChatStore.getState().addMessage(threadId, assistantMessage);
   saveMessage(threadId, userMessage).catch(() => {});
 
-  const config = useConfigStore.getState();
-  const connectionMode = config.connectionMode;
-
   if (connectionMode === 'server' && config.apiUrl && config.apiKey) {
     await runServerStream({
       apiUrl: config.apiUrl,
@@ -105,7 +129,7 @@ export async function sendQuickChatMessage(
       agent: thread.agent || DEFAULT_AGENT_ID,
       syncUserEntry: userMessage,
       setAuthRequired: () => {},
-      attachments,
+      attachments: finalAttachments,
       cloudPrivacyConsent: config.cloudPrivacyConsent,
     });
     return;

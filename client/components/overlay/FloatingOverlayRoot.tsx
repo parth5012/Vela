@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, Pressable, BackHandler } from 'react-native';
 import { useConfigStore } from '../../store/useConfigStore';
 import FloatingBubble from './FloatingBubble';
 import MiniChatPanel from './MiniChatPanel';
@@ -7,13 +7,29 @@ import DismissDropZone from './DismissDropZone';
 
 export default function FloatingOverlayRoot() {
   const isEnabled = useConfigStore((s) => s.floatingOverlay.enabled);
-  const setEnabled = useConfigStore((s) => s.setFloatingOverlayEnabled);
 
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isHoveringDismiss, setIsHoveringDismiss] = useState(false);
 
-  if (!isEnabled) {
+  useEffect(() => {
+    if (!isExpanded) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      handleMinimize();
+      return true;
+    });
+    return () => sub.remove();
+  }, [isExpanded]);
+
+  useEffect(() => {
+    if (!isEnabled) {
+      setIsExpanded(false);
+      setIsDismissed(false);
+    }
+  }, [isEnabled]);
+
+  if (!isEnabled || isDismissed) {
     return null;
   }
 
@@ -27,7 +43,7 @@ export default function FloatingOverlayRoot() {
 
   const handleDismiss = () => {
     setIsExpanded(false);
-    setEnabled(false);
+    setIsDismissed(true);
   };
 
   const handleDragStateChange = (dragging: boolean, hoveringDismiss: boolean) => {

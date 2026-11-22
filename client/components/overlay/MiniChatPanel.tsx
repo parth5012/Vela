@@ -6,10 +6,10 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Dimensions,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAurora } from '../../hooks/useAurora';
@@ -17,6 +17,7 @@ import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { useChatStore, type Message, type ChatAttachment } from '../../store/useChatStore';
 import { useConfigStore } from '../../store/useConfigStore';
 import { QUICK_CHAT_THREAD_ID, sendQuickChatMessage } from '../../utils/quickChatSync';
+import { streamController } from '../../utils/streamController';
 import { pickChatImages } from '../../utils/chatAttachments';
 import { useVoiceInput } from '../../hooks/useVoiceInput';
 import VoiceConsentModal from '../chat/VoiceConsentModal';
@@ -32,7 +33,7 @@ export default function MiniChatPanel({ onMinimize, onClose }: MiniChatPanelProp
   const { colors, aurora, sizes } = useAurora();
   const reducedMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
-  const { height: screenHeight } = Dimensions.get('window');
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
@@ -43,13 +44,14 @@ export default function MiniChatPanel({ onMinimize, onClose }: MiniChatPanelProp
 
   const enableVoice = useConfigStore((s) => s.floatingOverlay.enableVoice);
   const enableImages = useConfigStore((s) => s.floatingOverlay.enableImages);
+  const maxImages = useConfigStore((s) => s.maxImagesPerMessage) || 4;
 
   const scrollViewRef = useRef<ScrollView>(null);
 
   // Auto-scroll when messages arrive or stream updates
   useEffect(() => {
-    scrollViewRef.current?.scrollToEnd({ animated: true });
-  }, [messages.length, isStreaming]);
+    scrollViewRef.current?.scrollToEnd({ animated: !reducedMotion });
+  }, [messages.length, isStreaming, reducedMotion]);
 
   // Voice input integration
   const voice = useVoiceInput({
@@ -59,6 +61,15 @@ export default function MiniChatPanel({ onMinimize, onClose }: MiniChatPanelProp
   });
 
   const isRecording = voice.state.recording;
+
+  // Cleanup voice recording on unmount
+  useEffect(() => {
+    return () => {
+      if (voice.state.recording) {
+        void voice.stop();
+      }
+    };
+  }, [voice]);
 
   const handleSend = async () => {
     const textToSend = input.trim();
@@ -76,7 +87,12 @@ export default function MiniChatPanel({ onMinimize, onClose }: MiniChatPanelProp
     }
   };
 
+  const handleStopStream = async () => {
+    await streamController.stopStream(QUICK_CHAT_THREAD_ID);
+  };
+
   const handlePickImage = async () => {
+    if (attachments.length >= maxImages) return;
     const picked = await pickChatImages(1);
     if (picked.length > 0) {
       const file = picked[0];
@@ -93,22 +109,31 @@ export default function MiniChatPanel({ onMinimize, onClose }: MiniChatPanelProp
   };
 
   const handleToggleVoice = async () => {
-    if (isRecording) {
-      await voice.stop();
-    } else {
-      await voice.start();
+    try {
+      if (isRecording) {
+        await voice.stop();
+      } else {
+        await voice.start();
+      }
+    } catch (err) {
+      console.warn('[MiniChatPanel] Voice recording error:', err);
     }
   };
 
   const panelHeight = Math.min(screenHeight * 0.56, 520);
+  const syncTextColor = colors.card === '#ffffff' || colors.card.toLowerCase().includes('fff') ? '#15803d' : '#4ade80';
+  const recordTextColor = colors.card === '#ffffff' || colors.card.toLowerCase().includes('fff') ? '#b91c1c' : '#f87171';
 
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      accessibilityViewIsModal={true}
       style={[
         styles.panel,
         {
           height: panelHeight,
+          width: Math.min(screenWidth - 32, 420),
+          alignSelf: 'center',
           backgroundColor: colors.card,
           borderColor: colors.border,
           bottom: insets.bottom + 16,
@@ -123,7 +148,7 @@ export default function MiniChatPanel({ onMinimize, onClose }: MiniChatPanelProp
           </Text>
           <View style={styles.syncBadge}>
             <View style={styles.syncDot} />
-            <Text style={[styles.syncText, { color: '#22c55e', fontSize: sizes.sub }]}>
+            <Text style={[styles.syncText, { color: syncTextColor, fontSize: sizes.sub }]}>
               Synced
             </Text>
           </View>
@@ -249,7 +274,7 @@ export default function MiniChatPanel({ onMinimize, onClose }: MiniChatPanelProp
         <View style={styles.attachmentsRow}>
           {attachments.map((att, idx) => (
             <View key={att.id || idx} style={styles.attachmentChip}>
-              <Text style={styles.attachmentText} numberOfLines={1}>
+              <Text style={[styles.attachmentText, { color: colors.text }]} numberOfLines={1}>
                 {att.alt_text || 'Image attachment'}
               </Text>
               <Pressable
@@ -258,7 +283,7 @@ export default function MiniChatPanel({ onMinimize, onClose }: MiniChatPanelProp
                 accessibilityRole="button"
                 accessibilityLabel="Remove image attachment"
               >
-                <Text style={styles.removeChip}>✕</Text>
+                <Text style={[styles.removeChip, { color: recordTextColor }]}>✕</Text>
               </Pressable>
             </View>
           ))}
@@ -268,8 +293,8 @@ export default function MiniChatPanel({ onMinimize, onClose }: MiniChatPanelProp
       {/* Voice status if active */}
       {isRecording && (
         <View style={styles.voiceBar}>
-          <ActivityIndicator size="small" color="#ef4444" />
-          <Text style={[styles.voiceBarText, { color: '#f87171', fontSize: sizes.sub }]}>
+          <ActivityIndicator size="small" color="#dc2626" />
+          <Text style={[styles.voiceBarText, { color: recordTextColor, fontSize: sizes.sub }]}>
             Recording voice input... Tap mic to stop
           </Text>
         </View>
@@ -314,28 +339,40 @@ export default function MiniChatPanel({ onMinimize, onClose }: MiniChatPanelProp
           maxLength={1000}
         />
 
-        <Pressable
-          onPress={handleSend}
-          disabled={(!input.trim() && attachments.length === 0) || isSubmitting}
-          hitSlop={8}
-          style={[
-            styles.sendBtn,
-            {
-              backgroundColor:
-                input.trim() || attachments.length > 0
-                  ? aurora.acc1
-                  : 'rgba(120, 110, 140, 0.2)',
-            },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Send message"
-        >
-          {isSubmitting ? (
-            <ActivityIndicator size="small" color={aurora.onAccent} />
-          ) : (
-            <Text style={[styles.sendIcon, { color: aurora.onAccent }]}>↑</Text>
-          )}
-        </Pressable>
+        {isStreaming ? (
+          <Pressable
+            onPress={handleStopStream}
+            hitSlop={8}
+            style={[styles.sendBtn, { backgroundColor: '#dc2626' }]}
+            accessibilityRole="button"
+            accessibilityLabel="Stop generating response"
+          >
+            <Text style={[styles.sendIcon, { color: '#ffffff', fontSize: 13 }]}>■</Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={handleSend}
+            disabled={(!input.trim() && attachments.length === 0) || isSubmitting}
+            hitSlop={8}
+            style={[
+              styles.sendBtn,
+              {
+                backgroundColor:
+                  input.trim() || attachments.length > 0
+                    ? aurora.acc1
+                    : 'rgba(120, 110, 140, 0.2)',
+              },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Send message"
+          >
+            {isSubmitting ? (
+              <ActivityIndicator size="small" color={aurora.onAccent} />
+            ) : (
+              <Text style={[styles.sendIcon, { color: aurora.onAccent }]}>↑</Text>
+            )}
+          </Pressable>
+        )}
       </View>
       <VoiceConsentModal
         visible={voice.state.consentProvider !== null}

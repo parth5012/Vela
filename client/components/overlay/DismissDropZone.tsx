@@ -1,6 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAurora } from '../../hooks/useAurora';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 
 interface DismissDropZoneProps {
   visible: boolean;
@@ -9,24 +11,27 @@ interface DismissDropZoneProps {
 
 export default function DismissDropZone({ visible, isHovered }: DismissDropZoneProps) {
   const { colors, sizes } = useAurora();
+  const insets = useSafeAreaInsets();
+  const reducedMotion = useReducedMotion();
 
   if (!visible) {
     return null;
   }
 
-  const backgroundColor = isHovered ? 'rgba(239, 68, 68, 0.28)' : 'rgba(50, 50, 65, 0.45)';
-  const borderColor = isHovered ? '#ef4444' : colors.border;
-  const textColor = isHovered ? '#f87171' : colors.textMuted;
+  const backgroundColor = isHovered ? 'rgba(239, 68, 68, 0.22)' : colors.card;
+  const borderColor = isHovered ? '#dc2626' : colors.border;
+  const textColor = isHovered ? '#dc2626' : colors.text;
 
   return (
-    <View style={styles.container} pointerEvents="none">
+    <View style={[styles.container, { bottom: insets.bottom + 24 }]} pointerEvents="none">
       <View
         style={[
           styles.target,
           {
             backgroundColor,
             borderColor,
-            transform: [{ scale: isHovered ? 1.08 : 1 }],
+            transform: [{ scale: isHovered && !reducedMotion ? 1.08 : 1 }],
+            opacity: isHovered && reducedMotion ? 0.9 : 1,
           },
         ]}
       >

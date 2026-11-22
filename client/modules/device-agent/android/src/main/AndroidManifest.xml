@@ -10,9 +10,6 @@
     <!-- WF-583: push-to-talk voice input. Requested at runtime on first mic tap. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
-    <!-- WF-596: floating overlay (mini-chat bubble) -->
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-
     <!-- Package visibility (Android 11+): lets getShizukuStatus() see whether
          the Shizuku manager app is installed. applicationId, not the Gradle
          namespace 'moe.shizuku.manager'. -->
