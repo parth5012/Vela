@@ -51,7 +51,7 @@ To display a system-level floating view above other applications:
   - `FLAG_NOT_TOUCH_MODAL`: Ensures outside touches register for other apps unless tapping inside the overlay.
   - `FLAG_WATCH_OUTSIDE_TOUCH`: Detects when a tap occurs outside the expanded panel to automatically collapse or dismiss.
 - **Service & Lifecycle:**
-  Displaying a view when the app Activity is not in the foreground requires an Android `ForegroundService` with an ongoing notification (`android.permission.FOREGROUND_SERVICE` and Android 14+ `FOREGROUND_SERVICE_SPECIAL_USE` / `dataSync`). Without a foreground service, the OS immediately kills background windows when memory pressure occurs.
+  Displaying a view when the app Activity is not in the foreground requires an Android `ForegroundService` with an ongoing notification (`android.permission.FOREGROUND_SERVICE` and Android 14+ `FOREGROUND_SERVICE_SPECIAL_USE`). Note that on Android 15 (API 35)+, `dataSync` foreground services have a strict 6-hour limit per 24-hour period and cannot be used for indefinite overlay persistence. An overlay service must use an appropriate long-running service type (`specialUse` with policy justification) or confine overlay operations to active user interactions. Without a foreground service, the OS kills background windows when memory pressure occurs.
 
 ---
 
@@ -113,7 +113,7 @@ To display a system-level floating view above other applications:
   const QUICK_CHAT_THREAD_ID = 'quick-chat-thread';
   ```
 - **Lifecycle & Persistence:**
-  - Initialized automatically if absent: `title: 'Quick Chat'`, tagged with `isQuickChat: true`.
+  - Initialized automatically if absent: identified by the fixed `QUICK_CHAT_THREAD_ID = 'quick-chat-thread'` with title `'Quick Chat'`.
   - Persisted in SQLite local DB via standard `saveThread()` and `saveMessage()`.
   - Full support for streaming assistant responses using `streamController`.
   - Synchronized in real time: any messages sent from the overlay immediately appear in the thread list and can be viewed/continued in the main chat view without state divergence.

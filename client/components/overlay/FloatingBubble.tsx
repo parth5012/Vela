@@ -3,12 +3,13 @@ import {
   Animated,
   PanResponder,
   StyleSheet,
-  Dimensions,
   Text,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAurora } from '../../hooks/useAurora';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { useConfigStore } from '../../store/useConfigStore';
 
 interface FloatingBubbleProps {
@@ -26,8 +27,9 @@ export default function FloatingBubble({
   onDragStateChange,
 }: FloatingBubbleProps) {
   const { colors, aurora } = useAurora();
+  const reducedMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
-  const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
   const savedDockSide = useConfigStore((s) => s.floatingOverlay.dockSide);
   const savedDockY = useConfigStore((s) => s.floatingOverlay.dockY);
@@ -42,11 +44,21 @@ export default function FloatingBubble({
   const pan = useRef(new Animated.ValueXY({ x: initialX, y: initialY })).current;
   const [isPressing, setIsPressing] = useState(false);
 
-  // Sync with store if saved dock side changes externally
+  // Keep references to latest dimensions and insets for gesture handlers
+  const layoutRef = useRef({ screenWidth, screenHeight, insets });
+  useEffect(() => {
+    layoutRef.current = { screenWidth, screenHeight, insets };
+  }, [screenWidth, screenHeight, insets]);
+
+  // Sync with store and window size adjustments
   useEffect(() => {
     const targetX = savedDockSide === 'left' ? 16 : screenWidth - BUBBLE_SIZE - 16;
-    pan.setValue({ x: targetX, y: initialY });
-  }, [savedDockSide, screenWidth]);
+    const clampedY = Math.min(
+      Math.max(savedDockY, insets.top + 16),
+      screenHeight - insets.bottom - BUBBLE_SIZE - 40
+    );
+    pan.setValue({ x: targetX, y: clampedY });
+  }, [savedDockSide, savedDockY, screenWidth, screenHeight, insets.top, insets.bottom]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -67,27 +79,35 @@ export default function FloatingBubble({
       onPanResponderMove: (_, gesture) => {
         pan.setValue({ x: gesture.dx, y: gesture.dy });
 
+        const { screenWidth: curW, screenHeight: curH, insets: curInsets } = layoutRef.current;
         const currentX = (pan.x as unknown as { _offset: number })._offset + gesture.dx;
         const currentY = (pan.y as unknown as { _offset: number })._offset + gesture.dy;
 
-        const isNearBottom = currentY > screenHeight - insets.bottom - 110;
-        const isNearCenter = Math.abs(currentX + BUBBLE_SIZE / 2 - screenWidth / 2) < 90;
+        const isNearBottom = currentY > curH - curInsets.bottom - 110;
+        const isNearCenter = Math.abs(currentX + BUBBLE_SIZE / 2 - curW / 2) < 90;
         const isHoveringDismiss = isNearBottom && isNearCenter;
 
         onDragStateChange(true, isHoveringDismiss);
+      },
+
+      onPanResponderTerminate: () => {
+        setIsPressing(false);
+        pan.flattenOffset();
+        onDragStateChange(false, false);
       },
 
       onPanResponderRelease: (_, gesture) => {
         setIsPressing(false);
         pan.flattenOffset();
 
+        const { screenWidth: curW, screenHeight: curH, insets: curInsets } = layoutRef.current;
         const totalDist = Math.hypot(gesture.dx, gesture.dy);
         const finalX = (pan.x as unknown as { _value: number })._value;
         const finalY = (pan.y as unknown as { _value: number })._value;
 
         // Check if dropped into bottom dismiss zone
-        const isNearBottom = finalY > screenHeight - insets.bottom - 110;
-        const isNearCenter = Math.abs(finalX + BUBBLE_SIZE / 2 - screenWidth / 2) < 90;
+        const isNearBottom = finalY > curH - curInsets.bottom - 110;
+        const isNearCenter = Math.abs(finalX + BUBBLE_SIZE / 2 - curW / 2) < 90;
         if (isNearBottom && isNearCenter) {
           onDragStateChange(false, false);
           onDismiss();
@@ -103,22 +123,27 @@ export default function FloatingBubble({
         }
 
         // Snap to nearest edge
-        const midPoint = (screenWidth - BUBBLE_SIZE) / 2;
+        const midPoint = (curW - BUBBLE_SIZE) / 2;
         const toLeft = finalX < midPoint;
-        const targetX = toLeft ? 16 : screenWidth - BUBBLE_SIZE - 16;
+        const targetX = toLeft ? 16 : curW - BUBBLE_SIZE - 16;
         const clampedY = Math.min(
-          Math.max(finalY, insets.top + 16),
-          screenHeight - insets.bottom - BUBBLE_SIZE - 40
+          Math.max(finalY, curInsets.top + 16),
+          curH - curInsets.bottom - BUBBLE_SIZE - 40
         );
 
-        Animated.spring(pan, {
-          toValue: { x: targetX, y: clampedY },
-          bounciness: 6,
-          speed: 12,
-          useNativeDriver: Platform.OS !== 'web',
-        }).start(() => {
+        if (reducedMotion) {
+          pan.setValue({ x: targetX, y: clampedY });
           setPosition(toLeft ? 'left' : 'right', clampedY);
-        });
+        } else {
+          Animated.spring(pan, {
+            toValue: { x: targetX, y: clampedY },
+            bounciness: 6,
+            speed: 12,
+            useNativeDriver: Platform.OS !== 'web',
+          }).start(() => {
+            setPosition(toLeft ? 'left' : 'right', clampedY);
+          });
+        }
       },
     })
   ).current;
@@ -131,8 +156,9 @@ export default function FloatingBubble({
           transform: [
             { translateX: pan.x },
             { translateY: pan.y },
-            { scale: isPressing ? 0.95 : 1 },
+            { scale: isPressing && !reducedMotion ? 0.95 : 1 },
           ],
+          opacity: isPressing && reducedMotion ? 0.8 : 1,
           backgroundColor: colors.card,
           borderColor: aurora.acc1,
         },
@@ -140,6 +166,12 @@ export default function FloatingBubble({
       accessible={true}
       accessibilityRole="button"
       accessibilityLabel="Open Quick Chat floating overlay"
+      accessibilityActions={[{ name: 'activate', label: 'Open Quick Chat' }]}
+      onAccessibilityAction={(event) => {
+        if (event.nativeEvent.actionName === 'activate') {
+          onExpand();
+        }
+      }}
       {...panResponder.panHandlers}
     >
       <Text style={styles.bubbleIcon}>💬</Text>
