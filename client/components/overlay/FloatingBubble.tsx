@@ -115,7 +115,7 @@ export default function FloatingBubble({
           toValue: { x: targetX, y: clampedY },
           bounciness: 6,
           speed: 12,
-          useNativeDriver: false,
+          useNativeDriver: Platform.OS !== 'web',
         }).start(() => {
           setPosition(toLeft ? 'left' : 'right', clampedY);
         });
