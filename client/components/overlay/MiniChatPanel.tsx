@@ -13,11 +13,13 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAurora } from '../../hooks/useAurora';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { useChatStore, type Message, type ChatAttachment } from '../../store/useChatStore';
 import { useConfigStore } from '../../store/useConfigStore';
 import { QUICK_CHAT_THREAD_ID, sendQuickChatMessage } from '../../utils/quickChatSync';
 import { pickChatImages } from '../../utils/chatAttachments';
 import { useVoiceInput } from '../../hooks/useVoiceInput';
+import VoiceConsentModal from '../chat/VoiceConsentModal';
 
 interface MiniChatPanelProps {
   onMinimize: () => void;
@@ -28,6 +30,7 @@ const EMPTY_MESSAGES: Message[] = [];
 
 export default function MiniChatPanel({ onMinimize, onClose }: MiniChatPanelProps) {
   const { colors, aurora, sizes } = useAurora();
+  const reducedMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
   const { height: screenHeight } = Dimensions.get('window');
 
@@ -111,8 +114,6 @@ export default function MiniChatPanel({ onMinimize, onClose }: MiniChatPanelProp
           bottom: insets.bottom + 16,
         },
       ]}
-      accessible={true}
-      accessibilityLabel="Quick Chat panel"
     >
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
@@ -157,6 +158,11 @@ export default function MiniChatPanel({ onMinimize, onClose }: MiniChatPanelProp
         style={styles.messageList}
         contentContainerStyle={styles.messageContent}
         keyboardShouldPersistTaps="handled"
+        onContentSizeChange={() => {
+          if (isStreaming) {
+            scrollViewRef.current?.scrollToEnd({ animated: !reducedMotion });
+          }
+        }}
       >
         {messages.length === 0 ? (
           <View style={styles.emptyState}>
@@ -183,17 +189,47 @@ export default function MiniChatPanel({ onMinimize, onClose }: MiniChatPanelProp
                       : { backgroundColor: colors.border },
                   ]}
                 >
-                  <Text
-                    style={[
-                      styles.messageText,
-                      {
-                        color: isUser ? '#ffffff' : colors.text,
-                        fontSize: sizes.text,
-                      },
-                    ]}
-                  >
-                    {m.content || (isStreaming ? 'Thinking...' : '')}
-                  </Text>
+                  {m.attachments && m.attachments.length > 0 && (
+                    <View style={styles.messageAttachments}>
+                      {m.attachments.map((att, idx) => (
+                        <View key={att.id || idx} style={styles.messageAttachmentChip}>
+                          <Text
+                            style={[
+                              styles.messageAttachmentText,
+                              { color: isUser ? aurora.onAccent : colors.text },
+                            ]}
+                          >
+                            📷 {att.alt_text || 'Image'}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                  {m.content ? (
+                    <Text
+                      style={[
+                        styles.messageText,
+                        {
+                          color: isUser ? aurora.onAccent : colors.text,
+                          fontSize: sizes.text,
+                        },
+                      ]}
+                    >
+                      {m.content}
+                    </Text>
+                  ) : !m.attachments || m.attachments.length === 0 ? (
+                    <Text
+                      style={[
+                        styles.messageText,
+                        {
+                          color: isUser ? aurora.onAccent : colors.text,
+                          fontSize: sizes.text,
+                        },
+                      ]}
+                    >
+                      {isStreaming ? 'Thinking...' : ''}
+                    </Text>
+                  ) : null}
                 </View>
               </View>
             );
@@ -295,12 +331,18 @@ export default function MiniChatPanel({ onMinimize, onClose }: MiniChatPanelProp
           accessibilityLabel="Send message"
         >
           {isSubmitting ? (
-            <ActivityIndicator size="small" color="#ffffff" />
+            <ActivityIndicator size="small" color={aurora.onAccent} />
           ) : (
-            <Text style={styles.sendIcon}>↑</Text>
+            <Text style={[styles.sendIcon, { color: aurora.onAccent }]}>↑</Text>
           )}
         </Pressable>
       </View>
+      <VoiceConsentModal
+        visible={voice.state.consentProvider !== null}
+        provider={voice.state.consentProvider ?? ''}
+        onAccept={voice.acceptCloud}
+        onDecline={voice.declineCloud}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -396,6 +438,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderRadius: 16,
+  },
+  messageAttachments: {
+    marginBottom: 6,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+  },
+  messageAttachmentChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.15)',
+  },
+  messageAttachmentText: {
+    fontSize: 12,
+    fontWeight: '500',
   },
   messageText: {
     lineHeight: 20,

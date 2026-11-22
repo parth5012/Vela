@@ -135,7 +135,7 @@ export default function PermissionsHubScreen() {
         if (current !== 'granted' && Platform.OS === 'android') {
           Alert.alert(
             'Display Over Other Apps',
-            'Vela can float above other apps when system overlay permission is granted. If not granted, the overlay will still float within the Vela app as a fallback.',
+            'Vela displays the Quick Chat floating overlay inside the app. System overlay permission allows the overlay to stay active above other apps on supported Android versions.',
             [
               { text: 'Use In-App Fallback', style: 'cancel' },
               {
@@ -357,15 +357,14 @@ export default function PermissionsHubScreen() {
                 <Switch
                   value={floatingOverlay.enabled}
                   onValueChange={handleToggleOverlay}
+                  accessibilityLabel="Toggle floating chat bubble"
                   trackColor={{ false: colors.border, true: aurora.acc1 }}
                   thumbColor="#ffffff"
                 />
               </View>
               <Text style={[styles.rowHint, { color: colors.textMuted, fontSize: sizes.sub }]}>
                 {floatingOverlay.enabled
-                  ? overlayStatus === 'granted'
-                    ? 'Active (System-level overlay)'
-                    : 'Active (In-app fallback)'
+                  ? `Active (In-app overlay) • System permission: ${overlayStatus === 'granted' ? 'Granted' : 'Not granted'}`
                   : 'Disabled'}
               </Text>
             </View>
@@ -378,6 +377,7 @@ export default function PermissionsHubScreen() {
                 <Switch
                   value={floatingOverlay.enableVoice}
                   onValueChange={(val) => setFloatingOverlay({ enableVoice: val })}
+                  accessibilityLabel="Toggle voice input in floating overlay"
                   trackColor={{ false: colors.border, true: aurora.acc1 }}
                   thumbColor="#ffffff"
                 />
@@ -388,6 +388,7 @@ export default function PermissionsHubScreen() {
                 <Switch
                   value={floatingOverlay.enableImages}
                   onValueChange={(val) => setFloatingOverlay({ enableImages: val })}
+                  accessibilityLabel="Toggle image attachments in floating overlay"
                   trackColor={{ false: colors.border, true: aurora.acc1 }}
                   thumbColor="#ffffff"
                 />
