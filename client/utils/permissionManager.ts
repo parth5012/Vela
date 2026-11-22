@@ -135,6 +135,25 @@ export async function checkPermission(perm: OSPermission): Promise<PermissionSta
 }
 
 // ---------------------------------------------------------------------------
+// checkOverlayPermission — check SYSTEM_ALERT_WINDOW with in-app fallback
+// ---------------------------------------------------------------------------
+export async function checkOverlayPermission(): Promise<PermissionStatus> {
+  if (Platform.OS !== 'android') {
+    return 'undetermined';
+  }
+  try {
+    const DeviceAgent = getDeviceAgentModule();
+    if (DeviceAgent && typeof (DeviceAgent as { canDrawOverlays?: () => Promise<boolean> }).canDrawOverlays === 'function') {
+      const granted = await (DeviceAgent as { canDrawOverlays: () => Promise<boolean> }).canDrawOverlays();
+      return granted ? 'granted' : 'denied';
+    }
+  } catch {
+    // native module not available
+  }
+  return 'undetermined';
+}
+
+// ---------------------------------------------------------------------------
 // requestPermission — trigger OS dialog where applicable
 // ---------------------------------------------------------------------------
 export async function requestPermission(perm: OSPermission): Promise<PermissionStatus> {

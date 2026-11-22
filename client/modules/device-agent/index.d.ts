@@ -30,6 +30,7 @@ export interface DeviceAgentNative {
    */
   runPrivilegedOp(op: string, args: string[]): Promise<string>;
   checkSelfPermission?(permissionName: string): Promise<{ success: boolean; status: 'granted' | 'denied' | 'undetermined'; error?: string }>;
+  canDrawOverlays?(): Promise<boolean>;
   openSettingsAction?(action: string, needsPackageUri: boolean): Promise<{ success: boolean; message?: string; error?: string }>;
 
   // --- WF-583: push-to-talk voice input -----------------------------------

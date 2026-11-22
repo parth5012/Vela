@@ -479,4 +479,33 @@ describe('useConfigStore', () => {
     expect(await isGpuCrashFlagSet()).toBe(false);
     expect(await AsyncStorage.getItem(LITERT_GPU_INIT_SESSION_KEY)).toBeNull();
   });
+
+  describe('floatingOverlay configuration (#596, #599)', () => {
+    it('initializes with default overlay config and resets on clearConfig', () => {
+      const state = useConfigStore.getState();
+      expect(state.floatingOverlay).toEqual({
+        enabled: false,
+        dockSide: 'right',
+        dockY: 200,
+        enableVoice: true,
+        enableImages: true,
+      });
+
+      state.setFloatingOverlayEnabled(true);
+      state.setFloatingOverlayPosition('left', 350);
+      state.setFloatingOverlay({ enableVoice: false });
+
+      expect(useConfigStore.getState().floatingOverlay).toEqual({
+        enabled: true,
+        dockSide: 'left',
+        dockY: 350,
+        enableVoice: false,
+        enableImages: true,
+      });
+
+      useConfigStore.getState().clearConfig();
+      expect(useConfigStore.getState().floatingOverlay.enabled).toBe(false);
+      expect(useConfigStore.getState().floatingOverlay.dockSide).toBe('right');
+    });
+  });
 });

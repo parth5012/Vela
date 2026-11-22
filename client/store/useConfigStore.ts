@@ -75,6 +75,22 @@ export type PermissionTier = 'auto' | 'confirm' | 'deny';
 export type GpuBackendPreference = 'auto' | 'opencl' | 'vulkan' | 'cpu';
 export type GpuQuantPreference = 'auto' | 'q4_0' | 'q4_k_m' | 'q8_0';
 
+export interface FloatingOverlayConfig {
+  enabled: boolean;
+  dockSide: 'left' | 'right';
+  dockY: number;
+  enableVoice: boolean;
+  enableImages: boolean;
+}
+
+export const DEFAULT_FLOATING_OVERLAY_CONFIG: FloatingOverlayConfig = {
+  enabled: false,
+  dockSide: 'right',
+  dockY: 200,
+  enableVoice: true,
+  enableImages: true,
+};
+
 export type OSPermission = 'notifications' | 'camera' | 'microphone' | 'storage' | 'accessibility' | 'background' | 'phone' | 'contacts';
 export type OSPermissionStatus = 'granted' | 'denied' | 'undetermined';
 
@@ -209,6 +225,12 @@ interface ConfigState {
   cloudPrivacyConsent: boolean;
   setMaxImagesPerMessage: (val: number) => void;
   setCloudPrivacyConsent: (val: boolean) => void;
+
+  // Floating Overlay (mini-chat bubble) (#596, #599)
+  floatingOverlay: FloatingOverlayConfig;
+  setFloatingOverlay: (partial: Partial<FloatingOverlayConfig>) => void;
+  setFloatingOverlayEnabled: (enabled: boolean) => void;
+  setFloatingOverlayPosition: (dockSide: 'left' | 'right', dockY: number) => void;
 }
 
 const SECURE_KEY = 'vela-api-key';
@@ -273,6 +295,9 @@ export const useConfigStore = create<ConfigState>()(
       maxImagesPerMessage: 2,
       cloudPrivacyConsent: false,
 
+      // Floating Overlay defaults (#596, #599)
+      floatingOverlay: { ...DEFAULT_FLOATING_OVERLAY_CONFIG },
+
       setConfig: (url, key) => {
         set((state) => ({
           apiUrl: url,
@@ -328,6 +353,7 @@ export const useConfigStore = create<ConfigState>()(
             contacts: 'undetermined',
           } as Record<OSPermission, OSPermissionStatus>,
           googleSetupPending: false,
+          floatingOverlay: { ...DEFAULT_FLOATING_OVERLAY_CONFIG },
           suggestionStarters: [
             { label: '👩🏫 Teach Concept', text: 'Teach intuition behind binary search trace example', agent: 'teacher' },
             { label: '📊 Data Analyst', text: 'Analyze key features 2026 FIFA World Cup matches', agent: 'analyst' },
@@ -477,6 +503,20 @@ export const useConfigStore = create<ConfigState>()(
           ),
         }),
       setCloudPrivacyConsent: (cloudPrivacyConsent) => set({ cloudPrivacyConsent }),
+
+      // Floating Overlay setters (#596, #599)
+      setFloatingOverlay: (partial) =>
+        set((state) => ({
+          floatingOverlay: { ...state.floatingOverlay, ...partial },
+        })),
+      setFloatingOverlayEnabled: (enabled) =>
+        set((state) => ({
+          floatingOverlay: { ...state.floatingOverlay, enabled },
+        })),
+      setFloatingOverlayPosition: (dockSide, dockY) =>
+        set((state) => ({
+          floatingOverlay: { ...state.floatingOverlay, dockSide, dockY },
+        })),
     }),
     {
       name: 'vela-config-storage',
@@ -597,6 +637,9 @@ export const useConfigStore = create<ConfigState>()(
           const FLAIR_THEMES: readonly ThemeName[] = ['berry', 'citrus', 'aquatic', 'sunset', 'noir', 'chrome'];
           if (!FLAIR_THEMES.includes(persistedState.theme as ThemeName)) {
             persistedState.theme = 'berry';
+          }
+          if (persistedState.floatingOverlay === undefined) {
+            persistedState.floatingOverlay = { ...DEFAULT_FLOATING_OVERLAY_CONFIG };
           }
         }
         return persistedState;
