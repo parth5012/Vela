@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, AppState, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet, AppState, ActivityIndicator, Alert, Switch, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { AuroraScreen, Card, useAurora, PrimaryButton } from '../../components/ui/settingsKit';
 import {
   APP_PERMISSIONS,
   checkPermission,
+  checkOverlayPermission,
   requestPermission,
   openSettings,
   getRationale,
@@ -99,6 +100,11 @@ export default function PermissionsHubScreen() {
     phone: 'undetermined',
     contacts: 'undetermined',
   });
+  const [overlayStatus, setOverlayStatus] = useState<PermissionStatus>('undetermined');
+  const floatingOverlay = useConfigStore((s) => s.floatingOverlay);
+  const setFloatingOverlay = useConfigStore((s) => s.setFloatingOverlay);
+  const setFloatingOverlayEnabled = useConfigStore((s) => s.setFloatingOverlayEnabled);
+  const setFloatingOverlayPosition = useConfigStore((s) => s.setFloatingOverlayPosition);
   const [loadingPerm, setLoadingPerm] = useState<OSPermission | null>(null);
   const [bulkLoading, setBulkLoading] = useState(false);
   // #158: accessibility has no OS dialog — show the step-by-step guide first;
@@ -113,10 +119,38 @@ export default function PermissionsHubScreen() {
       setOSPermission(meta.perm, s);
     }
     setStatuses((prev) => ({ ...prev, ...next }));
+    const ov = await checkOverlayPermission();
+    setOverlayStatus(ov);
     if (next.notifications === 'granted' && useConfigStore.getState().connectionMode === 'server') {
       void registerAndPostToken();
     }
   }, [setOSPermission]);
+
+  const handleToggleOverlay = useCallback(
+    async (val: boolean) => {
+      setFloatingOverlayEnabled(val);
+      if (val) {
+        const current = await checkOverlayPermission();
+        setOverlayStatus(current);
+        if (current !== 'granted' && Platform.OS === 'android') {
+          Alert.alert(
+            'Display Over Other Apps',
+            'Vela can float above other apps when system overlay permission is granted. If not granted, the overlay will still float within the Vela app as a fallback.',
+            [
+              { text: 'Use In-App Fallback', style: 'cancel' },
+              {
+                text: 'Open Settings',
+                onPress: () => {
+                  void openSettings('overlay');
+                },
+              },
+            ]
+          );
+        }
+      }
+    },
+    [setFloatingOverlayEnabled]
+  );
 
   useEffect(() => {
     refreshAll();
@@ -299,6 +333,97 @@ export default function PermissionsHubScreen() {
           >
             <Text style={[styles.deviceAgentBtnText, { color: aurora.acc1, fontSize: sizes.text }]}>Open Device Agent →</Text>
           </Pressable>
+        </Card>
+      </View>
+
+      {/* Floating Overlay subsection */}
+      <View style={{ marginTop: 16 }}>
+        <Text style={[styles.sectionTitle, { color: colors.text, fontSize: sizes.sub + 2 }]}>
+          Floating Overlay (Mini-Chat)
+        </Text>
+        <Text style={[styles.sectionSubtitle, { color: colors.textMuted, fontSize: sizes.sub - 1 }]}>
+          Persistent draggable chat bubble with Quick Chat synchronization and graceful in-app fallback.
+        </Text>
+        <Card style={styles.card}>
+          <View style={styles.rowHeader}>
+            <View style={[styles.iconCircle, { borderColor: colors.border, backgroundColor: colors.card }]}>
+              <Text style={{ fontSize: 18 }}>💬</Text>
+            </View>
+            <View style={styles.rowBody}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={[styles.rowLabel, { color: colors.text, fontSize: sizes.text }]}>
+                  Floating Bubble
+                </Text>
+                <Switch
+                  value={floatingOverlay.enabled}
+                  onValueChange={handleToggleOverlay}
+                  trackColor={{ false: colors.border, true: aurora.acc1 }}
+                  thumbColor="#ffffff"
+                />
+              </View>
+              <Text style={[styles.rowHint, { color: colors.textMuted, fontSize: sizes.sub }]}>
+                {floatingOverlay.enabled
+                  ? overlayStatus === 'granted'
+                    ? 'Active (System-level overlay)'
+                    : 'Active (In-app fallback)'
+                  : 'Disabled'}
+              </Text>
+            </View>
+          </View>
+
+          {floatingOverlay.enabled && (
+            <View style={{ gap: 10, marginTop: 4, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={{ color: colors.text, fontSize: sizes.sub }}>Voice Input in Overlay</Text>
+                <Switch
+                  value={floatingOverlay.enableVoice}
+                  onValueChange={(val) => setFloatingOverlay({ enableVoice: val })}
+                  trackColor={{ false: colors.border, true: aurora.acc1 }}
+                  thumbColor="#ffffff"
+                />
+              </View>
+
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={{ color: colors.text, fontSize: sizes.sub }}>Image Attachments in Overlay</Text>
+                <Switch
+                  value={floatingOverlay.enableImages}
+                  onValueChange={(val) => setFloatingOverlay({ enableImages: val })}
+                  trackColor={{ false: colors.border, true: aurora.acc1 }}
+                  thumbColor="#ffffff"
+                />
+              </View>
+
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 6 }}>
+                <Pressable
+                  onPress={() => openSettings('overlay')}
+                  style={({ pressed }) => [
+                    styles.manageBtn,
+                    { flex: 1, borderColor: colors.border, borderWidth: 1, opacity: pressed ? 0.7 : 1, alignItems: 'center' },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Manage system overlay permission"
+                >
+                  <Text style={{ color: colors.text, fontSize: sizes.sub, fontWeight: '600' }}>
+                    System Permission
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => setFloatingOverlayPosition('right', 200)}
+                  style={({ pressed }) => [
+                    styles.manageBtn,
+                    { borderColor: colors.border, borderWidth: 1, opacity: pressed ? 0.7 : 1 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Reset overlay position"
+                >
+                  <Text style={{ color: colors.textMuted, fontSize: sizes.sub }}>
+                    Reset Position
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
         </Card>
       </View>
 

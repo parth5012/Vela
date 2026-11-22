@@ -3,6 +3,7 @@ import path from 'path';
 import { Linking, Platform } from 'react-native';
 import {
   checkPermission,
+  checkOverlayPermission,
   requestPermission,
   buildSettingsDeepLink,
   getRationale,
@@ -221,6 +222,20 @@ describe('permissionManager', () => {
       // Assert
       expect(result.success).toBe(true);
       expect(openSettingsSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('checkOverlayPermission (#596, #599)', () => {
+    it('returns undetermined on non-Android platforms', async () => {
+      Platform.OS = 'ios';
+      const status = await checkOverlayPermission();
+      expect(status).toBe('undetermined');
+    });
+
+    it('returns honest undetermined on Android when native module is absent', async () => {
+      Platform.OS = 'android';
+      const status = await checkOverlayPermission();
+      expect(status).toBe('undetermined');
     });
   });
 });
