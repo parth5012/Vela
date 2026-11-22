@@ -127,27 +127,8 @@ export default function PermissionsHubScreen() {
   }, [setOSPermission]);
 
   const handleToggleOverlay = useCallback(
-    async (val: boolean) => {
+    (val: boolean) => {
       setFloatingOverlayEnabled(val);
-      if (val) {
-        const current = await checkOverlayPermission();
-        setOverlayStatus(current);
-        if (current !== 'granted' && Platform.OS === 'android') {
-          Alert.alert(
-            'Display Over Other Apps',
-            'Vela displays the Quick Chat floating overlay inside the app. System overlay permission allows the overlay to stay active above other apps on supported Android versions.',
-            [
-              { text: 'Use In-App Fallback', style: 'cancel' },
-              {
-                text: 'Open Settings',
-                onPress: () => {
-                  void openSettings('overlay');
-                },
-              },
-            ]
-          );
-        }
-      }
     },
     [setFloatingOverlayEnabled]
   );
@@ -364,7 +345,7 @@ export default function PermissionsHubScreen() {
               </View>
               <Text style={[styles.rowHint, { color: colors.textMuted, fontSize: sizes.sub }]}>
                 {floatingOverlay.enabled
-                  ? `Active (In-app overlay) • System permission: ${overlayStatus === 'granted' ? 'Granted' : 'Not granted'}`
+                  ? 'Active (In-app Quick Chat bubble)'
                   : 'Disabled'}
               </Text>
             </View>
@@ -396,30 +377,16 @@ export default function PermissionsHubScreen() {
 
               <View style={{ flexDirection: 'row', gap: 10, marginTop: 6 }}>
                 <Pressable
-                  onPress={() => openSettings('overlay')}
+                  onPress={() => setFloatingOverlayPosition('right', 200)}
                   style={({ pressed }) => [
                     styles.manageBtn,
                     { flex: 1, borderColor: colors.border, borderWidth: 1, opacity: pressed ? 0.7 : 1, alignItems: 'center' },
                   ]}
                   accessibilityRole="button"
-                  accessibilityLabel="Manage system overlay permission"
+                  accessibilityLabel="Reset floating overlay position to default"
                 >
                   <Text style={{ color: colors.text, fontSize: sizes.sub, fontWeight: '600' }}>
-                    System Permission
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={() => setFloatingOverlayPosition('right', 200)}
-                  style={({ pressed }) => [
-                    styles.manageBtn,
-                    { borderColor: colors.border, borderWidth: 1, opacity: pressed ? 0.7 : 1 },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Reset overlay position"
-                >
-                  <Text style={{ color: colors.textMuted, fontSize: sizes.sub }}>
-                    Reset Position
+                    Reset Bubble Position
                   </Text>
                 </Pressable>
               </View>

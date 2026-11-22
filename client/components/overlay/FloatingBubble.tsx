@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAurora } from '../../hooks/useAurora';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { useConfigStore } from '../../store/useConfigStore';
+import { triggerHaptic } from '../../utils/haptics';
 
 interface FloatingBubbleProps {
   onExpand: () => void;
@@ -44,6 +45,22 @@ export default function FloatingBubble({
   const pan = useRef(new Animated.ValueXY({ x: initialX, y: initialY })).current;
   const [isPressing, setIsPressing] = useState(false);
 
+  const positionRef = useRef({ x: initialX, y: initialY });
+  const isHoveringDismissRef = useRef(false);
+  const reducedMotionRef = useRef(reducedMotion);
+  useEffect(() => {
+    reducedMotionRef.current = reducedMotion;
+  }, [reducedMotion]);
+
+  useEffect(() => {
+    const id = pan.addListener((value) => {
+      positionRef.current = value;
+    });
+    return () => {
+      pan.removeListener(id);
+    };
+  }, [pan]);
+
   // Keep references to latest dimensions and insets for gesture handlers
   const layoutRef = useRef({ screenWidth, screenHeight, insets });
   useEffect(() => {
@@ -68,24 +85,28 @@ export default function FloatingBubble({
 
       onPanResponderGrant: () => {
         setIsPressing(true);
-        pan.setOffset({
-          x: (pan.x as unknown as { _value: number })._value,
-          y: (pan.y as unknown as { _value: number })._value,
+        pan.stopAnimation((currentPos) => {
+          pan.setOffset(currentPos);
+          pan.setValue({ x: 0, y: 0 });
+          onDragStateChange(true, false);
         });
-        pan.setValue({ x: 0, y: 0 });
-        onDragStateChange(true, false);
       },
 
       onPanResponderMove: (_, gesture) => {
         pan.setValue({ x: gesture.dx, y: gesture.dy });
 
         const { screenWidth: curW, screenHeight: curH, insets: curInsets } = layoutRef.current;
-        const currentX = (pan.x as unknown as { _offset: number })._offset + gesture.dx;
-        const currentY = (pan.y as unknown as { _offset: number })._offset + gesture.dy;
+        const currentX = positionRef.current.x;
+        const currentY = positionRef.current.y;
 
         const isNearBottom = currentY > curH - curInsets.bottom - 110;
         const isNearCenter = Math.abs(currentX + BUBBLE_SIZE / 2 - curW / 2) < 90;
         const isHoveringDismiss = isNearBottom && isNearCenter;
+
+        if (isHoveringDismiss && !isHoveringDismissRef.current) {
+          triggerHaptic('medium');
+        }
+        isHoveringDismissRef.current = isHoveringDismiss;
 
         onDragStateChange(true, isHoveringDismiss);
       },
@@ -93,17 +114,19 @@ export default function FloatingBubble({
       onPanResponderTerminate: () => {
         setIsPressing(false);
         pan.flattenOffset();
+        isHoveringDismissRef.current = false;
         onDragStateChange(false, false);
       },
 
       onPanResponderRelease: (_, gesture) => {
         setIsPressing(false);
         pan.flattenOffset();
+        isHoveringDismissRef.current = false;
 
         const { screenWidth: curW, screenHeight: curH, insets: curInsets } = layoutRef.current;
         const totalDist = Math.hypot(gesture.dx, gesture.dy);
-        const finalX = (pan.x as unknown as { _value: number })._value;
-        const finalY = (pan.y as unknown as { _value: number })._value;
+        const finalX = positionRef.current.x;
+        const finalY = positionRef.current.y;
 
         // Check if dropped into bottom dismiss zone
         const isNearBottom = finalY > curH - curInsets.bottom - 110;
@@ -131,7 +154,7 @@ export default function FloatingBubble({
           curH - curInsets.bottom - BUBBLE_SIZE - 40
         );
 
-        if (reducedMotion) {
+        if (reducedMotionRef.current) {
           pan.setValue({ x: targetX, y: clampedY });
           setPosition(toLeft ? 'left' : 'right', clampedY);
         } else {

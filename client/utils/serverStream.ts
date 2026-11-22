@@ -46,7 +46,7 @@ export async function runServerStream(p: ServerStreamParams): Promise<void> {
           streamController.appendChunk(p.threadId, chunk);
         },
         (newTitle) => {
-          if (newTitle) {
+          if (newTitle && p.threadId !== '1db65310-8cf7-52aa-a370-c2f0ab8ce187' && p.threadId !== 'quick-chat-thread') {
             if (p.threads && p.setThreads) {
               p.setThreads(p.threads.map((t) => (t.id === p.threadId ? { ...t, title: newTitle } : t)));
             }
