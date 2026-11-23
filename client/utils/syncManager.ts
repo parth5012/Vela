@@ -77,7 +77,16 @@ export async function syncStandaloneDataToBackend(
   });
 
   try {
-    const activeConflictIds = new Set(useSyncConflictStore.getState().conflicts.map((c) => c.id));
+    // 1. Run syncDatabase first (pull remote changes, detect any conflicts, and push pending operationLog)
+    updateSyncStatus({ message: 'Synchronizing remote conversations...' });
+    await syncDatabase(normalizedApiUrl, apiKey);
+    await hydrateChatFromLocalDb();
+
+    // 2. Check for any legacy standalone messages (messages with isNull(server_id) or pending = true)
+    // that are not in conflict
+    const activeConflictIds = new Set(
+      useSyncConflictStore.getState().conflicts.flatMap((c) => [c.id, c.localMessage.id])
+    );
     const allUnsynced = await db
       .select()
       .from(messages)
@@ -85,10 +94,6 @@ export async function syncStandaloneDataToBackend(
     const unsynced = allUnsynced.filter((m: { id: string }) => !activeConflictIds.has(m.id));
 
     if (unsynced.length === 0) {
-      // Nothing to push, just pull remote changes
-      updateSyncStatus({ message: 'Synchronizing remote conversations...' });
-      await syncDatabase(normalizedApiUrl, apiKey);
-      await hydrateChatFromLocalDb();
       updateSyncStatus({
         isSyncing: false,
         message: 'All conversations up to date.',
@@ -357,7 +362,9 @@ export async function syncDatabase(apiUrl: string, apiKey: string): Promise<void
   // (mocked db, query-builder drift), never POST device_step ops to /push.
   // Also: exclude operations for message IDs that currently have unresolved conflicts
   // so they are not pushed or prematurely marked synced before resolution commits.
-  const activeConflictIds = new Set(useSyncConflictStore.getState().conflicts.map((c) => c.id));
+  const activeConflictIds = new Set(
+    useSyncConflictStore.getState().conflicts.flatMap((c) => [c.id, c.localMessage.id])
+  );
   const pushableOps = mappedOps.filter(
     (op) => op.type === 'message' && !activeConflictIds.has(op.id)
   );

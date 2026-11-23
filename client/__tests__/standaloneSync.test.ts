@@ -97,13 +97,21 @@ describe('Standalone SQLite-to-backend sync', () => {
       },
     ];
 
-    // 1. getUnsyncedLocalMessages
-    (db.select as jest.Mock).mockReturnValueOnce({
-      from: jest.fn(() => ({
-        where: jest.fn(() => Promise.resolve(mockRows)),
-        then: (resolve: any) => resolve(mockRows),
-      })),
-    });
+    // 1. syncDatabase pending operationLog query -> []
+    // 2. getUnsyncedLocalMessages -> mockRows
+    (db.select as jest.Mock)
+      .mockReturnValueOnce({
+        from: jest.fn(() => ({
+          where: jest.fn(() => Promise.resolve([])),
+          then: (resolve: any) => resolve([]),
+        })),
+      })
+      .mockReturnValueOnce({
+        from: jest.fn(() => ({
+          where: jest.fn(() => Promise.resolve(mockRows)),
+          then: (resolve: any) => resolve(mockRows),
+        })),
+      });
 
     // Mock push endpoint response
     const mockFetch = jest.fn().mockImplementation((url) => {
@@ -193,12 +201,21 @@ describe('Standalone SQLite-to-backend sync', () => {
       },
     ];
 
-    (db.select as jest.Mock).mockReturnValueOnce({
-      from: jest.fn(() => ({
-        where: jest.fn(() => Promise.resolve(mockMessages)),
-        then: (resolve: any) => resolve(mockMessages),
-      })),
-    });
+    // 1. syncDatabase pending operationLog query -> []
+    // 2. getUnsyncedLocalMessages -> mockMessages
+    (db.select as jest.Mock)
+      .mockReturnValueOnce({
+        from: jest.fn(() => ({
+          where: jest.fn(() => Promise.resolve([])),
+          then: (resolve: any) => resolve([]),
+        })),
+      })
+      .mockReturnValueOnce({
+        from: jest.fn(() => ({
+          where: jest.fn(() => Promise.resolve(mockMessages)),
+          then: (resolve: any) => resolve(mockMessages),
+        })),
+      });
 
     const mockFetch = jest.fn().mockImplementation((url) => {
       if (url.includes('/api/sync/push')) {

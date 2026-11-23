@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, ScrollView, Pressable } from 'react-native';
 import { useSyncConflictStore, type SyncConflict } from '../../store/useSyncConflictStore';
 import { useAurora } from '../../hooks/useAurora';
@@ -131,6 +131,8 @@ function ConflictCard({
             </Text>
           </View>
           <Text
+            numberOfLines={10}
+            ellipsizeMode="tail"
             style={[styles.contentPreview, { color: colors.text, fontSize: sizes.text }]}
           >
             {conflict.localMessage.content}
@@ -153,6 +155,8 @@ function ConflictCard({
             </Text>
           </View>
           <Text
+            numberOfLines={10}
+            ellipsizeMode="tail"
             style={[styles.contentPreview, { color: colors.text, fontSize: sizes.text }]}
           >
             {conflict.serverMessage.content}

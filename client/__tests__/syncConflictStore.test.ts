@@ -160,6 +160,12 @@ describe('useSyncConflictStore', () => {
     // Confirmed db operations: marked pending = true in messages, inserted into operationLog
     expect(db.update).toHaveBeenCalled();
     expect(db.insert).toHaveBeenCalled();
+
+    // Verify provider is strictly 'android_client' for echo suppression
+    const insertMock = (db.insert as jest.Mock).mock.results[0].value;
+    const insertedValues = insertMock.values.mock.calls[0][0];
+    const payload = JSON.parse(insertedValues.payload);
+    expect(payload.provider).toBe('android_client');
   });
 
   it('resolves conflict with "server"', async () => {

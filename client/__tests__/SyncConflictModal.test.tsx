@@ -77,7 +77,7 @@ describe('SyncConflictModal', () => {
   });
 
   it('calls resolveConflict with "local" when Keep Local button is pressed', () => {
-    const resolveSpy = jest.spyOn(useSyncConflictStore.getState(), 'resolveConflict');
+    const resolveSpy = jest.spyOn(useSyncConflictStore.getState(), 'resolveConflict').mockImplementation(async () => {});
 
     act(() => {
       useSyncConflictStore.getState().addConflict(sampleConflict);
@@ -97,7 +97,7 @@ describe('SyncConflictModal', () => {
   });
 
   it('calls resolveConflict with "server" when Keep Server button is pressed', () => {
-    const resolveSpy = jest.spyOn(useSyncConflictStore.getState(), 'resolveConflict');
+    const resolveSpy = jest.spyOn(useSyncConflictStore.getState(), 'resolveConflict').mockImplementation(async () => {});
 
     act(() => {
       useSyncConflictStore.getState().addConflict(sampleConflict);
@@ -117,7 +117,7 @@ describe('SyncConflictModal', () => {
   });
 
   it('calls resolveConflict with "both" when Keep Both button is pressed', () => {
-    const resolveSpy = jest.spyOn(useSyncConflictStore.getState(), 'resolveConflict');
+    const resolveSpy = jest.spyOn(useSyncConflictStore.getState(), 'resolveConflict').mockImplementation(async () => {});
 
     act(() => {
       useSyncConflictStore.getState().addConflict(sampleConflict);

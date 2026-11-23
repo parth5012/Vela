@@ -29,6 +29,7 @@ if (process.env.EXPO_PUBLIC_E2E === '1') {
 import * as Notifications from 'expo-notifications';
 import { SafetyDialog } from '../components/ui/SafetyDialog';
 import { SyncConflictModal } from '../components/ui/SyncConflictModal';
+import { useSyncConflictStore } from '../store/useSyncConflictStore';
 import FloatingOverlayRoot from '../components/overlay/FloatingOverlayRoot';
 import { persistentWebviewContainerStyle, persistentWebviewPointerEvents } from '../utils/persistentWebviewStyle';
 import { registerAndPostToken } from '../utils/pushRegistration';
@@ -173,6 +174,11 @@ export default function RootLayout() {
           await initializeDatabase();
         } catch (e) {
           console.warn('[Layout] Database initialization error:', e);
+        }
+        try {
+          await useSyncConflictStore.getState().hydrateConflicts();
+        } catch (e) {
+          console.warn('[Layout] Conflict hydration error:', e);
         }
         runAgentDataBootstrap();
         // Local-first offline sync: flush any pending offline messages once the

@@ -327,4 +327,70 @@ describe('Sync conflict detection in syncDatabase', () => {
     expect(pushBody.operations.length).toBe(1);
     expect(pushBody.operations[0].id).toBe('msg_normal_y');
   });
+
+  it('excludes pending operations when active conflict was matched by server_id (local id != server id)', async () => {
+    // Pull phase: empty pull
+    (globalThis.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        operations: [],
+        cursor: 'cursor_test_4',
+        has_more: false,
+      }),
+    });
+
+    // Conflict where local message has local ID 'local_uuid_1' and server ID 'server_op_1'
+    useSyncConflictStore.getState().addConflict({
+      id: 'server_op_1',
+      conversation_id: 'conv_1',
+      localMessage: {
+        id: 'local_uuid_1',
+        role: 'user',
+        content: 'Local text',
+        created_at: 1000,
+        provider: 'android_client',
+        conversation_id: 'conv_1',
+      },
+      serverMessage: {
+        id: 'server_op_1',
+        role: 'user',
+        content: 'Server text',
+        created_at: 2000,
+        provider: 'remote',
+        conversation_id: 'conv_1',
+      },
+    });
+
+    // Push phase: pending operation in operationLog has local ID 'local_uuid_1'
+    (db.select as jest.Mock).mockImplementationOnce(() => ({
+      from: jest.fn(() => ({
+        where: jest.fn(() =>
+          Promise.resolve([
+            {
+              id: 'local_uuid_1',
+              type: 'message',
+              conversation_id: 'conv_1',
+              payload: JSON.stringify({ role: 'user', content: 'Local text' }),
+              created_at: 1000,
+            },
+          ])
+        ),
+        then: (resolve: any) =>
+          resolve([
+            {
+              id: 'local_uuid_1',
+              type: 'message',
+              conversation_id: 'conv_1',
+              payload: JSON.stringify({ role: 'user', content: 'Local text' }),
+              created_at: 1000,
+            },
+          ]),
+      })),
+    }));
+
+    await syncDatabase('https://api.vela.run', 'test_key');
+
+    // Push fetch must NOT be called because local_uuid_1 was excluded via activeConflictIds
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
 });
