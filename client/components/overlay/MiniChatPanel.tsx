@@ -74,9 +74,7 @@ export default function MiniChatPanel({ onMinimize, onClose }: MiniChatPanelProp
 
   useEffect(() => {
     return () => {
-      if (voiceRef.current.state.recording) {
-        void voiceRef.current.cancel();
-      }
+      void voiceRef.current.cancel();
     };
   }, []);
 

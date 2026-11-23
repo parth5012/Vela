@@ -26,6 +26,32 @@ jest.mock('../db/agentRepository', () => ({
   getCachedAgents: jest.fn(() => []),
 }));
 
+const mockStreamLocalLlmResponse = jest.fn(
+  async function* (_prompt: string, onToken?: (token: string) => void, _signal?: AbortSignal) {
+    if (onToken) onToken('Local response chunk');
+    yield 'Local response chunk';
+  }
+);
+const mockInitializeLocalModel = jest.fn(
+  async (_throwOnFallback?: boolean, _modelNameOverride?: string) => {
+    localLlmMockState.isLocalModelLoaded = true;
+  }
+);
+
+const localLlmMockState = {
+  isLocalModelLoaded: false,
+};
+
+jest.mock('../utils/localLlm', () => ({
+  get isLocalModelLoaded() {
+    return localLlmMockState.isLocalModelLoaded;
+  },
+  initializeLocalModel: (throwOnFallback?: boolean, modelNameOverride?: string) =>
+    mockInitializeLocalModel(throwOnFallback, modelNameOverride),
+  streamLocalLlmResponse: (prompt: string, onToken?: (token: string) => void, signal?: AbortSignal) =>
+    mockStreamLocalLlmResponse(prompt, onToken, signal),
+}));
+
 import { useChatStore } from '../store/useChatStore';
 import { useConfigStore } from '../store/useConfigStore';
 import {
@@ -84,5 +110,34 @@ describe('quickChatSync (#596, #599)', () => {
     await sendQuickChatMessage('   ');
     const messages = useChatStore.getState().messages[QUICK_CHAT_THREAD_ID] || [];
     expect(messages.length).toBe(0);
+  });
+
+  it('initializes local model before streaming in local mode if unloaded', async () => {
+    useConfigStore.setState({ connectionMode: 'local' });
+    localLlmMockState.isLocalModelLoaded = false;
+
+    await sendQuickChatMessage('Local test prompt');
+
+    expect(mockInitializeLocalModel).toHaveBeenCalledTimes(1);
+    expect(mockStreamLocalLlmResponse).toHaveBeenCalledWith(
+      'Local test prompt',
+      expect.any(Function),
+      expect.any(AbortSignal)
+    );
+  });
+
+  it('reports error and does not stream if local model initialization fails in local mode', async () => {
+    useConfigStore.setState({ connectionMode: 'local' });
+    localLlmMockState.isLocalModelLoaded = false;
+    mockInitializeLocalModel.mockRejectedValueOnce(new Error('Model weights missing'));
+
+    await sendQuickChatMessage('Local fail prompt');
+
+    expect(mockInitializeLocalModel).toHaveBeenCalledTimes(1);
+    expect(mockStreamLocalLlmResponse).not.toHaveBeenCalled();
+
+    const messages = useChatStore.getState().messages[QUICK_CHAT_THREAD_ID] || [];
+    const assistantMessage = messages.find((m) => m.role === 'assistant');
+    expect(assistantMessage?.content).toContain('Model weights missing');
   });
 });

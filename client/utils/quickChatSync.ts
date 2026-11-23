@@ -12,7 +12,11 @@ import { saveThread, saveMessage } from '../db/chatRepository';
 import { streamController } from './streamController';
 import { runServerStream } from './serverStream';
 import { streamCloudResponse } from './providers';
-import { streamLocalLlmResponse } from './localLlm';
+import {
+  streamLocalLlmResponse,
+  isLocalModelLoaded,
+  initializeLocalModel,
+} from './localLlm';
 import { getCachedAgents } from '../db/agentRepository';
 import { uploadChatAttachment } from './chatAttachments';
 import { QUICK_CHAT_THREAD_ID } from './quickChatConstants';
@@ -193,6 +197,28 @@ export async function sendQuickChatMessage(
     await streamController.startStream(threadId, async (signal) => {
       if (signal.aborted) return;
       try {
+        if (!isLocalModelLoaded) {
+          try {
+            await initializeLocalModel();
+          } catch (initErr: unknown) {
+            if (signal.aborted) return;
+            const initMsg = initErr instanceof Error ? initErr.message : String(initErr);
+            streamController.appendChunk(
+              threadId,
+              `\n\n⚠️ **Local Model Error:** ${initMsg || 'Local model is not loaded. Download and initialize it in Settings.'}`
+            );
+            return;
+          }
+        }
+        if (signal.aborted) return;
+        if (!isLocalModelLoaded) {
+          streamController.appendChunk(
+            threadId,
+            '\n\n⚠️ **Local Model Error:** Local model is not loaded. Please initialize a model in Settings.'
+          );
+          return;
+        }
+
         const generator = streamLocalLlmResponse(
           effectiveContent,
           (token: string) => {

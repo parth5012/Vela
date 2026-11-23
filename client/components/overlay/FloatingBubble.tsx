@@ -163,8 +163,10 @@ export default function FloatingBubble({
             bounciness: 6,
             speed: 12,
             useNativeDriver: Platform.OS !== 'web',
-          }).start(() => {
-            setPosition(toLeft ? 'left' : 'right', clampedY);
+          }).start(({ finished }) => {
+            if (finished) {
+              setPosition(toLeft ? 'left' : 'right', clampedY);
+            }
           });
         }
       },

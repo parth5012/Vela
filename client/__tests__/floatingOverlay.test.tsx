@@ -281,6 +281,24 @@ describe('Floating Overlay UI Components (#596, #599)', () => {
       expect(mockCancelVoice).toHaveBeenCalledTimes(1);
       mockVoiceState = { ...mockVoiceState, recording: false };
     });
+
+    it('always cancels voice on unmount even if recording flag is false (e.g. startup in flight)', () => {
+      mockCancelVoice.mockClear();
+      mockVoiceState = { ...mockVoiceState, recording: false };
+
+      let tree: renderer.ReactTestRenderer | undefined;
+      act(() => {
+        tree = renderer.create(
+          <MiniChatPanel onMinimize={jest.fn()} onClose={jest.fn()} />
+        );
+      });
+
+      act(() => {
+        tree?.unmount();
+      });
+
+      expect(mockCancelVoice).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('FloatingBubble', () => {
