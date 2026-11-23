@@ -34,3 +34,4 @@ This document maps all 20 Vela client-surface features from `docs/e2e-verificati
 | Feature | Subsystem | Validation |
 |---|---|---|
 | Floating Overlay (Mini-Chat Bubble) (#596) | `client/components/overlay/` | Unit tests (`client/__tests__/floatingOverlay.test.tsx`), Sync tests (`client/__tests__/quickChatSync.test.ts`) |
+| Sync Conflict Detection & Resolution Modal (#600) | `client/components/ui/SyncConflictModal.tsx`, `client/store/useSyncConflictStore.ts` | Unit tests (`client/__tests__/syncConflictStore.test.ts`, `syncConflictDetection.test.ts`, `SyncConflictModal.test.tsx`), CI pass |

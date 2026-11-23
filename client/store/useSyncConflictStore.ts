@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { db } from '../db/client';
+import { db, expoDb } from '../db/client';
 import { messages, operationLog } from '../db/schema';
 import { eq, or } from 'drizzle-orm';
 import { generateUlid } from '../utils/syncIds';
@@ -100,12 +100,26 @@ export const useSyncConflictStore = create<SyncConflictState>((set, get) => ({
 
     try {
       const runInTx = async (fn: (runner: any) => Promise<void>) => {
-        if (db) {
-          if (typeof (db as any).transaction === 'function') {
-            await (db as any).transaction(fn);
-          } else {
+        if (!db) {
+          throw new Error('Local database unavailable');
+        }
+        if (expoDb && typeof expoDb.execSync === 'function') {
+          expoDb.execSync('BEGIN IMMEDIATE;');
+          try {
             await fn(db);
+            expoDb.execSync('COMMIT;');
+          } catch (txErr) {
+            try {
+              expoDb.execSync('ROLLBACK;');
+            } catch {
+              // Ignore rollback failure if transaction already aborted
+            }
+            throw txErr;
           }
+        } else if (typeof (db as any).transaction === 'function') {
+          await (db as any).transaction(fn);
+        } else {
+          await fn(db);
         }
       };
 
@@ -128,7 +142,7 @@ export const useSyncConflictStore = create<SyncConflictState>((set, get) => ({
               payload: JSON.stringify({
                 role: conflict.localMessage.role,
                 content: conflict.localMessage.content,
-                provider: conflict.localMessage.provider || 'android_client',
+                provider: 'android_client',
                 created_at: conflict.localMessage.created_at,
               }),
               created_at: conflict.localMessage.created_at,
@@ -226,7 +240,7 @@ export const useSyncConflictStore = create<SyncConflictState>((set, get) => ({
             payload: JSON.stringify({
               role: conflict.localMessage.role,
               content: duplicateContent,
-              provider: conflict.localMessage.provider || 'android_client',
+              provider: 'android_client',
               created_at: now,
             }),
             created_at: now,
