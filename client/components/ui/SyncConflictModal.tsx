@@ -5,6 +5,16 @@ import { useAurora } from '../../hooks/useAurora';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { DEFAULT_ELEVATION } from '../../utils/elevation';
 
+function formatTimestamp(ts?: number): string {
+  if (!ts) return '';
+  try {
+    const d = new Date(ts);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return '';
+  }
+}
+
 export function SyncConflictModal() {
   const conflicts = useSyncConflictStore((s) => s.conflicts);
   const resolvingIds = useSyncConflictStore((s) => s.resolvingIds);
@@ -20,7 +30,8 @@ export function SyncConflictModal() {
     <Modal
       transparent
       visible={conflicts.length > 0}
-      animationType="fade"
+      animationType={reducedMotion ? 'none' : 'fade'}
+      accessibilityViewIsModal={true}
       onRequestClose={() => {
         // Blocking modal: cannot be dismissed via back button until all conflicts are resolved
       }}
@@ -89,10 +100,12 @@ function ConflictCard({
   colors,
   sizes,
   aurora,
-  reducedMotion,
   isResolving,
   onResolve,
 }: ConflictCardProps) {
+  const localTime = formatTimestamp(conflict.localMessage.created_at);
+  const serverTime = formatTimestamp(conflict.serverMessage.created_at);
+
   return (
     <View testID={`conflict-card-${conflict.id}`} style={[styles.card, { backgroundColor: colors.glass, borderColor: colors.glassBorder }]}>
       <View style={styles.conflictMetaRow}>
@@ -114,7 +127,7 @@ function ConflictCard({
               📱 Local Version
             </Text>
             <Text style={[styles.statusBadge, { color: colors.textMuted, fontSize: sizes.sub - 1 }]}>
-              (role: {conflict.localMessage.role}, pending)
+              ({conflict.localMessage.role}, pending{localTime ? ` • ${localTime}` : ''})
             </Text>
           </View>
           <Text
@@ -136,7 +149,7 @@ function ConflictCard({
               ☁️ Server Version
             </Text>
             <Text style={[styles.statusBadge, { color: colors.textMuted, fontSize: sizes.sub - 1 }]}>
-              (role: {conflict.serverMessage.role}, remote)
+              ({conflict.serverMessage.role}, remote{serverTime ? ` • ${serverTime}` : ''})
             </Text>
           </View>
           <Text
@@ -151,6 +164,9 @@ function ConflictCard({
       <View style={styles.actionsRow}>
         <Pressable
           testID={`conflict-keep-local-${conflict.id}`}
+          accessibilityRole="button"
+          accessibilityLabel={`Keep local version of conflict ${index + 1}`}
+          accessibilityState={{ disabled: isResolving }}
           disabled={isResolving}
           onPress={() => onResolve('local')}
           style={({ pressed }) => [
@@ -167,6 +183,9 @@ function ConflictCard({
 
         <Pressable
           testID={`conflict-keep-server-${conflict.id}`}
+          accessibilityRole="button"
+          accessibilityLabel={`Keep server version of conflict ${index + 1}`}
+          accessibilityState={{ disabled: isResolving }}
           disabled={isResolving}
           onPress={() => onResolve('server')}
           style={({ pressed }) => [
@@ -183,6 +202,9 @@ function ConflictCard({
 
         <Pressable
           testID={`conflict-keep-both-${conflict.id}`}
+          accessibilityRole="button"
+          accessibilityLabel={`Keep both versions of conflict ${index + 1}`}
+          accessibilityState={{ disabled: isResolving }}
           disabled={isResolving}
           onPress={() => onResolve('both')}
           style={({ pressed }) => [
@@ -277,6 +299,7 @@ const styles = StyleSheet.create({
   },
   contentPreview: {
     lineHeight: 19,
+    maxHeight: 180,
   },
   actionsRow: {
     flexDirection: 'row',
@@ -285,7 +308,7 @@ const styles = StyleSheet.create({
   },
   actionBtn: {
     flex: 1,
-    height: 38,
+    minHeight: 44,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: 'transparent',
