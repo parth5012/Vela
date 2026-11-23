@@ -3,6 +3,7 @@ import { operationLog, threads, messages } from '../db/schema';
 import { eq, inArray, isNull, or } from 'drizzle-orm';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { markMessageSynced, hydrateChatFromLocalDb } from '../db/chatRepository';
+import { useSyncConflictStore } from '../store/useSyncConflictStore';
 
 export interface StandaloneSyncStatus {
   isSyncing: boolean;
@@ -328,6 +329,38 @@ export async function syncDatabase(apiUrl: string, apiKey: string): Promise<void
             server_id: op.id,
           });
         } else {
+          const existing = existingMessages[0];
+          const isContentDifferent =
+            existing.content !== msgPayload.content ||
+            existing.role !== msgPayload.role;
+
+          // Conflict detection on reconnect:
+          // A conflict is detected when pulling a remote message whose ID matches
+          // a local message that is still pending with differing content or role.
+          if (existing.pending && isContentDifferent) {
+            useSyncConflictStore.getState().addConflict({
+              id: op.id,
+              conversation_id: threadId,
+              localMessage: {
+                id: existing.id,
+                role: existing.role as 'user' | 'assistant',
+                content: existing.content,
+                created_at: existing.created_at,
+                provider: existing.provider,
+                conversation_id: existing.conversation_id,
+              },
+              serverMessage: {
+                id: op.id,
+                role: msgPayload.role as 'user' | 'assistant',
+                content: msgPayload.content,
+                created_at: Number(msgPayload.created_at) || Date.now(),
+                provider: msgPayload.provider || 'remote',
+                conversation_id: threadId,
+              },
+            });
+            continue;
+          }
+
           await db.update(messages)
             .set({
               content: msgPayload.content,

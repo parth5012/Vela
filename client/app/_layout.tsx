@@ -28,6 +28,7 @@ if (process.env.EXPO_PUBLIC_E2E === '1') {
 }
 import * as Notifications from 'expo-notifications';
 import { SafetyDialog } from '../components/ui/SafetyDialog';
+import { SyncConflictModal } from '../components/ui/SyncConflictModal';
 import FloatingOverlayRoot from '../components/overlay/FloatingOverlayRoot';
 import { persistentWebviewContainerStyle, persistentWebviewPointerEvents } from '../utils/persistentWebviewStyle';
 import { registerAndPostToken } from '../utils/pushRegistration';
@@ -485,6 +486,7 @@ export default function RootLayout() {
         />
       </View>
       <SafetyDialog />
+      <SyncConflictModal />
       <FloatingOverlayRoot />
     </View>
   );
