@@ -224,7 +224,12 @@ export async function syncDatabase(apiUrl: string, apiKey: string): Promise<void
 
   // Defense-in-depth: even if the query filter above is ever bypassed
   // (mocked db, query-builder drift), never POST device_step ops to /push.
-  const pushableOps = mappedOps.filter((op) => op.type === 'message');
+  // Also: exclude operations for message IDs that currently have unresolved conflicts
+  // so they are not pushed or prematurely marked synced before resolution commits.
+  const activeConflictIds = new Set(useSyncConflictStore.getState().conflicts.map((c) => c.id));
+  const pushableOps = mappedOps.filter(
+    (op) => op.type === 'message' && !activeConflictIds.has(op.id)
+  );
 
   if (pushableOps.length > 0) {
     const pushResponse = await fetch(`${apiUrl}/api/sync/push`, {

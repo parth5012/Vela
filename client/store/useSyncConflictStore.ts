@@ -25,6 +25,7 @@ export type ConflictResolution = 'local' | 'server' | 'both';
 
 export interface SyncConflictState {
   conflicts: SyncConflict[];
+  resolvingIds: string[];
   addConflict: (conflict: SyncConflict) => void;
   removeConflict: (id: string) => void;
   clearConflicts: () => void;
@@ -33,6 +34,7 @@ export interface SyncConflictState {
 
 export const useSyncConflictStore = create<SyncConflictState>((set, get) => ({
   conflicts: [],
+  resolvingIds: [],
 
   addConflict: (conflict: SyncConflict) =>
     set((state) => {
@@ -47,11 +49,19 @@ export const useSyncConflictStore = create<SyncConflictState>((set, get) => ({
       conflicts: state.conflicts.filter((c) => c.id !== id),
     })),
 
-  clearConflicts: () => set({ conflicts: [] }),
+  clearConflicts: () => set({ conflicts: [], resolvingIds: [] }),
 
   resolveConflict: async (id: string, resolution: ConflictResolution) => {
+    if (get().resolvingIds.includes(id)) {
+      return;
+    }
+
     const conflict = get().conflicts.find((c) => c.id === id);
     if (!conflict) return;
+
+    set((state) => ({ resolvingIds: [...state.resolvingIds, id] }));
+
+    try {
 
     if (resolution === 'local') {
       // Keep Local:
@@ -223,7 +233,10 @@ export const useSyncConflictStore = create<SyncConflictState>((set, get) => ({
       }
     }
 
-    // Finally remove from conflicts queue
-    get().removeConflict(id);
+      // Remove from conflicts queue only after resolution completes
+      get().removeConflict(id);
+    } finally {
+      set((state) => ({ resolvingIds: state.resolvingIds.filter((rid) => rid !== id) }));
+    }
   },
 }));
