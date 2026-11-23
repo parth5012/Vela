@@ -39,6 +39,8 @@ jest.mock('../db/client', () => {
     })
   );
 
+  const mockExecSync = jest.fn();
+
   return {
     db: {
       select: mockSelect,
@@ -48,7 +50,9 @@ jest.mock('../db/client', () => {
       transaction: mockTransaction,
     },
     initializeDatabase: jest.fn(async () => {}),
-    expoDb: {},
+    expoDb: {
+      execSync: mockExecSync,
+    },
     default: {
       select: mockSelect,
       insert: mockInsert,
@@ -65,7 +69,7 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 
 import { useSyncConflictStore, type SyncConflict } from '../store/useSyncConflictStore';
 import { useChatStore } from '../store/useChatStore';
-import { db } from '../db/client';
+import { db, expoDb } from '../db/client';
 
 describe('useSyncConflictStore', () => {
   const sampleConflict: SyncConflict = {
@@ -154,8 +158,9 @@ describe('useSyncConflictStore', () => {
     // Confirmed removed from conflict list
     expect(useSyncConflictStore.getState().conflicts).toEqual([]);
 
-    // Transaction executed
-    expect((db as any).transaction).toHaveBeenCalled();
+    // Native SQLite atomic transaction executed via expoDb.execSync
+    expect(expoDb.execSync).toHaveBeenCalledWith('BEGIN IMMEDIATE;');
+    expect(expoDb.execSync).toHaveBeenCalledWith('COMMIT;');
 
     // Confirmed db operations: marked pending = true in messages, inserted into operationLog
     expect(db.update).toHaveBeenCalled();
@@ -245,5 +250,79 @@ describe('useSyncConflictStore', () => {
     // Chat store has exactly 2 messages (1 original + 1 duplicate), not 3!
     const convMessages = useChatStore.getState().messages['conv_1'];
     expect(convMessages.length).toBe(2);
+  });
+
+  it('executes native SQLite BEGIN IMMEDIATE and COMMIT via expoDb.execSync', async () => {
+    const store = useSyncConflictStore.getState();
+    store.addConflict(sampleConflict);
+
+    (expoDb.execSync as jest.Mock).mockClear();
+
+    await store.resolveConflict('msg_conflict_1', 'local');
+
+    expect(expoDb.execSync).toHaveBeenCalledWith('BEGIN IMMEDIATE;');
+    expect(expoDb.execSync).toHaveBeenCalledWith('COMMIT;');
+  });
+
+  it('executes native SQLite ROLLBACK on write failure via expoDb.execSync', async () => {
+    const store = useSyncConflictStore.getState();
+    store.addConflict(sampleConflict);
+
+    (expoDb.execSync as jest.Mock).mockClear();
+    (db.update as jest.Mock).mockImplementationOnce(() => {
+      throw new Error('Disk write error');
+    });
+
+    await expect(store.resolveConflict('msg_conflict_1', 'local')).rejects.toThrow('Disk write error');
+
+    expect(expoDb.execSync).toHaveBeenCalledWith('BEGIN IMMEDIATE;');
+    expect(expoDb.execSync).toHaveBeenCalledWith('ROLLBACK;');
+  });
+
+  it('serializes resolutions across different conflict ids without transaction collision', async () => {
+    const store = useSyncConflictStore.getState();
+    const conflict2: SyncConflict = {
+      id: 'msg_conflict_2',
+      conversation_id: 'conv_1',
+      localMessage: {
+        id: 'msg_conflict_2',
+        role: 'user',
+        content: 'Local text 2',
+        created_at: 2000,
+        conversation_id: 'conv_1',
+      },
+      serverMessage: {
+        id: 'msg_conflict_2',
+        role: 'user',
+        content: 'Server text 2',
+        created_at: 2001,
+        conversation_id: 'conv_1',
+      },
+    };
+
+    store.addConflict(sampleConflict);
+    store.addConflict(conflict2);
+
+    const callOrder: string[] = [];
+    (expoDb.execSync as jest.Mock).mockImplementation((stmt: string) => {
+      callOrder.push(stmt);
+    });
+
+    // Concurrently trigger resolution on two different conflicts
+    const p1 = store.resolveConflict('msg_conflict_1', 'server');
+    const p2 = store.resolveConflict('msg_conflict_2', 'server');
+
+    await Promise.all([p1, p2]);
+
+    // BEGIN and COMMIT must be paired sequentially: BEGIN, COMMIT, BEGIN, COMMIT (no nested BEGIN)
+    expect(callOrder).toEqual([
+      'BEGIN IMMEDIATE;',
+      'COMMIT;',
+      'BEGIN IMMEDIATE;',
+      'COMMIT;',
+    ]);
+
+    expect(useSyncConflictStore.getState().conflicts).toEqual([]);
+    expect(useSyncConflictStore.getState().resolvingIds).toEqual([]);
   });
 });

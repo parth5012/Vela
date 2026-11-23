@@ -142,6 +142,66 @@ def test_sync_push_auto_creates_missing_android_conversation(client, headers):
     assert pull_resp.json()["operations"] == []
 
 
+def test_sync_push_updates_existing_message_content_and_provider(client, headers):
+    """When a client resolves a sync conflict with Keep Local, pushing the same
+    message ID must update the content and provider on the existing row."""
+    conv_id = "test-conv-keep-local"
+    msg_id = generate_ulid()
+
+    # Seed existing message on backend (e.g. remote version)
+    initial_payload = {
+        "operations": [
+            {
+                "id": msg_id,
+                "type": "message",
+                "conversation_id": conv_id,
+                "payload": {
+                    "role": "assistant",
+                    "content": "Server remote content",
+                    "provider": "openrouter",
+                    "created_at": int(time.time() * 1000),
+                }
+            }
+        ]
+    }
+    r1 = client.post("/api/sync/push", json=initial_payload, headers=headers)
+    assert r1.status_code == 200
+    assert msg_id in r1.json()["accepted"]
+
+    with get_db_session() as session:
+        msg = session.query(SyncMessage).filter_by(id=msg_id).first()
+        assert msg is not None
+        assert msg.content == "Server remote content"
+        assert msg.provider == "openrouter"
+
+    # Push updated version from client (Keep Local resolution)
+    update_payload = {
+        "operations": [
+            {
+                "id": msg_id,
+                "type": "message",
+                "conversation_id": conv_id,
+                "payload": {
+                    "role": "assistant",
+                    "content": "Keep local resolution edit",
+                    "provider": "android_client",
+                    "created_at": int(time.time() * 1000),
+                }
+            }
+        ]
+    }
+    r2 = client.post("/api/sync/push", json=update_payload, headers=headers)
+    assert r2.status_code == 200
+    assert msg_id in r2.json()["accepted"]
+
+    # Verify message row was updated with new content and provider
+    with get_db_session() as session:
+        msg = session.query(SyncMessage).filter_by(id=msg_id).first()
+        assert msg is not None
+        assert msg.content == "Keep local resolution edit"
+        assert msg.provider == "android_client"
+
+
 def test_sync_pull_scenarios(client, headers):
     with get_db_session() as session:
         db_client = DBClient(session)
