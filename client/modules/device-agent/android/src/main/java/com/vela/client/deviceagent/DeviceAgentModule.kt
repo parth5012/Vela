@@ -759,16 +759,6 @@ class DeviceAgentModule : Module() {
             }
         }
 
-        AsyncFunction("canDrawOverlays") {
-            val context = appContext.reactContext
-                ?: return@AsyncFunction false
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                Settings.canDrawOverlays(context)
-            } else {
-                true
-            }
-        }
-
         AsyncFunction("openSettingsAction") { action: String, needsPackageUri: Boolean ->
             val context = appContext.reactContext
                 ?: return@AsyncFunction mapOf("success" to false, "error" to "App context unavailable")

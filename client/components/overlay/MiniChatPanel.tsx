@@ -21,6 +21,7 @@ import { streamController } from '../../utils/streamController';
 import { pickChatImages } from '../../utils/chatAttachments';
 import { useVoiceInput } from '../../hooks/useVoiceInput';
 import VoiceConsentModal from '../chat/VoiceConsentModal';
+import { isDarkTheme } from '../../utils/theme';
 
 interface MiniChatPanelProps {
   onMinimize: () => void;
@@ -44,7 +45,9 @@ export default function MiniChatPanel({ onMinimize, onClose }: MiniChatPanelProp
 
   const enableVoice = useConfigStore((s) => s.floatingOverlay.enableVoice);
   const enableImages = useConfigStore((s) => s.floatingOverlay.enableImages);
-  const maxImages = useConfigStore((s) => s.maxImagesPerMessage) || 4;
+  const maxImages = useConfigStore((s) => s.maxImagesPerMessage) ?? 2;
+  const theme = useConfigStore((s) => s.theme);
+  const isDark = isDarkTheme(theme);
 
   const scrollViewRef = useRef<ScrollView>(null);
 
@@ -64,12 +67,14 @@ export default function MiniChatPanel({ onMinimize, onClose }: MiniChatPanelProp
 
   // Cleanup voice recording only on unmount (not on periodic waveform re-renders)
   const voiceRef = useRef(voice);
-  voiceRef.current = voice;
+  useEffect(() => {
+    voiceRef.current = voice;
+  });
 
   useEffect(() => {
     return () => {
       if (voiceRef.current.state.recording) {
-        void voiceRef.current.stop();
+        void voiceRef.current.cancel();
       }
     };
   }, []);
@@ -124,8 +129,8 @@ export default function MiniChatPanel({ onMinimize, onClose }: MiniChatPanelProp
   };
 
   const panelHeight = Math.min(screenHeight * 0.56, 520);
-  const syncTextColor = colors.card === '#ffffff' || colors.card.toLowerCase().includes('fff') ? '#15803d' : '#4ade80';
-  const recordTextColor = colors.card === '#ffffff' || colors.card.toLowerCase().includes('fff') ? '#b91c1c' : '#f87171';
+  const syncTextColor = isDark ? '#4ade80' : '#15803d';
+  const recordTextColor = isDark ? '#f87171' : '#b91c1c';
 
   return (
     <KeyboardAvoidingView
