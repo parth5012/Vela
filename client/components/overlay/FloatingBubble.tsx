@@ -75,7 +75,7 @@ export default function FloatingBubble({
       screenHeight - insets.bottom - BUBBLE_SIZE - 40
     );
     pan.setValue({ x: targetX, y: clampedY });
-  }, [savedDockSide, savedDockY, screenWidth, screenHeight, insets.top, insets.bottom]);
+  }, [pan, savedDockSide, savedDockY, screenWidth, screenHeight, insets.top, insets.bottom]);
 
   const panResponder = useRef(
     PanResponder.create({

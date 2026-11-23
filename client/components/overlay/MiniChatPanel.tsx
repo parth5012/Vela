@@ -62,14 +62,17 @@ export default function MiniChatPanel({ onMinimize, onClose }: MiniChatPanelProp
 
   const isRecording = voice.state.recording;
 
-  // Cleanup voice recording on unmount
+  // Cleanup voice recording only on unmount (not on periodic waveform re-renders)
+  const voiceRef = useRef(voice);
+  voiceRef.current = voice;
+
   useEffect(() => {
     return () => {
-      if (voice.state.recording) {
-        void voice.stop();
+      if (voiceRef.current.state.recording) {
+        void voiceRef.current.stop();
       }
     };
-  }, [voice]);
+  }, []);
 
   const handleSend = async () => {
     const textToSend = input.trim();

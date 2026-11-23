@@ -110,10 +110,10 @@ To display a system-level floating view above other applications:
 ### 5.1 Dedicated Quick Chat Thread
 - Rather than mutating the currently active main chat thread, the floating overlay binds to a dedicated thread:
   ```ts
-  const QUICK_CHAT_THREAD_ID = 'quick-chat-thread';
+  const QUICK_CHAT_THREAD_ID = '1db65310-8cf7-52aa-a370-c2f0ab8ce187';
   ```
 - **Lifecycle & Persistence:**
-  - Initialized automatically if absent: identified by the fixed `QUICK_CHAT_THREAD_ID = 'quick-chat-thread'` with title `'Quick Chat'`.
+  - Initialized automatically if absent: identified by the canonical RFC-4122 UUID `QUICK_CHAT_THREAD_ID = '1db65310-8cf7-52aa-a370-c2f0ab8ce187'` (derived via backend `uuid5(NAMESPACE_VELA, 'quick-chat-thread')`) with title `'Quick Chat'`.
   - Persisted in SQLite local DB via standard `saveThread()` and `saveMessage()`.
   - Full support for streaming assistant responses using `streamController`.
   - Synchronized in real time: any messages sent from the overlay immediately appear in the thread list and can be viewed/continued in the main chat view without state divergence.
