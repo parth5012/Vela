@@ -1,11 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, AppState, ActivityIndicator, Alert, Switch, Platform } from 'react-native';
+import { View, Text, Pressable, StyleSheet, AppState, ActivityIndicator, Alert, Switch } from 'react-native';
 import { useRouter } from 'expo-router';
 import { AuroraScreen, Card, useAurora, PrimaryButton } from '../../components/ui/settingsKit';
 import {
   APP_PERMISSIONS,
   checkPermission,
-  checkOverlayPermission,
   requestPermission,
   openSettings,
   getRationale,
@@ -100,7 +99,6 @@ export default function PermissionsHubScreen() {
     phone: 'undetermined',
     contacts: 'undetermined',
   });
-  const [overlayStatus, setOverlayStatus] = useState<PermissionStatus>('undetermined');
   const floatingOverlay = useConfigStore((s) => s.floatingOverlay);
   const setFloatingOverlay = useConfigStore((s) => s.setFloatingOverlay);
   const setFloatingOverlayEnabled = useConfigStore((s) => s.setFloatingOverlayEnabled);
@@ -119,8 +117,6 @@ export default function PermissionsHubScreen() {
       setOSPermission(meta.perm, s);
     }
     setStatuses((prev) => ({ ...prev, ...next }));
-    const ov = await checkOverlayPermission();
-    setOverlayStatus(ov);
     if (next.notifications === 'granted' && useConfigStore.getState().connectionMode === 'server') {
       void registerAndPostToken();
     }

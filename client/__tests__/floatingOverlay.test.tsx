@@ -37,18 +37,19 @@ jest.mock('react-native-safe-area-context', () => ({
 const mockStopVoice = jest.fn();
 const mockStartVoice = jest.fn();
 const mockCancelVoice = jest.fn();
+let mockVoiceState = {
+  recording: false,
+  elapsedMs: 0,
+  levels: [] as number[],
+  partialText: '',
+  consentProvider: null,
+  failure: null,
+  canRetry: false,
+};
 
 jest.mock('../hooks/useVoiceInput', () => ({
   useVoiceInput: () => ({
-    state: {
-      recording: false,
-      elapsedMs: 0,
-      levels: [],
-      partialText: '',
-      consentProvider: null,
-      failure: null,
-      canRetry: false,
-    },
+    state: mockVoiceState,
     isAvailable: true,
     start: mockStartVoice,
     stop: mockStopVoice,
@@ -228,6 +229,37 @@ describe('Floating Overlay UI Components (#596, #599)', () => {
 
       const str = JSON.stringify(tree?.toJSON());
       expect(str).toContain('Dashboard Preview');
+    });
+
+    it('cleans up voice recording on unmount without stopping on re-render', () => {
+      mockStopVoice.mockClear();
+      mockVoiceState = { ...mockVoiceState, recording: true };
+
+      let tree: renderer.ReactTestRenderer | undefined;
+      act(() => {
+        tree = renderer.create(
+          <MiniChatPanel onMinimize={jest.fn()} onClose={jest.fn()} />
+        );
+      });
+
+      // Force a re-render of MiniChatPanel (e.g. meter level tick or parent state)
+      act(() => {
+        tree?.update(
+          <MiniChatPanel onMinimize={jest.fn()} onClose={jest.fn()} />
+        );
+      });
+
+      // Stop should NOT be called on re-render
+      expect(mockStopVoice).not.toHaveBeenCalled();
+
+      // Unmount the component
+      act(() => {
+        tree?.unmount();
+      });
+
+      // Stop should be called on unmount
+      expect(mockStopVoice).toHaveBeenCalledTimes(1);
+      mockVoiceState = { ...mockVoiceState, recording: false };
     });
   });
 
