@@ -140,6 +140,7 @@ export async function sendQuickChatMessage(
     const provider = config.activeCloudProvider || 'gemini';
     const providerConfig = config.cloudProviders?.[provider];
     const apiKey = config.cloudApiKeys?.[provider] || '';
+    const baseUrl = providerConfig?.baseUrl;
     const agents = getCachedAgents();
     const activeAgent = agents.find((a) => a.id === thread.agent);
     const model = activeAgent?.model?.trim() || providerConfig?.model || 'gemini-1.5-flash';
@@ -162,6 +163,7 @@ export async function sendQuickChatMessage(
           provider,
           apiKey,
           model,
+          baseUrl,
           messages: payloadMessages,
           signal,
           onToken: (token: string) => {

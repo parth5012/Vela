@@ -47,7 +47,7 @@ This document evaluates:
 To display a system-level floating view above other applications:
 - **Window Type:** `WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY` (mandatory on API 26+; replaces deprecated `TYPE_SYSTEM_ALERT` and `TYPE_PHONE`).
 - **Flags:**
-  - `FLAG_NOT_FOCUSABLE`: Allows touch events outside the bubble to pass through to underlying applications.
+  - `FLAG_NOT_FOCUSABLE`: Allows touch events outside the bubble to pass through to underlying applications while collapsed; must be cleared when expanding a panel with text inputs so the IME (soft keyboard) can receive focus.
   - `FLAG_NOT_TOUCH_MODAL`: Ensures outside touches register for other apps unless tapping inside the overlay.
   - `FLAG_WATCH_OUTSIDE_TOUCH`: Detects when a tap occurs outside the expanded panel to automatically collapse or dismiss.
 - **Service & Lifecycle:**
