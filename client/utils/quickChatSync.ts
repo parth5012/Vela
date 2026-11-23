@@ -15,8 +15,9 @@ import { streamCloudResponse } from './providers';
 import { streamLocalLlmResponse } from './localLlm';
 import { getCachedAgents } from '../db/agentRepository';
 import { uploadChatAttachment } from './chatAttachments';
+import { QUICK_CHAT_THREAD_ID } from './quickChatConstants';
 
-export const QUICK_CHAT_THREAD_ID = '1db65310-8cf7-52aa-a370-c2f0ab8ce187';
+export { QUICK_CHAT_THREAD_ID };
 
 /**
  * Returns the existing Quick Chat thread or creates one if it does not yet exist.

@@ -13,6 +13,7 @@ import type React from 'react';
 import { useChatStore, Message, Thread, ChatAttachment } from '../store/useChatStore';
 import { streamAgentResponse } from './sse';
 import { queueMessageForSync } from '../db/chatRepository';
+import { QUICK_CHAT_THREAD_ID } from './quickChatConstants';
 import { streamController } from './streamController';
 
 export type ServerStreamParams = {
@@ -46,7 +47,7 @@ export async function runServerStream(p: ServerStreamParams): Promise<void> {
           streamController.appendChunk(p.threadId, chunk);
         },
         (newTitle) => {
-          if (newTitle && p.threadId !== '1db65310-8cf7-52aa-a370-c2f0ab8ce187' && p.threadId !== 'quick-chat-thread') {
+          if (newTitle && p.threadId !== QUICK_CHAT_THREAD_ID && p.threadId !== 'quick-chat-thread') {
             if (p.threads && p.setThreads) {
               p.setThreads(p.threads.map((t) => (t.id === p.threadId ? { ...t, title: newTitle } : t)));
             }

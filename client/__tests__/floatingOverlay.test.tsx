@@ -104,6 +104,26 @@ describe('Floating Overlay UI Components (#596, #599)', () => {
       const bubble = root?.findByProps({ accessibilityLabel: 'Open Quick Chat floating overlay' });
       expect(bubble).toBeTruthy();
     });
+
+    it('disables floatingOverlay in store when bubble is dismissed', () => {
+      act(() => {
+        useConfigStore.getState().setFloatingOverlayEnabled(true);
+      });
+      let tree: renderer.ReactTestRenderer | undefined;
+      act(() => {
+        tree = renderer.create(<FloatingOverlayRoot />);
+      });
+      const root = tree?.root;
+      const bubble = root?.findByType(FloatingBubble);
+      expect(bubble).toBeTruthy();
+
+      act(() => {
+        bubble!.props.onDismiss();
+      });
+
+      expect(useConfigStore.getState().floatingOverlay.enabled).toBe(false);
+      expect(tree?.toJSON()).toBeNull();
+    });
   });
 
   describe('DismissDropZone', () => {
@@ -232,7 +252,7 @@ describe('Floating Overlay UI Components (#596, #599)', () => {
     });
 
     it('cleans up voice recording on unmount without stopping on re-render', () => {
-      mockStopVoice.mockClear();
+      mockCancelVoice.mockClear();
       mockVoiceState = { ...mockVoiceState, recording: true };
 
       let tree: renderer.ReactTestRenderer | undefined;
@@ -249,16 +269,16 @@ describe('Floating Overlay UI Components (#596, #599)', () => {
         );
       });
 
-      // Stop should NOT be called on re-render
-      expect(mockStopVoice).not.toHaveBeenCalled();
+      // Cancel should NOT be called on re-render
+      expect(mockCancelVoice).not.toHaveBeenCalled();
 
       // Unmount the component
       act(() => {
         tree?.unmount();
       });
 
-      // Stop should be called on unmount
-      expect(mockStopVoice).toHaveBeenCalledTimes(1);
+      // Cancel should be called on unmount
+      expect(mockCancelVoice).toHaveBeenCalledTimes(1);
       mockVoiceState = { ...mockVoiceState, recording: false };
     });
   });

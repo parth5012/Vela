@@ -7,9 +7,9 @@ import DismissDropZone from './DismissDropZone';
 
 export default function FloatingOverlayRoot() {
   const isEnabled = useConfigStore((s) => s.floatingOverlay.enabled);
+  const setFloatingOverlayEnabled = useConfigStore((s) => s.setFloatingOverlayEnabled);
 
   const [isExpanded, setIsExpanded] = useState(false);
-  const [isDismissed, setIsDismissed] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isHoveringDismiss, setIsHoveringDismiss] = useState(false);
 
@@ -25,11 +25,10 @@ export default function FloatingOverlayRoot() {
   useEffect(() => {
     if (!isEnabled) {
       setIsExpanded(false);
-      setIsDismissed(false);
     }
   }, [isEnabled]);
 
-  if (!isEnabled || isDismissed) {
+  if (!isEnabled) {
     return null;
   }
 
@@ -43,7 +42,7 @@ export default function FloatingOverlayRoot() {
 
   const handleDismiss = () => {
     setIsExpanded(false);
-    setIsDismissed(true);
+    setFloatingOverlayEnabled(false);
   };
 
   const handleDragStateChange = (dragging: boolean, hoveringDismiss: boolean) => {
