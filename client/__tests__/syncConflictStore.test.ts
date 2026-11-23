@@ -172,4 +172,23 @@ describe('useSyncConflictStore', () => {
     expect(convMessages[0].content).toBe('Server remote text');
     expect(convMessages[1].content).toBe('Local text edited offline *');
   });
+
+  it('prevents concurrent double-resolution for the same conflict id', async () => {
+    const store = useSyncConflictStore.getState();
+    store.addConflict(sampleConflict);
+
+    // Call resolveConflict concurrently twice
+    const p1 = store.resolveConflict('msg_conflict_1', 'both');
+    const p2 = store.resolveConflict('msg_conflict_1', 'both');
+
+    await Promise.all([p1, p2]);
+
+    // Store is cleared and resolvingIds is empty
+    expect(useSyncConflictStore.getState().conflicts).toEqual([]);
+    expect(useSyncConflictStore.getState().resolvingIds).toEqual([]);
+
+    // Chat store has exactly 2 messages (1 original + 1 duplicate), not 3!
+    const convMessages = useChatStore.getState().messages['conv_1'];
+    expect(convMessages.length).toBe(2);
+  });
 });

@@ -7,6 +7,7 @@ import { DEFAULT_ELEVATION } from '../../utils/elevation';
 
 export function SyncConflictModal() {
   const conflicts = useSyncConflictStore((s) => s.conflicts);
+  const resolvingIds = useSyncConflictStore((s) => s.resolvingIds);
   const resolveConflict = useSyncConflictStore((s) => s.resolveConflict);
   const { colors, sizes, aurora } = useAurora();
   const reducedMotion = useReducedMotion();
@@ -58,6 +59,7 @@ export function SyncConflictModal() {
                 sizes={sizes}
                 aurora={aurora}
                 reducedMotion={reducedMotion}
+                isResolving={resolvingIds.includes(conflict.id)}
                 onResolve={(resolution) => resolveConflict(conflict.id, resolution)}
               />
             ))}
@@ -76,6 +78,7 @@ interface ConflictCardProps {
   sizes: ReturnType<typeof useAurora>['sizes'];
   aurora: ReturnType<typeof useAurora>['aurora'];
   reducedMotion: boolean;
+  isResolving: boolean;
   onResolve: (resolution: 'local' | 'server' | 'both') => void;
 }
 
@@ -87,13 +90,14 @@ function ConflictCard({
   sizes,
   aurora,
   reducedMotion,
+  isResolving,
   onResolve,
 }: ConflictCardProps) {
   return (
     <View testID={`conflict-card-${conflict.id}`} style={[styles.card, { backgroundColor: colors.glass, borderColor: colors.glassBorder }]}>
       <View style={styles.conflictMetaRow}>
         <Text style={[styles.badgeText, { color: colors.textMuted, fontSize: sizes.sub }]}>
-          Conflict {index + 1} of {total} • Role: {conflict.localMessage.role}
+          Conflict {index + 1} of {total}
         </Text>
       </View>
 
@@ -110,12 +114,11 @@ function ConflictCard({
               📱 Local Version
             </Text>
             <Text style={[styles.statusBadge, { color: colors.textMuted, fontSize: sizes.sub - 1 }]}>
-              (pending offline)
+              (role: {conflict.localMessage.role}, pending)
             </Text>
           </View>
           <Text
             style={[styles.contentPreview, { color: colors.text, fontSize: sizes.text }]}
-            numberOfLines={6}
           >
             {conflict.localMessage.content}
           </Text>
@@ -133,12 +136,11 @@ function ConflictCard({
               ☁️ Server Version
             </Text>
             <Text style={[styles.statusBadge, { color: colors.textMuted, fontSize: sizes.sub - 1 }]}>
-              (remote)
+              (role: {conflict.serverMessage.role}, remote)
             </Text>
           </View>
           <Text
             style={[styles.contentPreview, { color: colors.text, fontSize: sizes.text }]}
-            numberOfLines={6}
           >
             {conflict.serverMessage.content}
           </Text>
@@ -149,11 +151,13 @@ function ConflictCard({
       <View style={styles.actionsRow}>
         <Pressable
           testID={`conflict-keep-local-${conflict.id}`}
+          disabled={isResolving}
           onPress={() => onResolve('local')}
           style={({ pressed }) => [
             styles.actionBtn,
             { backgroundColor: colors.glass, borderColor: colors.glassBorder },
-            pressed && { opacity: 0.7 },
+            pressed && !isResolving && { opacity: 0.7 },
+            isResolving && { opacity: 0.5 },
           ]}
         >
           <Text style={[styles.actionBtnText, { color: colors.text, fontSize: sizes.sub }]}>
@@ -163,11 +167,13 @@ function ConflictCard({
 
         <Pressable
           testID={`conflict-keep-server-${conflict.id}`}
+          disabled={isResolving}
           onPress={() => onResolve('server')}
           style={({ pressed }) => [
             styles.actionBtn,
             { backgroundColor: colors.glass, borderColor: colors.glassBorder },
-            pressed && { opacity: 0.7 },
+            pressed && !isResolving && { opacity: 0.7 },
+            isResolving && { opacity: 0.5 },
           ]}
         >
           <Text style={[styles.actionBtnText, { color: colors.text, fontSize: sizes.sub }]}>
@@ -177,17 +183,19 @@ function ConflictCard({
 
         <Pressable
           testID={`conflict-keep-both-${conflict.id}`}
+          disabled={isResolving}
           onPress={() => onResolve('both')}
           style={({ pressed }) => [
             styles.actionBtn,
             { backgroundColor: aurora.acc1 },
-            pressed && { opacity: 0.7 },
+            pressed && !isResolving && { opacity: 0.7 },
+            isResolving && { opacity: 0.5 },
           ]}
         >
           <Text
             style={[
               styles.actionBtnText,
-              { color: '#ffffff', fontSize: sizes.sub, fontWeight: 'bold' },
+              { color: aurora.onAccent, fontSize: sizes.sub, fontWeight: 'bold' },
             ]}
           >
             Keep Both
