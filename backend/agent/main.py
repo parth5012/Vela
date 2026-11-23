@@ -2354,6 +2354,13 @@ def sync_push(payload: SyncPushPayload):
                                     created_at=int(created_at)
                                 )
                                 session.add(new_msg)
+                            else:
+                                if "content" in op.payload and op.payload["content"] is not None:
+                                    existing.content = op.payload["content"]
+                                if "role" in op.payload and op.payload["role"] is not None:
+                                    existing.role = op.payload["role"]
+                                if "provider" in op.payload and op.payload["provider"] is not None:
+                                    existing.provider = op.payload["provider"]
                             session.flush()
                             op_ok = True
             except HTTPException:

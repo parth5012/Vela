@@ -70,7 +70,7 @@ export function SyncConflictModal() {
                 sizes={sizes}
                 aurora={aurora}
                 reducedMotion={reducedMotion}
-                isResolving={resolvingIds.includes(conflict.id)}
+                isResolving={resolvingIds.length > 0}
                 onResolve={(resolution) => resolveConflict(conflict.id, resolution)}
               />
             ))}

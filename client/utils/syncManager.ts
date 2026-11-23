@@ -153,13 +153,12 @@ export async function syncStandaloneDataToBackend(
       totalPushed += accepted.length;
     }
 
-    // Now pull remote changes and hydrate store
+    // Hydrate store with synced local messages
     updateSyncStatus({
-      message: `Pushed ${totalPushed} messages. Merging remote updates...`,
+      message: `Pushed ${totalPushed} messages. Updating local store...`,
       pushedCount: totalPushed,
     });
 
-    await syncDatabase(normalizedApiUrl, apiKey);
     await hydrateChatFromLocalDb();
 
     updateSyncStatus({

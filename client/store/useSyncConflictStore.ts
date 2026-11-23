@@ -36,16 +36,28 @@ export interface SyncConflictState {
   resolveConflict: (id: string, resolution: ConflictResolution) => Promise<void>;
 }
 
+let isWritingStorage = false;
+let pendingStorageConflicts: SyncConflict[] | null = null;
+let resolutionQueue: Promise<void> = Promise.resolve();
+
 async function persistConflictsToStorage(conflicts: SyncConflict[]): Promise<void> {
-  try {
-    if (conflicts.length > 0) {
-      await AsyncStorage.setItem(CONFLICTS_STORAGE_KEY, JSON.stringify(conflicts));
-    } else {
-      await AsyncStorage.removeItem(CONFLICTS_STORAGE_KEY);
+  pendingStorageConflicts = conflicts;
+  if (isWritingStorage) return;
+  isWritingStorage = true;
+  while (pendingStorageConflicts !== null) {
+    const toWrite: SyncConflict[] = pendingStorageConflicts;
+    pendingStorageConflicts = null;
+    try {
+      if (toWrite.length > 0) {
+        await AsyncStorage.setItem(CONFLICTS_STORAGE_KEY, JSON.stringify(toWrite));
+      } else {
+        await AsyncStorage.removeItem(CONFLICTS_STORAGE_KEY);
+      }
+    } catch (err) {
+      console.warn('[useSyncConflictStore] Failed to persist conflicts to AsyncStorage:', err);
     }
-  } catch (err) {
-    console.warn('[useSyncConflictStore] Failed to persist conflicts to AsyncStorage:', err);
   }
+  isWritingStorage = false;
 }
 
 export const useSyncConflictStore = create<SyncConflictState>((set, get) => ({
@@ -58,7 +70,16 @@ export const useSyncConflictStore = create<SyncConflictState>((set, get) => ({
       if (raw) {
         const stored = JSON.parse(raw);
         if (Array.isArray(stored)) {
-          set({ conflicts: stored });
+          const valid = stored.filter(
+            (c) =>
+              c &&
+              typeof c.id === 'string' &&
+              c.localMessage &&
+              typeof c.localMessage.content === 'string' &&
+              c.serverMessage &&
+              typeof c.serverMessage.content === 'string'
+          );
+          set({ conflicts: valid });
         }
       }
     } catch (err) {
@@ -98,7 +119,8 @@ export const useSyncConflictStore = create<SyncConflictState>((set, get) => ({
 
     set((state) => ({ resolvingIds: [...state.resolvingIds, id] }));
 
-    try {
+    const doResolve = async () => {
+      try {
       const runInTx = async (fn: (runner: any) => Promise<void>) => {
         if (!db) {
           throw new Error('Local database unavailable');
@@ -290,5 +312,10 @@ export const useSyncConflictStore = create<SyncConflictState>((set, get) => ({
     } finally {
       set((state) => ({ resolvingIds: state.resolvingIds.filter((rid) => rid !== id) }));
     }
-  },
+  };
+
+  const task = resolutionQueue.catch(() => {}).then(doResolve);
+  resolutionQueue = task.catch(() => {});
+  return task;
+},
 }));
