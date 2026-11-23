@@ -77,10 +77,12 @@ export async function syncStandaloneDataToBackend(
   });
 
   try {
-    const unsynced = await db
+    const activeConflictIds = new Set(useSyncConflictStore.getState().conflicts.map((c) => c.id));
+    const allUnsynced = await db
       .select()
       .from(messages)
       .where(or(isNull(messages.server_id), eq(messages.pending, true)));
+    const unsynced = allUnsynced.filter((m: { id: string }) => !activeConflictIds.has(m.id));
 
     if (unsynced.length === 0) {
       // Nothing to push, just pull remote changes
@@ -178,88 +180,10 @@ export async function syncDatabase(apiUrl: string, apiKey: string): Promise<void
     return;
   }
 
-  // 1. Fetch pending MESSAGE sync operations. Device steps share the same
-  // operation_log table but drain exclusively via POST /api/sync/device-steps
-  // (drainDeviceStepSyncQueue) — POSTing them to /api/sync/push only earns a
-  // server rejection, so filter them out at the query (T5, issue #253).
-  const pendingOps = await db
-    .select()
-    .from(operationLog)
-    .where(eq(operationLog.type, 'message'));
-
-  // Per-row parse with quarantine: one corrupt payload must never abort the
-  // whole sync (T5, issue #253). Bad rows are deleted (dead-lettered) and
-  // logged; the message row itself is left untouched.
-  const mappedOps: {
-    id: string;
-    type: string;
-    conversation_id: string;
-    payload: unknown;
-  }[] = [];
-  for (const op of pendingOps) {
-    let decoded: unknown = null;
-    try {
-      decoded = JSON.parse(op.payload);
-      // Coderabbit #261: JSON.parse('null') succeeds but yields null, which
-      // would enter mappedOps and be POSTed to /api/sync/push whose payload
-      // contract requires a dictionary. Quarantine non-dictionary payloads.
-      if (typeof decoded !== 'object' || decoded === null || Array.isArray(decoded)) {
-        throw new Error('decoded payload is not a dictionary');
-      }
-      mappedOps.push({
-        id: op.id,
-        type: op.type,
-        conversation_id: op.conversation_id,
-        payload: decoded,
-      });
-    } catch (err) {
-      console.warn('[Sync] Quarantining operation with corrupt payload:', op.id, err);
-      try {
-        await db.delete(operationLog).where(eq(operationLog.id, op.id));
-      } catch (deleteErr) {
-        console.warn('[Sync] Failed to quarantine corrupt operation:', op.id, deleteErr);
-      }
-    }
-  }
-
-  // Defense-in-depth: even if the query filter above is ever bypassed
-  // (mocked db, query-builder drift), never POST device_step ops to /push.
-  // Also: exclude operations for message IDs that currently have unresolved conflicts
-  // so they are not pushed or prematurely marked synced before resolution commits.
-  const activeConflictIds = new Set(useSyncConflictStore.getState().conflicts.map((c) => c.id));
-  const pushableOps = mappedOps.filter(
-    (op) => op.type === 'message' && !activeConflictIds.has(op.id)
-  );
-
-  if (pushableOps.length > 0) {
-    const pushResponse = await fetch(`${apiUrl}/api/sync/push`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: JSON.stringify({ operations: pushableOps }),
-    });
-
-    if (!pushResponse.ok) {
-      throw new Error(`Sync push failed with status ${pushResponse.status}`);
-    }
-
-    const pushData = await pushResponse.json();
-    const accepted: string[] = pushData.accepted || [];
-
-    if (accepted.length > 0) {
-      await db.delete(operationLog).where(inArray(operationLog.id, accepted));
-      // Flip the local messages from pending to synced so the next offline
-      // flush does not re-push them, and record the server id.
-      for (const opId of accepted) {
-        await markMessageSynced(opId, opId);
-      }
-    }
-  }
-
-  // 2. Pull remote changes from backend
+  // 1. Pull remote changes from backend
+  // Pulling remote changes first ensures any conflicting messages with local pending
+  // edits are detected and routed to the conflict resolution store BEFORE local
+  // operations are pushed to the server and flipped from pending to synced.
   let currentCursor = await AsyncStorage.getItem('last_sync_cursor');
   let hasMore = true;
 
@@ -382,6 +306,87 @@ export async function syncDatabase(apiUrl: string, apiKey: string): Promise<void
 
     if (currentCursor) {
       await AsyncStorage.setItem('last_sync_cursor', currentCursor);
+    }
+  }
+
+  // 2. Fetch pending MESSAGE sync operations. Device steps share the same
+  // operation_log table but drain exclusively via POST /api/sync/device-steps
+  // (drainDeviceStepSyncQueue) — POSTing them to /api/sync/push only earns a
+  // server rejection, so filter them out at the query (T5, issue #253).
+  const pendingOps = await db
+    .select()
+    .from(operationLog)
+    .where(eq(operationLog.type, 'message'));
+
+  // Per-row parse with quarantine: one corrupt payload must never abort the
+  // whole sync (T5, issue #253). Bad rows are deleted (dead-lettered) and
+  // logged; the message row itself is left untouched.
+  const mappedOps: {
+    id: string;
+    type: string;
+    conversation_id: string;
+    payload: unknown;
+  }[] = [];
+  for (const op of pendingOps) {
+    let decoded: unknown = null;
+    try {
+      decoded = JSON.parse(op.payload);
+      // Coderabbit #261: JSON.parse('null') succeeds but yields null, which
+      // would enter mappedOps and be POSTed to /api/sync/push whose payload
+      // contract requires a dictionary. Quarantine non-dictionary payloads.
+      if (typeof decoded !== 'object' || decoded === null || Array.isArray(decoded)) {
+        throw new Error('decoded payload is not a dictionary');
+      }
+      mappedOps.push({
+        id: op.id,
+        type: op.type,
+        conversation_id: op.conversation_id,
+        payload: decoded,
+      });
+    } catch (err) {
+      console.warn('[Sync] Quarantining operation with corrupt payload:', op.id, err);
+      try {
+        await db.delete(operationLog).where(eq(operationLog.id, op.id));
+      } catch (deleteErr) {
+        console.warn('[Sync] Failed to quarantine corrupt operation:', op.id, deleteErr);
+      }
+    }
+  }
+
+  // Defense-in-depth: even if the query filter above is ever bypassed
+  // (mocked db, query-builder drift), never POST device_step ops to /push.
+  // Also: exclude operations for message IDs that currently have unresolved conflicts
+  // so they are not pushed or prematurely marked synced before resolution commits.
+  const activeConflictIds = new Set(useSyncConflictStore.getState().conflicts.map((c) => c.id));
+  const pushableOps = mappedOps.filter(
+    (op) => op.type === 'message' && !activeConflictIds.has(op.id)
+  );
+
+  if (pushableOps.length > 0) {
+    const pushResponse = await fetch(`${apiUrl}/api/sync/push`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({ operations: pushableOps }),
+    });
+
+    if (!pushResponse.ok) {
+      throw new Error(`Sync push failed with status ${pushResponse.status}`);
+    }
+
+    const pushData = await pushResponse.json();
+    const accepted: string[] = pushData.accepted || [];
+
+    if (accepted.length > 0) {
+      await db.delete(operationLog).where(inArray(operationLog.id, accepted));
+      // Flip the local messages from pending to synced so the next offline
+      // flush does not re-push them, and record the server id.
+      for (const opId of accepted) {
+        await markMessageSynced(opId, opId);
+      }
     }
   }
 }

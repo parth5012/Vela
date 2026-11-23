@@ -30,12 +30,22 @@ jest.mock('../db/client', () => {
     })),
   }));
 
+  const mockTransaction = jest.fn(async (cb: (tx: any) => Promise<void>) =>
+    cb({
+      select: mockSelect,
+      insert: mockInsert,
+      delete: mockDelete,
+      update: mockUpdate,
+    })
+  );
+
   return {
     db: {
       select: mockSelect,
       insert: mockInsert,
       delete: mockDelete,
       update: mockUpdate,
+      transaction: mockTransaction,
     },
     initializeDatabase: jest.fn(async () => {}),
     expoDb: {},
@@ -44,6 +54,7 @@ jest.mock('../db/client', () => {
       insert: mockInsert,
       delete: mockDelete,
       update: mockUpdate,
+      transaction: mockTransaction,
     },
   };
 });
@@ -78,8 +89,9 @@ describe('useSyncConflictStore', () => {
     },
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
+    await AsyncStorage.clear();
     useSyncConflictStore.getState().clearConflicts();
     useChatStore.setState({
       messages: {
@@ -109,6 +121,21 @@ describe('useSyncConflictStore', () => {
     expect(useSyncConflictStore.getState().conflicts.length).toBe(1);
   });
 
+  it('persists conflicts to AsyncStorage and restores them via hydrateConflicts', async () => {
+    const store = useSyncConflictStore.getState();
+    store.addConflict(sampleConflict);
+
+    // Reset in-memory store state to simulate app restart
+    useSyncConflictStore.setState({ conflicts: [], resolvingIds: [] });
+    expect(useSyncConflictStore.getState().conflicts).toEqual([]);
+
+    // Hydrate from AsyncStorage
+    await useSyncConflictStore.getState().hydrateConflicts();
+    const hydrated = useSyncConflictStore.getState().conflicts;
+    expect(hydrated.length).toBe(1);
+    expect(hydrated[0].id).toBe(sampleConflict.id);
+  });
+
   it('removes conflict by id', () => {
     const store = useSyncConflictStore.getState();
     store.addConflict(sampleConflict);
@@ -118,7 +145,7 @@ describe('useSyncConflictStore', () => {
     expect(useSyncConflictStore.getState().conflicts.length).toBe(0);
   });
 
-  it('resolves conflict with "local"', async () => {
+  it('resolves conflict with "local" inside db.transaction', async () => {
     const store = useSyncConflictStore.getState();
     store.addConflict(sampleConflict);
 
@@ -126,6 +153,9 @@ describe('useSyncConflictStore', () => {
 
     // Confirmed removed from conflict list
     expect(useSyncConflictStore.getState().conflicts).toEqual([]);
+
+    // Transaction executed
+    expect((db as any).transaction).toHaveBeenCalled();
 
     // Confirmed db operations: marked pending = true in messages, inserted into operationLog
     expect(db.update).toHaveBeenCalled();
@@ -145,9 +175,10 @@ describe('useSyncConflictStore', () => {
     expect(db.update).toHaveBeenCalled();
     expect(db.delete).toHaveBeenCalled();
 
-    // In-memory chat store updated
+    // In-memory chat store updated with server content and server created_at
     const updatedMessages = useChatStore.getState().messages['conv_1'];
     expect(updatedMessages[0].content).toBe('Server remote text');
+    expect(updatedMessages[0].created_at).toBe(new Date(2000).toISOString());
   });
 
   it('resolves conflict with "both"', async () => {
@@ -171,6 +202,24 @@ describe('useSyncConflictStore', () => {
     expect(convMessages.length).toBe(2);
     expect(convMessages[0].content).toBe('Server remote text');
     expect(convMessages[1].content).toBe('Local text edited offline *');
+  });
+
+  it('retains conflict in queue and re-throws if transaction fails', async () => {
+    const store = useSyncConflictStore.getState();
+    store.addConflict(sampleConflict);
+
+    // Mock transaction throwing an error
+    (db.update as jest.Mock).mockImplementationOnce(() => {
+      throw new Error('SQLite write failure');
+    });
+
+    await expect(store.resolveConflict('msg_conflict_1', 'local')).rejects.toThrow(
+      'SQLite write failure'
+    );
+
+    // Conflict must NOT be discarded from the queue
+    expect(useSyncConflictStore.getState().conflicts.length).toBe(1);
+    expect(useSyncConflictStore.getState().resolvingIds).toEqual([]);
   });
 
   it('prevents concurrent double-resolution for the same conflict id', async () => {

@@ -94,8 +94,10 @@ describe('syncDatabase engine', () => {
   });
 
   it('should skip sync if operation log is empty and no remote items pulled', async () => {
-    mockPendingOps([]);
+    // 1. Pull phase (empty)
     mockPullEmpty();
+    // 2. Push phase (no pending ops)
+    mockPendingOps([]);
 
     await syncDatabase('https://api.vela.run', 'test_key');
 
@@ -108,17 +110,17 @@ describe('syncDatabase engine', () => {
       { id: 'op_1', type: 'message', conversation_id: 'conv_1', payload: JSON.stringify({ role: 'user', content: 'test' }), created_at: Date.now() },
     ];
 
-    mockPendingOps(mockPendingOpsRows);
-    mockEmptySelects();
+    // 1. Pull phase (empty)
+    mockPullEmpty();
 
-    // Post to push
+    // 2. Push phase: Post to push
     (globalThis.fetch as jest.Mock).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ accepted: ['op_1'], rejected: [] }),
     });
 
-    // Get for pull
-    mockPullEmpty();
+    mockPendingOps(mockPendingOpsRows);
+    mockEmptySelects();
 
     await syncDatabase('https://api.vela.run', 'test_key');
 
@@ -131,17 +133,17 @@ describe('syncDatabase engine', () => {
       { id: 'op_1', type: 'message', conversation_id: 'conv_1', payload: JSON.stringify({ role: 'user', content: 'test' }), created_at: Date.now() },
     ];
 
-    mockPendingOps(mockPendingOpsRows);
-    mockEmptySelects();
+    // 1. Pull phase (empty)
+    mockPullEmpty();
 
-    // Post to push — op_1 accepted
+    // 2. Post to push — op_1 accepted
     (globalThis.fetch as jest.Mock).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ accepted: ['op_1'], rejected: [] }),
     });
 
-    // Get for pull — nothing new
-    mockPullEmpty();
+    mockPendingOps(mockPendingOpsRows);
+    mockEmptySelects();
 
     // Record update calls for markMessageSynced
     const updateMocks = (db.update as jest.Mock).mock.calls;
@@ -154,9 +156,9 @@ describe('syncDatabase engine', () => {
   });
 
   it('should filter the push query to message ops (T5: device steps drain elsewhere)', async () => {
+    mockPullEmpty();
     mockPendingOps([]);
     mockEmptySelects();
-    mockPullEmpty();
 
     await syncDatabase('https://api.vela.run', 'test_key');
 
@@ -173,7 +175,14 @@ describe('syncDatabase engine', () => {
       { id: 'op_step', type: 'device_step', conversation_id: 'conv_1', payload: JSON.stringify({ toolName: 'device_click' }), created_at: Date.now() },
     ];
 
-    // First call (push phase) returns the mixed rows; everything after is empty.
+    mockPullEmpty();
+
+    (globalThis.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ accepted: ['op_msg'], rejected: [] }),
+    });
+
+    // Push phase select returns the mixed rows
     (db.select as jest.Mock).mockImplementationOnce(() => ({
       from: jest.fn(() => ({
         where: jest.fn(() => Promise.resolve(rows)),
@@ -182,15 +191,12 @@ describe('syncDatabase engine', () => {
     }));
     mockEmptySelects();
 
-    (globalThis.fetch as jest.Mock).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ accepted: ['op_msg'], rejected: [] }),
-    });
-    mockPullEmpty();
-
     await syncDatabase('https://api.vela.run', 'test_key');
 
-    const pushCall = (globalThis.fetch as jest.Mock).mock.calls[0];
+    const pushCall = (globalThis.fetch as jest.Mock).mock.calls.find((c: any[]) =>
+      c[0].endsWith('/api/sync/push')
+    );
+    expect(pushCall).toBeDefined();
     const pushBody = JSON.parse(pushCall[1].body);
     const pushedIds = pushBody.operations.map((op: any) => op.id);
     expect(pushedIds).toEqual(['op_msg']);
@@ -203,6 +209,14 @@ describe('syncDatabase engine', () => {
       { id: 'op_bad', type: 'message', conversation_id: 'conv_1', payload: '{not valid json', created_at: Date.now() },
     ];
 
+    mockPullEmpty();
+
+    (globalThis.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ accepted: ['op_good'], rejected: [] }),
+    });
+
+    // Push phase select returns the rows
     (db.select as jest.Mock).mockImplementationOnce(() => ({
       from: jest.fn(() => ({
         where: jest.fn(() => Promise.resolve(rows)),
@@ -211,17 +225,14 @@ describe('syncDatabase engine', () => {
     }));
     mockEmptySelects();
 
-    (globalThis.fetch as jest.Mock).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ accepted: ['op_good'], rejected: [] }),
-    });
-    mockPullEmpty();
-
     // Must not throw; the corrupt row is quarantined, the good row syncs.
     await expect(syncDatabase('https://api.vela.run', 'test_key')).resolves.toBeUndefined();
 
     // Push carried only the good op.
-    const pushCall = (globalThis.fetch as jest.Mock).mock.calls[0];
+    const pushCall = (globalThis.fetch as jest.Mock).mock.calls.find((c: any[]) =>
+      c[0].endsWith('/api/sync/push')
+    );
+    expect(pushCall).toBeDefined();
     const pushBody = JSON.parse(pushCall[1].body);
     expect(pushBody.operations.map((op: any) => op.id)).toEqual(['op_good']);
 
@@ -240,6 +251,14 @@ describe('syncDatabase engine', () => {
       { id: 'op_null', type: 'message', conversation_id: 'conv_1', payload: 'null', created_at: Date.now() },
     ];
 
+    mockPullEmpty();
+
+    (globalThis.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ accepted: ['op_good'], rejected: [] }),
+    });
+
+    // Push phase select returns the rows
     (db.select as jest.Mock).mockImplementationOnce(() => ({
       from: jest.fn(() => ({
         where: jest.fn(() => Promise.resolve(rows)),
@@ -248,15 +267,12 @@ describe('syncDatabase engine', () => {
     }));
     mockEmptySelects();
 
-    (globalThis.fetch as jest.Mock).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ accepted: ['op_good'], rejected: [] }),
-    });
-    mockPullEmpty();
-
     await expect(syncDatabase('https://api.vela.run', 'test_key')).resolves.toBeUndefined();
 
-    const pushCall = (globalThis.fetch as jest.Mock).mock.calls[0];
+    const pushCall = (globalThis.fetch as jest.Mock).mock.calls.find((c: any[]) =>
+      c[0].endsWith('/api/sync/push')
+    );
+    expect(pushCall).toBeDefined();
     const pushBody = JSON.parse(pushCall[1].body);
     expect(pushBody.operations.map((op: any) => op.id)).toEqual(['op_good']);
 
