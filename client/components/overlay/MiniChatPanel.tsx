@@ -52,9 +52,10 @@ export default function MiniChatPanel({ onMinimize, onClose }: MiniChatPanelProp
   const scrollViewRef = useRef<ScrollView>(null);
 
   // Auto-scroll when messages arrive or stream updates
+  const lastMessageContent = messages.length > 0 ? messages[messages.length - 1]?.content : '';
   useEffect(() => {
     scrollViewRef.current?.scrollToEnd({ animated: !reducedMotion });
-  }, [messages.length, isStreaming, reducedMotion]);
+  }, [messages.length, lastMessageContent, isStreaming, reducedMotion]);
 
   // Voice input integration
   const voice = useVoiceInput({
