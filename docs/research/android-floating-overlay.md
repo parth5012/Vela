@@ -41,7 +41,7 @@ This document evaluates:
   )
   context.startActivity(intent)
   ```
-  *Note:* Vela's `permissionManager.ts` already provides `buildSettingsDeepLink('overlay')` targeting `android.settings.action.MANAGE_OVERLAY_PERMISSION`.
+  *Note:* While Android provides `ACTION_MANAGE_OVERLAY_PERMISSION`, Vela's in-app floating overlay operates entirely within the application window and intentionally does not request or require `SYSTEM_ALERT_WINDOW`.
 
 ### 2.2 System Window Management (`WindowManager`)
 To display a system-level floating view above other applications:
@@ -64,17 +64,20 @@ To display a system-level floating view above other applications:
   2. Google Play Store Policy: Google strictly enforces `SYSTEM_ALERT_WINDOW` review requirements. Apps using system overlays for assistant chat bubbles frequently receive policy warnings unless classified as dialer, navigation, or accessibility tools.
   3. Non-portable: Breaks entirely on Web (Expo Web) and iOS.
 
-### Option B: In-App Floating Overlay with Deep-Link System Gating (Recommended)
+### Option B: In-App Floating Overlay (Recommended)
 - **Mechanism:**
   - Render an interactive, draggable floating bubble directly in the root layout (`app/_layout.tsx` or top-level provider) above the navigation hierarchy.
-  - Provide an on-demand permission toggle in Settings (`Floating Overlay`).
-  - When enabled, check Android overlay permission. If not granted, present an explanatory rationale modal and deep-link directly to `openSettings('overlay')`.
-  - Fall back gracefully to the in-app floating overlay across all screens within Vela (on Android, Web, and iOS), displaying an advisory badge if system overlay is ungranted.
+  - Provide an on-demand toggle in Settings (`Floating Overlay`).
+  - Operates consistently as an in-app overlay across all screens within Vela (on Android, Web, and iOS) without requiring dangerous system-level alert window permissions or OS-level settings hops.
 - **Benefits:**
   1. Zero native crash risk, zero memory leak risk.
   2. Full access to React state, navigation, theme tokens (`useAurora`), and `useChatStore`.
   3. Clean fallback across Android, iOS, and Web.
   4. Fully compliant with Google Play Store policies.
+
+### Option C: System Permission Gating with Settings Deep-Link (Rejected Alternative)
+- **Mechanism:** Prompting users for `android.permission.SYSTEM_ALERT_WINDOW` or deep-linking to Android `ACTION_MANAGE_OVERLAY_PERMISSION` to gate the in-app overlay.
+- **Reason for Rejection:** An in-app View rendered within the React Native root does not draw outside the app's window, making OS-level overlay permissions unnecessary. Demanding system-level overlay permission triggers Play Store policy scrutiny and creates confusing UX when the app cannot draw over third-party apps regardless.
 
 ---
 
@@ -131,10 +134,9 @@ export interface FloatingOverlayConfig {
 ```
 Settings UI provides:
 1. Floating Overlay toggle (master on/off).
-2. Permission status indicator (System Overlay: Granted / Denied / Fallback).
-3. "Voice Input in Overlay" switch.
-4. "Image Attachments in Overlay" switch.
-5. "Reset Overlay Position" button.
+2. "Voice Input in Overlay" switch.
+3. "Image Attachments in Overlay" switch.
+4. "Reset Overlay Position" button.
 
 ---
 
@@ -142,7 +144,7 @@ Settings UI provides:
 
 1. **State & Configuration:**
    - Update `useConfigStore.ts` with `floatingOverlay` settings (enabled, dockSide, dockY, enableVoice, enableImages).
-   - Ensure `permissionManager.ts` supports overlay status checking and settings launch.
+   - Ensure settings cleanly toggle overlay state without unneeded OS permission checks.
 
 2. **Components (`client/components/overlay/`):**
    - `FloatingBubble.tsx`: Draggable, edge-docking, dismiss-detecting circular button.
