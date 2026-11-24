@@ -55,8 +55,14 @@ export function parseNotificationData(
     if (id) conversation_id = id;
   }
 
-  if (conversation_id) return { type, conversation_id };
-  return { type };
+  const rawRoute = (data as Record<string, string>).route;
+  const route = rawRoute ? String(rawRoute).trim() : undefined;
+
+  return {
+    type,
+    ...(conversation_id ? { conversation_id } : {}),
+    ...(route ? { route } : {}),
+  };
 }
 
 /**
@@ -219,6 +225,12 @@ export function routeByType(
         console.log(`[notifications] routing ${normalizedType} without conversation_id`);
       }
       router.replace('/');
+      break;
+    }
+    case 'settings': {
+      const targetRoute = parsed.route || '/settings';
+      console.log(`[notifications] routing ${normalizedType} to ${targetRoute}`);
+      router.replace(targetRoute);
       break;
     }
     default: {

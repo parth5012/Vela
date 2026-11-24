@@ -40,7 +40,11 @@ function TimeStepper({
   const { colors, sizes } = useAurora();
 
   return (
-    <View style={styles.timeStepperContainer}>
+    <View
+      style={styles.timeStepperContainer}
+      accessible={true}
+      accessibilityLabel={`${label}: ${padTime(hour)}:${padTime(minute)}`}
+    >
       <Text style={[styles.timeLabel, { color: colors.text, fontSize: sizes.text }]}>
         {label}
       </Text>
