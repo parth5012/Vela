@@ -34,65 +34,10 @@ import FloatingOverlayRoot from '../components/overlay/FloatingOverlayRoot';
 import { persistentWebviewContainerStyle, persistentWebviewPointerEvents } from '../utils/persistentWebviewStyle';
 import { registerAndPostToken } from '../utils/pushRegistration';
 import { routeByType } from '../utils/notificationRouting';
-import { evaluateNotificationDelivery } from '../utils/notificationGate';
-import { useNotificationStore } from '../store/useNotificationStore';
+import { handleForegroundNotification } from '../utils/notificationGate';
 
 Notifications.setNotificationHandler({
-  handleNotification: async (notification) => {
-    const content = (notification as { request?: { content?: { title?: string; body?: string; data?: Record<string, unknown> } } })?.request?.content;
-    const data = content?.data;
-    const isAlreadyDeferred = data?.deferred === true;
-    const rawType = (data?.type as string) || (data?.channel as string);
-
-    if (isAlreadyDeferred) {
-      return {
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: false,
-        shouldShowBanner: true,
-        shouldShowList: true,
-      };
-    }
-
-    const evaluation = evaluateNotificationDelivery(rawType, new Date(), false);
-
-    if (evaluation.isDeferred && evaluation.deferredDate) {
-      try {
-        const deferredId = await Notifications.scheduleNotificationAsync({
-          content: {
-            title: content?.title || 'Notification',
-            body: content?.body || '',
-            data: { ...(data || {}), deferred: true },
-          },
-          trigger: {
-            type: Notifications.SchedulableTriggerInputTypes.DATE,
-            date: evaluation.deferredDate,
-          },
-        });
-        useNotificationStore.getState().trackDeferredNotificationId(deferredId);
-      } catch (err) {
-        console.warn('[notifications] Failed to reschedule deferred notification:', err);
-      }
-
-      return {
-        shouldShowAlert: false,
-        shouldPlaySound: false,
-        shouldSetBadge: false,
-        shouldShowBanner: false,
-        shouldShowList: false,
-      };
-    }
-
-    const shouldPresent = evaluation.shouldDeliver;
-
-    return {
-      shouldShowAlert: shouldPresent,
-      shouldPlaySound: shouldPresent,
-      shouldSetBadge: false,
-      shouldShowBanner: shouldPresent,
-      shouldShowList: shouldPresent,
-    };
-  },
+  handleNotification: handleForegroundNotification,
 });
 
 

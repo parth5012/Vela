@@ -12,9 +12,11 @@ import {
   getNextQuietHoursEnd,
   evaluateNotificationDelivery,
   scheduleGatedNotification,
+  handleForegroundNotification,
+  cancelDeferredNotifications,
 } from '../utils/notificationGate';
 import { parseUrl, routeByType } from '../utils/notificationRouting';
-import NotificationsSettingsScreen from '../app/settings/notifications';
+import NotificationsSettingsScreen, { TimeStepper } from '../app/settings/notifications';
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({
@@ -78,7 +80,7 @@ describe('Notification Settings & Gating (#604, #607)', () => {
       expect(useNotificationStore.getState().deferredNotificationIds).toEqual(['notif-1', 'notif-2']);
 
       await act(async () => {
-        await useNotificationStore.getState().clearDeferredNotifications();
+        await cancelDeferredNotifications();
       });
 
       expect(useNotificationStore.getState().deferredNotificationIds).toEqual([]);
@@ -394,6 +396,178 @@ describe('Notification Settings & Gating (#604, #607)', () => {
       expect(flattened).toContain('Morning Briefing');
       expect(flattened).toContain('Daily Check-in');
       expect(flattened).toContain('Action Approvals');
+    });
+  });
+
+  describe('handleForegroundNotification', () => {
+    it('presents immediately when outside quiet hours', async () => {
+      const notification = {
+        request: {
+          identifier: 'test-1',
+          content: {
+            title: 'Task Done',
+            body: 'Finished downloading',
+            data: { type: 'task_completion' },
+          },
+        },
+      } as any;
+
+      const behavior = await handleForegroundNotification(notification);
+      expect(behavior.shouldShowAlert).toBe(true);
+      expect(behavior.shouldPlaySound).toBe(true);
+    });
+
+    it('defers delivery with Date trigger when quiet hours are active', async () => {
+      act(() => {
+        useNotificationStore.getState().setQuietHours({
+          enabled: true,
+          startHour: 0,
+          startMinute: 0,
+          endHour: 23,
+          endMinute: 59,
+        });
+      });
+
+      const notification = {
+        request: {
+          identifier: 'test-quiet',
+          content: {
+            title: 'Quiet Notification',
+            body: 'Should be deferred',
+            data: { type: 'task_completion' },
+          },
+        },
+      } as any;
+
+      const behavior = await handleForegroundNotification(notification);
+      expect(behavior.shouldShowAlert).toBe(false);
+      expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          identifier: 'deferred-test-quiet',
+          content: expect.objectContaining({
+            data: expect.objectContaining({ deferred: true }),
+          }),
+          trigger: expect.objectContaining({
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
+          }),
+        })
+      );
+    });
+
+    it('presents pre-approved deferred notifications immediately', async () => {
+      act(() => {
+        useNotificationStore.getState().setQuietHours({
+          enabled: true,
+          startHour: 0,
+          startMinute: 0,
+          endHour: 23,
+          endMinute: 59,
+        });
+      });
+
+      const notification = {
+        request: {
+          identifier: 'deferred-123',
+          content: {
+            title: 'Re-delivered notification',
+            body: 'Firing after quiet hours',
+            data: { type: 'task_completion', deferred: true },
+          },
+        },
+      } as any;
+
+      const behavior = await handleForegroundNotification(notification);
+      expect(behavior.shouldShowAlert).toBe(true);
+      expect(behavior.shouldPlaySound).toBe(true);
+    });
+
+    it('suppresses presentation when channel is disabled', async () => {
+      act(() => {
+        useNotificationStore.getState().setChannelEnabled('briefing', false);
+      });
+
+      const notification = {
+        request: {
+          identifier: 'test-briefing',
+          content: {
+            title: 'Morning Briefing',
+            body: 'Here is your update',
+            data: { type: 'briefing' },
+          },
+        },
+      } as any;
+
+      const behavior = await handleForegroundNotification(notification);
+      expect(behavior.shouldShowAlert).toBe(false);
+    });
+  });
+
+  describe('TimeStepper hour and minute wrapping', () => {
+    it('borrows an hour when decrementing from minute 0', () => {
+      const mockChange = jest.fn();
+      let root: renderer.ReactTestRenderer | null = null;
+      act(() => {
+        root = renderer.create(
+          <TimeStepper
+            label="Start Time"
+            hour={22}
+            minute={0}
+            onChange={mockChange}
+          />
+        );
+      });
+
+      const decMinuteBtn = root!.root.findByProps({
+        accessibilityLabel: 'Decrease Start Time minute',
+      });
+      act(() => {
+        decMinuteBtn.props.onPress();
+      });
+
+      // Hour borrows: 22 -> 21, minute -> 45
+      expect(mockChange).toHaveBeenCalledWith(21, 45);
+    });
+
+    it('increments hour when advancing past minute 45', () => {
+      const mockChange = jest.fn();
+      let root: renderer.ReactTestRenderer | null = null;
+      act(() => {
+        root = renderer.create(
+          <TimeStepper
+            label="End Time"
+            hour={22}
+            minute={45}
+            onChange={mockChange}
+          />
+        );
+      });
+
+      const incMinuteBtn = root!.root.findByProps({
+        accessibilityLabel: 'Increase End Time minute',
+      });
+      act(() => {
+        incMinuteBtn.props.onPress();
+      });
+
+      // Hour advances: 22 -> 23, minute -> 0
+      expect(mockChange).toHaveBeenCalledWith(23, 0);
+    });
+  });
+
+  describe('cancelDeferredNotifications', () => {
+    it('cancels all tracked deferred notification IDs and clears the registry', async () => {
+      act(() => {
+        useNotificationStore.getState().trackDeferredNotificationId('def-1');
+        useNotificationStore.getState().trackDeferredNotificationId('def-2');
+      });
+
+      expect(useNotificationStore.getState().deferredNotificationIds).toEqual(['def-1', 'def-2']);
+
+      await cancelDeferredNotifications();
+
+      expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith('def-1');
+      expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith('def-2');
+      expect(useNotificationStore.getState().deferredNotificationIds).toEqual([]);
     });
   });
 });

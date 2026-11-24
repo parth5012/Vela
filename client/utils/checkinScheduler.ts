@@ -163,6 +163,7 @@ export async function presentCheckinNotification(
     await scheduleGatedNotification({
       identifier,
       channel: 'checkin',
+      channelId: CHECKIN_CHANNEL_ID,
       title,
       body,
       data: { type: 'checkin' },
