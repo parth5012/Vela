@@ -520,7 +520,7 @@ describe('Notification Settings & Gating (#604, #607)', () => {
             title: 'Action Approval',
             body: 'Confirmation needed',
             data: { type: 'approval' },
-            android: { channelId: 'vela-approval', priority: 'high' },
+            android: { channelId: 'vela_approval', priority: 'high' },
           },
         },
       } as any;
@@ -529,10 +529,10 @@ describe('Notification Settings & Gating (#604, #607)', () => {
       expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledWith(
         expect.objectContaining({
           content: expect.objectContaining({
-            android: expect.objectContaining({ channelId: 'vela-approval' }),
+            android: expect.objectContaining({ channelId: 'vela_approval' }),
           }),
           trigger: expect.objectContaining({
-            channelId: 'vela-approval',
+            channelId: 'vela_approval',
           }),
         })
       );

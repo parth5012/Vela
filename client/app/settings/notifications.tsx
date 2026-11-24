@@ -226,7 +226,7 @@ export default function NotificationsSettingsScreen() {
       <View style={styles.sectionHeader}>
         <SectionTitle>Quiet Hours</SectionTitle>
         <SectionSubtitle>
-          Defer notification alerts during designated rest hours
+          Defer in-app notifications and scheduled reminders during rest hours
         </SectionSubtitle>
       </View>
 
@@ -287,7 +287,7 @@ export default function NotificationsSettingsScreen() {
                 <Text style={{ color: aurora.acc1, fontWeight: '700' }}>
                   {formatTime(quietHours.endHour, quietHours.endMinute)}
                 </Text>
-                .
+                {' '}while Vela is active.
               </Text>
             </View>
           </View>

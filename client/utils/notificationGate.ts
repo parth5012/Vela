@@ -79,8 +79,10 @@ export async function cancelScheduledNotificationsForChannel(
     const scheduled = await Notifications.getAllScheduledNotificationsAsync();
     for (const item of scheduled) {
       const data = item.content?.data as Record<string, unknown> | undefined;
+      const isDeferred = data?.deferred === true || data?.deferred === 'true';
       const itemChannel = normalizeChannelKey((data?.channel as string) || (data?.type as string));
-      if (itemChannel === channel && typeof Notifications.cancelScheduledNotificationAsync === 'function') {
+      // Only cancel deferred notifications scheduled by the gate; preserve recurring schedules (e.g. check-ins)
+      if (itemChannel === channel && isDeferred && typeof Notifications.cancelScheduledNotificationAsync === 'function') {
         await Notifications.cancelScheduledNotificationAsync(item.identifier).catch(() => {});
       }
     }
@@ -182,7 +184,7 @@ export function evaluateNotificationDelivery(
   if (!hasHydrated && typeof process !== 'undefined' && process.env?.NODE_ENV !== 'test') {
     return {
       shouldDeliver: false,
-      isDeferred: true,
+      isDeferred: false,
       channel: channel ?? undefined,
       reason: 'store_not_hydrated',
     };
@@ -375,6 +377,8 @@ export async function handleForegroundNotification(
           title: content?.title || 'Notification',
           body: content?.body || '',
           data: { ...(data || {}), deferred: true, originalTime: new Date().toISOString() },
+          ...(content?.sound ? { sound: content.sound } : {}),
+          ...(typeof content?.badge === 'number' ? { badge: content.badge } : {}),
           ...(androidConfig ? { android: androidConfig } : {}),
         },
         trigger: {
@@ -386,6 +390,14 @@ export async function handleForegroundNotification(
       useNotificationStore.getState().trackDeferredNotificationId(scheduledId);
     } catch (err) {
       console.warn('[notificationGate] Failed to reschedule deferred notification:', err);
+      // Fallback: present immediately rather than silently dropping
+      return {
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      };
     }
 
     return {
