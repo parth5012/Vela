@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useConfigStore, PermissionTier, DeviceAgentPermissions } from '../../store/useConfigStore';
+import { useConfigStore, DeviceAgentPermissions } from '../../store/useConfigStore';
 import { useDeviceSessionStore } from '../../store/useDeviceSessionStore';
 import { openSettings, canOpenSettingsAction } from '../../utils/permissionManager';
 import {

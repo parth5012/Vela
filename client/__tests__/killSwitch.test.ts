@@ -110,11 +110,47 @@ describe('Kill Switch & Emergency Abort Integration', () => {
     // Native module is null
     mockHolder.mod = null;
 
-    let checkCallState: () => void = () => {};
-    // Hook into startAutomationSession or test execution
     const res = await executeDeviceAction('device_tap', '@e5', 'click');
     expect(res.outcome).toBe('unavailable');
     expect(res.observation).toContain('unavailable');
     expect(res.observation).not.toContain('indeterminate');
+  });
+
+  it('tracks overlapping executeDeviceAction dispatches without clearing session state prematurely', async () => {
+    let resolveAction1: (val: any) => void = () => {};
+    let resolveAction2: (val: any) => void = () => {};
+
+    const promise1 = new Promise((res) => { resolveAction1 = res; });
+    const promise2 = new Promise((res) => { resolveAction2 = res; });
+
+    let callCount = 0;
+    mockHolder.mod.performAction = jest.fn().mockImplementation(() => {
+      callCount++;
+      return callCount === 1 ? promise1 : promise2;
+    });
+
+    const exec1 = executeDeviceAction('device_tap', '@e10');
+    expect(useDeviceSessionStore.getState().pendingDispatches).toBe(1);
+    expect(useDeviceSessionStore.getState().hasPendingWork).toBe(true);
+    expect(useDeviceSessionStore.getState().isAutomationRunning).toBe(true);
+
+    const exec2 = executeDeviceAction('device_type', '@e11', 'hello');
+    expect(useDeviceSessionStore.getState().pendingDispatches).toBe(2);
+    expect(useDeviceSessionStore.getState().hasPendingWork).toBe(true);
+    expect(useDeviceSessionStore.getState().isAutomationRunning).toBe(true);
+
+    resolveAction1(true);
+    await exec1;
+
+    expect(useDeviceSessionStore.getState().pendingDispatches).toBe(1);
+    expect(useDeviceSessionStore.getState().hasPendingWork).toBe(true);
+    expect(useDeviceSessionStore.getState().isAutomationRunning).toBe(true);
+
+    resolveAction2(true);
+    await exec2;
+
+    expect(useDeviceSessionStore.getState().pendingDispatches).toBe(0);
+    expect(useDeviceSessionStore.getState().hasPendingWork).toBe(false);
+    expect(useDeviceSessionStore.getState().isAutomationRunning).toBe(false);
   });
 });

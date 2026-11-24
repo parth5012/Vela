@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, Modal, Pressable, ScrollView, ActivityIndicator, Platform } from 'react-native';
 import { useDeviceSessionStore, type SimplifiedDomNode } from '../../store/useDeviceSessionStore';
 import { parseScreenHierarchy } from '../../utils/domSimplifier';
@@ -18,6 +18,7 @@ export function ScreenMirrorModal() {
 
   const [selectedNode, setSelectedNode] = useState<SimplifiedDomNode | null>(null);
   const [isSimulated, setIsSimulated] = useState(false);
+  const hasFetchedRef = useRef(false);
 
   const fetchScreenTree = useCallback(async () => {
     setLoading(true);
@@ -57,16 +58,25 @@ export function ScreenMirrorModal() {
     } catch (e) {
       console.warn('[ScreenMirrorModal] Failed to fetch screen hierarchy:', e);
       setHierarchy([]);
+      setIsSimulated(true);
     } finally {
       setLoading(false);
     }
   }, [setHierarchy, setLoading]);
 
+  const handleRefresh = () => {
+    setSelectedNode(null);
+    fetchScreenTree();
+  };
+
   useEffect(() => {
-    if (visible && (!hierarchy || hierarchy.length === 0)) {
+    if (visible && !hasFetchedRef.current) {
+      hasFetchedRef.current = true;
       fetchScreenTree();
+    } else if (!visible) {
+      hasFetchedRef.current = false;
     }
-  }, [visible, hierarchy, fetchScreenTree]);
+  }, [visible, fetchScreenTree]);
 
   if (!visible) return null;
 
@@ -92,6 +102,7 @@ export function ScreenMirrorModal() {
             pressed && { opacity: 0.7 },
           ]}
           accessibilityRole="button"
+          accessibilityState={{ selected: isSelected }}
           accessibilityLabel={`DOM Node ${node.id}, type ${node.type}`}
         >
           <View style={[styles.typeBadge, { backgroundColor: `${typeColor}20`, borderColor: typeColor }]}>
@@ -228,7 +239,7 @@ export function ScreenMirrorModal() {
           {/* Action Row */}
           <View style={styles.actionRow}>
             <Pressable
-              onPress={fetchScreenTree}
+              onPress={handleRefresh}
               style={({ pressed }) => [
                 styles.refreshBtn,
                 { backgroundColor: aurora.acc1 || '#3b82f6' },

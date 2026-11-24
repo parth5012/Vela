@@ -2,6 +2,7 @@ import type { ShizukuStatus } from '../../utils/shizuku';
 
 export interface DeviceAgentNative {
   getScreenTree(): Promise<string>;
+  isAccessibilityEnabled?(): Promise<boolean>;
   performAction(action: string, target: string, value: string, ref: string): Promise<boolean>;
   getDeviceInfo(): Promise<Record<string, any>>;
   takeScreenshot(): Promise<string>;

@@ -44,6 +44,13 @@ class DeviceAgentModule : Module() {
         // WF-583: push-to-talk voice input.
         private const val RECORD_AUDIO_REQUEST_CODE = 4402
         private const val SPEECH_PARTIAL_EVENT = "onSpeechPartial"
+        private const val VOLUME_KEY_EVENT = "onDeviceVolumeKeyEvent"
+        @Volatile
+        var instance: DeviceAgentModule? = null
+
+        fun emitVolumeKeyEvent() {
+            instance?.sendEvent(VOLUME_KEY_EVENT, mapOf("source" to "volume_key"))
+        }
         private var speechRecognizer: SpeechRecognizer? = null
         private var speechAudioFile: File? = null
         private var speechRecorder: MediaRecorder? = null
@@ -149,7 +156,21 @@ class DeviceAgentModule : Module() {
 
         // WF-583: interim speech-recognition results (final result is returned
         // by stopSpeechRecognition()).
-        Events(SPEECH_PARTIAL_EVENT)
+        Events(SPEECH_PARTIAL_EVENT, VOLUME_KEY_EVENT)
+
+        OnCreate {
+            instance = this@DeviceAgentModule
+        }
+
+        OnDestroy {
+            if (instance == this@DeviceAgentModule) {
+                instance = null
+            }
+        }
+
+        AsyncFunction("isAccessibilityEnabled") {
+            VelaAccessibilityService.instance != null
+        }
 
         AsyncFunction("getScreenTree") {
             val service = VelaAccessibilityService.instance

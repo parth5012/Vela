@@ -394,6 +394,13 @@ async function executeDeviceActionInternal(
     return executeShizukuOp(toolName, target, value);
   }
 
+  if (useDeviceSessionStore.getState().killSwitchTriggered) {
+    return {
+      outcome: 'failed',
+      observation: `Action NOT executed: ${toolName} was aborted by emergency kill switch before dispatch. No device state was changed.`,
+    };
+  }
+
   try {
     switch (toolName) {
       case 'device_screen_read': {
@@ -646,7 +653,6 @@ export async function executeDeviceAction(
     }
     throw err;
   } finally {
-    useDeviceSessionStore.getState().setPendingWork(false);
     useDeviceSessionStore.getState().stopAutomationSession();
   }
 }
@@ -697,6 +703,13 @@ async function executeShizukuOp(
       toolName,
       `Shizuku is not ready: ${describeShizukuState(state)}. Open Vela Settings → Shizuku Setup to connect it.`
     );
+  }
+
+  if (useDeviceSessionStore.getState().killSwitchTriggered) {
+    return {
+      outcome: 'failed',
+      observation: `Action NOT executed: ${toolName} was aborted by emergency kill switch before privileged dispatch. No device state was changed.`,
+    };
   }
 
   let raw: string;

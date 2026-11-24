@@ -101,7 +101,9 @@ export function SafetyDialog() {
             {pendingTask.value ? (
               <View style={styles.metaRow}>
                 <Text style={[styles.metaLabel, { color: colors.textMuted, fontSize: sizes.sub }]}>Payload / Input:</Text>
-                <Text style={[styles.metaValue, { color: colors.text, fontSize: sizes.text }]}>{pendingTask.value}</Text>
+                <Text style={[styles.metaValue, { color: colors.text, fontSize: sizes.text }]}>
+                  {category === 'passwords_otps' ? '••••••••' : pendingTask.value}
+                </Text>
               </View>
             ) : null}
             {pendingTask.thoughts ? (
@@ -114,21 +116,23 @@ export function SafetyDialog() {
             ) : null}
           </Card>
 
-          {/* Session Bypass Checkbox */}
-          <Pressable
-            onPress={() => setDontAskThisSession((v) => !v)}
-            style={styles.checkboxRow}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: dontAskThisSession }}
-            accessibilityLabel={`Don't ask again this session for ${categoryLabel}`}
-          >
-            <View style={[styles.checkbox, { borderColor: colors.glassBorder }, dontAskThisSession && { backgroundColor: aurora.acc1 }]}>
-              {dontAskThisSession ? <Text style={styles.checkmark}>✓</Text> : null}
-            </View>
-            <Text style={[styles.checkboxLabel, { color: colors.textMuted, fontSize: sizes.sub }]}>
-              Don't ask again this session for {categoryLabel}
-            </Text>
-          </Pressable>
+          {/* Session Bypass Checkbox — gated for low/medium risk actions only */}
+          {!isHighRisk ? (
+            <Pressable
+              onPress={() => setDontAskThisSession((v) => !v)}
+              style={styles.checkboxRow}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: dontAskThisSession }}
+              accessibilityLabel={`Don't ask again this session for ${categoryLabel}`}
+            >
+              <View style={[styles.checkbox, { borderColor: colors.glassBorder }, dontAskThisSession && { backgroundColor: aurora.acc1 }]}>
+                {dontAskThisSession ? <Text style={styles.checkmark}>✓</Text> : null}
+              </View>
+              <Text style={[styles.checkboxLabel, { color: colors.textMuted, fontSize: sizes.sub }]}>
+                Don't ask again this session for {categoryLabel}
+              </Text>
+            </Pressable>
+          ) : null}
 
           {/* Primary Action Buttons */}
           <View style={styles.buttonGroup}>
@@ -155,7 +159,7 @@ export function SafetyDialog() {
               accessibilityRole="button"
               accessibilityLabel="Allow once or confirm action"
             >
-              <Text style={[styles.btnText, { color: '#ffffff', fontSize: sizes.text, fontWeight: 'bold' }]}>
+              <Text style={[styles.btnText, { color: aurora.onAccent || '#ffffff', fontSize: sizes.text, fontWeight: 'bold' }]}>
                 Allow Once
               </Text>
             </Pressable>

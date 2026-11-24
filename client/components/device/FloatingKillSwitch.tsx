@@ -31,12 +31,19 @@ export function FloatingKillSwitch() {
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dx) > 5 || Math.abs(gesture.dy) > 5,
+      onPanResponderGrant: () => {
+        pan.setOffset({
+          x: (pan.x as any)._value + (pan.x as any)._offset,
+          y: (pan.y as any)._value + (pan.y as any)._offset,
+        });
+        pan.setValue({ x: 0, y: 0 });
+      },
       onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], {
         useNativeDriver: false,
       }),
       onPanResponderRelease: () => {
-        pan.extractOffset();
+        pan.flattenOffset();
       },
     })
   ).current;
@@ -50,7 +57,9 @@ export function FloatingKillSwitch() {
     });
 
     const keySub = DeviceEventEmitter.addListener('onHardwareEmergencyStop', () => {
-      triggerKillSwitch('volume_key');
+      if (useDeviceSessionStore.getState().isAutomationRunning) {
+        triggerKillSwitch('volume_key');
+      }
     });
 
     return () => {
@@ -59,20 +68,16 @@ export function FloatingKillSwitch() {
     };
   }, [triggerKillSwitch]);
 
-  // Handle visual feedback and guard reset when kill switch is triggered
+  // Handle visual feedback toast when kill switch is triggered
   useEffect(() => {
     if (killSwitchTriggered) {
       setToastMessage('⏹ Agent stopped by user');
-      // Keep guard active until pending automation work has settled
-      if (!isRunning && !hasPendingWork) {
-        const timer = setTimeout(() => {
-          setToastMessage(null);
-          resetKillSwitch();
-        }, 3000);
-        return () => clearTimeout(timer);
-      }
+      const timer = setTimeout(() => {
+        setToastMessage(null);
+      }, 3000);
+      return () => clearTimeout(timer);
     }
-  }, [killSwitchTriggered, isRunning, hasPendingWork, resetKillSwitch]);
+  }, [killSwitchTriggered]);
 
   const handleStopPress = () => {
     triggerKillSwitch('floating_button');
@@ -81,7 +86,7 @@ export function FloatingKillSwitch() {
   // Render status toast banner if triggered
   if (toastMessage) {
     return (
-      <View style={styles.toastContainer} pointerEvents="none">
+      <View style={styles.toastContainer} pointerEvents="none" accessibilityLiveRegion="assertive">
         <View style={styles.toastBox}>
           <Text style={styles.toastText}>{toastMessage}</Text>
         </View>
