@@ -80,6 +80,10 @@ describe('Kill Switch & Emergency Abort Integration', () => {
     useDeviceSessionStore.getState().resetKillSwitch();
     expect(useDeviceSessionStore.getState().killSwitchTriggered).toBe(true);
 
+    // Attempting to start another automation session while pending work is active must NOT clear kill switch
+    useDeviceSessionStore.getState().startAutomationSession('device_tap', '@e4', 'click');
+    expect(useDeviceSessionStore.getState().killSwitchTriggered).toBe(true);
+
     // Now resolve the in-flight native call
     resolveNativeCall(true);
     const res = await actionPromise;
@@ -100,5 +104,17 @@ describe('Kill Switch & Emergency Abort Integration', () => {
     // Now kill switch can be safely reset
     useDeviceSessionStore.getState().resetKillSwitch();
     expect(useDeviceSessionStore.getState().killSwitchTriggered).toBe(false);
+  });
+
+  it('preserves unavailable outcome when capability is unavailable without dressing it as indeterminate', async () => {
+    // Native module is null
+    mockHolder.mod = null;
+
+    let checkCallState: () => void = () => {};
+    // Hook into startAutomationSession or test execution
+    const res = await executeDeviceAction('device_tap', '@e5', 'click');
+    expect(res.outcome).toBe('unavailable');
+    expect(res.observation).toContain('unavailable');
+    expect(res.observation).not.toContain('indeterminate');
   });
 });
