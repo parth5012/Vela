@@ -81,6 +81,11 @@ export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
   isScreenMirrorLoading: false,
 
   startAutomationSession: (toolName, target, value) => {
+    // If pending native work is in flight, an abort must stay in effect until that work settles.
+    // Do not allow starting a new session or clearing killSwitchTriggered while hasPendingWork is true.
+    if (get().hasPendingWork) {
+      return;
+    }
     set({
       isAutomationRunning: true,
       activeToolName: toolName || null,

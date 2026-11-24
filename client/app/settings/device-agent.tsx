@@ -64,6 +64,7 @@ export default function DeviceAgentPermissionsScreen() {
   const setMirrorVisible = useDeviceSessionStore((s) => s.setMirrorVisible);
   const setHistoryVisible = useDeviceSessionStore((s) => s.setHistoryVisible);
   const isAutomationRunning = useDeviceSessionStore((s) => s.isAutomationRunning);
+  const hasPendingWork = useDeviceSessionStore((s) => s.hasPendingWork);
   const startAutomationSession = useDeviceSessionStore((s) => s.startAutomationSession);
   const stopAutomationSession = useDeviceSessionStore((s) => s.stopAutomationSession);
   const triggerKillSwitch = useDeviceSessionStore((s) => s.triggerKillSwitch);
@@ -161,10 +162,11 @@ export default function DeviceAgentPermissionsScreen() {
             An active-only floating Stop button appears when automation executes. Pressing it or either hardware Volume key immediately aborts ongoing actions.
           </Text>
           <Pressable
+            disabled={hasPendingWork}
             onPress={() => {
               if (isAutomationRunning) {
                 triggerKillSwitch('programmatic');
-              } else {
+              } else if (!hasPendingWork) {
                 startAutomationSession('test_tap', 'Sample Target Button', 'Click');
               }
             }}
@@ -173,14 +175,24 @@ export default function DeviceAgentPermissionsScreen() {
               {
                 backgroundColor: isAutomationRunning ? 'rgba(244, 63, 94, 0.15)' : 'rgba(59, 130, 246, 0.15)',
                 borderColor: isAutomationRunning ? '#f43f5e' : colors.glassBorder,
-                opacity: pressed ? 0.7 : 1,
+                opacity: pressed ? 0.7 : hasPendingWork ? 0.5 : 1,
               },
             ]}
             accessibilityRole="button"
-            accessibilityLabel={isAutomationRunning ? 'Stop test automation session' : 'Simulate active session to test floating stop button'}
+            accessibilityLabel={
+              isAutomationRunning
+                ? 'Stop test automation session'
+                : hasPendingWork
+                ? 'Pending native action settling'
+                : 'Simulate active session to test floating stop button'
+            }
           >
             <Text style={[styles.actionBtnText, { color: isAutomationRunning ? '#f43f5e' : colors.text, fontSize: sizes.sub }]}>
-              {isAutomationRunning ? '⏹ Stop Active Session' : '▶ Simulate Active Session to Test Stop Button'}
+              {isAutomationRunning
+                ? '⏹ Stop Active Session'
+                : hasPendingWork
+                ? '⏳ Settling Pending Action...'
+                : '▶ Simulate Active Session to Test Stop Button'}
             </Text>
           </Pressable>
         </Card>

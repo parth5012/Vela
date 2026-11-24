@@ -587,6 +587,19 @@ export async function executeDeviceAction(
     // record an outcome honestly reflecting what actually occurred on the device.
     const currentSession = useDeviceSessionStore.getState();
     if (currentSession.killSwitchTriggered) {
+      // If the action was not dispatched because the capability was unavailable,
+      // preserve the unavailable outcome and explanation honestly.
+      if (result.outcome === 'unavailable') {
+        currentSession.recordAction({
+          toolName,
+          target,
+          value,
+          outcome: 'unavailable',
+          summary: result.observation,
+        });
+        return result;
+      }
+
       const isMut = isMutating(toolName);
       const abortedOutcome: DeviceActionOutcome = isMut ? 'indeterminate' : 'failed';
       const abortedResult: DeviceActionResult = {
