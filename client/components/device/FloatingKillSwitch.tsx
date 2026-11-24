@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useDeviceSessionStore } from '../../store/useDeviceSessionStore';
 import { useAurora } from '../../hooks/useAurora';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { DEFAULT_ELEVATION } from '../../utils/elevation';
 
 export function FloatingKillSwitch() {
@@ -20,6 +21,7 @@ export function FloatingKillSwitch() {
   const triggerKillSwitch = useDeviceSessionStore((s) => s.triggerKillSwitch);
   const resetKillSwitch = useDeviceSessionStore((s) => s.resetKillSwitch);
   const { colors, sizes } = useAurora();
+  const reducedMotion = useReducedMotion();
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -102,7 +104,10 @@ export function FloatingKillSwitch() {
         onPress={handleStopPress}
         style={({ pressed }) => [
           styles.stopButton,
-          pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] },
+          pressed && {
+            opacity: 0.8,
+            ...(!reducedMotion && { transform: [{ scale: 0.95 }] }),
+          },
         ]}
         accessibilityRole="button"
         accessibilityLabel="Emergency Stop Device Agent"
