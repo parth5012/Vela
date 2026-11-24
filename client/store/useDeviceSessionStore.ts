@@ -83,9 +83,9 @@ export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
   isScreenMirrorLoading: false,
 
   startAutomationSession: (toolName, target, value) => {
-    // If pending native work is in flight, an abort must stay in effect until that work settles.
-    // Do not allow starting a new session or clearing killSwitchTriggered while hasPendingWork is true.
-    if (get().hasPendingWork) {
+    // If pending native work is in flight AND kill switch was triggered,
+    // do not allow starting a new session or clearing killSwitchTriggered until that work settles.
+    if (get().hasPendingWork && get().killSwitchTriggered) {
       return;
     }
     const currentCount = get().pendingDispatches;
@@ -116,6 +116,7 @@ export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
     set({
       pendingDispatches: nextCount,
       isAutomationRunning: nextCount > 0,
+      hasPendingWork: nextCount > 0 ? get().hasPendingWork : false,
       ...(nextCount === 0 && {
         activeToolName: null,
         activeTarget: null,
@@ -151,6 +152,10 @@ export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
 
     set({
       isAutomationRunning: false,
+      pendingDispatches: 0,
+      activeToolName: null,
+      activeTarget: null,
+      activeValue: null,
       killSwitchTriggered: true,
       killSwitchSource: source,
       actionHistory: nextHistory,
@@ -166,10 +171,23 @@ export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
   },
 
   recordAction: (item) => {
+    const isSensitive =
+      (item.target && /password|pin|otp|secret|credential|cvv/i.test(item.target)) ||
+      (item.value && /password|pin|otp|secret|credential|cvv/i.test(item.value));
+    const maskedValue = isSensitive && item.value
+      ? '••••••••'
+      : item.value;
+    const truncatedSummary =
+      item.summary && item.summary.length > 300
+        ? `${item.summary.slice(0, 300)}...`
+        : item.summary;
+
     const fullItem: SessionActionItem = {
       id: `act_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       timestamp: Date.now(),
       ...item,
+      value: maskedValue,
+      summary: truncatedSummary,
     };
 
     set((state) => {

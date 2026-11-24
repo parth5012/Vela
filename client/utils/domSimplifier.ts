@@ -5,13 +5,16 @@ const SENSITIVE_KEYWORDS = ['password', 'pin', 'otp', 'cvv', 'passcode', 'creden
 export function isSensitiveField(text?: string, isPassword?: boolean): boolean {
   if (isPassword) return true;
   if (!text) return false;
-  const lower = text.toLowerCase();
+  const lower = text.toLowerCase().trim();
   return SENSITIVE_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
 export function maskSensitiveText(text?: string, isPassword?: boolean): string | undefined {
   if (!text) return text;
-  if (isSensitiveField(text, isPassword)) {
+  if (isPassword === false) {
+    return text;
+  }
+  if (isPassword === true || isSensitiveField(text, isPassword)) {
     return '••••••••';
   }
   return text;
@@ -100,14 +103,54 @@ export function parseScreenHierarchy(rawHierarchy: string | unknown): Simplified
       }
     }
 
-    // Line-by-line format fallback: e.g. "@e1: Button 'Submit' [100,200,300,250]"
-    const lines = trimmed.split('\n').filter(Boolean);
+    // Line-by-line format: supports Android native emitter `[@e0] ClassName: text="..." ...`
+    // as well as fallback `@e1: Button 'Submit' [100,200,300,250]`.
+    const lines = trimmed.split('\n');
     const nodes: SimplifiedDomNode[] = [];
 
     lines.forEach((rawLine, idx) => {
       const line = rawLine.trim();
+      if (!line) return;
+
+      // 1. Android native module format: `[@e0] EditText: text="val" desc="desc" bounds=[l,t,r,b]px(...) clickable`
+      const nativeMatch = line.match(/^\[(@?\w+)\]\s*([A-Za-z0-9_]+):/);
+      if (nativeMatch) {
+        const id = nativeMatch[1];
+        const className = nativeMatch[2].toLowerCase();
+        let type: SimplifiedDomNode['type'] = 'text';
+        if (className.includes('button')) type = 'button';
+        else if (className.includes('edit') || className.includes('input')) type = 'input';
+        else if (className.includes('image')) type = 'image';
+
+        const textMatch = line.match(/text="([^"]*)"/);
+        const descMatch = line.match(/desc="([^"]*)"/);
+        const rawText = (textMatch && textMatch[1]) || (descMatch && descMatch[1]) || undefined;
+
+        const boundsMatch = line.match(/bounds=\[(\d+(?:\.\d+)?),(\d+(?:\.\d+)?),(\d+(?:\.\d+)?),(\d+(?:\.\d+)?)\]/);
+        const pxMatch = line.match(/px\((\d+(?:\.\d+)?),(\d+(?:\.\d+)?),(\d+(?:\.\d+)?),(\d+(?:\.\d+)?)\)/);
+        const bounds: [number, number, number, number] = boundsMatch
+          ? [parseFloat(boundsMatch[1]), parseFloat(boundsMatch[2]), parseFloat(boundsMatch[3]), parseFloat(boundsMatch[4])]
+          : pxMatch
+          ? [parseFloat(pxMatch[1]), parseFloat(pxMatch[2]), parseFloat(pxMatch[3]), parseFloat(pxMatch[4])]
+          : [0, 0, 0, 0];
+
+        const isClickable = line.includes('clickable') || type === 'button';
+        const isPassword = className.includes('password') || (type === 'input' && isSensitiveField(rawText));
+
+        nodes.push({
+          id,
+          type,
+          text: maskSensitiveText(rawText, isPassword),
+          bounds,
+          clickable: isClickable,
+          isPassword,
+        });
+        return;
+      }
+
+      // 2. Legacy fallback format: `@e1: Button 'Submit' [100,200,300,250]`
       const match = line.match(/^(@?\w+)?\s*:?\s*([A-Za-z]+)?\s*(?:'([^']*)')?(?:\s*\[(\s*-?\d+(?:\.\d+)?),(\s*-?\d+(?:\.\d+)?),(\s*-?\d+(?:\.\d+)?),(\s*-?\d+(?:\.\d+)?)\])?/);
-      if (match) {
+      if (match && (match[1] || match[2] || match[3] || match[4])) {
         const id = match[1] || `line_${idx}`;
         const typeStr = (match[2] || '').toLowerCase();
         const rawText = match[3] || undefined;

@@ -96,6 +96,35 @@ describe('domSimplifier', () => {
       expect(result[1].text).toBe('••••••••');
     });
 
+    it('parses real Android native module indented line format with bounds and masking', () => {
+      const nativeOutput = `
+  [@e0] EditText: text="secret_pin_123" desc="" bounds=[10,20,30,40]px(108,480,972,720) clickable focused
+  [@e1] Button: text="Submit Now" desc="" bounds=[10,50,90,60]px(108,1200,972,1440) clickable
+  [@e2] TextView: text="Forgot password?" desc="" bounds=[20,70,80,80]px(216,1680,864,1920) clickable
+`;
+
+      const result = parseScreenHierarchy(nativeOutput);
+      expect(result.length).toBe(3);
+
+      expect(result[0].id).toBe('@e0');
+      expect(result[0].type).toBe('input');
+      expect(result[0].text).toBe('••••••••');
+      expect(result[0].bounds).toEqual([10, 20, 30, 40]);
+      expect(result[0].clickable).toBe(true);
+      expect(result[0].isPassword).toBe(true);
+
+      expect(result[1].id).toBe('@e1');
+      expect(result[1].type).toBe('button');
+      expect(result[1].text).toBe('Submit Now');
+      expect(result[1].bounds).toEqual([10, 50, 90, 60]);
+      expect(result[1].clickable).toBe(true);
+
+      expect(result[2].id).toBe('@e2');
+      expect(result[2].type).toBe('text');
+      expect(result[2].text).toBe('Forgot password?');
+      expect(result[2].bounds).toEqual([20, 70, 80, 80]);
+    });
+
     it('returns empty array on empty input', () => {
       expect(parseScreenHierarchy('')).toEqual([]);
       expect(parseScreenHierarchy(null)).toEqual([]);

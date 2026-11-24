@@ -21,7 +21,8 @@ class VelaAccessibilityService : AccessibilityService() {
             eventTypes = AccessibilityEvent.TYPES_ALL_MASK
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
             flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
-                    AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+                    AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+                    AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS
             notificationTimeout = 100
         }
         Log.d("VelaAccessibility", "Service Connected")
@@ -30,6 +31,16 @@ class VelaAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         // Accessibility events can be handled here if needed.
+    }
+
+    override fun onKeyEvent(event: android.view.KeyEvent?): Boolean {
+        if (event?.action == android.view.KeyEvent.ACTION_DOWN) {
+            val keyCode = event.keyCode
+            if (keyCode == android.view.KeyEvent.KEYCODE_VOLUME_UP || keyCode == android.view.KeyEvent.KEYCODE_VOLUME_DOWN) {
+                DeviceAgentModule.emitVolumeKeyEvent()
+            }
+        }
+        return super.onKeyEvent(event)
     }
 
     override fun onInterrupt() {

@@ -103,7 +103,7 @@ export function AccessibilityPermissionModal() {
                   🔒 Strict Privacy Guarantee
                 </Text>
                 <Text style={[styles.privacyText, { color: colors.textMuted, fontSize: sizes.sub }]}>
-                  All screen analysis and actions execute strictly on-device. Vela never records, transmits, or uploads your screen content, passwords, or personal credentials.
+                  Screen elements are processed strictly on-device to fulfill requested tasks. Sensitive fields such as passwords and PINs are masked, and raw screen captures are never stored or sold.
                 </Text>
               </Card>
 
@@ -117,7 +117,7 @@ export function AccessibilityPermissionModal() {
                 accessibilityRole="button"
                 accessibilityLabel="Open Android Accessibility Settings"
               >
-                <Text style={styles.primaryBtnText}>Open Android Settings →</Text>
+                <Text style={[styles.primaryBtnText, { color: aurora.onAccent || '#ffffff' }]}>Open Android Settings →</Text>
               </Pressable>
             </View>
           )}
@@ -226,7 +226,7 @@ export function AccessibilityPermissionModal() {
                 accessibilityRole="button"
                 accessibilityLabel="Complete accessibility setup"
               >
-                <Text style={styles.primaryBtnText}>Done</Text>
+                <Text style={[styles.primaryBtnText, { color: aurora.onAccent || '#ffffff' }]}>Done</Text>
               </Pressable>
             </View>
           )}

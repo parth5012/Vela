@@ -6,6 +6,7 @@ import { operationLog } from '../db/schema';
 import { generateUlid } from './syncIds';
 import { stripReasoning, EMPTY_RESPONSE_ERROR_HINT } from './reasoning';
 import { useConfigStore } from '../store/useConfigStore';
+import { useDeviceSessionStore } from '../store/useDeviceSessionStore';
 
 export interface ParsedToolCall {
   toolName: string;
@@ -620,6 +621,11 @@ export async function runLocalAgentLoop(
   let totalWaitCount = 0;
 
   while (step <= maxSteps) {
+    if (useDeviceSessionStore.getState().killSwitchTriggered) {
+      completed = false;
+      finalResponse = 'Automation stopped by user emergency kill switch.';
+      break;
+    }
     let stepResponse = '';
     const tokenBuffer: string[] = [];
 
@@ -1276,6 +1282,29 @@ export async function runLocalAgentLoop(
       executionStatus = action.outcome;
 
       await logDeviceStepToDb(conversationId, step, toolCall, observation, action.outcome);
+
+      if (useDeviceSessionStore.getState().killSwitchTriggered) {
+        options.onEvent?.({
+          type: 'tool_observation',
+          toolName: toolCall.toolName,
+          observation,
+          step,
+          error: observation,
+        });
+        steps.push({
+          step,
+          prompt: currentPrompt,
+          response: stepResponse,
+          toolCall,
+          safetyStatus,
+          safetyMessage: 'Aborted by emergency kill switch',
+          observation,
+          executionStatus: action.outcome,
+        });
+        completed = false;
+        finalResponse = 'Automation stopped by user emergency kill switch.';
+        break;
+      }
 
       options.onEvent?.({
         type: 'tool_observation',
