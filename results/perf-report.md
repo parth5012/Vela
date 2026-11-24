@@ -1,14 +1,14 @@
 # Performance Ratchet Benchmark Report
 
-Generated: 2026-11-24T11:52:18.790Z
+Generated: 2026-11-24T12:47:31.537Z
 Runtime: Node v26.8.2 / Jest on linux
 
 | Metric | Value | Target | Status |
 |---|---:|---:|:---:|
 | stream_render_commits | 10 commits | 10 | PASS |
 | redundant_cell_rerenders | 0 commits | 0 | PASS |
-| stream_total_parse_ms | 1.09 ms | 2.5 | PASS |
-| parse_quadratic_ratio | 2.11 ratio | 2.2 | PASS |
+| stream_total_parse_ms | 1.81 ms | 2.5 | PASS |
+| parse_quadratic_ratio | 1.95 ratio | 2.2 | PASS |
 | js_event_loop_lag_ms | 0 ms | 4 | PASS |
 | sqlite_insert_duration_ms | 0 ms | 3 | PASS |
 | sqlite_query_duration_ms | 1 ms | 5 | PASS |

@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "timestamp": "2026-11-24T11:52:18.790Z",
+  "timestamp": "2026-11-24T12:47:31.537Z",
   "platform": "mobile-android",
   "environment": {
     "os": "linux",
@@ -10,7 +10,7 @@
   },
   "metrics": {
     "cold_start_to_typeable_ms": {
-      "value": 0.33,
+      "value": 0.67,
       "unit": "ms",
       "lower_is_better": true,
       "target": 400,
@@ -28,7 +28,7 @@
       "description": "Synchronous send action dispatch to optimistic state commit (Target: < 4.0 ms headless, < 16.6 ms native)"
     },
     "stream_100_token_settle_ms": {
-      "value": 4,
+      "value": 2.33,
       "unit": "ms",
       "lower_is_better": true,
       "target": 20,
@@ -55,7 +55,7 @@
       "description": "Historical cell re-render count during stream (Target: strictly 0)"
     },
     "stream_total_parse_ms": {
-      "value": 1.09,
+      "value": 1.81,
       "unit": "ms",
       "lower_is_better": true,
       "target": 2.5,
@@ -64,7 +64,7 @@
       "description": "Cumulative AST parse duration across 250 tokens (Target: < 2.5 ms)"
     },
     "parse_quadratic_ratio": {
-      "value": 2.11,
+      "value": 1.95,
       "unit": "ratio",
       "lower_is_better": true,
       "target": 2.2,

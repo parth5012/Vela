@@ -481,6 +481,63 @@ describe('Notification Settings & Gating (#604, #607)', () => {
       expect(behavior.shouldPlaySound).toBe(true);
     });
 
+    it('suppresses even pre-approved deferred notifications if the channel was disabled', async () => {
+      act(() => {
+        useNotificationStore.getState().setChannelEnabled('task_completion', false);
+      });
+
+      const notification = {
+        request: {
+          identifier: 'deferred-123',
+          content: {
+            title: 'Re-delivered notification',
+            body: 'Firing after quiet hours',
+            data: { type: 'task_completion', deferred: true },
+          },
+        },
+      } as any;
+
+      const behavior = await handleForegroundNotification(notification);
+      expect(behavior.shouldShowAlert).toBe(false);
+      expect(behavior.shouldPlaySound).toBe(false);
+    });
+
+    it('forwards android channelId and config when rescheduling deferred notifications', async () => {
+      act(() => {
+        useNotificationStore.getState().setQuietHours({
+          enabled: true,
+          startHour: 0,
+          startMinute: 0,
+          endHour: 23,
+          endMinute: 59,
+        });
+      });
+
+      const notification = {
+        request: {
+          identifier: 'approval-quiet',
+          content: {
+            title: 'Action Approval',
+            body: 'Confirmation needed',
+            data: { type: 'approval' },
+            android: { channelId: 'vela-approval', priority: 'high' },
+          },
+        },
+      } as any;
+
+      await handleForegroundNotification(notification);
+      expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: expect.objectContaining({
+            android: expect.objectContaining({ channelId: 'vela-approval' }),
+          }),
+          trigger: expect.objectContaining({
+            channelId: 'vela-approval',
+          }),
+        })
+      );
+    });
+
     it('suppresses presentation when channel is disabled', async () => {
       act(() => {
         useNotificationStore.getState().setChannelEnabled('briefing', false);
