@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Notifications from 'expo-notifications';
 
 export type NotificationChannelKey =
   | 'task_completion'
@@ -29,7 +28,7 @@ export interface NotificationStoreState {
   setQuietHours: (partial: Partial<QuietHoursConfig>) => void;
   setChannelEnabled: (channel: NotificationChannelKey, enabled: boolean) => void;
   trackDeferredNotificationId: (id: string) => void;
-  clearDeferredNotifications: () => Promise<void>;
+  clearDeferredNotificationIds: () => void;
   resetToDefaults: () => void;
 }
 
@@ -54,6 +53,8 @@ function clampInt(val: number | undefined, min: number, max: number, fallback: n
   return Math.max(min, Math.min(max, Math.floor(val)));
 }
 
+const MAX_DEFERRED_IDS = 50;
+
 export const useNotificationStore = create<NotificationStoreState>()(
   persist(
     (set, get) => ({
@@ -72,50 +73,27 @@ export const useNotificationStore = create<NotificationStoreState>()(
           endMinute: clampInt(partial.endMinute, 0, 59, current.endMinute),
         };
         set({ quietHours: updated });
-        if (updated.enabled === false) {
-          get().clearDeferredNotifications().catch(() => {});
-        }
       },
-      setChannelEnabled: (channel, enabled) => {
+      setChannelEnabled: (channel, enabled) =>
         set((state) => ({
           channels: { ...state.channels, [channel]: enabled },
-        }));
-        if (!enabled) {
-          Notifications.getAllScheduledNotificationsAsync?.().then((scheduled) => {
-            for (const item of scheduled) {
-              const data = item.content?.data as Record<string, unknown> | undefined;
-              const itemChannel = data?.channel || data?.type;
-              if (itemChannel === channel) {
-                Notifications.cancelScheduledNotificationAsync(item.identifier).catch(() => {});
-              }
-            }
-          }).catch(() => {});
-        }
-      },
-      trackDeferredNotificationId: (id) =>
-        set((state) => ({
-          deferredNotificationIds: [...state.deferredNotificationIds, id],
         })),
-      clearDeferredNotifications: async () => {
-        const ids = get().deferredNotificationIds;
-        for (const id of ids) {
-          try {
-            await Notifications.cancelScheduledNotificationAsync(id);
-          } catch {
-            // silent cleanup
+      trackDeferredNotificationId: (id) =>
+        set((state) => {
+          const next = [...state.deferredNotificationIds, id];
+          // Prune older deferred notification IDs to keep state bounded
+          if (next.length > MAX_DEFERRED_IDS) {
+            return { deferredNotificationIds: next.slice(-MAX_DEFERRED_IDS) };
           }
-        }
-        set({ deferredNotificationIds: [] });
-      },
-      resetToDefaults: () => {
-        const { clearDeferredNotifications } = get();
-        clearDeferredNotifications().catch(() => {});
+          return { deferredNotificationIds: next };
+        }),
+      clearDeferredNotificationIds: () => set({ deferredNotificationIds: [] }),
+      resetToDefaults: () =>
         set({
           quietHours: { ...DEFAULT_QUIET_HOURS },
           channels: { ...DEFAULT_CHANNELS },
           deferredNotificationIds: [],
-        });
-      },
+        }),
     }),
     {
       name: 'vela-notification-settings',

@@ -35,6 +35,61 @@ export function normalizeChannelKey(rawType?: string | null): NotificationChanne
 }
 
 /**
+ * Ensures the notification store has completed rehydration before gating decisions.
+ */
+export async function ensureNotificationStoreHydrated(): Promise<void> {
+  const store = useNotificationStore;
+  if (store.getState().hasHydrated) return;
+  if (store.persist?.hasHydrated?.()) {
+    store.getState().setHasHydrated(true);
+    return;
+  }
+  try {
+    await store.persist?.rehydrate?.();
+  } catch {
+    // fallback
+  }
+}
+
+/**
+ * Cancels all currently tracked deferred notifications and clears the ID registry.
+ */
+export async function cancelDeferredNotifications(): Promise<void> {
+  const ids = useNotificationStore.getState().deferredNotificationIds;
+  if (typeof Notifications.cancelScheduledNotificationAsync === 'function') {
+    for (const id of ids) {
+      try {
+        await Notifications.cancelScheduledNotificationAsync(id);
+      } catch {
+        // silent cleanup
+      }
+    }
+  }
+  useNotificationStore.getState().clearDeferredNotificationIds();
+}
+
+/**
+ * Cancels any scheduled notifications belonging to a disabled channel.
+ */
+export async function cancelScheduledNotificationsForChannel(
+  channel: NotificationChannelKey
+): Promise<void> {
+  if (typeof Notifications.getAllScheduledNotificationsAsync !== 'function') return;
+  try {
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    for (const item of scheduled) {
+      const data = item.content?.data as Record<string, unknown> | undefined;
+      const itemChannel = normalizeChannelKey((data?.channel as string) || (data?.type as string));
+      if (itemChannel === channel && typeof Notifications.cancelScheduledNotificationAsync === 'function') {
+        await Notifications.cancelScheduledNotificationAsync(item.identifier).catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.warn('[notificationGate] Failed to cancel scheduled notifications for channel:', err);
+  }
+}
+
+/**
  * Checks if a given Date falls within the configured quiet hours window.
  * Handles both same-day windows (e.g. 13:00 to 17:00) and cross-midnight windows (e.g. 22:00 to 07:00).
  */
@@ -61,6 +116,7 @@ export function isWithinQuietHours(date: Date, config: QuietHoursConfig): boolea
 
 /**
  * Calculates the exact next Date timestamp when quiet hours end.
+ * Self-defending against DST shifts and guarantees the returned date is in the future.
  */
 export function getNextQuietHoursEnd(from: Date, config: QuietHoursConfig): Date {
   const currentMinutes = from.getHours() * 60 + from.getMinutes();
@@ -76,13 +132,10 @@ export function getNextQuietHoursEnd(from: Date, config: QuietHoursConfig): Date
   if (startMinutes < endMinutes) {
     // Same-day window (e.g. 09:00 to 17:00)
     if (currentMinutes >= endMinutes) {
-      // Already past end today, rolls over to tomorrow
       dayOffset = 1;
     }
   } else {
     // Overnight window (e.g. 22:00 to 07:00)
-    // If we are before midnight (e.g. 23:00 >= startMinutes), end occurs tomorrow at endHour
-    // If we are after midnight (e.g. 03:00 < endMinutes), end occurs today at endHour
     if (currentMinutes >= startMinutes) {
       dayOffset = 1;
     }
@@ -93,6 +146,11 @@ export function getNextQuietHoursEnd(from: Date, config: QuietHoursConfig): Date
     result.setDate(result.getDate() + dayOffset);
   }
   result.setHours(config.endHour, config.endMinute, 0, 0);
+
+  // Self-defense: ensure the result is strictly in the future relative to `from`
+  if (result.getTime() <= from.getTime()) {
+    result.setDate(result.getDate() + 1);
+  }
 
   return result;
 }
@@ -118,7 +176,7 @@ export function evaluateNotificationDelivery(
   isAlreadyDeferred = false
 ): DeliveryEvaluation {
   const channel = normalizeChannelKey(rawType);
-  const { channels, quietHours } = useNotificationStore.getState();
+  const { channels, quietHours, hasHydrated } = useNotificationStore.getState();
 
   // If already deferred and firing at the end of quiet hours, approve immediately
   if (isAlreadyDeferred) {
@@ -127,6 +185,16 @@ export function evaluateNotificationDelivery(
       isDeferred: false,
       channel: channel ?? undefined,
       reason: 'pre_approved_deferred_delivery',
+    };
+  }
+
+  // If store has not hydrated yet, fail closed unless in test environment
+  if (!hasHydrated && typeof process !== 'undefined' && process.env?.NODE_ENV !== 'test') {
+    return {
+      shouldDeliver: false,
+      isDeferred: true,
+      channel: channel ?? undefined,
+      reason: 'store_not_hydrated',
     };
   }
 
@@ -167,6 +235,10 @@ export interface GatedNotificationRequest {
   body: string;
   data?: Record<string, unknown>;
   targetDate?: Date;
+  channelId?: string;
+  priority?: string;
+  android?: Record<string, unknown>;
+  trigger?: Notifications.NotificationTriggerInput;
 }
 
 /**
@@ -178,7 +250,9 @@ export interface GatedNotificationRequest {
 export async function scheduleGatedNotification(
   req: GatedNotificationRequest
 ): Promise<{ delivered: boolean; deferred: boolean; id?: string }> {
-  const isDeferredPayload = req.data?.deferred === true;
+  await ensureNotificationStoreHydrated();
+
+  const isDeferredPayload = req.data?.deferred === true || req.data?.deferred === 'true';
   const evaluation = evaluateNotificationDelivery(req.channel, req.targetDate, isDeferredPayload);
 
   if (!evaluation.shouldDeliver) {
@@ -189,8 +263,15 @@ export async function scheduleGatedNotification(
   const payloadData: Record<string, unknown> = {
     ...(req.data ?? {}),
     channel: req.channel,
-    type: req.channel,
+    type: (req.data?.type as string) || req.channel,
     ...(evaluation.isDeferred ? { deferred: true, originalTime: new Date().toISOString() } : {}),
+  };
+
+  const content: Notifications.NotificationContentInput = {
+    title: req.title,
+    body: req.body,
+    data: payloadData,
+    ...(req.android ? { android: req.android } : {}),
   };
 
   try {
@@ -203,10 +284,76 @@ export async function scheduleGatedNotification(
       );
       scheduledId = await Notifications.scheduleNotificationAsync({
         identifier,
+        content,
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: evaluation.deferredDate,
+          ...(req.channelId ? { channelId: req.channelId } : {}),
+        },
+      });
+      useNotificationStore.getState().trackDeferredNotificationId(scheduledId);
+      return { delivered: true, deferred: true, id: scheduledId };
+    }
+
+    const trigger =
+      req.trigger ??
+      (req.channelId
+        ? {
+            type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+            seconds: 1,
+            repeats: false,
+            channelId: req.channelId,
+          }
+        : null);
+
+    scheduledId = await Notifications.scheduleNotificationAsync({
+      identifier,
+      content,
+      trigger,
+    });
+    return { delivered: true, deferred: false, id: scheduledId };
+  } catch (error) {
+    console.warn('[notificationGate] Failed to schedule notification:', error);
+    return { delivered: false, deferred: false };
+  }
+}
+
+/**
+ * Handles incoming foreground notifications for Expo Notifications.setNotificationHandler.
+ * Reschedules deferred notifications for the end of quiet hours.
+ */
+export async function handleForegroundNotification(
+  notification: Notifications.Notification
+): Promise<Notifications.NotificationBehavior> {
+  await ensureNotificationStoreHydrated();
+
+  const content = notification?.request?.content;
+  const data = content?.data as Record<string, unknown> | undefined;
+  const isAlreadyDeferred = data?.deferred === true || data?.deferred === 'true';
+  const rawType = (data?.type as string) || (data?.channel as string);
+
+  if (isAlreadyDeferred) {
+    return {
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    };
+  }
+
+  const evaluation = evaluateNotificationDelivery(rawType, new Date(), false);
+
+  if (evaluation.isDeferred && evaluation.deferredDate) {
+    try {
+      const scheduledId = await Notifications.scheduleNotificationAsync({
+        identifier: notification.request.identifier
+          ? `deferred-${notification.request.identifier}`
+          : undefined,
         content: {
-          title: req.title,
-          body: req.body,
-          data: payloadData,
+          title: content?.title || 'Notification',
+          body: content?.body || '',
+          data: { ...(data || {}), deferred: true, originalTime: new Date().toISOString() },
         },
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DATE,
@@ -214,21 +361,24 @@ export async function scheduleGatedNotification(
         },
       });
       useNotificationStore.getState().trackDeferredNotificationId(scheduledId);
-      return { delivered: true, deferred: true, id: scheduledId };
+    } catch (err) {
+      console.warn('[notificationGate] Failed to reschedule deferred notification:', err);
     }
 
-    scheduledId = await Notifications.scheduleNotificationAsync({
-      identifier,
-      content: {
-        title: req.title,
-        body: req.body,
-        data: payloadData,
-      },
-      trigger: null,
-    });
-    return { delivered: true, deferred: false, id: scheduledId };
-  } catch (error) {
-    console.warn('[notificationGate] Failed to schedule notification:', error);
-    return { delivered: false, deferred: false };
+    return {
+      shouldShowAlert: false,
+      shouldPlaySound: false,
+      shouldSetBadge: false,
+      shouldShowBanner: false,
+      shouldShowList: false,
+    };
   }
+
+  return {
+    shouldShowAlert: evaluation.shouldDeliver,
+    shouldPlaySound: evaluation.shouldDeliver,
+    shouldSetBadge: false,
+    shouldShowBanner: evaluation.shouldDeliver,
+    shouldShowList: evaluation.shouldDeliver,
+  };
 }

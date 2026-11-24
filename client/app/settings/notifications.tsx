@@ -13,31 +13,55 @@ import {
   useNotificationStore,
   type NotificationChannelKey,
 } from '../../store/useNotificationStore';
+import {
+  cancelDeferredNotifications,
+  cancelScheduledNotificationsForChannel,
+} from '../../utils/notificationGate';
 
 function padTime(n: number): string {
   return n.toString().padStart(2, '0');
 }
 
 function formatTime(hour: number, minute: number): string {
-  const period = hour >= 12 ? 'PM' : 'AM';
-  const displayHour = hour % 12 === 0 ? 12 : hour % 12;
-  return `${displayHour}:${padTime(minute)} ${period} (${padTime(hour)}:${padTime(minute)})`;
+  return `${padTime(hour)}:${padTime(minute)}`;
 }
 
-function TimeStepper({
+export function TimeStepper({
   label,
   hour,
   minute,
-  onHourChange,
-  onMinuteChange,
+  onChange,
 }: {
   label: string;
   hour: number;
   minute: number;
-  onHourChange: (h: number) => void;
-  onMinuteChange: (m: number) => void;
+  onChange: (h: number, m: number) => void;
 }) {
   const { colors, sizes } = useAurora();
+
+  const handleHourDecrement = () => {
+    onChange((hour + 23) % 24, minute);
+  };
+
+  const handleHourIncrement = () => {
+    onChange((hour + 1) % 24, minute);
+  };
+
+  const handleMinuteDecrement = () => {
+    if (minute === 0) {
+      onChange((hour + 23) % 24, 45);
+    } else {
+      onChange(hour, minute - 15);
+    }
+  };
+
+  const handleMinuteIncrement = () => {
+    if (minute === 45) {
+      onChange((hour + 1) % 24, 0);
+    } else {
+      onChange(hour, minute + 15);
+    }
+  };
 
   return (
     <View
@@ -55,7 +79,7 @@ function TimeStepper({
           </Text>
           <View style={styles.unitButtonsRow}>
             <Pressable
-              onPress={() => onHourChange((hour + 23) % 24)}
+              onPress={handleHourDecrement}
               style={({ pressed }) => [
                 styles.stepBtn,
                 { borderColor: colors.glassBorder, opacity: pressed ? 0.6 : 1 },
@@ -69,7 +93,7 @@ function TimeStepper({
               {padTime(hour)}
             </Text>
             <Pressable
-              onPress={() => onHourChange((hour + 1) % 24)}
+              onPress={handleHourIncrement}
               style={({ pressed }) => [
                 styles.stepBtn,
                 { borderColor: colors.glassBorder, opacity: pressed ? 0.6 : 1 },
@@ -90,7 +114,7 @@ function TimeStepper({
           </Text>
           <View style={styles.unitButtonsRow}>
             <Pressable
-              onPress={() => onMinuteChange((minute + 45) % 60)}
+              onPress={handleMinuteDecrement}
               style={({ pressed }) => [
                 styles.stepBtn,
                 { borderColor: colors.glassBorder, opacity: pressed ? 0.6 : 1 },
@@ -104,7 +128,7 @@ function TimeStepper({
               {padTime(minute)}
             </Text>
             <Pressable
-              onPress={() => onMinuteChange((minute + 15) % 60)}
+              onPress={handleMinuteIncrement}
               style={({ pressed }) => [
                 styles.stepBtn,
                 { borderColor: colors.glassBorder, opacity: pressed ? 0.6 : 1 },
@@ -170,10 +194,33 @@ export default function NotificationsSettingsScreen() {
   const setChannelEnabled = useNotificationStore((s) => s.setChannelEnabled);
   const resetToDefaults = useNotificationStore((s) => s.resetToDefaults);
 
+  const isZeroDuration =
+    quietHours.startHour === quietHours.endHour &&
+    quietHours.startMinute === quietHours.endMinute;
+
+  const handleToggleQuietHours = (enabled: boolean) => {
+    setQuietHours({ enabled });
+    if (!enabled) {
+      cancelDeferredNotifications().catch(() => {});
+    }
+  };
+
+  const handleToggleChannel = (key: NotificationChannelKey, val: boolean) => {
+    setChannelEnabled(key, val);
+    if (!val) {
+      cancelScheduledNotificationsForChannel(key).catch(() => {});
+    }
+  };
+
+  const handleReset = () => {
+    cancelDeferredNotifications().catch(() => {});
+    resetToDefaults();
+  };
+
   return (
     <AuroraScreen
       title="Notifications"
-      subtitle="Manage quiet hours, delivery preferences, and channels"
+      subtitle="Configure quiet hours and notification channels"
       onBack={() => router.navigate('/settings')}
     >
       <View style={styles.sectionHeader}>
@@ -191,13 +238,15 @@ export default function NotificationsSettingsScreen() {
             </Text>
             <Text style={[styles.rowHint, { color: colors.textMuted, fontSize: sizes.sub }]}>
               {quietHours.enabled
-                ? `Active from ${padTime(quietHours.startHour)}:${padTime(quietHours.startMinute)} to ${padTime(quietHours.endHour)}:${padTime(quietHours.endMinute)}`
+                ? isZeroDuration
+                  ? 'Start and end times are identical (0-duration window: inactive)'
+                  : `Active from ${formatTime(quietHours.startHour, quietHours.startMinute)} to ${formatTime(quietHours.endHour, quietHours.endMinute)}`
                 : 'Disabled — all allowed notifications deliver immediately'}
             </Text>
           </View>
           <Switch
             value={quietHours.enabled}
-            onValueChange={(enabled) => setQuietHours({ enabled })}
+            onValueChange={handleToggleQuietHours}
             trackColor={{ false: colors.card, true: aurora.acc1 }}
             thumbColor="#FFFFFF"
             accessibilityLabel="Toggle quiet hours"
@@ -210,16 +259,18 @@ export default function NotificationsSettingsScreen() {
               label="Start Time"
               hour={quietHours.startHour}
               minute={quietHours.startMinute}
-              onHourChange={(startHour) => setQuietHours({ startHour })}
-              onMinuteChange={(startMinute) => setQuietHours({ startMinute })}
+              onChange={(startHour, startMinute) =>
+                setQuietHours({ startHour, startMinute })
+              }
             />
 
             <TimeStepper
               label="End Time"
               hour={quietHours.endHour}
               minute={quietHours.endMinute}
-              onHourChange={(endHour) => setQuietHours({ endHour })}
-              onMinuteChange={(endMinute) => setQuietHours({ endMinute })}
+              onChange={(endHour, endMinute) =>
+                setQuietHours({ endHour, endMinute })
+              }
             />
 
             <View
@@ -274,7 +325,7 @@ export default function NotificationsSettingsScreen() {
               </View>
               <Switch
                 value={isEnabled}
-                onValueChange={(val) => setChannelEnabled(ch.key, val)}
+                onValueChange={(val) => handleToggleChannel(ch.key, val)}
                 trackColor={{ false: colors.card, true: aurora.acc1 }}
                 thumbColor="#FFFFFF"
                 accessibilityLabel={`Toggle ${ch.title}`}
@@ -287,7 +338,7 @@ export default function NotificationsSettingsScreen() {
       <View style={styles.footerContainer}>
         <SecondaryButton
           label="Reset to Defaults"
-          onPress={resetToDefaults}
+          onPress={handleReset}
           accessibilityLabel="Reset notification settings to defaults"
         />
       </View>
@@ -299,21 +350,21 @@ const styles = StyleSheet.create({
   sectionHeader: {
     marginTop: 16,
     marginBottom: 8,
-    paddingHorizontal: 4,
   },
   card: {
-    padding: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 4,
     borderRadius: 16,
   },
   switchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 4,
+    paddingVertical: 14,
   },
   switchTextContainer: {
     flex: 1,
-    paddingRight: 16,
+    marginRight: 12,
   },
   rowTitle: {
     fontWeight: '600',
@@ -324,15 +375,14 @@ const styles = StyleSheet.create({
   },
   expandedContent: {
     borderTopWidth: 1,
-    marginTop: 14,
-    paddingTop: 14,
-    gap: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
   },
   timeStepperContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 4,
+    paddingVertical: 10,
   },
   timeLabel: {
     fontWeight: '600',
@@ -340,20 +390,18 @@ const styles = StyleSheet.create({
   timeControlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
   },
   unitControl: {
     alignItems: 'center',
   },
   unitSub: {
-    fontWeight: '700',
-    letterSpacing: 0.8,
+    fontWeight: '600',
     marginBottom: 4,
+    letterSpacing: 0.5,
   },
   unitButtonsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
   },
   stepBtn: {
     width: 32,
@@ -369,46 +417,48 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   unitValue: {
-    minWidth: 26,
-    textAlign: 'center',
+    fontVariant: ['tabular-nums'],
     fontWeight: '700',
+    minWidth: 32,
+    textAlign: 'center',
+    marginHorizontal: 6,
   },
   colonSeparator: {
     fontSize: 20,
     fontWeight: '700',
-    marginTop: 14,
+    marginHorizontal: 6,
+    marginTop: 16,
   },
   noticeBox: {
-    padding: 10,
-    borderRadius: 10,
     borderWidth: 1,
-    marginTop: 4,
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 8,
+    marginBottom: 4,
   },
   noticeText: {
-    lineHeight: 18,
+    lineHeight: 20,
   },
   channelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    gap: 12,
+    paddingVertical: 14,
   },
   iconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    marginRight: 14,
   },
   channelTextContainer: {
     flex: 1,
-    paddingRight: 8,
+    marginRight: 12,
   },
   footerContainer: {
-    marginTop: 20,
+    marginTop: 24,
     marginBottom: 32,
-    alignItems: 'center',
   },
 });

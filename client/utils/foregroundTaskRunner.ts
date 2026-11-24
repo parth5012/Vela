@@ -61,13 +61,14 @@ export async function showApprovalNotification(
     channel: 'approval',
     title: 'Vela needs your approval',
     body: action || 'A task requires your confirmation to continue.',
+    channelId: 'vela-approval',
+    android: {
+      channelId: 'vela-approval',
+      priority: Notifications.AndroidNotificationPriority.HIGH,
+    },
     data: {
       type: 'approval_needed',
       execution_id: executionId,
-      android: {
-        channelId: 'vela-approval',
-        priority: Notifications.AndroidNotificationPriority.HIGH,
-      },
     },
   });
 }
