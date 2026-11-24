@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import * as BackgroundTask from 'expo-background-task';
+import { scheduleGatedNotification } from './notificationGate';
 import { db } from '../db/client';
 import {
   taskExecutions,
@@ -55,13 +56,18 @@ export async function showApprovalNotification(
   executionId: string,
   action: string
 ) {
-  await presentNotification(APPROVAL_NOTIFICATION_ID, {
+  await scheduleGatedNotification({
+    identifier: APPROVAL_NOTIFICATION_ID,
+    channel: 'approval',
     title: 'Vela needs your approval',
     body: action || 'A task requires your confirmation to continue.',
-    data: { type: 'approval_needed', execution_id: executionId },
-    android: {
-      channelId: 'vela-approval',
-      priority: Notifications.AndroidNotificationPriority.HIGH,
+    data: {
+      type: 'approval_needed',
+      execution_id: executionId,
+      android: {
+        channelId: 'vela-approval',
+        priority: Notifications.AndroidNotificationPriority.HIGH,
+      },
     },
   });
 }

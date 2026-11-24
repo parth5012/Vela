@@ -13,6 +13,7 @@ import {
   evaluateNotificationDelivery,
   scheduleGatedNotification,
 } from '../utils/notificationGate';
+import { parseUrl, routeByType } from '../utils/notificationRouting';
 import NotificationsSettingsScreen from '../app/settings/notifications';
 
 jest.mock('expo-router', () => ({
@@ -49,23 +50,40 @@ describe('Notification Settings & Gating (#604, #607)', () => {
       expect(state.channels.approval).toBe(true);
     });
 
-    it('updates quiet hours configuration', () => {
+    it('updates quiet hours configuration with validation & clamping', () => {
       act(() => {
         useNotificationStore.getState().setQuietHours({
           enabled: true,
-          startHour: 23,
-          startMinute: 30,
+          startHour: 99, // Clamped to 23
+          startMinute: -5, // Clamped to 0
           endHour: 8,
-          endMinute: 15,
+          endMinute: 75, // Clamped to 59
         });
       });
 
       const updated = useNotificationStore.getState().quietHours;
       expect(updated.enabled).toBe(true);
       expect(updated.startHour).toBe(23);
-      expect(updated.startMinute).toBe(30);
+      expect(updated.startMinute).toBe(0);
       expect(updated.endHour).toBe(8);
-      expect(updated.endMinute).toBe(15);
+      expect(updated.endMinute).toBe(59);
+    });
+
+    it('tracks and clears deferred notification IDs on reset', async () => {
+      act(() => {
+        useNotificationStore.getState().trackDeferredNotificationId('notif-1');
+        useNotificationStore.getState().trackDeferredNotificationId('notif-2');
+      });
+
+      expect(useNotificationStore.getState().deferredNotificationIds).toEqual(['notif-1', 'notif-2']);
+
+      await act(async () => {
+        await useNotificationStore.getState().clearDeferredNotifications();
+      });
+
+      expect(useNotificationStore.getState().deferredNotificationIds).toEqual([]);
+      expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith('notif-1');
+      expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith('notif-2');
     });
 
     it('toggles individual channels', () => {
@@ -121,6 +139,11 @@ describe('Notification Settings & Gating (#604, #607)', () => {
       const config = { enabled: false, startHour: 22, startMinute: 0, endHour: 7, endMinute: 0 };
       const date = new Date(2026, 10, 24, 23, 0); // 11 PM
       expect(isWithinQuietHours(date, config)).toBe(false);
+    });
+
+    it('returns false when start and end times are identical (0-duration window)', () => {
+      const config = { enabled: true, startHour: 22, startMinute: 0, endHour: 22, endMinute: 0 };
+      expect(isWithinQuietHours(new Date(2026, 10, 24, 22, 0), config)).toBe(false);
     });
 
     it('correctly handles overnight cross-midnight window (22:00 to 07:00)', () => {
@@ -182,6 +205,13 @@ describe('Notification Settings & Gating (#604, #607)', () => {
       expect(nextEnd.getHours()).toBe(7);
       expect(nextEnd.getMinutes()).toBe(0);
     });
+
+    it('returns immediately when start and end are equal', () => {
+      const config = { enabled: true, startHour: 22, startMinute: 0, endHour: 22, endMinute: 0 };
+      const from = new Date(2026, 10, 24, 22, 0);
+      const nextEnd = getNextQuietHoursEnd(from, config);
+      expect(nextEnd.getTime()).toBe(from.getTime());
+    });
   });
 
   describe('evaluateNotificationDelivery', () => {
@@ -222,6 +252,24 @@ describe('Notification Settings & Gating (#604, #607)', () => {
       expect(evalResult.deferredDate).toBeDefined();
       expect(evalResult.deferredDate?.getHours()).toBe(7);
       expect(evalResult.deferredDate?.getDate()).toBe(25);
+    });
+
+    it('pre-approves and immediately delivers when already deferred', () => {
+      act(() => {
+        useNotificationStore.getState().setQuietHours({
+          enabled: true,
+          startHour: 22,
+          startMinute: 0,
+          endHour: 7,
+          endMinute: 0,
+        });
+      });
+
+      const nightTime = new Date(2026, 10, 24, 23, 30);
+      const evalResult = evaluateNotificationDelivery('task_completion', nightTime, true);
+      expect(evalResult.shouldDeliver).toBe(true);
+      expect(evalResult.isDeferred).toBe(false);
+      expect(evalResult.reason).toBe('pre_approved_deferred_delivery');
     });
   });
 
@@ -264,7 +312,7 @@ describe('Notification Settings & Gating (#604, #607)', () => {
       );
     });
 
-    it('schedules deferred notification with Date trigger during quiet hours', async () => {
+    it('schedules deferred notification with Date trigger during quiet hours and tracks ID', async () => {
       act(() => {
         useNotificationStore.getState().setQuietHours({
           enabled: true,
@@ -297,11 +345,36 @@ describe('Notification Settings & Gating (#604, #607)', () => {
           }),
         })
       );
+      expect(useNotificationStore.getState().deferredNotificationIds).toContain('mock-notification-id');
+    });
+  });
+
+  describe('Deep Linking & Routing (#604, #607)', () => {
+    it('parses vela-client://settings/notifications URL correctly', () => {
+      const parsed = parseUrl('vela-client://settings/notifications');
+      expect(parsed).toEqual({
+        type: 'settings',
+        route: '/settings/notifications',
+      });
+    });
+
+    it('routes settings type to the target settings route', () => {
+      const mockReplace = jest.fn();
+      const mockSelectThread = jest.fn();
+
+      routeByType(
+        { type: 'settings', route: '/settings/notifications' },
+        { replace: mockReplace },
+        mockSelectThread
+      );
+
+      expect(mockReplace).toHaveBeenCalledWith('/settings/notifications');
+      expect(mockSelectThread).not.toHaveBeenCalled();
     });
   });
 
   describe('NotificationsSettingsScreen UI Component', () => {
-    it('renders without crashing and displays all sections and channel toggles', () => {
+    it('renders without crashing and displays all sections, channel toggles, and accessible labels', () => {
       let root: renderer.ReactTestRenderer | null = null;
       act(() => {
         root = renderer.create(<NotificationsSettingsScreen />);

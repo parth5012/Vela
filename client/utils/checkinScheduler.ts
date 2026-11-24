@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import db from '../db/client';
 import { tasks, checkIns } from '../db/schema';
 import { CHECKIN_CHANNEL_ID } from './checkIn';
+import { scheduleGatedNotification } from './notificationGate';
 
 /**
  * Scheduled check-in rows live in the existing `tasks` table — no new
@@ -159,17 +160,12 @@ export async function presentCheckinNotification(
   body: string
 ): Promise<void> {
   try {
-    await Notifications.scheduleNotificationAsync({
+    await scheduleGatedNotification({
       identifier,
-      content: {
-        title,
-        body,
-        data: { type: 'checkin' },
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
-        channelId: CHECKIN_CHANNEL_ID,
-      },
+      channel: 'checkin',
+      title,
+      body,
+      data: { type: 'checkin' },
     });
   } catch (e) {
     console.warn('[checkinScheduler] Failed to present check-in notification', e);
