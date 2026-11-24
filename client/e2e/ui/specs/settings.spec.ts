@@ -44,15 +44,14 @@ test.describe('Settings Hub & Sub-screen Navigation', () => {
     await expect(page.getByText('Font Scale').first()).toBeVisible();
   });
 
-  test('navigates to notification settings from hub and displays quiet hours and channels', async ({ page }) => {
+  test('navigates to notification settings and displays quiet hours and channels', async ({ page }) => {
     await page.goto('/?e2e_seed=chat');
     await waitForControlHook(page);
 
-    await goTo(page, '/settings');
-    await page.getByText('Notifications').first().click();
+    await goTo(page, '/settings/notifications');
 
-    await expect(page.getByText('Quiet Hours').first()).toBeVisible();
-    await expect(page.getByText('Enable Quiet Hours').first()).toBeVisible();
-    await expect(page.getByText('Notification Channels').first()).toBeVisible();
+    await expect(page.getByText('Quiet Hours', { exact: true })).toBeVisible();
+    await expect(page.getByText('Enable Quiet Hours', { exact: true })).toBeVisible();
+    await expect(page.getByText('Notification Channels', { exact: true })).toBeVisible();
   });
 });
