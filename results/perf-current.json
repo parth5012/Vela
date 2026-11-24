@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "timestamp": "2026-11-14T17:26:04.439Z",
+  "timestamp": "2026-11-24T11:52:18.790Z",
   "platform": "mobile-android",
   "environment": {
     "os": "linux",
@@ -10,7 +10,7 @@
   },
   "metrics": {
     "cold_start_to_typeable_ms": {
-      "value": 0.67,
+      "value": 0.33,
       "unit": "ms",
       "lower_is_better": true,
       "target": 400,
@@ -28,7 +28,7 @@
       "description": "Synchronous send action dispatch to optimistic state commit (Target: < 4.0 ms headless, < 16.6 ms native)"
     },
     "stream_100_token_settle_ms": {
-      "value": 2.67,
+      "value": 4,
       "unit": "ms",
       "lower_is_better": true,
       "target": 20,
@@ -55,7 +55,7 @@
       "description": "Historical cell re-render count during stream (Target: strictly 0)"
     },
     "stream_total_parse_ms": {
-      "value": 0.88,
+      "value": 1.09,
       "unit": "ms",
       "lower_is_better": true,
       "target": 2.5,
@@ -64,7 +64,7 @@
       "description": "Cumulative AST parse duration across 250 tokens (Target: < 2.5 ms)"
     },
     "parse_quadratic_ratio": {
-      "value": 1.6,
+      "value": 2.11,
       "unit": "ratio",
       "lower_is_better": true,
       "target": 2.2,
@@ -73,7 +73,7 @@
       "description": "Scaling ratio total_parse(250) / total_parse(125) (Target: < 2.20 ratio)"
     },
     "js_event_loop_lag_ms": {
-      "value": 1,
+      "value": 0,
       "unit": "ms",
       "lower_is_better": true,
       "target": 4,
@@ -91,7 +91,7 @@
       "description": "SQLite insert duration p50 in WAL mode (Target: < 3.0 ms)"
     },
     "sqlite_query_duration_ms": {
-      "value": 0,
+      "value": 1,
       "unit": "ms",
       "lower_is_better": true,
       "target": 5,

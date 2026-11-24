@@ -53,6 +53,12 @@ const GROUPS: CategoryGroup[] = [
     ],
   },
   {
+    title: 'Notifications',
+    rows: [
+      { icon: '🔔', label: 'Notifications', hint: 'Quiet hours, channels, deferred delivery', route: '/settings/notifications' },
+    ],
+  },
+  {
     title: 'Messaging',
     rows: [
       { icon: '💬', label: 'Suggestion Starters', hint: 'Welcome-view starter cards', route: '/settings/messaging' },

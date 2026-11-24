@@ -24,6 +24,17 @@ jest.mock('expo-notifications', () => ({
   getLastNotificationResponseAsync: jest.fn(async () => null),
   AndroidImportance: { MAX: 5, DEFAULT: 3, HIGH: 4 },
   setNotificationHandler: jest.fn(),
+  scheduleNotificationAsync: jest.fn(async () => 'mock-notification-id'),
+  cancelScheduledNotificationAsync: jest.fn(async () => {}),
+  SchedulableTriggerInputTypes: {
+    DATE: 'date',
+    CALENDAR: 'calendar',
+    TIME_INTERVAL: 'timeInterval',
+    DAILY: 'daily',
+    WEEKLY: 'weekly',
+    MONTHLY: 'monthly',
+    YEARLY: 'yearly',
+  },
 }));
 
 const util = require('util');

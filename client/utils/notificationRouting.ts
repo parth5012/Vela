@@ -120,6 +120,10 @@ export function parseUrl(url: string | null | undefined): ParsedNotification | n
       return { type: 'briefing', route: '/settings/briefing' };
     }
 
+    if (segments[0] === 'settings' && segments[1] === 'notifications') {
+      return { type: 'settings', route: '/settings/notifications' };
+    }
+
     if (segments[0] === 'checkin') {
       // vela-client://checkin opens chat home so the reply becomes the check-in.
       return { type: 'checkin', route: '/' };

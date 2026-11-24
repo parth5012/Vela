@@ -34,15 +34,23 @@ import FloatingOverlayRoot from '../components/overlay/FloatingOverlayRoot';
 import { persistentWebviewContainerStyle, persistentWebviewPointerEvents } from '../utils/persistentWebviewStyle';
 import { registerAndPostToken } from '../utils/pushRegistration';
 import { routeByType } from '../utils/notificationRouting';
+import { evaluateNotificationDelivery } from '../utils/notificationGate';
 
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
+  handleNotification: async (notification) => {
+    const data = (notification as { request?: { content?: { data?: Record<string, any> } } })?.request?.content?.data;
+    const rawType = data?.type || data?.channel;
+    const evaluation = evaluateNotificationDelivery(rawType);
+    const shouldPresent = evaluation.shouldDeliver && !evaluation.isDeferred;
+
+    return {
+      shouldShowAlert: shouldPresent,
+      shouldPlaySound: shouldPresent,
+      shouldSetBadge: false,
+      shouldShowBanner: shouldPresent,
+      shouldShowList: shouldPresent,
+    };
+  },
 });
 
 
