@@ -579,8 +579,32 @@ export async function executeDeviceAction(
   }
 
   session.startAutomationSession(toolName, target, value);
+  session.setPendingWork(true);
   try {
     const result = await executeDeviceActionInternal(toolName, target, value);
+
+    // If emergency kill switch was triggered while this action was in-flight,
+    // record an outcome honestly reflecting what actually occurred on the device.
+    const currentSession = useDeviceSessionStore.getState();
+    if (currentSession.killSwitchTriggered) {
+      const isMut = isMutating(toolName);
+      const abortedOutcome: DeviceActionOutcome = isMut ? 'indeterminate' : 'failed';
+      const abortedResult: DeviceActionResult = {
+        outcome: abortedOutcome,
+        observation: isMut
+          ? `Action indeterminate: ${toolName} was dispatched to the device and may have taken effect, but was aborted by user kill switch (${currentSession.killSwitchSource || 'programmatic'}) before completion confirmation.`
+          : `Action aborted: ${toolName} was cancelled by emergency kill switch (${currentSession.killSwitchSource || 'programmatic'}).`,
+      };
+      currentSession.recordAction({
+        toolName,
+        target,
+        value,
+        outcome: isMut ? 'indeterminate' : 'aborted',
+        summary: abortedResult.observation,
+      });
+      return abortedResult;
+    }
+
     session.recordAction({
       toolName,
       target,
@@ -589,7 +613,27 @@ export async function executeDeviceAction(
       summary: result.observation,
     });
     return result;
+  } catch (err: any) {
+    const currentSession = useDeviceSessionStore.getState();
+    if (currentSession.killSwitchTriggered) {
+      const isMut = isMutating(toolName);
+      const abortedOutcome: DeviceActionOutcome = isMut ? 'indeterminate' : 'failed';
+      const abortedResult: DeviceActionResult = {
+        outcome: abortedOutcome,
+        observation: `Action aborted: ${toolName} threw after kill switch was triggered (${currentSession.killSwitchSource || 'programmatic'}): ${err?.message || err}`,
+      };
+      currentSession.recordAction({
+        toolName,
+        target,
+        value,
+        outcome: isMut ? 'indeterminate' : 'aborted',
+        summary: abortedResult.observation,
+      });
+      return abortedResult;
+    }
+    throw err;
   } finally {
+    useDeviceSessionStore.getState().setPendingWork(false);
     useDeviceSessionStore.getState().stopAutomationSession();
   }
 }
