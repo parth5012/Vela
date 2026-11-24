@@ -30,6 +30,7 @@ interface DeviceSessionState {
   killSwitchTriggered: boolean;
   killSwitchSource: 'floating_button' | 'volume_key' | 'programmatic' | null;
   hasPendingWork: boolean;
+  pendingDispatches: number;
 
   // Session-only ephemeral action history — zero disk persistence
   actionHistory: SessionActionItem[];
@@ -70,6 +71,7 @@ export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
   killSwitchTriggered: false,
   killSwitchSource: null,
   hasPendingWork: false,
+  pendingDispatches: 0,
 
   actionHistory: [],
   sessionBypasses: {},
@@ -86,21 +88,25 @@ export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
     if (get().hasPendingWork) {
       return;
     }
-    set({
+    const currentCount = get().pendingDispatches;
+    set((state) => ({
       isAutomationRunning: true,
-      activeToolName: toolName || null,
-      activeTarget: target || null,
-      activeValue: value || null,
-      killSwitchTriggered: false,
-      killSwitchSource: null,
-    });
+      pendingDispatches: currentCount + 1,
+      activeToolName: toolName || state.activeToolName,
+      activeTarget: target || state.activeTarget,
+      activeValue: value || state.activeValue,
+      ...(currentCount === 0 && {
+        killSwitchTriggered: false,
+        killSwitchSource: null,
+      }),
+    }));
   },
 
   setPendingWork: (hasPendingWork: boolean) => set({ hasPendingWork }),
 
   stopAutomationSession: (reason) => {
-    const isRunning = get().isAutomationRunning;
-    if (isRunning && reason && !get().killSwitchTriggered) {
+    const nextCount = Math.max(0, get().pendingDispatches - 1);
+    if (get().isAutomationRunning && reason && !get().killSwitchTriggered) {
       get().recordAction({
         toolName: get().activeToolName || 'automation_session',
         outcome: 'executed',
@@ -108,10 +114,13 @@ export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
       });
     }
     set({
-      isAutomationRunning: false,
-      activeToolName: null,
-      activeTarget: null,
-      activeValue: null,
+      pendingDispatches: nextCount,
+      isAutomationRunning: nextCount > 0,
+      ...(nextCount === 0 && {
+        activeToolName: null,
+        activeTarget: null,
+        activeValue: null,
+      }),
     });
   },
 
@@ -218,6 +227,7 @@ export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
       killSwitchTriggered: false,
       killSwitchSource: null,
       hasPendingWork: false,
+      pendingDispatches: 0,
       actionHistory: [],
       sessionBypasses: {},
       isAccessibilityModalVisible: false,

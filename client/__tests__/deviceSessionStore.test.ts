@@ -76,4 +76,30 @@ describe('useDeviceSessionStore', () => {
     useDeviceSessionStore.getState().clearSessionHistory();
     expect(useDeviceSessionStore.getState().actionHistory.length).toBe(0);
   });
+
+  it('handles overlapping action dispatches without clearing active session prematurely', () => {
+    const store = useDeviceSessionStore.getState();
+
+    // Action 1 starts
+    store.startAutomationSession('device_tap', '@button1', 'Click');
+    expect(useDeviceSessionStore.getState().isAutomationRunning).toBe(true);
+    expect(useDeviceSessionStore.getState().pendingDispatches).toBe(1);
+
+    // Action 2 starts before action 1 finishes
+    store.startAutomationSession('device_type', '@field1', 'Text');
+    expect(useDeviceSessionStore.getState().isAutomationRunning).toBe(true);
+    expect(useDeviceSessionStore.getState().pendingDispatches).toBe(2);
+
+    // Action 1 completes
+    store.stopAutomationSession('Action 1 done');
+    expect(useDeviceSessionStore.getState().isAutomationRunning).toBe(true);
+    expect(useDeviceSessionStore.getState().pendingDispatches).toBe(1);
+    expect(useDeviceSessionStore.getState().activeToolName).toBe('device_type');
+
+    // Action 2 completes
+    store.stopAutomationSession('Action 2 done');
+    expect(useDeviceSessionStore.getState().isAutomationRunning).toBe(false);
+    expect(useDeviceSessionStore.getState().pendingDispatches).toBe(0);
+    expect(useDeviceSessionStore.getState().activeToolName).toBeNull();
+  });
 });
