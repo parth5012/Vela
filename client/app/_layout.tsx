@@ -31,6 +31,8 @@ import { SafetyDialog } from '../components/ui/SafetyDialog';
 import { SyncConflictModal } from '../components/ui/SyncConflictModal';
 import { useSyncConflictStore } from '../store/useSyncConflictStore';
 import FloatingOverlayRoot from '../components/overlay/FloatingOverlayRoot';
+import { FloatingKillSwitch } from '../components/device/FloatingKillSwitch';
+import { AccessibilityPermissionModal } from '../components/device/AccessibilityPermissionModal';
 import { persistentWebviewContainerStyle, persistentWebviewPointerEvents } from '../utils/persistentWebviewStyle';
 import { registerAndPostToken } from '../utils/pushRegistration';
 import { routeByType } from '../utils/notificationRouting';
@@ -489,6 +491,8 @@ export default function RootLayout() {
       <SafetyDialog />
       <SyncConflictModal />
       <FloatingOverlayRoot />
+      <FloatingKillSwitch />
+      <AccessibilityPermissionModal />
     </View>
   );
 }

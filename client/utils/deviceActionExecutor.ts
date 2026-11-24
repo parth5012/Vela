@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import DeviceAgentNative from '../modules/device-agent';
 import { useConfigStore } from '../store/useConfigStore';
+import { useDeviceSessionStore } from '../store/useDeviceSessionStore';
 import {
   buildShizukuOp,
   deriveShizukuState,
@@ -363,7 +364,7 @@ function unavailable(toolName: string, reason: string): DeviceActionResult {
  * five outcomes above actually occurred. Never claims an action ran unless it
  * ran.
  */
-export async function executeDeviceAction(
+async function executeDeviceActionInternal(
   toolName: string,
   target?: string,
   value?: string
@@ -557,6 +558,47 @@ export async function executeDeviceAction(
       observation: `Action failed: the device agent could not run ${toolName} (target: ${target}, value: ${value}). Error detail: ${e?.message || e}`,
     };
   }
+}
+
+/**
+ * Executes a device agent tool via the native module and reports which of the
+ * five outcomes above actually occurred. Coordinates with the active device
+ * automation session, records session history, and respects the emergency kill switch.
+ */
+export async function executeDeviceAction(
+  toolName: string,
+  target?: string,
+  value?: string
+): Promise<DeviceActionResult> {
+  const session = useDeviceSessionStore.getState();
+  if (session.killSwitchTriggered) {
+    return {
+      outcome: 'failed',
+      observation: 'Action NOT executed: aborted by emergency kill switch.',
+    };
+  }
+
+  session.startAutomationSession(toolName, target, value);
+  try {
+    const result = await executeDeviceActionInternal(toolName, target, value);
+    session.recordAction({
+      toolName,
+      target,
+      value,
+      outcome: result.outcome,
+      summary: result.observation,
+    });
+    return result;
+  } finally {
+    useDeviceSessionStore.getState().stopAutomationSession();
+  }
+}
+
+/**
+ * Emergency abort trigger for running automation sessions.
+ */
+export function abortDeviceAction(source: 'floating_button' | 'volume_key' | 'programmatic' = 'programmatic'): void {
+  useDeviceSessionStore.getState().triggerKillSwitch(source);
 }
 
 /**
