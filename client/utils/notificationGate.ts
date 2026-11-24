@@ -178,16 +178,6 @@ export function evaluateNotificationDelivery(
   const channel = normalizeChannelKey(rawType);
   const { channels, quietHours, hasHydrated } = useNotificationStore.getState();
 
-  // If already deferred and firing at the end of quiet hours, approve immediately
-  if (isAlreadyDeferred) {
-    return {
-      shouldDeliver: true,
-      isDeferred: false,
-      channel: channel ?? undefined,
-      reason: 'pre_approved_deferred_delivery',
-    };
-  }
-
   // If store has not hydrated yet, fail closed unless in test environment
   if (!hasHydrated && typeof process !== 'undefined' && process.env?.NODE_ENV !== 'test') {
     return {
@@ -198,13 +188,23 @@ export function evaluateNotificationDelivery(
     };
   }
 
-  // If channel is disabled, drop it
+  // If channel is disabled, drop it even if previously deferred
   if (channel && channels[channel] === false) {
     return {
       shouldDeliver: false,
       isDeferred: false,
       channel,
       reason: `channel_${channel}_disabled`,
+    };
+  }
+
+  // If already deferred and firing at the end of quiet hours, approve immediately
+  if (isAlreadyDeferred) {
+    return {
+      shouldDeliver: true,
+      isDeferred: false,
+      channel: channel ?? undefined,
+      reason: 'pre_approved_deferred_delivery',
     };
   }
 
@@ -267,11 +267,16 @@ export async function scheduleGatedNotification(
     ...(evaluation.isDeferred ? { deferred: true, originalTime: new Date().toISOString() } : {}),
   };
 
+  const androidPayload = {
+    ...(req.android ?? {}),
+    ...(req.priority && !req.android?.priority ? { priority: req.priority } : {}),
+  };
+
   const content: Notifications.NotificationContentInput = {
     title: req.title,
     body: req.body,
     data: payloadData,
-    ...(req.android ? { android: req.android } : {}),
+    ...(Object.keys(androidPayload).length > 0 ? { android: androidPayload } : {}),
   };
 
   try {
@@ -332,6 +337,18 @@ export async function handleForegroundNotification(
   const isAlreadyDeferred = data?.deferred === true || data?.deferred === 'true';
   const rawType = (data?.type as string) || (data?.channel as string);
 
+  const evaluation = evaluateNotificationDelivery(rawType, new Date(), isAlreadyDeferred);
+
+  if (!evaluation.shouldDeliver) {
+    return {
+      shouldShowAlert: false,
+      shouldPlaySound: false,
+      shouldSetBadge: false,
+      shouldShowBanner: false,
+      shouldShowList: false,
+    };
+  }
+
   if (isAlreadyDeferred) {
     return {
       shouldShowAlert: true,
@@ -342,9 +359,13 @@ export async function handleForegroundNotification(
     };
   }
 
-  const evaluation = evaluateNotificationDelivery(rawType, new Date(), false);
-
   if (evaluation.isDeferred && evaluation.deferredDate) {
+    const channelId =
+      ((content as { android?: { channelId?: string } })?.android?.channelId) ||
+      (data?.channelId as string) ||
+      (content as { channelId?: string })?.channelId;
+    const androidConfig = (content as { android?: Record<string, unknown> })?.android;
+
     try {
       const scheduledId = await Notifications.scheduleNotificationAsync({
         identifier: notification.request.identifier
@@ -354,10 +375,12 @@ export async function handleForegroundNotification(
           title: content?.title || 'Notification',
           body: content?.body || '',
           data: { ...(data || {}), deferred: true, originalTime: new Date().toISOString() },
+          ...(androidConfig ? { android: androidConfig } : {}),
         },
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DATE,
           date: evaluation.deferredDate,
+          ...(channelId ? { channelId } : {}),
         },
       });
       useNotificationStore.getState().trackDeferredNotificationId(scheduledId);
