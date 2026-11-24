@@ -75,7 +75,7 @@ export function SafetyDialog() {
           {/* Header with Risk Badge */}
           <View style={styles.headerRow}>
             <Text style={[styles.dialogTitle, { color: colors.text, fontSize: sizes.title }]}>
-              Confirm Action: {categoryLabel}
+              🛡️ Safety Authorization
             </Text>
             <View style={[styles.badge, { backgroundColor: `${riskBadgeColor}20`, borderColor: riskBadgeColor }]}>
               <Text style={[styles.badgeText, { color: riskBadgeColor }]}>{riskBadge}</Text>
@@ -83,7 +83,7 @@ export function SafetyDialog() {
           </View>
 
           <Text style={[styles.dialogSubtitle, { color: colors.textMuted, fontSize: sizes.sub }]}>
-            Please verify the details below. Vela will only perform this action upon your confirmation.
+            Confirm Action: {categoryLabel} - Please verify the details below. Vela will only perform this action upon your confirmation.
           </Text>
 
           {/* Structured Payload Inspector Box */}
@@ -140,9 +140,9 @@ export function SafetyDialog() {
                 pressed && { opacity: 0.7 },
               ]}
               accessibilityRole="button"
-              accessibilityLabel="Cancel action"
+              accessibilityLabel="Deny once or cancel action"
             >
-              <Text style={[styles.btnText, { color: colors.text, fontSize: sizes.text }]}>Cancel</Text>
+              <Text style={[styles.btnText, { color: colors.text, fontSize: sizes.text }]}>Deny Once</Text>
             </Pressable>
 
             <Pressable
@@ -153,10 +153,10 @@ export function SafetyDialog() {
                 pressed && { opacity: 0.7 },
               ]}
               accessibilityRole="button"
-              accessibilityLabel="Confirm action"
+              accessibilityLabel="Allow once or confirm action"
             >
               <Text style={[styles.btnText, { color: '#ffffff', fontSize: sizes.text, fontWeight: 'bold' }]}>
-                Confirm Action
+                Allow Once
               </Text>
             </Pressable>
           </View>

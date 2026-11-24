@@ -66,6 +66,7 @@ export default function DeviceAgentPermissionsScreen() {
   const isAutomationRunning = useDeviceSessionStore((s) => s.isAutomationRunning);
   const startAutomationSession = useDeviceSessionStore((s) => s.startAutomationSession);
   const stopAutomationSession = useDeviceSessionStore((s) => s.stopAutomationSession);
+  const triggerKillSwitch = useDeviceSessionStore((s) => s.triggerKillSwitch);
   const { colors, sizes } = useAurora();
   const router = useRouter();
   const hasOverlayNativeAction = canOpenSettingsAction();
@@ -162,7 +163,7 @@ export default function DeviceAgentPermissionsScreen() {
           <Pressable
             onPress={() => {
               if (isAutomationRunning) {
-                stopAutomationSession('User stopped test session');
+                triggerKillSwitch('programmatic');
               } else {
                 startAutomationSession('test_tap', 'Sample Target Button', 'Click');
               }

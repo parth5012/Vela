@@ -17,6 +17,7 @@ export function ScreenMirrorModal() {
   const { colors, sizes, aurora } = useAurora();
 
   const [selectedNode, setSelectedNode] = useState<SimplifiedDomNode | null>(null);
+  const [isSimulated, setIsSimulated] = useState(false);
 
   const fetchScreenTree = useCallback(async () => {
     setLoading(true);
@@ -25,6 +26,7 @@ export function ScreenMirrorModal() {
         const raw = await (DeviceAgentNative as any).getScreenTree();
         const simplified = parseScreenHierarchy(raw);
         setHierarchy(simplified);
+        setIsSimulated(false);
       } else {
         // Simulated / test screen DOM tree
         const mockRaw = [
@@ -50,6 +52,7 @@ export function ScreenMirrorModal() {
         ];
         const simplified = parseScreenHierarchy(mockRaw);
         setHierarchy(simplified);
+        setIsSimulated(true);
       }
     } catch (e) {
       console.warn('[ScreenMirrorModal] Failed to fetch screen hierarchy:', e);
@@ -153,6 +156,15 @@ export function ScreenMirrorModal() {
               🔒 Read-Only: Password fields masked. No touches can be injected from this preview.
             </Text>
           </View>
+
+          {/* Simulated Demo Notice */}
+          {isSimulated ? (
+            <View style={[styles.banner, { backgroundColor: 'rgba(234, 179, 8, 0.12)', borderColor: 'rgba(234, 179, 8, 0.35)', marginTop: 8 }]}>
+              <Text style={[styles.bannerText, { color: '#eab308', fontSize: sizes.sub - 1 }]}>
+                🧪 Demo Preview: Live accessibility tree is unavailable on this platform. Displaying simulated sample hierarchy.
+              </Text>
+            </View>
+          ) : null}
 
           {/* Body Content */}
           <View style={styles.body}>
