@@ -268,6 +268,7 @@ export async function scheduleGatedNotification(
   };
 
   const androidPayload = {
+    ...(req.channelId ? { channelId: req.channelId } : {}),
     ...(req.android ?? {}),
     ...(req.priority && !req.android?.priority ? { priority: req.priority } : {}),
   };
@@ -287,11 +288,15 @@ export async function scheduleGatedNotification(
       console.log(
         `[notificationGate] Deferring notification (${req.channel}) to ${evaluation.deferredDate.toISOString()}`
       );
+      const dateType =
+        Notifications.SchedulableTriggerInputTypes?.DATE ??
+        ('date' as Notifications.SchedulableTriggerInputTypes.DATE);
+
       scheduledId = await Notifications.scheduleNotificationAsync({
         identifier,
         content,
         trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          type: dateType,
           date: evaluation.deferredDate,
           ...(req.channelId ? { channelId: req.channelId } : {}),
         },
@@ -300,16 +305,7 @@ export async function scheduleGatedNotification(
       return { delivered: true, deferred: true, id: scheduledId };
     }
 
-    const trigger =
-      req.trigger ??
-      (req.channelId
-        ? {
-            type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-            seconds: 1,
-            repeats: false,
-            channelId: req.channelId,
-          }
-        : null);
+    const trigger = req.trigger ?? null;
 
     scheduledId = await Notifications.scheduleNotificationAsync({
       identifier,
@@ -367,6 +363,10 @@ export async function handleForegroundNotification(
     const androidConfig = (content as { android?: Record<string, unknown> })?.android;
 
     try {
+      const dateType =
+        Notifications.SchedulableTriggerInputTypes?.DATE ??
+        ('date' as Notifications.SchedulableTriggerInputTypes.DATE);
+
       const scheduledId = await Notifications.scheduleNotificationAsync({
         identifier: notification.request.identifier
           ? `deferred-${notification.request.identifier}`
@@ -378,7 +378,7 @@ export async function handleForegroundNotification(
           ...(androidConfig ? { android: androidConfig } : {}),
         },
         trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          type: dateType,
           date: evaluation.deferredDate,
           ...(channelId ? { channelId } : {}),
         },

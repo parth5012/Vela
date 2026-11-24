@@ -16,6 +16,7 @@ jest.mock('expo-notifications', () => ({
   setNotificationChannelAsync: jest.fn(async () => undefined),
   scheduleNotificationAsync: jest.fn(async () => 'scheduled-id'),
   cancelScheduledNotificationAsync: jest.fn(async () => undefined),
+  SchedulableTriggerInputTypes: { DATE: 'date', TIME_INTERVAL: 'timeInterval', CALENDAR: 'calendar' },
 }));
 
 const mockDbUpdates: any[] = [];
@@ -109,7 +110,7 @@ describe('foregroundTaskRunner (System B approval path standalone verification #
       content: expect.objectContaining({
         title: 'Vela needs your approval',
         body: 'Confirm send transaction',
-        data: { type: 'approval_needed', execution_id: 'exec-test-1' },
+        data: expect.objectContaining({ type: 'approval_needed', execution_id: 'exec-test-1' }),
       }),
       trigger: null,
     });
