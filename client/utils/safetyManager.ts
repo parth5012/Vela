@@ -1,5 +1,6 @@
 import { useConfigStore, PermissionTier, DeviceAgentPermissions } from '../store/useConfigStore';
 import { useSafetyStore } from '../store/useSafetyStore';
+import { useDeviceSessionStore } from '../store/useDeviceSessionStore';
 
 /**
  * Classifies a specific device agent action into one of the 20 permission categories.
@@ -165,6 +166,14 @@ export async function evaluateSafety(
 
   // Confirm path: Trigger global async modal check
   if (tier === 'confirm') {
+    // Session-level bypass check: if user chose "Don't ask again this session", auto-approve
+    if (useDeviceSessionStore.getState().isCategoryBypassed(category)) {
+      return {
+        status: 'success',
+        result: 'Allowed by session bypass',
+      };
+    }
+
     try {
       const response = await useSafetyStore.getState().requestApproval({
         toolName,

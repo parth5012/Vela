@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useConfigStore, PermissionTier, DeviceAgentPermissions } from '../../store/useConfigStore';
+import { useDeviceSessionStore } from '../../store/useDeviceSessionStore';
 import { openSettings, canOpenSettingsAction } from '../../utils/permissionManager';
 import {
   AuroraScreen,
@@ -10,6 +11,9 @@ import {
   PillGroup,
   useAurora,
 } from '../../components/ui/settingsKit';
+import { AccessibilityPermissionModal } from '../../components/device/AccessibilityPermissionModal';
+import { ScreenMirrorModal } from '../../components/device/ScreenMirrorModal';
+import { SessionHistorySheet } from '../../components/device/SessionHistorySheet';
 
 interface PermissionItem {
   key: keyof DeviceAgentPermissions;
@@ -56,6 +60,12 @@ const OPTIONS = [
 export default function DeviceAgentPermissionsScreen() {
   const permissions = useConfigStore((s) => s.deviceAgentPermissions);
   const setPermission = useConfigStore((s) => s.setDeviceAgentPermission);
+  const setAccessibilityModalVisible = useDeviceSessionStore((s) => s.setAccessibilityModalVisible);
+  const setMirrorVisible = useDeviceSessionStore((s) => s.setMirrorVisible);
+  const setHistoryVisible = useDeviceSessionStore((s) => s.setHistoryVisible);
+  const isAutomationRunning = useDeviceSessionStore((s) => s.isAutomationRunning);
+  const startAutomationSession = useDeviceSessionStore((s) => s.startAutomationSession);
+  const stopAutomationSession = useDeviceSessionStore((s) => s.stopAutomationSession);
   const { colors, sizes } = useAurora();
   const router = useRouter();
   const hasOverlayNativeAction = canOpenSettingsAction();
@@ -96,6 +106,85 @@ export default function DeviceAgentPermissionsScreen() {
       title="Device Agent Permissions"
       subtitle="Configure how Vela acts on your phone automatically, prompts for authorization, or stands blocked."
     >
+      {/* Safety, Onboarding & Diagnostics */}
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.text, fontSize: sizes.sub + 2 }]}>
+          Safety, Onboarding & Diagnostics
+        </Text>
+        <Text style={[styles.sectionSubtitle, { color: colors.textMuted, fontSize: sizes.sub - 1 }]}>
+          Permission flow onboarding, read-only screen mirror, session action audit, and emergency controls.
+        </Text>
+
+        <Card style={styles.card}>
+          <Pressable
+            onPress={() => setAccessibilityModalVisible(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Launch Accessibility Service setup flow"
+          >
+            <Label>Accessibility Service Setup →</Label>
+            <Text style={[styles.description, { color: colors.textMuted, fontSize: sizes.sub }]}>
+              3-step guided flow to enable Android's Accessibility Service, review on-device privacy guarantees, and auto-detect activation.
+            </Text>
+          </Pressable>
+        </Card>
+
+        <Card style={styles.card}>
+          <Pressable
+            onPress={() => setMirrorVisible(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Inspect screen mirror"
+          >
+            <Label>Inspect Screen Mirror (Simplified DOM) →</Label>
+            <Text style={[styles.description, { color: colors.textMuted, fontSize: sizes.sub }]}>
+              Read-only inspection of active screen UI node hierarchies with sensitive input masking.
+            </Text>
+          </Pressable>
+        </Card>
+
+        <Card style={styles.card}>
+          <Pressable
+            onPress={() => setHistoryVisible(true)}
+            accessibilityRole="button"
+            accessibilityLabel="View session action history"
+          >
+            <Label>Session Action History →</Label>
+            <Text style={[styles.description, { color: colors.textMuted, fontSize: sizes.sub }]}>
+              Ephemeral in-memory audit trail of device actions in the current active session.
+            </Text>
+          </Pressable>
+        </Card>
+
+        <Card style={styles.card}>
+          <Label>Dual-Trigger Kill Switch</Label>
+          <Text style={[styles.description, { color: colors.textMuted, fontSize: sizes.sub }]}>
+            An active-only floating Stop button appears when automation executes. Pressing it or either hardware Volume key immediately aborts ongoing actions.
+          </Text>
+          <Pressable
+            onPress={() => {
+              if (isAutomationRunning) {
+                stopAutomationSession('User stopped test session');
+              } else {
+                startAutomationSession('test_tap', 'Sample Target Button', 'Click');
+              }
+            }}
+            style={({ pressed }) => [
+              styles.actionBtn,
+              {
+                backgroundColor: isAutomationRunning ? 'rgba(244, 63, 94, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                borderColor: isAutomationRunning ? '#f43f5e' : colors.glassBorder,
+                opacity: pressed ? 0.7 : 1,
+              },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={isAutomationRunning ? 'Stop test automation session' : 'Simulate active session to test floating stop button'}
+          >
+            <Text style={[styles.actionBtnText, { color: isAutomationRunning ? '#f43f5e' : colors.text, fontSize: sizes.sub }]}>
+              {isAutomationRunning ? '⏹ Stop Active Session' : '▶ Simulate Active Session to Test Stop Button'}
+            </Text>
+          </Pressable>
+        </Card>
+      </View>
+
       <Card style={styles.card}>
         <Pressable
           onPress={() => router.push('/settings/shizuku')}
@@ -200,6 +289,10 @@ export default function DeviceAgentPermissionsScreen() {
           </Text>
         </Card>
       </View>
+
+      <ScreenMirrorModal />
+      <SessionHistorySheet />
+      <AccessibilityPermissionModal />
     </AuroraScreen>
   );
 }
