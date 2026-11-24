@@ -98,6 +98,10 @@ export const useNotificationStore = create<NotificationStoreState>()(
     {
       name: 'vela-notification-settings',
       storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
+        quietHours: state.quietHours,
+        channels: state.channels,
+      }),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);
       },
