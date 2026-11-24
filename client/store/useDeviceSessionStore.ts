@@ -29,6 +29,7 @@ interface DeviceSessionState {
   activeValue: string | null;
   killSwitchTriggered: boolean;
   killSwitchSource: 'floating_button' | 'volume_key' | 'programmatic' | null;
+  hasPendingWork: boolean;
 
   // Session-only ephemeral action history — zero disk persistence
   actionHistory: SessionActionItem[];
@@ -48,6 +49,7 @@ interface DeviceSessionState {
   stopAutomationSession: (reason?: string) => void;
   triggerKillSwitch: (source?: 'floating_button' | 'volume_key' | 'programmatic') => void;
   resetKillSwitch: () => void;
+  setPendingWork: (pending: boolean) => void;
   recordAction: (item: Omit<SessionActionItem, 'id' | 'timestamp'>) => void;
   clearSessionHistory: () => void;
   setSessionBypass: (category: string, bypass: boolean) => void;
@@ -67,6 +69,7 @@ export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
   activeValue: null,
   killSwitchTriggered: false,
   killSwitchSource: null,
+  hasPendingWork: false,
 
   actionHistory: [],
   sessionBypasses: {},
@@ -88,9 +91,11 @@ export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
     });
   },
 
+  setPendingWork: (hasPendingWork: boolean) => set({ hasPendingWork }),
+
   stopAutomationSession: (reason) => {
     const isRunning = get().isAutomationRunning;
-    if (isRunning && reason) {
+    if (isRunning && reason && !get().killSwitchTriggered) {
       get().recordAction({
         toolName: get().activeToolName || 'automation_session',
         outcome: 'executed',
@@ -106,39 +111,43 @@ export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
   },
 
   triggerKillSwitch: (source = 'programmatic') => {
+    const hasWork = get().hasPendingWork;
     const tool = get().activeToolName || 'device_action';
     const target = get().activeTarget || undefined;
     const value = get().activeValue || undefined;
 
-    // Record the abort event in session history
-    const item: SessionActionItem = {
-      id: `act_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      timestamp: Date.now(),
-      toolName: tool,
-      target,
-      value,
-      outcome: 'aborted',
-      summary: `[Aborted by User] Emergency kill switch triggered via ${source}`,
-    };
-
-    set((state) => {
-      const nextHistory = [item, ...state.actionHistory];
+    // If no native dispatch is in-flight, record the abort event immediately into session history.
+    // If a dispatch is in-flight, executeDeviceAction records the accurate outcome once the native call settles.
+    let nextHistory = get().actionHistory;
+    if (!hasWork) {
+      const item: SessionActionItem = {
+        id: `act_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        timestamp: Date.now(),
+        toolName: tool,
+        target,
+        value,
+        outcome: 'aborted',
+        summary: `[Aborted by User] Emergency kill switch triggered via ${source}`,
+      };
+      nextHistory = [item, ...nextHistory];
       if (nextHistory.length > MAX_HISTORY_ITEMS) {
         nextHistory.length = MAX_HISTORY_ITEMS;
       }
-      return {
-        isAutomationRunning: false,
-        activeToolName: null,
-        activeTarget: null,
-        activeValue: null,
-        killSwitchTriggered: true,
-        killSwitchSource: source,
-        actionHistory: nextHistory,
-      };
+    }
+
+    set({
+      isAutomationRunning: false,
+      killSwitchTriggered: true,
+      killSwitchSource: source,
+      actionHistory: nextHistory,
     });
   },
 
   resetKillSwitch: () => {
+    // Keep the guard active until pending automation work has fully settled
+    if (get().hasPendingWork) {
+      return;
+    }
     set({ killSwitchTriggered: false, killSwitchSource: null });
   },
 
@@ -203,6 +212,7 @@ export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
       activeValue: null,
       killSwitchTriggered: false,
       killSwitchSource: null,
+      hasPendingWork: false,
       actionHistory: [],
       sessionBypasses: {},
       isAccessibilityModalVisible: false,

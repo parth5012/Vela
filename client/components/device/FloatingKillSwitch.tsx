@@ -16,6 +16,7 @@ import { DEFAULT_ELEVATION } from '../../utils/elevation';
 
 export function FloatingKillSwitch() {
   const isRunning = useDeviceSessionStore((s) => s.isAutomationRunning);
+  const hasPendingWork = useDeviceSessionStore((s) => s.hasPendingWork);
   const activeTool = useDeviceSessionStore((s) => s.activeToolName);
   const killSwitchTriggered = useDeviceSessionStore((s) => s.killSwitchTriggered);
   const triggerKillSwitch = useDeviceSessionStore((s) => s.triggerKillSwitch);
@@ -58,17 +59,20 @@ export function FloatingKillSwitch() {
     };
   }, [triggerKillSwitch]);
 
-  // Handle visual feedback when kill switch is triggered
+  // Handle visual feedback and guard reset when kill switch is triggered
   useEffect(() => {
     if (killSwitchTriggered) {
       setToastMessage('⏹ Agent stopped by user');
-      const timer = setTimeout(() => {
-        setToastMessage(null);
-        resetKillSwitch();
-      }, 3000);
-      return () => clearTimeout(timer);
+      // Keep guard active until pending automation work has settled
+      if (!isRunning && !hasPendingWork) {
+        const timer = setTimeout(() => {
+          setToastMessage(null);
+          resetKillSwitch();
+        }, 3000);
+        return () => clearTimeout(timer);
+      }
     }
-  }, [killSwitchTriggered, resetKillSwitch]);
+  }, [killSwitchTriggered, isRunning, hasPendingWork, resetKillSwitch]);
 
   const handleStopPress = () => {
     triggerKillSwitch('floating_button');
@@ -104,10 +108,8 @@ export function FloatingKillSwitch() {
         onPress={handleStopPress}
         style={({ pressed }) => [
           styles.stopButton,
-          pressed && {
-            opacity: 0.8,
-            ...(!reducedMotion && { transform: [{ scale: 0.95 }] }),
-          },
+          pressed && styles.stopButtonPressed,
+          !reducedMotion && pressed && styles.stopButtonScale,
         ]}
         accessibilityRole="button"
         accessibilityLabel="Emergency Stop Device Agent"
@@ -149,6 +151,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 6,
     gap: 6,
+  },
+  stopButtonPressed: {
+    opacity: 0.8,
+  },
+  stopButtonScale: {
+    transform: [{ scale: 0.95 }],
   },
   stopIcon: {
     color: '#ffffff',

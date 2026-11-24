@@ -132,11 +132,31 @@ export function ScreenMirrorModal() {
           {/* Header */}
           <View style={styles.headerRow}>
             <View style={styles.titleCol}>
-              <Text style={[styles.title, { color: colors.text, fontSize: sizes.title }]}>
-                📱 Screen Mirror (Simplified DOM)
-              </Text>
+              <View style={styles.titleWithBadge}>
+                <Text style={[styles.title, { color: colors.text, fontSize: sizes.title }]}>
+                  📱 Screen Mirror
+                </Text>
+                <View
+                  style={[
+                    styles.sourceBadge,
+                    {
+                      backgroundColor: isSimulated ? 'rgba(234, 179, 8, 0.18)' : 'rgba(16, 185, 129, 0.18)',
+                      borderColor: isSimulated ? '#eab308' : '#10b981',
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.sourceBadgeText,
+                      { color: isSimulated ? '#eab308' : '#10b981' },
+                    ]}
+                  >
+                    {isSimulated ? 'Simulated Fallback' : 'Live Capture'}
+                  </Text>
+                </View>
+              </View>
               <Text style={[styles.subtitle, { color: colors.textMuted, fontSize: sizes.sub }]}>
-                Read-only inspection of active screen accessibility nodes
+                Read-only inspection of {isSimulated ? 'simulated demo' : 'active screen'} accessibility nodes
               </Text>
             </View>
 
@@ -271,6 +291,23 @@ const styles = StyleSheet.create({
   },
   title: {
     fontWeight: 'bold',
+  },
+  titleWithBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  sourceBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  sourceBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
   },
   subtitle: {
     marginTop: 2,

@@ -55,4 +55,50 @@ describe('Kill Switch & Emergency Abort Integration', () => {
     expect(res.observation).toContain('aborted by emergency kill switch');
     expect(mockHolder.mod.performAction).not.toHaveBeenCalled();
   });
+
+  it('keeps kill switch guard active until pending native call settles, and records indeterminate for mutating in-flight action', async () => {
+    let resolveNativeCall: (val: any) => void = () => {};
+    mockHolder.mod.performAction = jest.fn().mockImplementation(() => {
+      return new Promise((resolve) => {
+        resolveNativeCall = resolve;
+      });
+    });
+
+    // Start executing an action (mutating device_tap)
+    const actionPromise = executeDeviceAction('device_tap', '@e3', 'click');
+
+    // While the native action is pending, verify automation and pending work are active
+    expect(useDeviceSessionStore.getState().isAutomationRunning).toBe(true);
+    expect(useDeviceSessionStore.getState().hasPendingWork).toBe(true);
+
+    // User triggers kill switch mid-flight
+    abortDeviceAction('floating_button');
+    expect(useDeviceSessionStore.getState().killSwitchTriggered).toBe(true);
+    expect(useDeviceSessionStore.getState().hasPendingWork).toBe(true);
+
+    // Attempting to reset kill switch while pending work is active should be blocked
+    useDeviceSessionStore.getState().resetKillSwitch();
+    expect(useDeviceSessionStore.getState().killSwitchTriggered).toBe(true);
+
+    // Now resolve the in-flight native call
+    resolveNativeCall(true);
+    const res = await actionPromise;
+
+    // Mutating action in-flight should report indeterminate outcome reflecting actual device state
+    expect(res.outcome).toBe('indeterminate');
+    expect(res.observation).toContain('kill switch');
+
+    // Verify session history recorded the indeterminate outcome
+    const history = useDeviceSessionStore.getState().actionHistory;
+    expect(history.length).toBe(1);
+    expect(history[0].outcome).toBe('indeterminate');
+
+    // After pending work has settled, pending work is false
+    expect(useDeviceSessionStore.getState().hasPendingWork).toBe(false);
+    expect(useDeviceSessionStore.getState().isAutomationRunning).toBe(false);
+
+    // Now kill switch can be safely reset
+    useDeviceSessionStore.getState().resetKillSwitch();
+    expect(useDeviceSessionStore.getState().killSwitchTriggered).toBe(false);
+  });
 });
