@@ -150,7 +150,7 @@ export function SessionHistorySheet() {
               accessibilityRole="button"
               accessibilityLabel="Done viewing history"
             >
-              <Text style={styles.doneBtnText}>Done</Text>
+              <Text style={[styles.doneBtnText, { color: aurora.onAccent || '#ffffff' }]}>Done</Text>
             </Pressable>
           </View>
         </View>

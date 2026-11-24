@@ -237,7 +237,7 @@ export function ScreenMirrorModal() {
               accessibilityRole="button"
               accessibilityLabel="Refresh screen hierarchy"
             >
-              <Text style={styles.refreshBtnText}>🔄 Refresh Screen</Text>
+              <Text style={[styles.refreshBtnText, { color: aurora.onAccent || '#ffffff' }]}>🔄 Refresh Screen</Text>
             </Pressable>
 
             <Pressable
