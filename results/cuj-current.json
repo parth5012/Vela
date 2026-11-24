@@ -1,10 +1,10 @@
 {
   "version": "1.0.0",
-  "timestamp": "2026-11-14T17:26:28.490Z",
+  "timestamp": "2026-11-24T11:52:50.462Z",
   "platform": "mobile-android",
   "metrics": {
     "cold_start_to_typeable_ms": {
-      "value": 0.67,
+      "value": 0.33,
       "unit": "ms",
       "lower_is_better": true,
       "target": 400,
@@ -22,7 +22,7 @@
       "description": "Synchronous send action dispatch to optimistic state commit (Target: < 4.0 ms headless, < 16.6 ms native)"
     },
     "stream_100_token_settle_ms": {
-      "value": 2.67,
+      "value": 4,
       "unit": "ms",
       "lower_is_better": true,
       "target": 20,
