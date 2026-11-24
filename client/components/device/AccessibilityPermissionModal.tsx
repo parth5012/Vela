@@ -14,6 +14,7 @@ export function AccessibilityPermissionModal() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [isGranted, setIsGranted] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [launchError, setLaunchError] = useState<string | null>(null);
 
   const checkStatus = useCallback(async () => {
     setChecking(true);
@@ -51,7 +52,11 @@ export function AccessibilityPermissionModal() {
 
   const handleOpenSettings = async () => {
     setStep(2);
-    await openSettings('accessibility');
+    setLaunchError(null);
+    const result = await openSettings('accessibility');
+    if (result && (result as any).success === false) {
+      setLaunchError((result as any).error || 'Could not launch Android Settings automatically.');
+    }
   };
 
   const handleClose = () => {
@@ -144,6 +149,17 @@ export function AccessibilityPermissionModal() {
                   If the toggle is greyed out with "Restricted setting", first open App Info → tap the top-right three dots (⋮) → select "Allow restricted settings".
                 </Text>
               </Card>
+
+              {launchError ? (
+                <Card style={[styles.sideloadCard, { borderColor: 'rgba(244, 63, 94, 0.4)', backgroundColor: 'rgba(244, 63, 94, 0.1)' }]}>
+                  <Text style={[styles.sideloadTitle, { color: '#f43f5e', fontSize: sizes.sub }]}>
+                    ⚠️ Settings Launch Notice:
+                  </Text>
+                  <Text style={[styles.sideloadText, { color: colors.text, fontSize: sizes.sub - 1 }]}>
+                    {launchError} Please navigate to Settings manually using the steps below.
+                  </Text>
+                </Card>
+              ) : null}
 
               <View style={styles.autoDetectRow}>
                 {checking ? (
