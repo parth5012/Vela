@@ -24,6 +24,7 @@ export function AccessibilityPermissionModal() {
         setStep(3);
       } else {
         setIsGranted(false);
+        setStep((currentStep) => (currentStep === 3 ? 1 : currentStep));
       }
     } finally {
       setChecking(false);
