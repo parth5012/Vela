@@ -115,8 +115,8 @@ export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
     }
     set({
       pendingDispatches: nextCount,
-      isAutomationRunning: nextCount > 0,
-      hasPendingWork: nextCount > 0 ? get().hasPendingWork : false,
+      isAutomationRunning: get().killSwitchTriggered ? false : nextCount > 0,
+      hasPendingWork: nextCount > 0,
       ...(nextCount === 0 && {
         activeToolName: null,
         activeTarget: null,
@@ -133,32 +133,24 @@ export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
 
     // If no native dispatch is in-flight, record the abort event immediately into session history.
     // If a dispatch is in-flight, executeDeviceAction records the accurate outcome once the native call settles.
-    let nextHistory = get().actionHistory;
     if (!hasWork) {
-      const item: SessionActionItem = {
-        id: `act_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-        timestamp: Date.now(),
+      get().recordAction({
         toolName: tool,
         target,
         value,
         outcome: 'aborted',
         summary: `[Aborted by User] Emergency kill switch triggered via ${source}`,
-      };
-      nextHistory = [item, ...nextHistory];
-      if (nextHistory.length > MAX_HISTORY_ITEMS) {
-        nextHistory.length = MAX_HISTORY_ITEMS;
-      }
+      });
     }
 
     set({
       isAutomationRunning: false,
-      pendingDispatches: 0,
+      // Keep pendingDispatches unchanged so each in-flight dispatch settlement decrements the count
       activeToolName: null,
       activeTarget: null,
       activeValue: null,
       killSwitchTriggered: true,
       killSwitchSource: source,
-      actionHistory: nextHistory,
     });
   },
 
@@ -177,10 +169,15 @@ export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
     const maskedValue = isSensitive && item.value
       ? '••••••••'
       : item.value;
+
+    let processedSummary = item.summary;
+    if (isSensitive && item.value && processedSummary) {
+      processedSummary = processedSummary.split(item.value).join('••••••••');
+    }
     const truncatedSummary =
-      item.summary && item.summary.length > 300
-        ? `${item.summary.slice(0, 300)}...`
-        : item.summary;
+      processedSummary && processedSummary.length > 300
+        ? `${processedSummary.slice(0, 300)}...`
+        : processedSummary;
 
     const fullItem: SessionActionItem = {
       id: `act_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,

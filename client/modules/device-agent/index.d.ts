@@ -48,6 +48,8 @@ export interface DeviceAgentNative {
   addSpeechPartialListener?(cb: (text: string, isFinal: boolean) => void): Promise<string>;
   /** Remove an interim-results subscription by id. */
   removeSpeechPartialListener?(id: string): Promise<void>;
+  /** Subscribe to hardware volume key emergency stop events. */
+  addVolumeKeyListener?(cb: () => void): { remove(): void } | null;
 }
 
 declare const _default: DeviceAgentNative;

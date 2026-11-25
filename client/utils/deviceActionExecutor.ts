@@ -203,6 +203,12 @@ async function executeBrightnessWithShizuku(
     if (deriveShizukuState(status) !== 'ready') {
       return { outcome: 'failed', observation: `Action failed: ${nativeError}` };
     }
+    if (useDeviceSessionStore.getState().killSwitchTriggered) {
+      return {
+        outcome: 'failed',
+        observation: `Action NOT executed: device_setting_set was aborted by emergency kill switch before fallback dispatch.`,
+      };
+    }
     const brightnessVal = Math.round((percent / 100) * 255);
     const shizukuResult = await executeShizukuOp(
       'device_setting_put',

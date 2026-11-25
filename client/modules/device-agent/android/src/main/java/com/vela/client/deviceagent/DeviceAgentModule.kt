@@ -50,6 +50,15 @@ class DeviceAgentModule : Module() {
 
         fun emitVolumeKeyEvent() {
             instance?.sendEvent(VOLUME_KEY_EVENT, mapOf("source" to "volume_key"))
+            try {
+                instance?.appContext?.reactContext?.getJSModule(
+                    com.facebook.react.modules.core.DeviceEventManagerModule.RCTDeviceEventEmitter::class.java
+                )?.emit(VOLUME_KEY_EVENT, com.facebook.react.bridge.Arguments.createMap().apply {
+                    putString("source", "volume_key")
+                })
+            } catch (_: Throwable) {
+                // Ignore fallback emission failure
+            }
         }
         private var speechRecognizer: SpeechRecognizer? = null
         private var speechAudioFile: File? = null
@@ -204,6 +213,7 @@ class DeviceAgentModule : Module() {
                 val desc = node.contentDescription?.toString()?.replace("\n", " ") ?: ""
                 val className = node.className?.toString()?.substringAfterLast('.') ?: "Node"
 
+                val isPassword = if (node.isPassword) "password " else ""
                 val clickable = if (node.isClickable) "clickable " else ""
                 val scrollable = if (node.isScrollable) "scrollable " else ""
                 val focused = if (node.isFocused) "focused " else ""
@@ -213,7 +223,7 @@ class DeviceAgentModule : Module() {
                 if (text.isNotEmpty()) sb.append("text=\"$text\" ")
                 if (desc.isNotEmpty()) sb.append("desc=\"$desc\" ")
                 sb.append("bounds=[$lPct,$tPct,$rPct,$bPct]px(${rect.left},${rect.top},${rect.right},${rect.bottom}) ")
-                sb.append("$clickable$scrollable$focused\n")
+                sb.append("$isPassword$clickable$scrollable$focused\n")
 
                 for (i in 0 until node.childCount) {
                     val child = node.getChild(i) ?: continue

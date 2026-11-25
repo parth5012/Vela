@@ -68,6 +68,8 @@ export default function DeviceAgentPermissionsScreen() {
   const startAutomationSession = useDeviceSessionStore((s) => s.startAutomationSession);
   const stopAutomationSession = useDeviceSessionStore((s) => s.stopAutomationSession);
   const triggerKillSwitch = useDeviceSessionStore((s) => s.triggerKillSwitch);
+  const resetKillSwitch = useDeviceSessionStore((s) => s.resetKillSwitch);
+  const killSwitchTriggered = useDeviceSessionStore((s) => s.killSwitchTriggered);
   const { colors, sizes } = useAurora();
   const router = useRouter();
   const hasOverlayNativeAction = canOpenSettingsAction();
@@ -162,7 +164,7 @@ export default function DeviceAgentPermissionsScreen() {
             An active-only floating Stop button appears when automation executes. Pressing it or either hardware Volume key immediately aborts ongoing actions.
           </Text>
           <Pressable
-            disabled={hasPendingWork}
+            disabled={!isAutomationRunning && hasPendingWork}
             onPress={() => {
               if (isAutomationRunning) {
                 triggerKillSwitch('programmatic');
@@ -175,7 +177,7 @@ export default function DeviceAgentPermissionsScreen() {
               {
                 backgroundColor: isAutomationRunning ? 'rgba(244, 63, 94, 0.15)' : 'rgba(59, 130, 246, 0.15)',
                 borderColor: isAutomationRunning ? '#f43f5e' : colors.glassBorder,
-                opacity: pressed ? 0.7 : hasPendingWork ? 0.5 : 1,
+                opacity: pressed ? 0.7 : (!isAutomationRunning && hasPendingWork) ? 0.5 : 1,
               },
             ]}
             accessibilityRole="button"
@@ -195,6 +197,27 @@ export default function DeviceAgentPermissionsScreen() {
                 : '▶ Simulate Active Session to Test Stop Button'}
             </Text>
           </Pressable>
+
+          {killSwitchTriggered && !hasPendingWork && !isAutomationRunning ? (
+            <Pressable
+              onPress={() => resetKillSwitch()}
+              style={({ pressed }) => [
+                styles.actionBtn,
+                {
+                  marginTop: 10,
+                  backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                  borderColor: '#10b981',
+                  opacity: pressed ? 0.7 : 1,
+                },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Reset emergency stop and re-arm automation"
+            >
+              <Text style={[styles.actionBtnText, { color: '#10b981', fontSize: sizes.sub }]}>
+                🔄 Reset Kill Switch (Re-arm)
+              </Text>
+            </Pressable>
+          ) : null}
         </Card>
       </View>
 
@@ -305,7 +328,6 @@ export default function DeviceAgentPermissionsScreen() {
 
       <ScreenMirrorModal />
       <SessionHistorySheet />
-      <AccessibilityPermissionModal />
     </AuroraScreen>
   );
 }

@@ -72,9 +72,11 @@ export function ScreenMirrorModal() {
   useEffect(() => {
     if (visible && !hasFetchedRef.current) {
       hasFetchedRef.current = true;
+      setSelectedNode(null);
       fetchScreenTree();
     } else if (!visible) {
       hasFetchedRef.current = false;
+      setSelectedNode(null);
     }
   }, [visible, fetchScreenTree]);
 
