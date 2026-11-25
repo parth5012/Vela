@@ -619,54 +619,65 @@ export async function runLocalAgentLoop(
   let lastRecoveryAction: 'back' | 'home_reset' | null = null;
   let consecutiveWaitCount = 0;
   let totalWaitCount = 0;
+  let runStoppedByKillSwitch = false;
+  let currentAbortController: AbortController | null = null;
 
-  while (step <= maxSteps) {
-    if (useDeviceSessionStore.getState().killSwitchTriggered) {
-      completed = false;
-      finalResponse = 'Automation stopped by user emergency kill switch.';
-      break;
+  const unsubscribeKillSwitch = useDeviceSessionStore.subscribe((state) => {
+    if (state.killSwitchTriggered) {
+      runStoppedByKillSwitch = true;
+      currentAbortController?.abort();
     }
-    let stepResponse = '';
-    const tokenBuffer: string[] = [];
+  });
 
-    const abortController = new AbortController();
-    const unsubscribeKillSwitch = useDeviceSessionStore.subscribe((state) => {
-      if (state.killSwitchTriggered) {
-        abortController.abort();
+  useDeviceSessionStore.getState().startAgentRun();
+
+  try {
+    while (step <= maxSteps) {
+      if (runStoppedByKillSwitch || useDeviceSessionStore.getState().killSwitchTriggered) {
+        runStoppedByKillSwitch = true;
+        completed = false;
+        finalResponse = 'Automation stopped by user emergency kill switch.';
+        break;
       }
-    });
+      let stepResponse = '';
+      const tokenBuffer: string[] = [];
 
-    try {
-      const generator = streamLocalLlmResponse(
-        currentPrompt,
-        (token: string) => {
-          tokenBuffer.push(token);
-          options.onToken?.(token);
-          options.onEvent?.({
-            type: 'token',
-            token,
-            step,
-          });
-        },
-        abortController.signal
-      );
+      const abortController = new AbortController();
+      currentAbortController = abortController;
 
-      for await (const chunk of generator) {
-        if (useDeviceSessionStore.getState().killSwitchTriggered) {
-          abortController.abort();
-          break;
+      try {
+        const generator = streamLocalLlmResponse(
+          currentPrompt,
+          (token: string) => {
+            tokenBuffer.push(token);
+            options.onToken?.(token);
+            options.onEvent?.({
+              type: 'token',
+              token,
+              step,
+            });
+          },
+          abortController.signal
+        );
+
+        for await (const chunk of generator) {
+          if (runStoppedByKillSwitch || useDeviceSessionStore.getState().killSwitchTriggered) {
+            runStoppedByKillSwitch = true;
+            abortController.abort();
+            break;
+          }
+          stepResponse += chunk;
         }
-        stepResponse += chunk;
+      } finally {
+        currentAbortController = null;
       }
-    } finally {
-      unsubscribeKillSwitch();
-    }
 
-    if (useDeviceSessionStore.getState().killSwitchTriggered || abortController.signal.aborted) {
-      completed = false;
-      finalResponse = 'Automation stopped by user emergency kill switch.';
-      break;
-    }
+      if (runStoppedByKillSwitch || useDeviceSessionStore.getState().killSwitchTriggered || abortController.signal.aborted) {
+        runStoppedByKillSwitch = true;
+        completed = false;
+        finalResponse = 'Automation stopped by user emergency kill switch.';
+        break;
+      }
 
     const toolCall = parseToolCall(stepResponse);
 
@@ -1290,6 +1301,13 @@ export async function runLocalAgentLoop(
       // 2. Execute device action. #308: the executor reports what actually
       // happened. An unavailable or failed action is recorded and fed back as
       // "did not execute" — never as a success, and never silently.
+      if (runStoppedByKillSwitch || useDeviceSessionStore.getState().killSwitchTriggered) {
+        runStoppedByKillSwitch = true;
+        completed = false;
+        finalResponse = 'Automation stopped by user emergency kill switch.';
+        break;
+      }
+
       let action: DeviceActionResult;
       try {
         action = await executeDeviceAction(
@@ -1303,12 +1321,16 @@ export async function runLocalAgentLoop(
           observation: `Execution error: ${err?.message || String(err)}`,
         };
       }
+      if (useDeviceSessionStore.getState().killSwitchTriggered) {
+        runStoppedByKillSwitch = true;
+      }
       observation = action.observation;
       executionStatus = action.outcome;
 
       await logDeviceStepToDb(conversationId, step, toolCall, observation, action.outcome);
 
-      if (useDeviceSessionStore.getState().killSwitchTriggered) {
+      if (runStoppedByKillSwitch || useDeviceSessionStore.getState().killSwitchTriggered) {
+        runStoppedByKillSwitch = true;
         options.onEvent?.({
           type: 'tool_observation',
           toolName: toolCall.toolName,
@@ -1381,6 +1403,10 @@ export async function runLocalAgentLoop(
     currentPrompt += `\n${stepResponse}\nObservation: ${observation}\n`;
     step++;
   }
+} finally {
+  unsubscribeKillSwitch();
+  useDeviceSessionStore.getState().stopAgentRun();
+}
 
   return {
     finalResponse: finalResponse || steps[steps.length - 1]?.response || '',

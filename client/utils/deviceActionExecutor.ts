@@ -638,7 +638,7 @@ export async function executeDeviceAction(
       value,
       outcome: result.outcome,
       summary: result.observation,
-      isSensitive: classifyAction(toolName, target, value) === 'passwords_otps',
+      isSensitive: classifyAction(toolName, target, value) === 'passwords_otps' ? true : undefined,
     });
     return result;
   } catch (err: any) {
@@ -656,7 +656,7 @@ export async function executeDeviceAction(
         value,
         outcome: isMut ? 'indeterminate' : 'aborted',
         summary: abortedResult.observation,
-        isSensitive: classifyAction(toolName, target, value) === 'passwords_otps',
+        isSensitive: classifyAction(toolName, target, value) === 'passwords_otps' ? true : undefined,
       });
       return abortedResult;
     }

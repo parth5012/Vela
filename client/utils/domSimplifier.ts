@@ -1,6 +1,6 @@
 import type { SimplifiedDomNode } from '../store/useDeviceSessionStore';
 
-const SENSITIVE_PATTERN = /(?:^|[^a-zA-Z0-9])(password|pin|otp|cvv|passcode|credential|secret)(?:[^a-zA-Z0-9]|$)/i;
+const SENSITIVE_PATTERN = /(?:^|[^a-zA-Z0-9])(password|pin|otp|cvv|passcode|credential|secret)\d*(?:[^a-zA-Z0-9]|$)/i;
 
 export function isSensitiveField(text?: string, isPassword?: boolean): boolean {
   if (isPassword) return true;
