@@ -64,8 +64,8 @@ export default function DeviceAgentPermissionsScreen() {
   const setHistoryVisible = useDeviceSessionStore((s) => s.setHistoryVisible);
   const isAutomationRunning = useDeviceSessionStore((s) => s.isAutomationRunning);
   const hasPendingWork = useDeviceSessionStore((s) => s.hasPendingWork);
-  const startAutomationSession = useDeviceSessionStore((s) => s.startAutomationSession);
-  const stopAutomationSession = useDeviceSessionStore((s) => s.stopAutomationSession);
+  const startSimulatedSession = useDeviceSessionStore((s) => s.startSimulatedSession);
+  const stopSimulatedSession = useDeviceSessionStore((s) => s.stopSimulatedSession);
   const triggerKillSwitch = useDeviceSessionStore((s) => s.triggerKillSwitch);
   const resetKillSwitch = useDeviceSessionStore((s) => s.resetKillSwitch);
   const killSwitchTriggered = useDeviceSessionStore((s) => s.killSwitchTriggered);
@@ -171,9 +171,9 @@ export default function DeviceAgentPermissionsScreen() {
                 onPress={() => {
                   if (isAutomationRunning) {
                     triggerKillSwitch('programmatic');
-                    stopAutomationSession('User stopped simulated session');
+                    stopSimulatedSession();
                   } else if (!hasPendingWork && !killSwitchTriggered) {
-                    startAutomationSession('test_tap', 'Sample Target Button', 'Click');
+                    startSimulatedSession('test_tap', 'Sample Target Button', 'Click');
                   }
                 }}
                 style={({ pressed }) => [
