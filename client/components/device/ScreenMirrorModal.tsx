@@ -127,7 +127,7 @@ export function ScreenMirrorModal() {
         </Pressable>
 
         {node.children && node.children.length > 0
-          ? node.children.map((child) => renderNode(child, depth + 1))
+          ? node.children.map((child, cIdx) => renderNode(child, depth + 1, cIdx))
           : null}
       </View>
     );

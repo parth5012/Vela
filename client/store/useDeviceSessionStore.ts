@@ -25,6 +25,7 @@ const MAX_HISTORY_ITEMS = 50;
 
 interface DeviceSessionState {
   isAutomationRunning: boolean;
+  isSimulatedSession: boolean;
   activeToolName: string | null;
   activeTarget: string | null;
   activeValue: string | null;
@@ -49,6 +50,8 @@ interface DeviceSessionState {
   // Actions
   startAutomationSession: (toolName?: string, target?: string, value?: string) => void;
   stopAutomationSession: (reason?: string) => void;
+  startSimulatedSession: (toolName?: string, target?: string, value?: string) => void;
+  stopSimulatedSession: () => void;
   triggerKillSwitch: (source?: 'floating_button' | 'volume_key' | 'programmatic') => void;
   resetKillSwitch: () => void;
   setPendingWork: (pending: boolean) => void;
@@ -66,6 +69,7 @@ interface DeviceSessionState {
 
 export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
   isAutomationRunning: false,
+  isSimulatedSession: false,
   activeToolName: null,
   activeTarget: null,
   activeValue: null,
@@ -99,6 +103,29 @@ export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
     }));
   },
 
+  startSimulatedSession: (toolName = 'test_tap', target = 'Sample Target Button', value = 'Click') => {
+    if (get().killSwitchTriggered) {
+      return;
+    }
+    set({
+      isAutomationRunning: true,
+      isSimulatedSession: true,
+      activeToolName: toolName,
+      activeTarget: target,
+      activeValue: value,
+    });
+  },
+
+  stopSimulatedSession: () => {
+    set({
+      isAutomationRunning: false,
+      isSimulatedSession: false,
+      activeToolName: null,
+      activeTarget: null,
+      activeValue: null,
+    });
+  },
+
   setPendingWork: (hasPendingWork: boolean) => set({ hasPendingWork }),
 
   stopAutomationSession: (reason) => {
@@ -128,24 +155,25 @@ export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
       return;
     }
     const hasWork = get().hasPendingWork;
+    const isSimulated = get().isSimulatedSession;
     const tool = get().activeToolName || 'device_action';
     const target = get().activeTarget || undefined;
     const value = get().activeValue || undefined;
 
-    // If no native dispatch is in-flight, record the abort event immediately into session history.
-    // If a dispatch is in-flight, executeDeviceAction records the accurate outcome once the native call settles.
-    if (!hasWork) {
+    // If no native dispatch is in-flight or if it's a simulated session, record the abort event immediately
+    if (!hasWork || isSimulated) {
       get().recordAction({
         toolName: tool,
         target,
         value,
-        outcome: 'aborted',
+        outcome: isSimulated ? 'simulated' : 'aborted',
         summary: `[Aborted by User] Emergency kill switch triggered via ${source}`,
       });
     }
 
     set({
       isAutomationRunning: false,
+      isSimulatedSession: false,
       // Keep pendingDispatches unchanged so each in-flight dispatch settlement decrements the count
       activeToolName: null,
       activeTarget: null,
@@ -167,8 +195,8 @@ export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
     const isSensitive =
       item.isSensitive ??
       Boolean(
-        (item.target && /(?:^|[^a-zA-Z0-9])(password|pin|otp|secret|credential|cvv)(?:[^a-zA-Z0-9]|$)/i.test(item.target)) ||
-        (item.value && /(?:^|[^a-zA-Z0-9])(password|pin|otp|secret|credential|cvv)(?:[^a-zA-Z0-9]|$)/i.test(item.value))
+        (item.target && /(?:^|[^a-zA-Z0-9])(password|pin|otp|cvv|passcode|secret|credential)(?:[^a-zA-Z0-9]|$)/i.test(item.target)) ||
+        (item.value && /(?:^|[^a-zA-Z0-9])(password|pin|otp|cvv|passcode|secret|credential)(?:[^a-zA-Z0-9]|$)/i.test(item.value))
       );
     const maskedValue = isSensitive && item.value
       ? '••••••••'
@@ -240,6 +268,7 @@ export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
   resetSession: () => {
     set({
       isAutomationRunning: false,
+      isSimulatedSession: false,
       activeToolName: null,
       activeTarget: null,
       activeValue: null,

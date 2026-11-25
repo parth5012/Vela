@@ -240,4 +240,35 @@ describe('Kill Switch & Emergency Abort Integration', () => {
     expect(useDeviceSessionStore.getState().isAutomationRunning).toBe(true);
     expect(useDeviceSessionStore.getState().pendingDispatches).toBe(1);
   });
+
+  it('simulated session in settings does not leak pendingDispatches or lock hasPendingWork on kill switch abort', () => {
+    useDeviceSessionStore.getState().resetSession();
+    expect(useDeviceSessionStore.getState().pendingDispatches).toBe(0);
+    expect(useDeviceSessionStore.getState().hasPendingWork).toBe(false);
+
+    // Start simulated session from Settings
+    useDeviceSessionStore.getState().startSimulatedSession('test_tap', 'Button', 'Click');
+    expect(useDeviceSessionStore.getState().isAutomationRunning).toBe(true);
+    expect(useDeviceSessionStore.getState().pendingDispatches).toBe(0); // must remain 0!
+
+    // Abort via floating kill switch
+    useDeviceSessionStore.getState().triggerKillSwitch('floating_button');
+    expect(useDeviceSessionStore.getState().killSwitchTriggered).toBe(true);
+    expect(useDeviceSessionStore.getState().isAutomationRunning).toBe(false);
+    expect(useDeviceSessionStore.getState().hasPendingWork).toBe(false);
+    expect(useDeviceSessionStore.getState().pendingDispatches).toBe(0);
+
+    // Re-arm
+    useDeviceSessionStore.getState().resetKillSwitch();
+    expect(useDeviceSessionStore.getState().killSwitchTriggered).toBe(false);
+
+    // Second simulated session
+    useDeviceSessionStore.getState().startSimulatedSession('test_tap', 'Button', 'Click');
+    expect(useDeviceSessionStore.getState().pendingDispatches).toBe(0);
+
+    // Stop simulated session
+    useDeviceSessionStore.getState().stopSimulatedSession();
+    expect(useDeviceSessionStore.getState().hasPendingWork).toBe(false);
+    expect(useDeviceSessionStore.getState().pendingDispatches).toBe(0);
+  });
 });

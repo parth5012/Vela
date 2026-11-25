@@ -128,6 +128,15 @@ describe('domSimplifier', () => {
       expect(result[2].bounds).toEqual([20, 70, 80, 80]);
     });
 
+    it('parses negative off-screen coordinates in bounds and px formats', () => {
+      const output = `
+        [@e0] View: text="Offscreen Header" bounds=[-10,-20,100,50]px(-10,-20,100,50)
+      `;
+      const result = parseScreenHierarchy(output);
+      expect(result.length).toBe(1);
+      expect(result[0].bounds).toEqual([-10, -20, 100, 50]);
+    });
+
     it('returns empty array on empty input', () => {
       expect(parseScreenHierarchy('')).toEqual([]);
       expect(parseScreenHierarchy(null)).toEqual([]);
