@@ -25,6 +25,7 @@ const MAX_HISTORY_ITEMS = 50;
 
 interface DeviceSessionState {
   isAutomationRunning: boolean;
+  isAgentRunActive: boolean;
   isSimulatedSession: boolean;
   activeToolName: string | null;
   activeTarget: string | null;
@@ -48,6 +49,8 @@ interface DeviceSessionState {
   isScreenMirrorLoading: boolean;
 
   // Actions
+  startAgentRun: () => void;
+  stopAgentRun: () => void;
   startAutomationSession: (toolName?: string, target?: string, value?: string) => void;
   stopAutomationSession: (reason?: string) => void;
   startSimulatedSession: (toolName?: string, target?: string, value?: string) => void;
@@ -69,6 +72,7 @@ interface DeviceSessionState {
 
 export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
   isAutomationRunning: false,
+  isAgentRunActive: false,
   isSimulatedSession: false,
   activeToolName: null,
   activeTarget: null,
@@ -86,6 +90,17 @@ export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
   isHistoryVisible: false,
   screenMirrorHierarchy: null,
   isScreenMirrorLoading: false,
+
+  startAgentRun: () => {
+    if (get().killSwitchTriggered) {
+      return;
+    }
+    set({ isAgentRunActive: true });
+  },
+
+  stopAgentRun: () => {
+    set({ isAgentRunActive: false });
+  },
 
   startAutomationSession: (toolName, target, value) => {
     // If kill switch was triggered, do not allow starting a new session or clearing killSwitchTriggered
@@ -173,6 +188,7 @@ export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
 
     set({
       isAutomationRunning: false,
+      isAgentRunActive: false,
       isSimulatedSession: false,
       // Keep pendingDispatches unchanged so each in-flight dispatch settlement decrements the count
       activeToolName: null,
@@ -195,8 +211,8 @@ export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
     const isSensitive =
       item.isSensitive ??
       Boolean(
-        (item.target && /(?:^|[^a-zA-Z0-9])(password|pin|otp|cvv|passcode|secret|credential)(?:[^a-zA-Z0-9]|$)/i.test(item.target)) ||
-        (item.value && /(?:^|[^a-zA-Z0-9])(password|pin|otp|cvv|passcode|secret|credential)(?:[^a-zA-Z0-9]|$)/i.test(item.value))
+        (item.target && /(?:^|[^a-zA-Z0-9])(password|pin|otp|cvv|passcode|secret|credential)\d*(?:[^a-zA-Z0-9]|$)/i.test(item.target)) ||
+        (item.value && /(?:^|[^a-zA-Z0-9])(password|pin|otp|cvv|passcode|secret|credential)\d*(?:[^a-zA-Z0-9]|$)/i.test(item.value))
       );
     const maskedValue = isSensitive && item.value
       ? '••••••••'
@@ -268,6 +284,7 @@ export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
   resetSession: () => {
     set({
       isAutomationRunning: false,
+      isAgentRunActive: false,
       isSimulatedSession: false,
       activeToolName: null,
       activeTarget: null,

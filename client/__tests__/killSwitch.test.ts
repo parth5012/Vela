@@ -271,4 +271,47 @@ describe('Kill Switch & Emergency Abort Integration', () => {
     expect(useDeviceSessionStore.getState().hasPendingWork).toBe(false);
     expect(useDeviceSessionStore.getState().pendingDispatches).toBe(0);
   });
+
+  it('maintains run-level state isAgentRunActive throughout agent execution', () => {
+    useDeviceSessionStore.getState().resetSession();
+    expect(useDeviceSessionStore.getState().isAgentRunActive).toBe(false);
+
+    // Starting an agent run activates run-level state
+    useDeviceSessionStore.getState().startAgentRun();
+    expect(useDeviceSessionStore.getState().isAgentRunActive).toBe(true);
+
+    // Aborting via kill switch clears isAgentRunActive immediately
+    useDeviceSessionStore.getState().triggerKillSwitch('volume_key');
+    expect(useDeviceSessionStore.getState().killSwitchTriggered).toBe(true);
+    expect(useDeviceSessionStore.getState().isAgentRunActive).toBe(false);
+
+    // startAgentRun cannot activate while kill switch is triggered
+    useDeviceSessionStore.getState().startAgentRun();
+    expect(useDeviceSessionStore.getState().isAgentRunActive).toBe(false);
+
+    // Resetting kill switch and normal start/stop lifecycle
+    useDeviceSessionStore.getState().resetKillSwitch();
+    expect(useDeviceSessionStore.getState().killSwitchTriggered).toBe(false);
+
+    useDeviceSessionStore.getState().startAgentRun();
+    expect(useDeviceSessionStore.getState().isAgentRunActive).toBe(true);
+
+    useDeviceSessionStore.getState().stopAgentRun();
+    expect(useDeviceSessionStore.getState().isAgentRunActive).toBe(false);
+  });
+
+  it('masks unrecognized secret when classifyAction returns non-passwords_otps category', async () => {
+    useDeviceSessionStore.getState().resetSession();
+
+    // device_type into a password field: classifyAction returns 'type' (not 'passwords_otps')
+    // but the store fallback regex should detect the password target and mask the value!
+    await executeDeviceAction('device_type', 'password', 'hunter2');
+
+    const history = useDeviceSessionStore.getState().actionHistory;
+    expect(history.length).toBe(1);
+    expect(history[0].toolName).toBe('device_type');
+    expect(history[0].target).toBe('password');
+    // Secret must be masked!
+    expect(history[0].value).toBe('••••••••');
+  });
 });

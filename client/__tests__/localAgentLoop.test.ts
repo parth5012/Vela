@@ -457,10 +457,37 @@ describe('localAgentLoop real engine envelope (function_calls)', () => {
 
         expect(result.completed).toBe(false);
         expect(result.finalResponse).toContain('emergency kill switch');
-        expect(deviceActionExecutor.executeDeviceAction).not.toHaveBeenCalledWith(
-          'device_click',
-          '@never_executed'
-        );
+        expect(deviceActionExecutor.executeDeviceAction).not.toHaveBeenCalled();
+      } finally {
+        useDeviceSessionStore.setState({ killSwitchTriggered: false, hasPendingWork: false });
+      }
+    });
+
+    it('keeps stopped run stopped even if resetKillSwitch is called during post-action logging', async () => {
+      useDeviceSessionStore.setState({ killSwitchTriggered: false, hasPendingWork: false });
+      try {
+        let stepCount = 0;
+        async function* multiStepStream() {
+          stepCount++;
+          yield JSON.stringify({ name: 'device_tap', arguments: { target: `@button_${stepCount}` } });
+        }
+        mockStream.mockImplementation(multiStepStream as any);
+
+        // When the first action executes, trigger kill switch, then simulate resetKillSwitch right as native settles
+        (deviceActionExecutor.executeDeviceAction as jest.Mock).mockImplementationOnce(async () => {
+          useDeviceSessionStore.getState().triggerKillSwitch('volume_key');
+          // Reset kill switch immediately to simulate user re-arming during post-action logging
+          useDeviceSessionStore.setState({ hasPendingWork: false });
+          useDeviceSessionStore.getState().resetKillSwitch();
+          return { outcome: 'indeterminate', observation: 'Action aborted by emergency kill switch' };
+        });
+
+        const result = await runLocalAgentLoop('Perform multi-step action', { maxSteps: 5 });
+
+        expect(result.completed).toBe(false);
+        expect(result.finalResponse).toContain('emergency kill switch');
+        // Only the first step was dispatched; subsequent steps were blocked by the run-local stop latch
+        expect(deviceActionExecutor.executeDeviceAction).toHaveBeenCalledTimes(1);
       } finally {
         useDeviceSessionStore.setState({ killSwitchTriggered: false, hasPendingWork: false });
       }

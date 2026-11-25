@@ -11,6 +11,8 @@ describe('domSimplifier', () => {
       expect(isSensitiveField('Enter password')).toBe(true);
       expect(isSensitiveField('Your PIN number')).toBe(true);
       expect(isSensitiveField('SMS OTP code')).toBe(true);
+      expect(isSensitiveField('OTP123456')).toBe(true);
+      expect(isSensitiveField('PIN1234')).toBe(true);
       expect(isSensitiveField(undefined, true)).toBe(true);
       expect(isSensitiveField('General Settings')).toBe(false);
       expect(isSensitiveField('Loading Spinner')).toBe(false);
@@ -21,6 +23,11 @@ describe('domSimplifier', () => {
     it('masks sensitive text with bullets', () => {
       expect(maskSensitiveText('my_secret_password', true)).toBe('••••••••');
       expect(maskSensitiveText('Your OTP is 123456')).toBe('••••••••');
+      expect(maskSensitiveText('OTP123456')).toBe('••••••••');
+      expect(maskSensitiveText('PIN1234')).toBe('••••••••');
+      expect(maskSensitiveText('Loading Spinner')).toBe('Loading Spinner');
+      expect(maskSensitiveText('Pinned message')).toBe('Pinned message');
+      expect(maskSensitiveText('Pinterest board')).toBe('Pinterest board');
       expect(maskSensitiveText('Welcome back, Alice')).toBe('Welcome back, Alice');
       expect(maskSensitiveText(undefined)).toBeUndefined();
     });

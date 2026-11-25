@@ -14,7 +14,9 @@ import DeviceAgentNative from '../../modules/device-agent';
 import { DEFAULT_ELEVATION } from '../../utils/elevation';
 
 export function FloatingKillSwitch() {
-  const isRunning = useDeviceSessionStore((s) => s.isAutomationRunning);
+  const isAgentRunActive = useDeviceSessionStore((s) => s.isAgentRunActive);
+  const isAutomationRunning = useDeviceSessionStore((s) => s.isAutomationRunning);
+  const isRunning = isAgentRunActive || isAutomationRunning;
   const activeTool = useDeviceSessionStore((s) => s.activeToolName);
   const killSwitchTriggered = useDeviceSessionStore((s) => s.killSwitchTriggered);
   const triggerKillSwitch = useDeviceSessionStore((s) => s.triggerKillSwitch);
@@ -43,7 +45,8 @@ export function FloatingKillSwitch() {
   // Listen to hardware volume key events
   useEffect(() => {
     const handleVolumeStop = () => {
-      if (useDeviceSessionStore.getState().isAutomationRunning) {
+      const state = useDeviceSessionStore.getState();
+      if (state.isAgentRunActive || state.isAutomationRunning) {
         triggerKillSwitch('volume_key');
       }
     };
