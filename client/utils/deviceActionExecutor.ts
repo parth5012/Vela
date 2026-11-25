@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import DeviceAgentNative from '../modules/device-agent';
 import { useConfigStore } from '../store/useConfigStore';
 import { useDeviceSessionStore } from '../store/useDeviceSessionStore';
+import { classifyAction } from './safetyManager';
 import {
   buildShizukuOp,
   deriveShizukuState,
@@ -637,6 +638,7 @@ export async function executeDeviceAction(
       value,
       outcome: result.outcome,
       summary: result.observation,
+      isSensitive: classifyAction(toolName, target, value) === 'passwords_otps',
     });
     return result;
   } catch (err: any) {
@@ -654,6 +656,7 @@ export async function executeDeviceAction(
         value,
         outcome: isMut ? 'indeterminate' : 'aborted',
         summary: abortedResult.observation,
+        isSensitive: classifyAction(toolName, target, value) === 'passwords_otps',
       });
       return abortedResult;
     }
