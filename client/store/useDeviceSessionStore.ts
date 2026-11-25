@@ -84,9 +84,9 @@ export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
   isScreenMirrorLoading: false,
 
   startAutomationSession: (toolName, target, value) => {
-    // If pending native work is in flight AND kill switch was triggered,
-    // do not allow starting a new session or clearing killSwitchTriggered until that work settles.
-    if (get().hasPendingWork && get().killSwitchTriggered) {
+    // If kill switch was triggered, do not allow starting a new session or clearing killSwitchTriggered
+    // until resetKillSwitch() is explicitly called after pending work settles.
+    if (get().killSwitchTriggered) {
       return;
     }
     const currentCount = get().pendingDispatches;
@@ -96,10 +96,6 @@ export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
       activeToolName: toolName || state.activeToolName,
       activeTarget: target || state.activeTarget,
       activeValue: value || state.activeValue,
-      ...(currentCount === 0 && {
-        killSwitchTriggered: false,
-        killSwitchSource: null,
-      }),
     }));
   },
 
@@ -127,6 +123,10 @@ export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
   },
 
   triggerKillSwitch: (source = 'programmatic') => {
+    if (get().killSwitchTriggered) {
+      // Idempotent: already latched, avoid duplicate history entries from dual triggers
+      return;
+    }
     const hasWork = get().hasPendingWork;
     const tool = get().activeToolName || 'device_action';
     const target = get().activeTarget || undefined;
@@ -167,8 +167,8 @@ export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
     const isSensitive =
       item.isSensitive ??
       Boolean(
-        (item.target && /\b(password|pin|otp|secret|credential|cvv)\b/i.test(item.target)) ||
-        (item.value && /\b(password|pin|otp|secret|credential|cvv)\b/i.test(item.value))
+        (item.target && /(?:^|[^a-zA-Z0-9])(password|pin|otp|secret|credential|cvv)(?:[^a-zA-Z0-9]|$)/i.test(item.target)) ||
+        (item.value && /(?:^|[^a-zA-Z0-9])(password|pin|otp|secret|credential|cvv)(?:[^a-zA-Z0-9]|$)/i.test(item.value))
       );
     const maskedValue = isSensitive && item.value
       ? '••••••••'

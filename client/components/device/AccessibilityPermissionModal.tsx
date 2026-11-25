@@ -80,7 +80,7 @@ export function AccessibilityPermissionModal() {
         <View style={[styles.modalContainer, { backgroundColor: colors.skyBottom, borderColor: colors.glassBorder }]}>
           {/* Header */}
           <View style={styles.headerRow}>
-            <Text style={styles.icon}>♿</Text>
+            <Text style={styles.icon} accessible={false}>♿</Text>
             <View style={styles.titleCol}>
               <Text style={[styles.title, { color: colors.text, fontSize: sizes.title }]}>
                 {step === 3 && isGranted ? 'Accessibility Active' : 'Accessibility Service Setup'}
@@ -197,7 +197,7 @@ export function AccessibilityPermissionModal() {
                   accessibilityRole="button"
                   accessibilityLabel="Check permission status again"
                 >
-                  <Text style={styles.primaryBtnText}>Check Again</Text>
+                  <Text style={[styles.primaryBtnText, { color: aurora.onAccent || '#ffffff' }]}>Check Again</Text>
                 </Pressable>
               </View>
             </View>
@@ -207,7 +207,7 @@ export function AccessibilityPermissionModal() {
           {step === 3 && (
             <View style={styles.content}>
               <View style={styles.successBox}>
-                <Text style={styles.successIcon}>🎉</Text>
+                <Text style={styles.successIcon} accessible={false}>🎉</Text>
                 <Text style={[styles.successTitle, { color: colors.text, fontSize: sizes.title }]}>
                   Accessibility Service Active
                 </Text>

@@ -7,10 +7,8 @@ import {
   Animated,
   PanResponder,
   DeviceEventEmitter,
-  Platform,
 } from 'react-native';
 import { useDeviceSessionStore } from '../../store/useDeviceSessionStore';
-import { useAurora } from '../../hooks/useAurora';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import DeviceAgentNative from '../../modules/device-agent';
 import { DEFAULT_ELEVATION } from '../../utils/elevation';
@@ -20,7 +18,6 @@ export function FloatingKillSwitch() {
   const activeTool = useDeviceSessionStore((s) => s.activeToolName);
   const killSwitchTriggered = useDeviceSessionStore((s) => s.killSwitchTriggered);
   const triggerKillSwitch = useDeviceSessionStore((s) => s.triggerKillSwitch);
-  const { colors, sizes } = useAurora();
   const reducedMotion = useReducedMotion();
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -78,6 +75,8 @@ export function FloatingKillSwitch() {
         setToastMessage(null);
       }, 3000);
       return () => clearTimeout(timer);
+    } else {
+      setToastMessage(null);
     }
   }, [killSwitchTriggered]);
 
