@@ -12,15 +12,14 @@ import {
 import { useDeviceSessionStore } from '../../store/useDeviceSessionStore';
 import { useAurora } from '../../hooks/useAurora';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
+import DeviceAgentNative from '../../modules/device-agent';
 import { DEFAULT_ELEVATION } from '../../utils/elevation';
 
 export function FloatingKillSwitch() {
   const isRunning = useDeviceSessionStore((s) => s.isAutomationRunning);
-  const hasPendingWork = useDeviceSessionStore((s) => s.hasPendingWork);
   const activeTool = useDeviceSessionStore((s) => s.activeToolName);
   const killSwitchTriggered = useDeviceSessionStore((s) => s.killSwitchTriggered);
   const triggerKillSwitch = useDeviceSessionStore((s) => s.triggerKillSwitch);
-  const resetKillSwitch = useDeviceSessionStore((s) => s.resetKillSwitch);
   const { colors, sizes } = useAurora();
   const reducedMotion = useReducedMotion();
 
@@ -33,15 +32,11 @@ export function FloatingKillSwitch() {
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dx) > 5 || Math.abs(gesture.dy) > 5,
       onPanResponderGrant: () => {
-        pan.setOffset({
-          x: (pan.x as any)._value + (pan.x as any)._offset,
-          y: (pan.y as any)._value + (pan.y as any)._offset,
-        });
-        pan.setValue({ x: 0, y: 0 });
+        pan.extractOffset();
       },
-      onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], {
-        useNativeDriver: false,
-      }),
+      onPanResponderMove: (_, gesture) => {
+        pan.setValue({ x: gesture.dx, y: gesture.dy });
+      },
       onPanResponderRelease: () => {
         pan.flattenOffset();
       },
@@ -50,21 +45,28 @@ export function FloatingKillSwitch() {
 
   // Listen to hardware volume key events
   useEffect(() => {
-    const volumeSub = DeviceEventEmitter.addListener('onDeviceVolumeKeyEvent', () => {
+    const handleVolumeStop = () => {
       if (useDeviceSessionStore.getState().isAutomationRunning) {
         triggerKillSwitch('volume_key');
       }
-    });
+    };
 
-    const keySub = DeviceEventEmitter.addListener('onHardwareEmergencyStop', () => {
-      if (useDeviceSessionStore.getState().isAutomationRunning) {
-        triggerKillSwitch('volume_key');
+    const volumeSub = DeviceEventEmitter.addListener('onDeviceVolumeKeyEvent', handleVolumeStop);
+    const keySub = DeviceEventEmitter.addListener('onHardwareEmergencyStop', handleVolumeStop);
+
+    let nativeSub: { remove(): void } | null = null;
+    if (typeof DeviceAgentNative?.addVolumeKeyListener === 'function') {
+      try {
+        nativeSub = DeviceAgentNative.addVolumeKeyListener(handleVolumeStop);
+      } catch {
+        // Fallback to DeviceEventEmitter
       }
-    });
+    }
 
     return () => {
       volumeSub.remove();
       keySub.remove();
+      nativeSub?.remove();
     };
   }, [triggerKillSwitch]);
 

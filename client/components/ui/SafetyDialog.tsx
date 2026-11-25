@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, Pressable } from 'react-native';
 import { useSafetyStore } from '../../store/useSafetyStore';
 import { useConfigStore } from '../../store/useConfigStore';
@@ -15,6 +15,10 @@ export function SafetyDialog() {
   const setSessionBypass = useDeviceSessionStore((s) => s.setSessionBypass);
   const { colors, sizes, aurora } = useAurora();
   const [dontAskThisSession, setDontAskThisSession] = useState(false);
+
+  useEffect(() => {
+    setDontAskThisSession(false);
+  }, [pendingTask]);
 
   if (!pendingTask) return null;
 
@@ -39,10 +43,10 @@ export function SafetyDialog() {
   const riskBadgeColor = isHighRisk ? '#f43f5e' : (aurora.acc1 || '#3b82f6');
 
   const handleConfirmAction = () => {
-    if (dontAskThisSession) {
+    if (dontAskThisSession && !isHighRisk) {
       setSessionBypass(category, true);
     }
-    resolvePending('success', dontAskThisSession ? 'Confirmed (session bypass enabled)' : 'Confirmed by user');
+    resolvePending('success', dontAskThisSession && !isHighRisk ? 'Confirmed (session bypass enabled)' : 'Confirmed by user');
     setDontAskThisSession(false);
   };
 
@@ -52,6 +56,7 @@ export function SafetyDialog() {
   };
 
   const handleAlwaysAllow = () => {
+    if (isHighRisk) return;
     setPermission(category, 'auto');
     resolvePending('success', `Always allow safety category: ${category}`);
     setDontAskThisSession(false);
@@ -167,14 +172,16 @@ export function SafetyDialog() {
 
           {/* Secondary Permanent Policy Options */}
           <View style={styles.permanentOptionsRow}>
-            <Pressable
-              onPress={handleAlwaysAllow}
-              style={({ pressed }) => [styles.textLink, pressed && { opacity: 0.6 }]}
-              accessibilityRole="button"
-              accessibilityLabel="Always allow this category"
-            >
-              <Text style={[styles.linkText, { color: colors.textMuted, fontSize: sizes.sub - 1 }]}>Always Allow</Text>
-            </Pressable>
+            {!isHighRisk ? (
+              <Pressable
+                onPress={handleAlwaysAllow}
+                style={({ pressed }) => [styles.textLink, pressed && { opacity: 0.6 }]}
+                accessibilityRole="button"
+                accessibilityLabel="Always allow this category"
+              >
+                <Text style={[styles.linkText, { color: colors.textMuted, fontSize: sizes.sub - 1 }]}>Always Allow</Text>
+              </Pressable>
+            ) : null}
 
             <Pressable
               onPress={handleAlwaysBlock}

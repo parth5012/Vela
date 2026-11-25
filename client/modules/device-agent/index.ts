@@ -43,12 +43,24 @@ function removeSpeechPartialListener(id: string): Promise<void> {
   return Promise.resolve();
 }
 
-const voiceHelpers = { addSpeechPartialListener, removeSpeechPartialListener };
+function addVolumeKeyListener(cb: () => void): EventSubscription | null {
+  const addListener = nativeModule?.addListener;
+  if (typeof addListener !== 'function') return null;
+  try {
+    return addListener.call(nativeModule, 'onDeviceVolumeKeyEvent', () => {
+      cb();
+    });
+  } catch {
+    return null;
+  }
+}
+
+const moduleHelpers = { addSpeechPartialListener, removeSpeechPartialListener, addVolumeKeyListener };
 
 // Mutate in place so every existing consumer of the default export sees the
-// same native module object, with the two additive voice helpers attached.
+// same native module object, with the additive helpers attached.
 const exported = nativeModule
-  ? Object.assign(nativeModule, voiceHelpers)
-  : { ...voiceHelpers };
+  ? Object.assign(nativeModule, moduleHelpers)
+  : { ...moduleHelpers };
 
 export default exported;

@@ -629,18 +629,43 @@ export async function runLocalAgentLoop(
     let stepResponse = '';
     const tokenBuffer: string[] = [];
 
-    const generator = streamLocalLlmResponse(currentPrompt, (token: string) => {
-      tokenBuffer.push(token);
-      options.onToken?.(token);
-      options.onEvent?.({
-        type: 'token',
-        token,
-        step,
-      });
+    const abortController = new AbortController();
+    const unsubscribeKillSwitch = useDeviceSessionStore.subscribe((state) => {
+      if (state.killSwitchTriggered) {
+        abortController.abort();
+      }
     });
 
-    for await (const chunk of generator) {
-      stepResponse += chunk;
+    try {
+      const generator = streamLocalLlmResponse(
+        currentPrompt,
+        (token: string) => {
+          tokenBuffer.push(token);
+          options.onToken?.(token);
+          options.onEvent?.({
+            type: 'token',
+            token,
+            step,
+          });
+        },
+        abortController.signal
+      );
+
+      for await (const chunk of generator) {
+        if (useDeviceSessionStore.getState().killSwitchTriggered) {
+          abortController.abort();
+          break;
+        }
+        stepResponse += chunk;
+      }
+    } finally {
+      unsubscribeKillSwitch();
+    }
+
+    if (useDeviceSessionStore.getState().killSwitchTriggered) {
+      completed = false;
+      finalResponse = 'Automation stopped by user emergency kill switch.';
+      break;
     }
 
     const toolCall = parseToolCall(stepResponse);

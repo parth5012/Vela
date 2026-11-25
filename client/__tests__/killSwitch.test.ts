@@ -153,4 +153,56 @@ describe('Kill Switch & Emergency Abort Integration', () => {
     expect(useDeviceSessionStore.getState().hasPendingWork).toBe(false);
     expect(useDeviceSessionStore.getState().isAutomationRunning).toBe(false);
   });
+
+  it('keeps resetKillSwitch blocked until all overlapping aborted dispatches settle', async () => {
+    let resolveAction1: (val: any) => void = () => {};
+    let resolveAction2: (val: any) => void = () => {};
+
+    const promise1 = new Promise((res) => { resolveAction1 = res; });
+    const promise2 = new Promise((res) => { resolveAction2 = res; });
+
+    let callCount = 0;
+    mockHolder.mod.performAction = jest.fn().mockImplementation(() => {
+      callCount++;
+      return callCount === 1 ? promise1 : promise2;
+    });
+
+    const exec1 = executeDeviceAction('device_tap', '@e10');
+    const exec2 = executeDeviceAction('device_type', '@e11', 'hello');
+
+    expect(useDeviceSessionStore.getState().pendingDispatches).toBe(2);
+    expect(useDeviceSessionStore.getState().hasPendingWork).toBe(true);
+    expect(useDeviceSessionStore.getState().isAutomationRunning).toBe(true);
+
+    // User triggers emergency kill switch while both are in-flight
+    abortDeviceAction('floating_button');
+    expect(useDeviceSessionStore.getState().killSwitchTriggered).toBe(true);
+    expect(useDeviceSessionStore.getState().isAutomationRunning).toBe(false);
+    expect(useDeviceSessionStore.getState().hasPendingWork).toBe(true);
+
+    // Try to reset kill switch while work is still in flight -> blocked!
+    useDeviceSessionStore.getState().resetKillSwitch();
+    expect(useDeviceSessionStore.getState().killSwitchTriggered).toBe(true);
+
+    // First action settles
+    resolveAction1(true);
+    await exec1;
+
+    expect(useDeviceSessionStore.getState().pendingDispatches).toBe(1);
+    expect(useDeviceSessionStore.getState().hasPendingWork).toBe(true);
+    // Still blocked!
+    useDeviceSessionStore.getState().resetKillSwitch();
+    expect(useDeviceSessionStore.getState().killSwitchTriggered).toBe(true);
+
+    // Second action settles
+    resolveAction2(true);
+    await exec2;
+
+    expect(useDeviceSessionStore.getState().pendingDispatches).toBe(0);
+    expect(useDeviceSessionStore.getState().hasPendingWork).toBe(false);
+
+    // Now reset succeeds!
+    useDeviceSessionStore.getState().resetKillSwitch();
+    expect(useDeviceSessionStore.getState().killSwitchTriggered).toBe(false);
+  });
 });

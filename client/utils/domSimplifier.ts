@@ -11,10 +11,14 @@ export function isSensitiveField(text?: string, isPassword?: boolean): boolean {
 
 export function maskSensitiveText(text?: string, isPassword?: boolean): string | undefined {
   if (!text) return text;
-  if (isPassword === false) {
-    return text;
+  if (isPassword === true) {
+    return '••••••••';
   }
-  if (isPassword === true || isSensitiveField(text, isPassword)) {
+  if (isSensitiveField(text)) {
+    const lower = text.toLowerCase().trim();
+    if (lower.startsWith('forgot ') || lower.startsWith('reset ') || lower.includes('how to')) {
+      return text;
+    }
     return '••••••••';
   }
   return text;
@@ -105,13 +109,13 @@ export function parseScreenHierarchy(rawHierarchy: string | unknown): Simplified
 
     // Line-by-line format: supports Android native emitter `[@e0] ClassName: text="..." ...`
     // as well as fallback `@e1: Button 'Submit' [100,200,300,250]`.
-    const lines = trimmed.split('\n');
+    const lines = trimmed
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
     const nodes: SimplifiedDomNode[] = [];
 
-    lines.forEach((rawLine, idx) => {
-      const line = rawLine.trim();
-      if (!line) return;
-
+    lines.forEach((line, idx) => {
       // 1. Android native module format: `[@e0] EditText: text="val" desc="desc" bounds=[l,t,r,b]px(...) clickable`
       const nativeMatch = line.match(/^\[(@?\w+)\]\s*([A-Za-z0-9_]+):/);
       if (nativeMatch) {
@@ -134,8 +138,9 @@ export function parseScreenHierarchy(rawHierarchy: string | unknown): Simplified
           ? [parseFloat(pxMatch[1]), parseFloat(pxMatch[2]), parseFloat(pxMatch[3]), parseFloat(pxMatch[4])]
           : [0, 0, 0, 0];
 
-        const isClickable = line.includes('clickable') || type === 'button';
-        const isPassword = className.includes('password') || (type === 'input' && isSensitiveField(rawText));
+        const flagsPart = line.includes(')') ? line.slice(line.lastIndexOf(')')) : line;
+        const isClickable = flagsPart.includes('clickable') || type === 'button';
+        const isPassword = flagsPart.includes('password') || className.includes('password') || (type === 'input' && isSensitiveField(rawText));
 
         nodes.push({
           id,
