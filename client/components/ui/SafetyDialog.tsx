@@ -123,7 +123,7 @@ export function SafetyDialog() {
               accessibilityLabel={`Don't ask again this session for ${categoryLabel}`}
             >
               <View style={[styles.checkbox, { borderColor: colors.glassBorder }, dontAskThisSession && { backgroundColor: aurora.acc1 }]}>
-                {dontAskThisSession ? <Text style={styles.checkmark}>✓</Text> : null}
+                {dontAskThisSession ? <Text style={[styles.checkmark, { color: aurora.onAccent || '#ffffff' }]}>✓</Text> : null}
               </View>
               <Text style={[styles.checkboxLabel, { color: colors.textMuted, fontSize: sizes.sub }]}>
                 Don't ask again this session for {categoryLabel}

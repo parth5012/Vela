@@ -205,4 +205,39 @@ describe('Kill Switch & Emergency Abort Integration', () => {
     useDeviceSessionStore.getState().resetKillSwitch();
     expect(useDeviceSessionStore.getState().killSwitchTriggered).toBe(false);
   });
+
+  it('triggerKillSwitch is idempotent and avoids duplicate history entries on multiple triggers', () => {
+    useDeviceSessionStore.getState().resetSession();
+    expect(useDeviceSessionStore.getState().actionHistory.length).toBe(0);
+
+    useDeviceSessionStore.getState().triggerKillSwitch('floating_button');
+    expect(useDeviceSessionStore.getState().killSwitchTriggered).toBe(true);
+    expect(useDeviceSessionStore.getState().actionHistory.length).toBe(1);
+
+    // Second trigger from hardware volume key or listener
+    useDeviceSessionStore.getState().triggerKillSwitch('volume_key');
+    expect(useDeviceSessionStore.getState().killSwitchTriggered).toBe(true);
+    // Length remains 1, no duplicate audit entries
+    expect(useDeviceSessionStore.getState().actionHistory.length).toBe(1);
+  });
+
+  it('startAutomationSession cannot bypass latched kill switch without explicit reset', () => {
+    useDeviceSessionStore.getState().resetSession();
+    useDeviceSessionStore.getState().triggerKillSwitch('floating_button');
+    expect(useDeviceSessionStore.getState().killSwitchTriggered).toBe(true);
+
+    // Attempting to start a session without resetting must be blocked
+    useDeviceSessionStore.getState().startAutomationSession('device_tap', '@e1', 'click');
+    expect(useDeviceSessionStore.getState().killSwitchTriggered).toBe(true);
+    expect(useDeviceSessionStore.getState().isAutomationRunning).toBe(false);
+    expect(useDeviceSessionStore.getState().pendingDispatches).toBe(0);
+
+    // Only explicit resetKillSwitch re-arms
+    useDeviceSessionStore.getState().resetKillSwitch();
+    expect(useDeviceSessionStore.getState().killSwitchTriggered).toBe(false);
+
+    useDeviceSessionStore.getState().startAutomationSession('device_tap', '@e1', 'click');
+    expect(useDeviceSessionStore.getState().isAutomationRunning).toBe(true);
+    expect(useDeviceSessionStore.getState().pendingDispatches).toBe(1);
+  });
 });

@@ -162,47 +162,52 @@ export default function DeviceAgentPermissionsScreen() {
           <Text style={[styles.description, { color: colors.textMuted, fontSize: sizes.sub }]}>
             An active-only floating Stop button appears when automation executes. Pressing it or either hardware Volume key immediately aborts ongoing actions.
           </Text>
-          <Pressable
-            disabled={!isAutomationRunning && hasPendingWork}
-            accessibilityState={{ disabled: !isAutomationRunning && hasPendingWork }}
-            onPress={() => {
-              if (isAutomationRunning) {
-                triggerKillSwitch('programmatic');
-                stopAutomationSession('User stopped simulated session');
-              } else if (!hasPendingWork) {
-                startAutomationSession('test_tap', 'Sample Target Button', 'Click');
-              }
-            }}
-            style={({ pressed }) => [
-              styles.actionBtn,
-              {
-                backgroundColor: isAutomationRunning ? 'rgba(244, 63, 94, 0.15)' : 'rgba(59, 130, 246, 0.15)',
-                borderColor: isAutomationRunning ? '#f43f5e' : colors.glassBorder,
-                opacity: pressed ? 0.7 : (!isAutomationRunning && hasPendingWork) ? 0.4 : 1,
-              },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel={
-              isAutomationRunning
-                ? 'Stop test automation session'
-                : hasPendingWork
-                ? 'Pending native action settling'
-                : 'Simulate active session to test floating stop button'
-            }
-          >
-            <Text style={[styles.actionBtnText, { color: isAutomationRunning ? '#f43f5e' : colors.text, fontSize: sizes.sub }]}>
-              {isAutomationRunning
-                ? '⏹ Stop Active Session'
-                : hasPendingWork
-                ? '⏳ Settling Pending Action...'
-                : '▶ Simulate Active Session to Test Stop Button'}
-            </Text>
-          </Pressable>
+          {(() => {
+            const isSimulateDisabled = !isAutomationRunning && (hasPendingWork || killSwitchTriggered);
+            return (
+              <Pressable
+                disabled={isSimulateDisabled}
+                accessibilityState={{ disabled: isSimulateDisabled }}
+                onPress={() => {
+                  if (isAutomationRunning) {
+                    triggerKillSwitch('programmatic');
+                    stopAutomationSession('User stopped simulated session');
+                  } else if (!hasPendingWork && !killSwitchTriggered) {
+                    startAutomationSession('test_tap', 'Sample Target Button', 'Click');
+                  }
+                }}
+                style={({ pressed }) => [
+                  styles.actionBtn,
+                  {
+                    backgroundColor: isAutomationRunning ? 'rgba(244, 63, 94, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                    borderColor: isAutomationRunning ? '#f43f5e' : colors.glassBorder,
+                    opacity: pressed ? 0.7 : isSimulateDisabled ? 0.4 : 1,
+                  },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  isAutomationRunning
+                    ? 'Stop test automation session'
+                    : hasPendingWork
+                    ? 'Pending native action settling'
+                    : killSwitchTriggered
+                    ? 'Kill switch active. Re-arm below before starting new session.'
+                    : 'Simulate active session to test floating stop button'
+                }
+              >
+                <Text style={[styles.actionBtnText, { color: isAutomationRunning ? '#f43f5e' : colors.text, fontSize: sizes.sub }]}>
+                  {isAutomationRunning
+                    ? '⏹ Stop Active Session'
+                    : hasPendingWork
+                    ? '⏳ Settling Pending Action...'
+                    : '▶ Simulate Active Session to Test Stop Button'}
+                </Text>
+              </Pressable>
+            );
+          })()}
 
           {killSwitchTriggered && !hasPendingWork && !isAutomationRunning ? (
             <Pressable
-              disabled={hasPendingWork}
-              accessibilityState={{ disabled: hasPendingWork }}
               onPress={() => resetKillSwitch()}
               style={({ pressed }) => [
                 styles.actionBtn,
@@ -210,7 +215,7 @@ export default function DeviceAgentPermissionsScreen() {
                   marginTop: 10,
                   backgroundColor: 'rgba(16, 185, 129, 0.15)',
                   borderColor: '#10b981',
-                  opacity: pressed ? 0.7 : hasPendingWork ? 0.4 : 1,
+                  opacity: pressed ? 0.7 : 1,
                 },
               ]}
               accessibilityRole="button"
@@ -263,10 +268,10 @@ export default function DeviceAgentPermissionsScreen() {
               { borderColor: colors.glassBorder, opacity: pressed ? 0.7 : 1 },
             ]}
             accessibilityRole="button"
-            accessibilityLabel="Open app settings — then tap ⋮ → Allow restricted settings"
+            accessibilityLabel="Open app settings to allow restricted settings"
           >
             <Text style={[styles.actionBtnText, { color: colors.text, fontSize: sizes.sub }]}>
-              Open App Settings — then tap ⋮ → Allow restricted settings →
+              Open App Settings (tap ⋮ → Allow restricted settings) →
             </Text>
           </Pressable>
         </Card>

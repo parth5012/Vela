@@ -1,12 +1,12 @@
 import type { SimplifiedDomNode } from '../store/useDeviceSessionStore';
 
 const SENSITIVE_KEYWORDS = ['password', 'pin', 'otp', 'cvv', 'passcode', 'credential', 'secret'];
+const SENSITIVE_PATTERN = /(?:^|[^a-zA-Z0-9])(password|pin|otp|cvv|passcode|credential|secret)(?:[^a-zA-Z0-9]|$)/i;
 
 export function isSensitiveField(text?: string, isPassword?: boolean): boolean {
   if (isPassword) return true;
   if (!text) return false;
-  const lower = text.toLowerCase().trim();
-  return SENSITIVE_KEYWORDS.some((kw) => lower.includes(kw));
+  return SENSITIVE_PATTERN.test(text);
 }
 
 export function maskSensitiveText(text?: string, isPassword?: boolean): string | undefined {
@@ -132,8 +132,8 @@ export function parseScreenHierarchy(rawHierarchy: string | unknown): Simplified
         const descMatch = line.match(/desc="([^"]*)"/);
         const rawText = (textMatch && textMatch[1]) || (descMatch && descMatch[1]) || undefined;
 
-        const boundsMatch = line.match(/bounds=\[(\d+(?:\.\d+)?),(\d+(?:\.\d+)?),(\d+(?:\.\d+)?),(\d+(?:\.\d+)?)\]/);
-        const pxMatch = line.match(/px\((\d+(?:\.\d+)?),(\d+(?:\.\d+)?),(\d+(?:\.\d+)?),(\d+(?:\.\d+)?)\)/);
+        const boundsMatch = line.match(/bounds=\[(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)\]/);
+        const pxMatch = line.match(/px\((-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)\)/);
         const bounds: [number, number, number, number] = boundsMatch
           ? [parseFloat(boundsMatch[1]), parseFloat(boundsMatch[2]), parseFloat(boundsMatch[3]), parseFloat(boundsMatch[4])]
           : pxMatch

@@ -7,12 +7,15 @@ import {
 
 describe('domSimplifier', () => {
   describe('maskSensitiveText and isSensitiveField', () => {
-    it('detects sensitive password, pin, and otp fields', () => {
+    it('detects sensitive password, pin, and otp fields with word boundaries', () => {
       expect(isSensitiveField('Enter password')).toBe(true);
       expect(isSensitiveField('Your PIN number')).toBe(true);
       expect(isSensitiveField('SMS OTP code')).toBe(true);
       expect(isSensitiveField(undefined, true)).toBe(true);
       expect(isSensitiveField('General Settings')).toBe(false);
+      expect(isSensitiveField('Loading Spinner')).toBe(false);
+      expect(isSensitiveField('Pinned message')).toBe(false);
+      expect(isSensitiveField('Pinterest board')).toBe(false);
     });
 
     it('masks sensitive text with bullets', () => {

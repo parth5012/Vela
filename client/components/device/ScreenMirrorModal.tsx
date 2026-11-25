@@ -82,7 +82,7 @@ export function ScreenMirrorModal() {
 
   if (!visible) return null;
 
-  const renderNode = (node: SimplifiedDomNode, depth = 0) => {
+  const renderNode = (node: SimplifiedDomNode, depth = 0, index = 0) => {
     const isSelected = selectedNode?.id === node.id;
     const typeColor =
       node.type === 'button'
@@ -94,7 +94,7 @@ export function ScreenMirrorModal() {
         : colors.textMuted;
 
     return (
-      <View key={node.id} style={{ marginLeft: depth * 12, marginBottom: 6 }}>
+      <View key={`${node.id}-${depth}-${index}`} style={{ marginLeft: depth * 12, marginBottom: 6 }}>
         <Pressable
           onPress={() => setSelectedNode(node)}
           style={({ pressed }) => [
@@ -210,7 +210,7 @@ export function ScreenMirrorModal() {
               </View>
             ) : hierarchy && hierarchy.length > 0 ? (
               <ScrollView style={styles.treeScroll} contentContainerStyle={styles.treeContent}>
-                {hierarchy.map((rootNode) => renderNode(rootNode, 0))}
+                {hierarchy.map((rootNode, idx) => renderNode(rootNode, 0, idx))}
               </ScrollView>
             ) : (
               <View style={styles.emptyContainer}>
