@@ -25,6 +25,7 @@ import {
 import { streamLocalLlmResponse } from '../utils/localLlm';
 import * as safetyManager from '../utils/safetyManager';
 import * as deviceActionExecutor from '../utils/deviceActionExecutor';
+import { useDeviceSessionStore } from '../store/useDeviceSessionStore';
 
 const mockStream = streamLocalLlmResponse as jest.Mock;
 
@@ -439,6 +440,30 @@ describe('localAgentLoop real engine envelope (function_calls)', () => {
       );
       expect(events.some((e) => e.type === 'recovery' && e.recoveryType === 'scroll')).toBe(true);
       expect(result.completed).toBe(true);
+    });
+
+    it('aborts execution and stops LLM generator promptly when kill switch is triggered', async () => {
+      useDeviceSessionStore.setState({ killSwitchTriggered: false, hasPendingWork: false });
+      try {
+        async function* streamWithKillSwitch(_prompt: string, _onToken?: any, signal?: AbortSignal) {
+          yield '{"name": "device_click", ';
+          useDeviceSessionStore.getState().triggerKillSwitch('programmatic');
+          if (signal?.aborted) return;
+          yield '"arguments": {"target": "@never_executed"}}';
+        }
+        mockStream.mockImplementation(streamWithKillSwitch as any);
+
+        const result = await runLocalAgentLoop('Perform action', { maxSteps: 3 });
+
+        expect(result.completed).toBe(false);
+        expect(result.finalResponse).toContain('emergency kill switch');
+        expect(deviceActionExecutor.executeDeviceAction).not.toHaveBeenCalledWith(
+          'device_click',
+          '@never_executed'
+        );
+      } finally {
+        useDeviceSessionStore.setState({ killSwitchTriggered: false, hasPendingWork: false });
+      }
     });
 
     it('recovers from unchanged hierarchy: back at threshold N, then home reset if still unchanged', async () => {

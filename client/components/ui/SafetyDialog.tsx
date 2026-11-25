@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Modal, Pressable } from 'react-native';
 import { useSafetyStore } from '../../store/useSafetyStore';
 import { useConfigStore } from '../../store/useConfigStore';
 import { useDeviceSessionStore } from '../../store/useDeviceSessionStore';
-import { classifyAction, getCategoryLabel } from '../../utils/safetyManager';
+import { classifyAction, getCategoryLabel, isHighRiskCategory } from '../../utils/safetyManager';
 import { useAurora } from '../../hooks/useAurora';
 import { Card } from './settingsKit';
 import { DEFAULT_ELEVATION } from '../../utils/elevation';
@@ -29,15 +29,7 @@ export function SafetyDialog() {
   );
   const categoryLabel = getCategoryLabel(category);
 
-  const isHighRisk =
-    category === 'send_communication' ||
-    category === 'calls' ||
-    category === 'purchases' ||
-    category === 'deletions' ||
-    category === 'settings_changes' ||
-    category === 'passwords_otps' ||
-    category === 'sideloads' ||
-    category === 'root_shizuku';
+  const isHighRisk = isHighRiskCategory(category);
 
   const riskBadge = isHighRisk ? '⚠️ High Risk' : '⚡ Action Confirmation';
   const riskBadgeColor = isHighRisk ? '#f43f5e' : (aurora.acc1 || '#3b82f6');

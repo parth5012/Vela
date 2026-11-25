@@ -2,6 +2,23 @@ import { useConfigStore, PermissionTier, DeviceAgentPermissions } from '../store
 import { useSafetyStore } from '../store/useSafetyStore';
 import { useDeviceSessionStore } from '../store/useDeviceSessionStore';
 
+export const HIGH_RISK_CATEGORIES = new Set<keyof DeviceAgentPermissions>([
+  'passwords_otps',
+  'sideloads',
+  'permission_toggles',
+  'root_shizuku',
+  'send_communication',
+  'calls',
+  'purchases',
+  'deletions',
+  'settings_changes',
+  'play_installs',
+]);
+
+export function isHighRiskCategory(category: keyof DeviceAgentPermissions): boolean {
+  return HIGH_RISK_CATEGORIES.has(category);
+}
+
 /**
  * Classifies a specific device agent action into one of the 20 permission categories.
  */

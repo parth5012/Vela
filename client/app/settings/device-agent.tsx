@@ -11,7 +11,6 @@ import {
   PillGroup,
   useAurora,
 } from '../../components/ui/settingsKit';
-import { AccessibilityPermissionModal } from '../../components/device/AccessibilityPermissionModal';
 import { ScreenMirrorModal } from '../../components/device/ScreenMirrorModal';
 import { SessionHistorySheet } from '../../components/device/SessionHistorySheet';
 
@@ -165,9 +164,11 @@ export default function DeviceAgentPermissionsScreen() {
           </Text>
           <Pressable
             disabled={!isAutomationRunning && hasPendingWork}
+            accessibilityState={{ disabled: !isAutomationRunning && hasPendingWork }}
             onPress={() => {
               if (isAutomationRunning) {
                 triggerKillSwitch('programmatic');
+                stopAutomationSession('User stopped simulated session');
               } else if (!hasPendingWork) {
                 startAutomationSession('test_tap', 'Sample Target Button', 'Click');
               }
@@ -177,7 +178,7 @@ export default function DeviceAgentPermissionsScreen() {
               {
                 backgroundColor: isAutomationRunning ? 'rgba(244, 63, 94, 0.15)' : 'rgba(59, 130, 246, 0.15)',
                 borderColor: isAutomationRunning ? '#f43f5e' : colors.glassBorder,
-                opacity: pressed ? 0.7 : (!isAutomationRunning && hasPendingWork) ? 0.5 : 1,
+                opacity: pressed ? 0.7 : (!isAutomationRunning && hasPendingWork) ? 0.4 : 1,
               },
             ]}
             accessibilityRole="button"
@@ -200,6 +201,8 @@ export default function DeviceAgentPermissionsScreen() {
 
           {killSwitchTriggered && !hasPendingWork && !isAutomationRunning ? (
             <Pressable
+              disabled={hasPendingWork}
+              accessibilityState={{ disabled: hasPendingWork }}
               onPress={() => resetKillSwitch()}
               style={({ pressed }) => [
                 styles.actionBtn,
@@ -207,7 +210,7 @@ export default function DeviceAgentPermissionsScreen() {
                   marginTop: 10,
                   backgroundColor: 'rgba(16, 185, 129, 0.15)',
                   borderColor: '#10b981',
-                  opacity: pressed ? 0.7 : 1,
+                  opacity: pressed ? 0.7 : hasPendingWork ? 0.4 : 1,
                 },
               ]}
               accessibilityRole="button"

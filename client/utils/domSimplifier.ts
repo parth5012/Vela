@@ -16,7 +16,9 @@ export function maskSensitiveText(text?: string, isPassword?: boolean): string |
   }
   if (isSensitiveField(text)) {
     const lower = text.toLowerCase().trim();
-    if (lower.startsWith('forgot ') || lower.startsWith('reset ') || lower.includes('how to')) {
+    // Only exempt discrete help/navigation labels if they don't contain any sensitive numbers/codes/OTPs
+    const isExemptLabel = (lower === 'forgot password?' || lower === 'forgot password' || lower === 'reset password') && !/\d{3,}/.test(text);
+    if (isExemptLabel) {
       return text;
     }
     return '••••••••';

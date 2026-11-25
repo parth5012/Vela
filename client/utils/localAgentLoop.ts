@@ -662,7 +662,7 @@ export async function runLocalAgentLoop(
       unsubscribeKillSwitch();
     }
 
-    if (useDeviceSessionStore.getState().killSwitchTriggered) {
+    if (useDeviceSessionStore.getState().killSwitchTriggered || abortController.signal.aborted) {
       completed = false;
       finalResponse = 'Automation stopped by user emergency kill switch.';
       break;

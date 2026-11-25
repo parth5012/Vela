@@ -8,6 +8,7 @@ export interface SessionActionItem {
   value?: string;
   outcome: 'executed' | 'simulated' | 'failed' | 'aborted' | 'indeterminate' | 'unavailable';
   summary: string;
+  isSensitive?: boolean;
 }
 
 export interface SimplifiedDomNode {
@@ -164,8 +165,11 @@ export const useDeviceSessionStore = create<DeviceSessionState>((set, get) => ({
 
   recordAction: (item) => {
     const isSensitive =
-      (item.target && /password|pin|otp|secret|credential|cvv/i.test(item.target)) ||
-      (item.value && /password|pin|otp|secret|credential|cvv/i.test(item.value));
+      item.isSensitive ??
+      Boolean(
+        (item.target && /\b(password|pin|otp|secret|credential|cvv)\b/i.test(item.target)) ||
+        (item.value && /\b(password|pin|otp|secret|credential|cvv)\b/i.test(item.value))
+      );
     const maskedValue = isSensitive && item.value
       ? '••••••••'
       : item.value;
