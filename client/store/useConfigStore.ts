@@ -513,14 +513,22 @@ export const useConfigStore = create<ConfigState>()(
       setModelOverride: (modelName, override) =>
         set((state) => {
           const existing = state.modelOverrides[modelName] ?? {};
-          const updated = { ...existing, ...override };
-          const nextOverrides = { ...state.modelOverrides, [modelName]: updated };
+          const merged: ModelOverrideConfig = { ...existing, ...override };
+          if (merged.contextSize === undefined) delete merged.contextSize;
+          if (merged.maxTokens === undefined) delete merged.maxTokens;
+          if (merged.gpuBackend === undefined || merged.gpuBackend === 'auto') delete merged.gpuBackend;
+          const nextOverrides = { ...state.modelOverrides };
+          if (Object.keys(merged).length === 0) {
+            delete nextOverrides[modelName];
+          } else {
+            nextOverrides[modelName] = merged;
+          }
           if (state.localModelName === modelName) {
             return {
               modelOverrides: nextOverrides,
-              localContextSize: override.contextSize ?? state.localContextSize,
-              localMaxTokens: override.maxTokens ?? state.localMaxTokens,
-              gpuBackendPreference: override.gpuBackend ?? state.gpuBackendPreference,
+              localContextSize: override.contextSize !== undefined ? override.contextSize : state.localContextSize,
+              localMaxTokens: override.maxTokens !== undefined ? override.maxTokens : state.localMaxTokens,
+              gpuBackendPreference: override.gpuBackend !== undefined ? override.gpuBackend : state.gpuBackendPreference,
               localConfigAutoApplied: false,
             };
           }
@@ -722,8 +730,8 @@ export const useConfigStore = create<ConfigState>()(
         return persistedState;
       },
       partialize: (state) => {
-        // Exclude hasHydrated (session state). securely store apiKey on native
-        const { hasHydrated, cloudApiKeys, ...rest } = state;
+        // Exclude runtime-only probes/session state (hasHydrated, detectedRamBytes).
+        const { hasHydrated, cloudApiKeys, detectedRamBytes, ...rest } = state;
         if (Platform.OS === 'web') {
           return { ...rest, cloudApiKeys };
         }
@@ -789,3 +797,35 @@ export const useConfigStore = create<ConfigState>()(
     }
   )
 );
+
+/**
+ * Single source of truth for whether the RAM-tier recommendation is currently
+ * active and matches the device's recommended preset.
+ */
+export function selectIsRecommendationApplied(
+  state: Pick<
+    ConfigState,
+    | 'localConfigAutoApplied'
+    | 'detectedRamBytes'
+    | 'localModelName'
+    | 'localContextSize'
+    | 'localMaxTokens'
+    | 'gpuBackendPreference'
+  >
+): boolean {
+  if (
+    !state.localConfigAutoApplied ||
+    typeof state.detectedRamBytes !== 'number' ||
+    !Number.isFinite(state.detectedRamBytes) ||
+    state.detectedRamBytes <= 0
+  ) {
+    return false;
+  }
+  const rec = getOptimalSettingsForRam(state.detectedRamBytes);
+  return (
+    state.localModelName === rec.modelName &&
+    state.localContextSize === rec.contextSize &&
+    state.localMaxTokens === rec.maxTokens &&
+    state.gpuBackendPreference === 'auto'
+  );
+}

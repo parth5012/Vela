@@ -2,13 +2,15 @@ import React from 'react';
 import { View, Text, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { Card, Label, PrimaryButton, useAurora } from './settingsKit';
 import PressableScale from './PressableScale';
-import { classifyDeviceTier } from '../../utils/ramDetection';
+import { classifyDeviceTier, getDeviceTierBadgeColors } from '../../utils/ramDetection';
+import { isDarkTheme } from '../../utils/theme';
 
 export interface RecommendationBannerProps {
   ramBytes: number | null;
   isApplied?: boolean;
   onAccept: () => void;
   onCustomize?: () => void;
+  surface?: 'auto' | 'light';
   style?: StyleProp<ViewStyle>;
 }
 
@@ -17,36 +19,57 @@ export function RecommendationBanner({
   isApplied = false,
   onAccept,
   onCustomize,
+  surface = 'auto',
   style,
 }: RecommendationBannerProps) {
-  const { colors, sizes } = useAurora();
+  const { colors, sizes, theme } = useAurora();
 
-  if (ramBytes === null || Number.isNaN(ramBytes) || ramBytes <= 0) {
+  if (ramBytes === null || !Number.isFinite(ramBytes) || ramBytes <= 0) {
     return null;
   }
 
+  const isLightSurface = surface === 'light' || !isDarkTheme(theme);
   const tierInfo = classifyDeviceTier(ramBytes);
+  const appliedBadgeColors = getDeviceTierBadgeColors('flagship', !isLightSurface);
+  const textPrimary = surface === 'light' ? '#1D1B20' : colors.text;
+  const textMuted = surface === 'light' ? '#4B4654' : colors.textMuted;
+  const outlineBorder = surface === 'light' ? '#E8E0F2' : colors.glassBorder;
+  const cardSurfaceStyle =
+    surface === 'light'
+      ? { backgroundColor: '#FBF7FE', borderColor: '#E8E0F2' }
+      : undefined;
 
   if (isApplied) {
     return (
-      <Card style={style}>
+      <Card style={[cardSurfaceStyle, style]}>
         <View style={styles.headerRow}>
-          <Label>RAM Auto-Configuration</Label>
+          {surface === 'light' ? (
+            <Text style={[styles.lightLabel, { color: textMuted, fontSize: sizes.sub }]}>
+              RAM AUTO-CONFIGURATION
+            </Text>
+          ) : (
+            <Label>RAM Auto-Configuration</Label>
+          )}
           <View
             style={[
               styles.appliedBadge,
-              { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderColor: '#10b981' },
+              {
+                backgroundColor: appliedBadgeColors.bg,
+                borderColor: appliedBadgeColors.border,
+              },
             ]}
             accessibilityRole="text"
             accessibilityLabel="Recommended configuration applied"
           >
-            <Text style={[styles.appliedText, { fontSize: sizes.sub - 1 }]}>Applied</Text>
+            <Text style={[styles.appliedText, { color: appliedBadgeColors.text, fontSize: sizes.sub - 1 }]}>
+              Applied
+            </Text>
           </View>
         </View>
-        <Text style={[styles.bodyText, { color: colors.text, fontSize: sizes.text }]}>
+        <Text style={[styles.bodyText, { color: textPrimary, fontSize: sizes.text }]}>
           Optimized for {tierInfo.name} Tier
         </Text>
-        <Text style={[styles.subText, { color: colors.textMuted, fontSize: sizes.sub }]}>
+        <Text style={[styles.subText, { color: textMuted, fontSize: sizes.sub }]}>
           • Model: {tierInfo.recommendedModel}
           {'\n'}• Context window: {tierInfo.contextSize} tokens
           {'\n'}• Max outputs: {tierInfo.maxTokens} tokens
@@ -56,10 +79,10 @@ export function RecommendationBanner({
             <PressableScale
               scaleTo={0.96}
               onPress={onCustomize}
-              style={[styles.outlineBtn, { borderColor: colors.glassBorder }]}
+              style={[styles.outlineBtn, { borderColor: outlineBorder }]}
               accessibilityLabel="Customize configuration"
             >
-              <Text style={[styles.outlineBtnText, { color: colors.text, fontSize: sizes.sub }]}>
+              <Text style={[styles.outlineBtnText, { color: textPrimary, fontSize: sizes.sub }]}>
                 Customize Settings
               </Text>
             </PressableScale>
@@ -70,12 +93,18 @@ export function RecommendationBanner({
   }
 
   return (
-    <Card style={style}>
-      <Label>Recommended Configuration</Label>
-      <Text style={[styles.bodyText, { color: colors.text, fontSize: sizes.text }]}>
+    <Card style={[cardSurfaceStyle, style]}>
+      {surface === 'light' ? (
+        <Text style={[styles.lightLabel, { color: textMuted, fontSize: sizes.sub, marginBottom: 6 }]}>
+          RECOMMENDED CONFIGURATION
+        </Text>
+      ) : (
+        <Label>Recommended Configuration</Label>
+      )}
+      <Text style={[styles.bodyText, { color: textPrimary, fontSize: sizes.text }]}>
         Optimized for your {tierInfo.name} device ({tierInfo.label})
       </Text>
-      <Text style={[styles.subText, { color: colors.textMuted, fontSize: sizes.sub }]}>
+      <Text style={[styles.subText, { color: textMuted, fontSize: sizes.sub }]}>
         • Model: {tierInfo.recommendedModel}
         {'\n'}• Context window: {tierInfo.contextSize} tokens
         {'\n'}• Max outputs: {tierInfo.maxTokens} tokens
@@ -91,10 +120,10 @@ export function RecommendationBanner({
           <PressableScale
             scaleTo={0.96}
             onPress={onCustomize}
-            style={[styles.outlineBtn, { borderColor: colors.glassBorder }]}
+            style={[styles.outlineBtn, { borderColor: outlineBorder }]}
             accessibilityLabel="Customize configuration"
           >
-            <Text style={[styles.outlineBtnText, { color: colors.text, fontSize: sizes.sub }]}>
+            <Text style={[styles.outlineBtnText, { color: textPrimary, fontSize: sizes.sub }]}>
               Customize
             </Text>
           </PressableScale>
@@ -111,6 +140,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
+  lightLabel: {
+    fontWeight: '700',
+    letterSpacing: 0.6,
+  },
   appliedBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -118,7 +151,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   appliedText: {
-    color: '#10b981',
     fontWeight: '700',
     letterSpacing: 0.2,
   },

@@ -94,6 +94,43 @@ describe('DeviceCapabilityCard (#612, #615)', () => {
     const badge = root.findByProps({ accessibilityLabel: 'Device Tier: Flagship (>8 GB)' });
     expect(badge).toBeDefined();
   });
+
+  it('renders Detecting badge when ramBytes is null and Detecting GPU when gpuVendor is null', () => {
+    let component: renderer.ReactTestRenderer | undefined;
+    act(() => {
+      component = renderer.create(
+        <DeviceCapabilityCard ramBytes={null} gpuVendor={null} />
+      );
+    });
+    const root = component!.root;
+    expect(root.findByProps({ accessibilityLabel: 'Device Tier: Detecting…' })).toBeDefined();
+    expect(getText(root)).toContain('Detecting hardware memory profile...');
+  });
+
+  it('treats NaN and Infinity ramBytes as RAM Unknown in DeviceCapabilityCard', () => {
+    for (const badRam of [NaN, Infinity]) {
+      let component: renderer.ReactTestRenderer | undefined;
+      act(() => {
+        component = renderer.create(
+          <DeviceCapabilityCard ramBytes={badRam} gpuVendor={null} />
+        );
+      });
+      const texts = getText(component!.root);
+      expect(texts).toContain('RAM: Unknown');
+      expect(texts).not.toContain('NaN GB');
+      expect(texts).not.toContain('Infinity GB');
+    }
+  });
+
+  it('reflects gpuBackendPreference override in DeviceCapabilityCard', () => {
+    let component: renderer.ReactTestRenderer | undefined;
+    act(() => {
+      component = renderer.create(
+        <DeviceCapabilityCard ramBytes={8 * GB} gpuVendor="adreno" gpuBackendPreference="cpu" />
+      );
+    });
+    expect(getText(component!.root)).toContain('ADRENO (CPU compute)');
+  });
 });
 
 describe('RecommendationBanner (#612, #615)', () => {
@@ -106,15 +143,17 @@ describe('RecommendationBanner (#612, #615)', () => {
       .join(' ')
       .replace(/\s+/g, ' ');
 
-  it('returns null when RAM is unreadable (<= 0)', () => {
+  it('returns null when RAM is unreadable (<= 0, NaN, or Infinity)', () => {
     const onAccept = jest.fn();
-    let component: renderer.ReactTestRenderer | undefined;
-    act(() => {
-      component = renderer.create(
-        <RecommendationBanner ramBytes={0} onAccept={onAccept} />
-      );
-    });
-    expect(component!.toJSON()).toBeNull();
+    for (const badRam of [0, -1, NaN, Infinity]) {
+      let component: renderer.ReactTestRenderer | undefined;
+      act(() => {
+        component = renderer.create(
+          <RecommendationBanner ramBytes={badRam} onAccept={onAccept} />
+        );
+      });
+      expect(component!.toJSON()).toBeNull();
+    }
   });
 
   it('renders unapplied recommendation banner with Accept and Customize buttons', () => {
