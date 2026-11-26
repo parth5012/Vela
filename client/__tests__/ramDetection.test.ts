@@ -1,5 +1,6 @@
 import {
   calculateEstimatedPeakRam,
+  classifyDeviceTier,
   FORMAT_RAM_MULTIPLIERS,
   getDynamicModelStatusForRam,
   getModelStatusForRam,
@@ -176,6 +177,71 @@ describe('ramDetection', () => {
           'unsupported'
         );
       }
+    });
+  });
+
+  describe('classifyDeviceTier (#612, #615)', () => {
+    const GB = 1024 * 1024 * 1024;
+
+    it('classifies unreadable, 0, or negative memory as unknown tier', () => {
+      expect(classifyDeviceTier(null).tier).toBe('unknown');
+      expect(classifyDeviceTier(undefined).tier).toBe('unknown');
+      expect(classifyDeviceTier(0).tier).toBe('unknown');
+      expect(classifyDeviceTier(-1024).tier).toBe('unknown');
+      expect(classifyDeviceTier(NaN).tier).toBe('unknown');
+      expect(classifyDeviceTier(0).label).toBe('RAM Unknown');
+    });
+
+    it('classifies <= 4 GB devices as Entry tier', () => {
+      const tier2 = classifyDeviceTier(2 * GB);
+      expect(tier2.tier).toBe('entry');
+      expect(tier2.label).toBe('Entry (≤4 GB)');
+      expect(tier2.recommendedModel).toBe('SmolLM 135M');
+      expect(tier2.contextSize).toBe(1024);
+      expect(tier2.maxTokens).toBe(256);
+
+      const tier4 = classifyDeviceTier(4 * GB);
+      expect(tier4.tier).toBe('entry');
+      expect(tier4.label).toBe('Entry (≤4 GB)');
+    });
+
+    it('classifies 4.1 - 6 GB devices as Mid-Tier', () => {
+      const tier5 = classifyDeviceTier(5 * GB);
+      expect(tier5.tier).toBe('mid');
+      expect(tier5.label).toBe('Mid-Tier (4–6 GB)');
+      expect(tier5.recommendedModel).toBe('Qwen2.5 0.5B');
+      expect(tier5.contextSize).toBe(2048);
+      expect(tier5.maxTokens).toBe(512);
+
+      const tier6 = classifyDeviceTier(6 * GB);
+      expect(tier6.tier).toBe('mid');
+      expect(tier6.label).toBe('Mid-Tier (4–6 GB)');
+    });
+
+    it('classifies 6.1 - 8 GB devices as Performance tier', () => {
+      const tier7 = classifyDeviceTier(7.5 * GB);
+      expect(tier7.tier).toBe('performance');
+      expect(tier7.label).toBe('Performance (6–8 GB)');
+      expect(tier7.recommendedModel).toBe('Qwen2.5 1.5B (GGUF)');
+      expect(tier7.contextSize).toBe(4096);
+      expect(tier7.maxTokens).toBe(1024);
+
+      const tier8 = classifyDeviceTier(8 * GB);
+      expect(tier8.tier).toBe('performance');
+      expect(tier8.label).toBe('Performance (6–8 GB)');
+    });
+
+    it('classifies > 8 GB devices as Flagship tier', () => {
+      const tier12 = classifyDeviceTier(12 * GB);
+      expect(tier12.tier).toBe('flagship');
+      expect(tier12.label).toBe('Flagship (>8 GB)');
+      expect(tier12.recommendedModel).toBe('Qwen2.5 1.5B (GGUF)');
+      expect(tier12.contextSize).toBe(8192);
+      expect(tier12.maxTokens).toBe(4096);
+
+      const tierInf = classifyDeviceTier(Infinity);
+      expect(tierInf.tier).toBe('flagship');
+      expect(tierInf.label).toBe('Flagship (>8 GB)');
     });
   });
 });

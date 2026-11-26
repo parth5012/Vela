@@ -33,6 +33,14 @@ import {
 import type { RequestablePermission } from '../utils/setupPermissions';
 import { registerAndPostToken } from '../utils/pushRegistration';
 import AccessibilityGuide from '../components/ui/AccessibilityGuide';
+import { DeviceCapabilityCard } from '../components/ui/DeviceCapabilityCard';
+import { RecommendationBanner } from '../components/ui/RecommendationBanner';
+import {
+  detectRamBytes,
+  detectGpuVendor,
+  getOptimalSettingsForRam,
+  type GpuVendor,
+} from '../utils/ramDetection';
 import { styles } from '../styles/setupStyles';
 import DeviceAgentNative from '../modules/device-agent';
 import {
@@ -164,6 +172,51 @@ export default function SetupScreen() {
   const [shizukuChecking, setShizukuChecking] = useState(false);
   const [shizukuRequesting, setShizukuRequesting] = useState(false);
   const [shizukuRequestResult, setShizukuRequestResult] = useState<string | null>(null);
+
+  const detectedRamBytes = useConfigStore((s) => s.detectedRamBytes);
+  const setDetectedRamBytes = useConfigStore((s) => s.setDetectedRamBytes);
+  const localConfigAutoApplied = useConfigStore((s) => s.localConfigAutoApplied);
+  const setLocalConfigAutoApplied = useConfigStore((s) => s.setLocalConfigAutoApplied);
+  const applyModelSettings = useConfigStore((s) => s.applyModelSettings);
+  const [setupGpuVendor, setSetupGpuVendor] = useState<GpuVendor | null>(null);
+
+  useEffect(() => {
+    if (detectedRamBytes === null) {
+      detectRamBytes({ allowEmulator: __DEV__ || Platform.OS === 'web' })
+        .then((bytes) => {
+          if (isMounted.current) {
+            setDetectedRamBytes(bytes);
+          }
+        })
+        .catch(() => {
+          if (isMounted.current) {
+            setDetectedRamBytes(0);
+          }
+        });
+    }
+  }, [detectedRamBytes, setDetectedRamBytes]);
+
+  useEffect(() => {
+    detectGpuVendor()
+      .then((vendor) => {
+        if (isMounted.current) {
+          setSetupGpuVendor(vendor);
+        }
+      })
+      .catch(() => {
+        if (isMounted.current) {
+          setSetupGpuVendor('unknown');
+        }
+      });
+  }, []);
+
+  const handleApplyLocalRecommendation = () => {
+    if (detectedRamBytes && detectedRamBytes > 0) {
+      const rec = getOptimalSettingsForRam(detectedRamBytes);
+      applyModelSettings(rec.modelName);
+      setLocalConfigAutoApplied(true);
+    }
+  };
 
   const isMounted = useRef(true);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -908,21 +961,25 @@ export default function SetupScreen() {
                   </Pressable>
                 </View>
               ) : (
-                <View>
+                <View style={{ gap: 12 }}>
                   <View style={styles.localInfoContainer}>
-                    <Text style={styles.localTitle}>On-Device Inference</Text>
+                    <Text style={styles.localTitle}>On-Device Local AI</Text>
                     <Text style={styles.localSubtitle}>
                       Runs models locally using llama.rn and GGUF. Zero data leaves your device.
                     </Text>
                   </View>
-                  <View style={styles.modelInfoCard}>
-                    <Text style={styles.modelNameLabel}>
-                      Default Model: {localModelName}
-                    </Text>
-                    <Text style={styles.modelHint}>
-                      You can download or switch models anytime from Settings.
-                    </Text>
-                  </View>
+
+                  <DeviceCapabilityCard
+                    compact
+                    ramBytes={detectedRamBytes}
+                    gpuVendor={setupGpuVendor}
+                  />
+
+                  <RecommendationBanner
+                    ramBytes={detectedRamBytes}
+                    isApplied={localConfigAutoApplied}
+                    onAccept={handleApplyLocalRecommendation}
+                  />
 
                   <Pressable
                     style={({ pressed }) => [
