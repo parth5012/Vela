@@ -1,0 +1,115 @@
+import { useConfigStore } from '../store/useConfigStore';
+
+describe('useConfigStore per-model overrides (#612, #615)', () => {
+  beforeEach(() => {
+    useConfigStore.setState({
+      localModelName: 'SmolLM 135M',
+      localContextSize: 1024,
+      localMaxTokens: 256,
+      gpuBackendPreference: 'auto',
+      detectedRamBytes: 8 * 1024 * 1024 * 1024,
+      modelOverrides: {},
+    });
+  });
+
+  it('sets and persists per-model overrides', () => {
+    const { setModelOverride } = useConfigStore.getState();
+
+    // Set override for a non-active model
+    setModelOverride('Qwen2.5 1.5B (GGUF)', {
+      contextSize: 4096,
+      maxTokens: 1024,
+      gpuBackend: 'vulkan',
+    });
+
+    const state = useConfigStore.getState();
+    expect(state.modelOverrides['Qwen2.5 1.5B (GGUF)']).toEqual({
+      contextSize: 4096,
+      maxTokens: 1024,
+      gpuBackend: 'vulkan',
+    });
+
+    // Active model params should remain untouched
+    expect(state.localModelName).toBe('SmolLM 135M');
+    expect(state.localContextSize).toBe(1024);
+  });
+
+  it('immediately updates active parameters when overriding the currently active model', () => {
+    const { setModelOverride } = useConfigStore.getState();
+
+    setModelOverride('SmolLM 135M', {
+      contextSize: 2048,
+      maxTokens: 512,
+      gpuBackend: 'cpu',
+    });
+
+    const state = useConfigStore.getState();
+    expect(state.modelOverrides['SmolLM 135M']).toEqual({
+      contextSize: 2048,
+      maxTokens: 512,
+      gpuBackend: 'cpu',
+    });
+    expect(state.localContextSize).toBe(2048);
+    expect(state.localMaxTokens).toBe(512);
+    expect(state.gpuBackendPreference).toBe('cpu');
+  });
+
+  it('clears per-model overrides cleanly', () => {
+    const { setModelOverride, clearModelOverride } = useConfigStore.getState();
+
+    setModelOverride('Phi-4 Mini (GGUF)', { contextSize: 8192 });
+    expect(useConfigStore.getState().modelOverrides['Phi-4 Mini (GGUF)']).toBeDefined();
+
+    clearModelOverride('Phi-4 Mini (GGUF)');
+    expect(useConfigStore.getState().modelOverrides['Phi-4 Mini (GGUF)']).toBeUndefined();
+  });
+
+  it('applies overridden settings when switching to a model with overrides', () => {
+    const { setModelOverride, applyModelSettings } = useConfigStore.getState();
+
+    setModelOverride('Qwen2.5 0.5B', {
+      contextSize: 3000,
+      maxTokens: 750,
+      gpuBackend: 'opencl',
+    });
+
+    applyModelSettings('Qwen2.5 0.5B');
+
+    const state = useConfigStore.getState();
+    expect(state.localModelName).toBe('Qwen2.5 0.5B');
+    expect(state.localContextSize).toBe(3000);
+    expect(state.localMaxTokens).toBe(750);
+    expect(state.gpuBackendPreference).toBe('opencl');
+  });
+
+  it('falls back to hardware tier defaults when switching to a model without overrides', () => {
+    const { applyModelSettings } = useConfigStore.getState();
+
+    // 8GB device tier default for optimal settings is Qwen2.5 1.5B (GGUF) ctx 4096, max 1024
+    applyModelSettings('DeepSeek-R1 1.5B (GGUF)');
+
+    const state = useConfigStore.getState();
+    expect(state.localModelName).toBe('DeepSeek-R1 1.5B (GGUF)');
+    expect(state.localContextSize).toBe(4096);
+    expect(state.localMaxTokens).toBe(1024);
+    expect(state.gpuBackendPreference).toBe('auto');
+  });
+
+  it('uses tier defaults for unset fields in a partial model override', () => {
+    const { setModelOverride, applyModelSettings } = useConfigStore.getState();
+
+    // Model A sets custom maxTokens and gpuBackend
+    applyModelSettings('SmolLM 135M');
+    setModelOverride('SmolLM 135M', { contextSize: 512, maxTokens: 128, gpuBackend: 'cpu' });
+
+    // Model B only overrides contextSize; maxTokens & gpuBackend should reset to tier/auto
+    setModelOverride('Qwen2.5 1.5B (GGUF)', { contextSize: 2048 });
+    applyModelSettings('Qwen2.5 1.5B (GGUF)');
+
+    const state = useConfigStore.getState();
+    expect(state.localModelName).toBe('Qwen2.5 1.5B (GGUF)');
+    expect(state.localContextSize).toBe(2048);
+    expect(state.localMaxTokens).toBe(1024);
+    expect(state.gpuBackendPreference).toBe('auto');
+  });
+});

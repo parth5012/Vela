@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { clearGpuCrashFlag } from '../utils/liteRtCrashFlag';
+import { getOptimalSettingsForRam } from '../utils/ramDetection';
 import type { ThemeName } from '../utils/theme';
 
 export interface SuggestionStarter {
@@ -74,6 +75,12 @@ export type PermissionTier = 'auto' | 'confirm' | 'deny';
 
 export type GpuBackendPreference = 'auto' | 'opencl' | 'vulkan' | 'cpu';
 export type GpuQuantPreference = 'auto' | 'q4_0' | 'q4_k_m' | 'q8_0';
+
+export interface ModelOverrideConfig {
+  contextSize?: number;
+  maxTokens?: number;
+  gpuBackend?: GpuBackendPreference;
+}
 
 export interface FloatingOverlayConfig {
   enabled: boolean;
@@ -205,6 +212,10 @@ interface ConfigState {
   maxTokens: number;
   gpuBackendPreference: GpuBackendPreference;
   gpuQuantPreference: GpuQuantPreference;
+  modelOverrides: Record<string, ModelOverrideConfig>;
+  setModelOverride: (modelName: string, override: Partial<ModelOverrideConfig>) => void;
+  clearModelOverride: (modelName: string) => void;
+  applyModelSettings: (modelName: string) => void;
   setLocalModelDownloadProgress: (val: number | null) => void;
   setWifiOnlyDownload: (val: boolean) => void;
   setLocalModelName: (val: string) => void;
@@ -290,6 +301,7 @@ export const useConfigStore = create<ConfigState>()(
       maxTokens: 4096,
       gpuBackendPreference: 'auto',
       gpuQuantPreference: 'auto',
+      modelOverrides: {},
 
       // Multimodal defaults (#559, #562)
       maxImagesPerMessage: 2,
@@ -341,6 +353,7 @@ export const useConfigStore = create<ConfigState>()(
           maxTokens: 4096,
           gpuBackendPreference: 'auto',
           gpuQuantPreference: 'auto',
+          modelOverrides: {},
           deviceAgentPermissions: { ...DEFAULT_DEVICE_AGENT_PERMISSIONS },
           osPermissions: {
             notifications: 'undetermined',
@@ -494,6 +507,41 @@ export const useConfigStore = create<ConfigState>()(
       setGpuBackendPreference: (gpuBackendPreference) => set({ gpuBackendPreference }),
       setGpuQuantPreference: (gpuQuantPreference) => set({ gpuQuantPreference }),
 
+      // Per-model override actions (#612, #615)
+      setModelOverride: (modelName, override) =>
+        set((state) => {
+          const existing = state.modelOverrides[modelName] ?? {};
+          const updated = { ...existing, ...override };
+          const nextOverrides = { ...state.modelOverrides, [modelName]: updated };
+          if (state.localModelName === modelName) {
+            return {
+              modelOverrides: nextOverrides,
+              localContextSize: override.contextSize ?? state.localContextSize,
+              localMaxTokens: override.maxTokens ?? state.localMaxTokens,
+              gpuBackendPreference: override.gpuBackend ?? state.gpuBackendPreference,
+            };
+          }
+          return { modelOverrides: nextOverrides };
+        }),
+      clearModelOverride: (modelName) =>
+        set((state) => {
+          const nextOverrides = { ...state.modelOverrides };
+          delete nextOverrides[modelName];
+          return { modelOverrides: nextOverrides };
+        }),
+      applyModelSettings: (modelName) =>
+        set((state) => {
+          const override = state.modelOverrides[modelName];
+          const tierSettings = getOptimalSettingsForRam(state.detectedRamBytes || 6 * 1024 * 1024 * 1024);
+          return {
+            localModelName: modelName,
+            isConfigured: computeIsConfigured({ ...state, localModelName: modelName }),
+            localContextSize: override?.contextSize ?? tierSettings.contextSize,
+            localMaxTokens: override?.maxTokens ?? tierSettings.maxTokens,
+            gpuBackendPreference: override?.gpuBackend ?? 'auto',
+          };
+        }),
+
       // Multimodal setters (#559, #562)
       setMaxImagesPerMessage: (maxImagesPerMessage) =>
         set({
@@ -546,9 +594,15 @@ export const useConfigStore = create<ConfigState>()(
       // v8: "Flair" redesign (Material 3 Expressive palettes).
       // v9 (WF-447-01): scroll-craft theme roles & cold silver/chrome addition;
       // legacy oled users cleanly migrate to noir.
-      version: 9,
+      // v10 (#612, #615): RAM auto-config UI & per-model overrides.
+      version: 10,
       migrate: (persistedState: any, fromVersion: number) => {
         if (persistedState) {
+          if (fromVersion < 10) {
+            if (persistedState.modelOverrides === undefined) {
+              persistedState.modelOverrides = {};
+            }
+          }
           if (fromVersion < 4) {
             if (persistedState.defaultAgent === undefined) {
               persistedState.defaultAgent = persistedState.defaultPersona ?? 'personal assistant';
