@@ -1,4 +1,4 @@
-import { useConfigStore } from '../store/useConfigStore';
+import { useConfigStore, selectIsRecommendationApplied } from '../store/useConfigStore';
 
 describe('useConfigStore per-model overrides (#612, #615)', () => {
   beforeEach(() => {
@@ -165,5 +165,37 @@ describe('useConfigStore per-model overrides (#612, #615)', () => {
 
     applyModelSettings('SmolLM 135M');
     expect(useConfigStore.getState().localConfigAutoApplied).toBe(false);
+  });
+
+  it('acceptRecommendedConfig is a no-op when detectedRamBytes is unknown (0, null, NaN)', () => {
+    for (const badRam of [0, null, NaN]) {
+      useConfigStore.setState({
+        detectedRamBytes: badRam,
+        localModelName: 'SmolLM 135M',
+        localContextSize: 1024,
+        localMaxTokens: 256,
+        localConfigAutoApplied: false,
+      });
+      useConfigStore.getState().acceptRecommendedConfig();
+      const state = useConfigStore.getState();
+      expect(state.localModelName).toBe('SmolLM 135M');
+      expect(state.localContextSize).toBe(1024);
+      expect(state.localConfigAutoApplied).toBe(false);
+    }
+  });
+
+  it('prunes redundant auto gpuBackend override and keeps selectIsRecommendationApplied in sync', () => {
+    const { acceptRecommendedConfig, setModelOverride } = useConfigStore.getState();
+
+    acceptRecommendedConfig();
+    expect(selectIsRecommendationApplied(useConfigStore.getState())).toBe(true);
+
+    setModelOverride('Qwen2.5 1.5B (GGUF)', { gpuBackend: 'cpu' });
+    expect(useConfigStore.getState().modelOverrides['Qwen2.5 1.5B (GGUF)']).toEqual({ gpuBackend: 'cpu' });
+    expect(selectIsRecommendationApplied(useConfigStore.getState())).toBe(false);
+
+    setModelOverride('Qwen2.5 1.5B (GGUF)', { gpuBackend: 'auto' });
+    expect(useConfigStore.getState().modelOverrides['Qwen2.5 1.5B (GGUF)']).toBeUndefined();
+    expect(useConfigStore.getState().gpuBackendPreference).toBe('auto');
   });
 });

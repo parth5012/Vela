@@ -15,10 +15,12 @@ import {
   Linking,
 } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
+import * as FileSystem from 'expo-file-system/legacy';
 import { DURATIONS, EASING } from '../utils/motion';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import {
   useConfigStore,
+  selectIsRecommendationApplied,
   ProviderSlug,
   DEFAULT_CLOUD_PROVIDERS,
 } from '../store/useConfigStore';
@@ -174,9 +176,11 @@ export default function SetupScreen() {
 
   const detectedRamBytes = useConfigStore((s) => s.detectedRamBytes);
   const setDetectedRamBytes = useConfigStore((s) => s.setDetectedRamBytes);
-  const localConfigAutoApplied = useConfigStore((s) => s.localConfigAutoApplied);
+  const isRecommendationApplied = useConfigStore(selectIsRecommendationApplied);
+  const gpuBackendPreference = useConfigStore((s) => s.gpuBackendPreference);
   const acceptRecommendedConfig = useConfigStore((s) => s.acceptRecommendedConfig);
   const [setupGpuVendor, setSetupGpuVendor] = useState<GpuVendor | null>(null);
+  const [setupFreeStorageBytes, setSetupFreeStorageBytes] = useState<number | null>(null);
 
   useEffect(() => {
     if (detectedRamBytes === null) {
@@ -206,6 +210,15 @@ export default function SetupScreen() {
           setSetupGpuVendor('unknown');
         }
       });
+    if (typeof FileSystem?.getFreeDiskStorageAsync === 'function') {
+      FileSystem.getFreeDiskStorageAsync()
+        .then((bytes) => {
+          if (isMounted.current && typeof bytes === 'number' && Number.isFinite(bytes) && bytes > 0) {
+            setSetupFreeStorageBytes(bytes);
+          }
+        })
+        .catch(() => {});
+    }
   }, []);
 
   const handleApplyLocalRecommendation = () => {
@@ -967,13 +980,18 @@ export default function SetupScreen() {
 
                   <DeviceCapabilityCard
                     compact
+                    surface="light"
                     ramBytes={detectedRamBytes}
                     gpuVendor={setupGpuVendor}
+                    gpuBackendPreference={gpuBackendPreference}
+                    modelName={localModelName}
+                    freeStorageBytes={setupFreeStorageBytes}
                   />
 
                   <RecommendationBanner
+                    surface="light"
                     ramBytes={detectedRamBytes}
-                    isApplied={localConfigAutoApplied}
+                    isApplied={isRecommendationApplied}
                     onAccept={handleApplyLocalRecommendation}
                   />
 

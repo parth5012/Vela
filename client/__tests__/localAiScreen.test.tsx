@@ -327,3 +327,114 @@ describe('LocalAiScreen LiteRT Crash Badge', () => {
     expect(alertBoxes.length).toBe(0);
   });
 });
+
+describe('LocalAiScreen RAM Auto-Config Integration (#612, #615)', () => {
+  let mounted: renderer.ReactTestRenderer | undefined;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    await AsyncStorage.clear();
+    act(() => {
+      useConfigStore.getState().clearConfig();
+      useConfigStore.getState().setDetectedRamBytes(8 * 1024 * 1024 * 1024);
+    });
+  });
+
+  afterEach(() => {
+    if (mounted) {
+      act(() => {
+        mounted!.unmount();
+      });
+      mounted = undefined;
+    }
+    jest.restoreAllMocks();
+  });
+
+  it('Customize keeps modelOverrides empty and pre-populates draft inputs without marking Applied', async () => {
+    let component: renderer.ReactTestRenderer | undefined;
+    await act(async () => {
+      component = renderer.create(<LocalAiScreen />);
+    });
+    mounted = component;
+
+    expect(
+      await flushUntil(() =>
+        component!.root.findAllByProps({ accessibilityLabel: 'Customize configuration' }).length > 0
+      )
+    ).toBe(true);
+
+    const customizeBtn = component!.root.findByProps({ accessibilityLabel: 'Customize configuration' });
+    act(() => {
+      customizeBtn.props.onPress();
+    });
+
+    expect(useConfigStore.getState().modelOverrides).toEqual({});
+    expect(useConfigStore.getState().localConfigAutoApplied).toBe(false);
+    const ctxInput = component!.root.findByProps({ accessibilityLabel: 'Context Size (Tokens)' });
+    expect(ctxInput.props.value).toBe('4096');
+  });
+
+  it('Accept Recommended applies tier configuration and renders Applied badge', async () => {
+    const { Alert } = require('react-native');
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+
+    let component: renderer.ReactTestRenderer | undefined;
+    await act(async () => {
+      component = renderer.create(<LocalAiScreen />);
+    });
+    mounted = component;
+
+    expect(
+      await flushUntil(() =>
+        component!.root.findAllByProps({ label: 'Accept Recommended' }).length > 0
+      )
+    ).toBe(true);
+
+    const acceptBtn = component!.root.findByProps({ label: 'Accept Recommended' });
+    act(() => {
+      acceptBtn.props.onPress();
+    });
+
+    const state = useConfigStore.getState();
+    expect(state.localModelName).toBe('Qwen2.5 1.5B (GGUF)');
+    expect(state.localContextSize).toBe(4096);
+    expect(state.localMaxTokens).toBe(1024);
+    expect(state.localConfigAutoApplied).toBe(true);
+    expect(
+      component!.root.findAllByProps({ accessibilityLabel: 'Recommended configuration applied' }).length
+    ).toBeGreaterThan(0);
+  });
+
+  it('shows Unknown Device RAM caution instead of fabricating 6 GB tier when RAM is 0', async () => {
+    const { Alert } = require('react-native');
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    act(() => {
+      useConfigStore.getState().setDetectedRamBytes(0);
+    });
+
+    let component: renderer.ReactTestRenderer | undefined;
+    await act(async () => {
+      component = renderer.create(<LocalAiScreen />);
+    });
+    mounted = component;
+
+    expect(
+      await flushUntil(() =>
+        component!.root.findAllByProps({ accessibilityLabel: 'Device Tier: RAM Unknown' }).length > 0
+      )
+    ).toBe(true);
+
+    const modelRow = component!.root.findByProps({
+      accessibilityLabel: 'Qwen2.5 0.5B Unknown, Not downloaded',
+    });
+    act(() => {
+      modelRow.props.onPress();
+    });
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Unknown Device RAM',
+      expect.stringContaining("couldn't verify your device's total memory"),
+      expect.any(Array)
+    );
+  });
+});

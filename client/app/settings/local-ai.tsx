@@ -1,9 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, Alert, StyleSheet, TextInput, Modal, ScrollView, ActivityIndicator, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
-import { useConfigStore } from '../../store/useConfigStore';
+import { useConfigStore, selectIsRecommendationApplied } from '../../store/useConfigStore';
 import {
   localModelStorageKey,
   LOCAL_MODELS,
@@ -96,7 +96,6 @@ export default function LocalAiScreen() {
   const setConnectionMode = useConfigStore((s) => s.setConnectionMode);
   const isLocalMode = connectionMode === 'local';
   const localModelName = useConfigStore((s) => s.localModelName);
-  const setLocalModelName = useConfigStore((s) => s.setLocalModelName);
   const localModelDownloadProgress = useConfigStore((s) => s.localModelDownloadProgress);
   const setLocalModelDownloadProgress = useConfigStore((s) => s.setLocalModelDownloadProgress);
   const wifiOnlyDownload = useConfigStore((s) => s.wifiOnlyDownload);
@@ -108,13 +107,10 @@ export default function LocalAiScreen() {
 
   const detectedRamBytes = useConfigStore((s) => s.detectedRamBytes);
   const setDetectedRamBytes = useConfigStore((s) => s.setDetectedRamBytes);
-  const localConfigAutoApplied = useConfigStore((s) => s.localConfigAutoApplied);
+  const isRecommendationApplied = useConfigStore(selectIsRecommendationApplied);
   const localContextSize = useConfigStore((s) => s.localContextSize);
-  const setLocalContextSize = useConfigStore((s) => s.setLocalContextSize);
   const localMaxTokens = useConfigStore((s) => s.localMaxTokens);
-  const setLocalMaxTokens = useConfigStore((s) => s.setLocalMaxTokens);
   const gpuBackendPreference = useConfigStore((s) => s.gpuBackendPreference);
-  const setGpuBackendPreference = useConfigStore((s) => s.setGpuBackendPreference);
   const gpuQuantPreference = useConfigStore((s) => s.gpuQuantPreference);
   const setGpuQuantPreference = useConfigStore((s) => s.setGpuQuantPreference);
   const modelOverrides = useConfigStore((s) => s.modelOverrides);
@@ -122,6 +118,17 @@ export default function LocalAiScreen() {
   const clearModelOverride = useConfigStore((s) => s.clearModelOverride);
   const applyModelSettings = useConfigStore((s) => s.applyModelSettings);
   const acceptRecommendedConfig = useConfigStore((s) => s.acceptRecommendedConfig);
+
+  const [contextDraft, setContextDraft] = useState(() => String(localContextSize || 2048));
+  const [maxTokensDraft, setMaxTokensDraft] = useState(() => String(localMaxTokens || 512));
+
+  useEffect(() => {
+    setContextDraft(String(localContextSize || 2048));
+  }, [localContextSize, localModelName]);
+
+  useEffect(() => {
+    setMaxTokensDraft(String(localMaxTokens || 512));
+  }, [localMaxTokens, localModelName]);
 
   const [showUnsupportedModels, setShowUnsupportedModels] = useState(false);
   const [detectedGpuVendor, setDetectedGpuVendor] = useState<GpuVendor | null>(null);
@@ -187,11 +194,11 @@ export default function LocalAiScreen() {
     });
   }, []);
 
-  useEffect(() => {
+  const refreshFreeDiskBytes = useCallback(() => {
     if (typeof FileSystem.getFreeDiskStorageAsync === 'function') {
       FileSystem.getFreeDiskStorageAsync()
         .then((bytes) => {
-          if (isMounted.current && typeof bytes === 'number' && bytes > 0) {
+          if (isMounted.current && typeof bytes === 'number' && Number.isFinite(bytes) && bytes > 0) {
             setFreeDiskBytes(bytes);
           }
         })
@@ -201,6 +208,10 @@ export default function LocalAiScreen() {
           }
         });
     }
+  }, []);
+
+  useEffect(() => {
+    refreshFreeDiskBytes();
     try {
       setCpuArch(detectCpuArchitecture());
     } catch (err) {
@@ -209,7 +220,7 @@ export default function LocalAiScreen() {
       }
       setCpuArch('unknown');
     }
-  }, []);
+  }, [refreshFreeDiskBytes]);
 
   const handleClearGpuCrash = async () => {
     await clearGpuCrashFlag();
@@ -288,63 +299,53 @@ export default function LocalAiScreen() {
     }
   };
 
-  const ramUnknown = detectedRamBytes !== null && detectedRamBytes <= 0;
+  const hasValidRam =
+    typeof detectedRamBytes === 'number' &&
+    Number.isFinite(detectedRamBytes) &&
+    detectedRamBytes > 0;
   // When RAM is genuinely unreadable (production device, totalMemory denied),
   // don't fabricate a recommendation by substituting a simulated 6 GB value.
   const modelStatus = (modelName: string): 'recommended' | 'borderline' | 'unsupported' | 'unknown' =>
-    ramUnknown
+    !hasValidRam
       ? 'unknown'
-      : getModelStatusForRam(modelName, detectedRamBytes || 6 * 1024 * 1024 * 1024);
-
-  const tierRec =
-    !ramUnknown && detectedRamBytes && detectedRamBytes > 0
-      ? getOptimalSettingsForRam(detectedRamBytes)
-      : null;
-  const isRecommendationApplied = Boolean(
-    localConfigAutoApplied &&
-      tierRec &&
-      localModelName === tierRec.modelName &&
-      localContextSize === tierRec.contextSize &&
-      localMaxTokens === tierRec.maxTokens &&
-      gpuBackendPreference === 'auto'
-  );
+      : getModelStatusForRam(modelName, detectedRamBytes);
 
   const handleApplyRecommendation = () => {
-    if (ramUnknown) {
-      Alert.alert(
-        'RAM Unavailable',
-        "We couldn't read your device's total memory, so no configuration is recommended. Pick a model manually below."
-      );
-      return;
-    }
-    if (detectedRamBytes && detectedRamBytes > 0) {
+    if (hasValidRam) {
       acceptRecommendedConfig();
-      Alert.alert('Recommendation Applied', `Recommended settings applied successfully.`);
+      Alert.alert('Recommendation Applied', 'Recommended settings applied successfully.');
     }
   };
 
   const handleCustomizeRecommendation = () => {
-    if (!isRecommendationApplied && detectedRamBytes && detectedRamBytes > 0) {
+    if (!isRecommendationApplied && hasValidRam) {
       const rec = getOptimalSettingsForRam(detectedRamBytes);
-      const currentModel = useConfigStore.getState().localModelName;
-      setModelOverride(currentModel, {
-        contextSize: rec.contextSize,
-        maxTokens: rec.maxTokens,
-      });
+      setContextDraft(String(rec.contextSize));
+      setMaxTokensDraft(String(rec.maxTokens));
     }
     contextInputRef.current?.focus();
   };
 
   const handleSelectModel = (modelName: string) => {
-    const ram = detectedRamBytes || 6 * 1024 * 1024 * 1024;
-    const status = getModelStatusForRam(modelName, ram);
+    if (!hasValidRam) {
+      Alert.alert(
+        'Unknown Device RAM',
+        "We couldn't verify your device's total memory. Selecting this model could risk an out-of-memory crash if it exceeds available RAM.",
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Select Anyway', onPress: () => applyModelSettings(modelName) },
+        ]
+      );
+      return;
+    }
+    const status = getModelStatusForRam(modelName, detectedRamBytes);
     if (status === 'borderline') {
       Alert.alert(
         'Borderline Model',
         'Warning: This model requires more memory than recommended for your device and may run slowly.',
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Select', onPress: () => applyModelSettings(modelName) }
+          { text: 'Select', onPress: () => applyModelSettings(modelName) },
         ]
       );
     } else if (status === 'unsupported') {
@@ -353,7 +354,7 @@ export default function LocalAiScreen() {
         'Warning: High OOM Risk. This model requires significantly more RAM than your device has. It is likely to crash. Do you want to select it anyway?',
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Select Anyway', onPress: () => applyModelSettings(modelName) }
+          { text: 'Select Anyway', onPress: () => applyModelSettings(modelName) },
         ]
       );
     } else {
@@ -392,14 +393,25 @@ export default function LocalAiScreen() {
   }, []);
 
   const handleSelectCustomModel = async (model: CustomModelRecord) => {
-    const ram = detectedRamBytes || 6 * 1024 * 1024 * 1024;
-    const status = getDynamicModelStatusForRam(model.sizeBytes, model.format, ram);
     const selectAction = async () => {
       applyModelSettings(model.name);
       await AsyncStorage.setItem(localModelStorageKey(model.name), 'true');
       await AsyncStorage.setItem(`${localModelStorageKey(model.name)}_path`, model.localUri);
     };
 
+    if (!hasValidRam) {
+      Alert.alert(
+        'Unknown Device RAM',
+        "We couldn't verify your device's total memory. Selecting this custom model could risk an out-of-memory crash if it exceeds available RAM.",
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Select Anyway', onPress: selectAction },
+        ]
+      );
+      return;
+    }
+
+    const status = getDynamicModelStatusForRam(model.sizeBytes, model.format, detectedRamBytes);
     if (status === 'borderline') {
       Alert.alert(
         'Borderline Memory',
@@ -434,10 +446,12 @@ export default function LocalAiScreen() {
           style: 'destructive',
           onPress: async () => {
             await deleteCustomModel(model.id);
+            clearModelOverride(model.name);
             if (localModelName === model.name) {
               applyModelSettings('Qwen2.5 0.5B');
             }
             await loadCustomModelsList();
+            refreshFreeDiskBytes();
           },
         },
       ]
@@ -537,6 +551,10 @@ export default function LocalAiScreen() {
     handleImportModel,
   } = useModelDownload({ customModels, needleHasNative, isMounted });
 
+  useEffect(() => {
+    refreshFreeDiskBytes();
+  }, [downloadedModels, customModels, refreshFreeDiskBytes]);
+
   const isDownloading = localModelDownloadProgress !== null;
 
   return (
@@ -591,6 +609,8 @@ export default function LocalAiScreen() {
       <DeviceCapabilityCard
         ramBytes={detectedRamBytes}
         gpuVendor={detectedGpuVendor}
+        gpuBackendPreference={gpuBackendPreference}
+        modelName={localModelName}
         freeStorageBytes={freeDiskBytes}
         architecture={cpuArch}
       />
@@ -783,13 +803,16 @@ export default function LocalAiScreen() {
         ) : (
           customModels.map((m) => {
             const isSelected = localModelName === m.name;
-            const ram = detectedRamBytes || 6 * 1024 * 1024 * 1024;
-            const status = getDynamicModelStatusForRam(m.sizeBytes, m.format, ram);
+            const status = !hasValidRam
+              ? 'unknown'
+              : getDynamicModelStatusForRam(m.sizeBytes, m.format, detectedRamBytes);
             const statusBg =
               status === 'recommended'
                 ? '#10b981'
                 : status === 'borderline'
                 ? '#f59e0b'
+                : status === 'unknown'
+                ? '#64748b'
                 : '#ef4444';
 
             return (
@@ -876,6 +899,7 @@ export default function LocalAiScreen() {
             <Text style={{ color: colors.textMuted, fontSize: sizes.sub, marginBottom: 4 }}>Context Size (Tokens)</Text>
             <TextInput
               ref={contextInputRef}
+              accessibilityLabel="Context Size (Tokens)"
               style={{
                 backgroundColor: 'rgba(0,0,0,0.25)',
                 color: colors.text,
@@ -886,12 +910,16 @@ export default function LocalAiScreen() {
                 fontSize: sizes.text
               }}
               keyboardType="numeric"
-              value={String(localContextSize || 2048)}
+              value={contextDraft}
               onChangeText={(val) => {
-                const num = parseInt(val, 10);
-                if (!isNaN(num)) {
-                  setLocalContextSize(num);
+                setContextDraft(val.replace(/[^0-9]/g, ''));
+              }}
+              onEndEditing={() => {
+                const num = parseInt(contextDraft, 10);
+                if (Number.isFinite(num) && num > 0) {
                   setModelOverride(useConfigStore.getState().localModelName, { contextSize: num });
+                } else {
+                  setContextDraft(String(localContextSize || 2048));
                 }
               }}
             />
@@ -899,6 +927,7 @@ export default function LocalAiScreen() {
           <View style={{ flex: 1 }}>
             <Text style={{ color: colors.textMuted, fontSize: sizes.sub, marginBottom: 4 }}>Max Output Tokens</Text>
             <TextInput
+              accessibilityLabel="Max Output Tokens"
               style={{
                 backgroundColor: 'rgba(0,0,0,0.25)',
                 color: colors.text,
@@ -909,12 +938,16 @@ export default function LocalAiScreen() {
                 fontSize: sizes.text
               }}
               keyboardType="numeric"
-              value={String(localMaxTokens || 512)}
+              value={maxTokensDraft}
               onChangeText={(val) => {
-                const num = parseInt(val, 10);
-                if (!isNaN(num)) {
-                  setLocalMaxTokens(num);
+                setMaxTokensDraft(val.replace(/[^0-9]/g, ''));
+              }}
+              onEndEditing={() => {
+                const num = parseInt(maxTokensDraft, 10);
+                if (Number.isFinite(num) && num > 0) {
                   setModelOverride(useConfigStore.getState().localModelName, { maxTokens: num });
+                } else {
+                  setMaxTokensDraft(String(localMaxTokens || 512));
                 }
               }}
             />
@@ -1062,7 +1095,6 @@ export default function LocalAiScreen() {
             options={GPU_BACKEND_OPTIONS}
             value={gpuBackendPreference}
             onChange={(v) => {
-              setGpuBackendPreference(v);
               setModelOverride(useConfigStore.getState().localModelName, { gpuBackend: v });
             }}
           />

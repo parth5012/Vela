@@ -54,6 +54,81 @@ export const DEVICE_TIER_COLORS: Record<DeviceTier, DeviceTierBadgeColor> = {
   },
 };
 
+export const DEVICE_TIER_LIGHT_COLORS: Record<DeviceTier, DeviceTierBadgeColor> = {
+  entry: {
+    bg: 'rgba(217, 119, 6, 0.12)',
+    border: '#d97706',
+    text: '#92400e',
+  },
+  mid: {
+    bg: 'rgba(37, 99, 235, 0.12)',
+    border: '#2563eb',
+    text: '#1e40af',
+  },
+  performance: {
+    bg: 'rgba(79, 70, 229, 0.12)',
+    border: '#4f46e5',
+    text: '#3730a3',
+  },
+  flagship: {
+    bg: 'rgba(5, 150, 105, 0.12)',
+    border: '#059669',
+    text: '#065f46',
+  },
+  unknown: {
+    bg: 'rgba(100, 116, 139, 0.12)',
+    border: '#64748b',
+    text: '#334155',
+  },
+};
+
+export function getDeviceTierBadgeColors(tier: DeviceTier, isDark: boolean): DeviceTierBadgeColor {
+  return isDark ? DEVICE_TIER_COLORS[tier] : DEVICE_TIER_LIGHT_COLORS[tier];
+}
+
+const DEVICE_TIER_SPECS: Record<DeviceTier, Omit<DeviceTierInfo, 'badgeColor'>> = {
+  entry: {
+    tier: 'entry',
+    name: 'Entry',
+    label: 'Entry (≤4 GB)',
+    recommendedModel: 'SmolLM 135M',
+    contextSize: 1024,
+    maxTokens: 256,
+  },
+  mid: {
+    tier: 'mid',
+    name: 'Mid-Tier',
+    label: 'Mid-Tier (4–6 GB)',
+    recommendedModel: 'Qwen2.5 0.5B',
+    contextSize: 2048,
+    maxTokens: 512,
+  },
+  performance: {
+    tier: 'performance',
+    name: 'Performance',
+    label: 'Performance (6–8 GB)',
+    recommendedModel: 'Qwen2.5 1.5B (GGUF)',
+    contextSize: 4096,
+    maxTokens: 1024,
+  },
+  flagship: {
+    tier: 'flagship',
+    name: 'Flagship',
+    label: 'Flagship (>8 GB)',
+    recommendedModel: 'Qwen2.5 1.5B (GGUF)',
+    contextSize: 8192,
+    maxTokens: 4096,
+  },
+  unknown: {
+    tier: 'unknown',
+    name: 'Unknown',
+    label: 'RAM Unknown',
+    recommendedModel: 'SmolLM 135M',
+    contextSize: 1024,
+    maxTokens: 256,
+  },
+};
+
 /**
  * Classifies device RAM into one of four tiers aligned with #612/#613:
  * - Entry:       <= 4 GB  (e.g., SmolLM 135M, ctx 1024, max 256)
@@ -63,73 +138,27 @@ export const DEVICE_TIER_COLORS: Record<DeviceTier, DeviceTierBadgeColor> = {
  * - Unknown:     <= 0, NaN, or non-finite (fails safe to unknown tier)
  */
 export function classifyDeviceTier(ramBytes: number | null | undefined): DeviceTierInfo {
+  let tier: DeviceTier;
   if (ramBytes === Infinity) {
-    return {
-      tier: 'flagship',
-      name: 'Flagship',
-      label: 'Flagship (>8 GB)',
-      badgeColor: DEVICE_TIER_COLORS.flagship,
-      recommendedModel: 'Qwen2.5 1.5B (GGUF)',
-      contextSize: 8192,
-      maxTokens: 4096,
-    };
-  }
-
-  if (ramBytes === null || ramBytes === undefined || !Number.isFinite(ramBytes) || ramBytes <= 0) {
-    return {
-      tier: 'unknown',
-      name: 'Unknown',
-      label: 'RAM Unknown',
-      badgeColor: DEVICE_TIER_COLORS.unknown,
-      recommendedModel: 'SmolLM 135M',
-      contextSize: 1024,
-      maxTokens: 256,
-    };
-  }
-
-  const ramGB = ramBytes / (1024 * 1024 * 1024);
-
-  if (ramGB <= RAM_TIER_ENTRY_MAX_GB) {
-    return {
-      tier: 'entry',
-      name: 'Entry',
-      label: 'Entry (≤4 GB)',
-      badgeColor: DEVICE_TIER_COLORS.entry,
-      recommendedModel: 'SmolLM 135M',
-      contextSize: 1024,
-      maxTokens: 256,
-    };
-  } else if (ramGB <= RAM_TIER_MID_MAX_GB) {
-    return {
-      tier: 'mid',
-      name: 'Mid-Tier',
-      label: 'Mid-Tier (4–6 GB)',
-      badgeColor: DEVICE_TIER_COLORS.mid,
-      recommendedModel: 'Qwen2.5 0.5B',
-      contextSize: 2048,
-      maxTokens: 512,
-    };
-  } else if (ramGB <= RAM_TIER_PERFORMANCE_MAX_GB) {
-    return {
-      tier: 'performance',
-      name: 'Performance',
-      label: 'Performance (6–8 GB)',
-      badgeColor: DEVICE_TIER_COLORS.performance,
-      recommendedModel: 'Qwen2.5 1.5B (GGUF)',
-      contextSize: 4096,
-      maxTokens: 1024,
-    };
+    tier = 'flagship';
+  } else if (ramBytes === null || ramBytes === undefined || !Number.isFinite(ramBytes) || ramBytes <= 0) {
+    tier = 'unknown';
   } else {
-    return {
-      tier: 'flagship',
-      name: 'Flagship',
-      label: 'Flagship (>8 GB)',
-      badgeColor: DEVICE_TIER_COLORS.flagship,
-      recommendedModel: 'Qwen2.5 1.5B (GGUF)',
-      contextSize: 8192,
-      maxTokens: 4096,
-    };
+    const ramGB = ramBytes / (1024 * 1024 * 1024);
+    if (ramGB <= RAM_TIER_ENTRY_MAX_GB) {
+      tier = 'entry';
+    } else if (ramGB <= RAM_TIER_MID_MAX_GB) {
+      tier = 'mid';
+    } else if (ramGB <= RAM_TIER_PERFORMANCE_MAX_GB) {
+      tier = 'performance';
+    } else {
+      tier = 'flagship';
+    }
   }
+  return {
+    ...DEVICE_TIER_SPECS[tier],
+    badgeColor: DEVICE_TIER_COLORS[tier],
+  };
 }
 
 export type GpuVendor = 'adreno' | 'mali' | 'xclipse' | 'tensor' | 'unknown';
@@ -558,41 +587,12 @@ export function getOptimalSettingsForRam(ramBytes: number): {
   contextSize: number;
   maxTokens: number;
 } {
-  const ramGB = ramBytes / (1024 * 1024 * 1024);
-
-  // If RAM is not finite or <= 4 GB, resolve to lowest tier (fail-safe to low tier on NaN/<=0)
-  if (!Number.isFinite(ramBytes) || ramGB <= RAM_TIER_ENTRY_MAX_GB) {
-    if (ramBytes === Infinity) {
-      return {
-        modelName: 'Qwen2.5 1.5B (GGUF)',
-        contextSize: 8192,
-        maxTokens: 4096,
-      };
-    }
-    return {
-      modelName: 'SmolLM 135M',
-      contextSize: 1024,
-      maxTokens: 256,
-    };
-  } else if (ramGB <= RAM_TIER_MID_MAX_GB) {
-    return {
-      modelName: 'Qwen2.5 0.5B',
-      contextSize: 2048,
-      maxTokens: 512,
-    };
-  } else if (ramGB <= RAM_TIER_PERFORMANCE_MAX_GB) {
-    return {
-      modelName: 'Qwen2.5 1.5B (GGUF)',
-      contextSize: 4096,
-      maxTokens: 1024,
-    };
-  } else {
-    return {
-      modelName: 'Qwen2.5 1.5B (GGUF)',
-      contextSize: 8192,
-      maxTokens: 4096,
-    };
-  }
+  const info = classifyDeviceTier(ramBytes);
+  return {
+    modelName: info.recommendedModel,
+    contextSize: info.contextSize,
+    maxTokens: info.maxTokens,
+  };
 }
 
 export interface SafeInferencePlan {

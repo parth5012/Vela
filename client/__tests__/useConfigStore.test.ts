@@ -314,6 +314,35 @@ describe('useConfigStore', () => {
     });
   });
 
+  it('initializes modelOverrides to {} on v9 -> v10 migration while preserving execution params', async () => {
+    const AsyncStorage = require('@react-native-async-storage/async-storage');
+    await AsyncStorage.setItem(
+      'vela-config-storage',
+      JSON.stringify({
+        state: {
+          ...useConfigStore.getState(),
+          localModelName: 'Qwen2.5 1.5B (GGUF)',
+          localContextSize: 4096,
+          localMaxTokens: 1024,
+          gpuBackendPreference: 'vulkan',
+          modelOverrides: undefined,
+        },
+        version: 9,
+      })
+    );
+
+    await useConfigStore.persist.rehydrate();
+
+    const migrated = useConfigStore.getState();
+    expect(migrated.modelOverrides).toEqual({});
+    expect(migrated.localContextSize).toBe(4096);
+    expect(migrated.localMaxTokens).toBe(1024);
+    expect(migrated.gpuBackendPreference).toBe('vulkan');
+
+    await AsyncStorage.removeItem('vela-config-storage');
+    useConfigStore.getState().clearConfig();
+  });
+
   it('should default tap/type/swipe device permissions to confirm (audit fix regression guard)', () => {
     const perms = useConfigStore.getState().deviceAgentPermissions;
     // These three were downgraded from 'auto' to 'confirm' in the audit fix:
