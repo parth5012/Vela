@@ -26,7 +26,7 @@ export function DeviceCapabilityCard({
 }: DeviceCapabilityCardProps) {
   const { colors, sizes } = useAurora();
   const tierInfo = classifyDeviceTier(ramBytes);
-  const ramInvalid = ramBytes !== null && ramBytes <= 0;
+  const ramInvalid = ramBytes !== null && (Number.isNaN(ramBytes) || ramBytes <= 0);
 
   const resolvedVendor = gpuVendor || 'unknown';
   const backend = GPU_BACKEND_TABLE[resolvedVendor] ?? 'cpu';

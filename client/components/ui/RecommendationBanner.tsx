@@ -21,7 +21,7 @@ export function RecommendationBanner({
 }: RecommendationBannerProps) {
   const { colors, sizes } = useAurora();
 
-  if (ramBytes === null || ramBytes <= 0) {
+  if (ramBytes === null || Number.isNaN(ramBytes) || ramBytes <= 0) {
     return null;
   }
 
@@ -129,10 +129,6 @@ const styles = StyleSheet.create({
   subText: {
     lineHeight: 20,
     marginBottom: 12,
-  },
-  mutedText: {
-    lineHeight: 18,
-    marginTop: 4,
   },
   actionsRow: {
     flexDirection: 'row',
