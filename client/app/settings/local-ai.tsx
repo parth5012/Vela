@@ -109,7 +109,6 @@ export default function LocalAiScreen() {
   const detectedRamBytes = useConfigStore((s) => s.detectedRamBytes);
   const setDetectedRamBytes = useConfigStore((s) => s.setDetectedRamBytes);
   const localConfigAutoApplied = useConfigStore((s) => s.localConfigAutoApplied);
-  const setLocalConfigAutoApplied = useConfigStore((s) => s.setLocalConfigAutoApplied);
   const localContextSize = useConfigStore((s) => s.localContextSize);
   const setLocalContextSize = useConfigStore((s) => s.setLocalContextSize);
   const localMaxTokens = useConfigStore((s) => s.localMaxTokens);
@@ -122,6 +121,7 @@ export default function LocalAiScreen() {
   const setModelOverride = useConfigStore((s) => s.setModelOverride);
   const clearModelOverride = useConfigStore((s) => s.clearModelOverride);
   const applyModelSettings = useConfigStore((s) => s.applyModelSettings);
+  const acceptRecommendedConfig = useConfigStore((s) => s.acceptRecommendedConfig);
 
   const [showUnsupportedModels, setShowUnsupportedModels] = useState(false);
   const [detectedGpuVendor, setDetectedGpuVendor] = useState<GpuVendor | null>(null);
@@ -296,6 +296,19 @@ export default function LocalAiScreen() {
       ? 'unknown'
       : getModelStatusForRam(modelName, detectedRamBytes || 6 * 1024 * 1024 * 1024);
 
+  const tierRec =
+    !ramUnknown && detectedRamBytes && detectedRamBytes > 0
+      ? getOptimalSettingsForRam(detectedRamBytes)
+      : null;
+  const isRecommendationApplied = Boolean(
+    localConfigAutoApplied &&
+      tierRec &&
+      localModelName === tierRec.modelName &&
+      localContextSize === tierRec.contextSize &&
+      localMaxTokens === tierRec.maxTokens &&
+      gpuBackendPreference === 'auto'
+  );
+
   const handleApplyRecommendation = () => {
     if (ramUnknown) {
       Alert.alert(
@@ -304,19 +317,20 @@ export default function LocalAiScreen() {
       );
       return;
     }
-    if (detectedRamBytes) {
-      const rec = getOptimalSettingsForRam(detectedRamBytes);
-      applyModelSettings(rec.modelName);
-      setLocalConfigAutoApplied(true);
+    if (detectedRamBytes && detectedRamBytes > 0) {
+      acceptRecommendedConfig();
       Alert.alert('Recommendation Applied', `Recommended settings applied successfully.`);
     }
   };
 
   const handleCustomizeRecommendation = () => {
-    if (!localConfigAutoApplied && detectedRamBytes && detectedRamBytes > 0) {
+    if (!isRecommendationApplied && detectedRamBytes && detectedRamBytes > 0) {
       const rec = getOptimalSettingsForRam(detectedRamBytes);
-      setLocalContextSize(rec.contextSize);
-      setLocalMaxTokens(rec.maxTokens);
+      const currentModel = useConfigStore.getState().localModelName;
+      setModelOverride(currentModel, {
+        contextSize: rec.contextSize,
+        maxTokens: rec.maxTokens,
+      });
     }
     contextInputRef.current?.focus();
   };
@@ -421,7 +435,7 @@ export default function LocalAiScreen() {
           onPress: async () => {
             await deleteCustomModel(model.id);
             if (localModelName === model.name) {
-              setLocalModelName('Qwen2.5 0.5B');
+              applyModelSettings('Qwen2.5 0.5B');
             }
             await loadCustomModelsList();
           },
@@ -583,7 +597,7 @@ export default function LocalAiScreen() {
 
       <RecommendationBanner
         ramBytes={detectedRamBytes}
-        isApplied={localConfigAutoApplied}
+        isApplied={isRecommendationApplied}
         onAccept={handleApplyRecommendation}
         onCustomize={handleCustomizeRecommendation}
       />

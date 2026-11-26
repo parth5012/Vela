@@ -216,6 +216,7 @@ interface ConfigState {
   setModelOverride: (modelName: string, override: Partial<ModelOverrideConfig>) => void;
   clearModelOverride: (modelName: string) => void;
   applyModelSettings: (modelName: string) => void;
+  acceptRecommendedConfig: () => void;
   setLocalModelDownloadProgress: (val: number | null) => void;
   setWifiOnlyDownload: (val: boolean) => void;
   setLocalModelName: (val: string) => void;
@@ -493,10 +494,11 @@ export const useConfigStore = create<ConfigState>()(
       setLocalModelName: (localModelName) =>
         set((state) => ({
           localModelName,
+          localConfigAutoApplied: false,
           isConfigured: computeIsConfigured({ ...state, localModelName }),
         })),
-      setLocalContextSize: (localContextSize) => set({ localContextSize }),
-      setLocalMaxTokens: (localMaxTokens) => set({ localMaxTokens }),
+      setLocalContextSize: (localContextSize) => set({ localContextSize, localConfigAutoApplied: false }),
+      setLocalMaxTokens: (localMaxTokens) => set({ localMaxTokens, localConfigAutoApplied: false }),
       setLocalConfigAutoApplied: (localConfigAutoApplied) => set({ localConfigAutoApplied }),
       setDetectedRamBytes: (detectedRamBytes) => set({ detectedRamBytes }),
       setMaxSteps: (maxSteps) => set({ maxSteps }),
@@ -504,7 +506,7 @@ export const useConfigStore = create<ConfigState>()(
       setContextCompression: (contextCompression) => set({ contextCompression }),
       setSystemPromptEnabled: (systemPromptEnabled) => set({ systemPromptEnabled }),
       setMaxTokens: (maxTokens) => set({ maxTokens }),
-      setGpuBackendPreference: (gpuBackendPreference) => set({ gpuBackendPreference }),
+      setGpuBackendPreference: (gpuBackendPreference) => set({ gpuBackendPreference, localConfigAutoApplied: false }),
       setGpuQuantPreference: (gpuQuantPreference) => set({ gpuQuantPreference }),
 
       // Per-model override actions (#612, #615)
@@ -519,6 +521,7 @@ export const useConfigStore = create<ConfigState>()(
               localContextSize: override.contextSize ?? state.localContextSize,
               localMaxTokens: override.maxTokens ?? state.localMaxTokens,
               gpuBackendPreference: override.gpuBackend ?? state.gpuBackendPreference,
+              localConfigAutoApplied: false,
             };
           }
           return { modelOverrides: nextOverrides };
@@ -532,13 +535,33 @@ export const useConfigStore = create<ConfigState>()(
       applyModelSettings: (modelName) =>
         set((state) => {
           const override = state.modelOverrides[modelName];
-          const tierSettings = getOptimalSettingsForRam(state.detectedRamBytes || 6 * 1024 * 1024 * 1024);
+          const hasPositiveRam = typeof state.detectedRamBytes === 'number' && state.detectedRamBytes > 0;
+          const tierSettings = hasPositiveRam ? getOptimalSettingsForRam(state.detectedRamBytes!) : null;
           return {
             localModelName: modelName,
             isConfigured: computeIsConfigured({ ...state, localModelName: modelName }),
-            localContextSize: override?.contextSize ?? tierSettings.contextSize,
-            localMaxTokens: override?.maxTokens ?? tierSettings.maxTokens,
+            localContextSize: override?.contextSize ?? tierSettings?.contextSize ?? state.localContextSize,
+            localMaxTokens: override?.maxTokens ?? tierSettings?.maxTokens ?? state.localMaxTokens,
             gpuBackendPreference: override?.gpuBackend ?? 'auto',
+            localConfigAutoApplied: false,
+          };
+        }),
+      acceptRecommendedConfig: () =>
+        set((state) => {
+          if (!state.detectedRamBytes || state.detectedRamBytes <= 0) {
+            return state;
+          }
+          const rec = getOptimalSettingsForRam(state.detectedRamBytes);
+          const nextOverrides = { ...state.modelOverrides };
+          delete nextOverrides[rec.modelName];
+          return {
+            localModelName: rec.modelName,
+            isConfigured: computeIsConfigured({ ...state, localModelName: rec.modelName }),
+            localContextSize: rec.contextSize,
+            localMaxTokens: rec.maxTokens,
+            gpuBackendPreference: 'auto',
+            localConfigAutoApplied: true,
+            modelOverrides: nextOverrides,
           };
         }),
 
