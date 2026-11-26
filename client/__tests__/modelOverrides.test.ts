@@ -7,6 +7,7 @@ describe('useConfigStore per-model overrides (#612, #615)', () => {
       localContextSize: 1024,
       localMaxTokens: 256,
       gpuBackendPreference: 'auto',
+      localConfigAutoApplied: false,
       detectedRamBytes: 8 * 1024 * 1024 * 1024,
       modelOverrides: {},
     });
@@ -111,5 +112,58 @@ describe('useConfigStore per-model overrides (#612, #615)', () => {
     expect(state.localContextSize).toBe(2048);
     expect(state.localMaxTokens).toBe(1024);
     expect(state.gpuBackendPreference).toBe('auto');
+  });
+
+  it('acceptRecommendedConfig applies displayed tier settings even when an override exists and clears stale override', () => {
+    const { setModelOverride, acceptRecommendedConfig } = useConfigStore.getState();
+
+    // Pre-existing override on the 8 GB recommended model
+    setModelOverride('Qwen2.5 1.5B (GGUF)', {
+      contextSize: 2048,
+      maxTokens: 512,
+      gpuBackend: 'cpu',
+    });
+
+    acceptRecommendedConfig();
+
+    const state = useConfigStore.getState();
+    expect(state.localModelName).toBe('Qwen2.5 1.5B (GGUF)');
+    expect(state.localContextSize).toBe(4096);
+    expect(state.localMaxTokens).toBe(1024);
+    expect(state.gpuBackendPreference).toBe('auto');
+    expect(state.localConfigAutoApplied).toBe(true);
+    expect(state.modelOverrides['Qwen2.5 1.5B (GGUF)']).toBeUndefined();
+  });
+
+  it('preserves manual parameters when RAM is unknown (0 or null) instead of fabricating a 6 GB tier', () => {
+    useConfigStore.setState({
+      detectedRamBytes: 0,
+      localModelName: 'SmolLM 135M',
+      localContextSize: 1536,
+      localMaxTokens: 384,
+    });
+
+    useConfigStore.getState().applyModelSettings('DeepSeek-R1 1.5B (GGUF)');
+
+    const state = useConfigStore.getState();
+    expect(state.localModelName).toBe('DeepSeek-R1 1.5B (GGUF)');
+    expect(state.localContextSize).toBe(1536);
+    expect(state.localMaxTokens).toBe(384);
+  });
+
+  it('clears localConfigAutoApplied when switching models or editing parameters', () => {
+    const { acceptRecommendedConfig, setModelOverride, applyModelSettings } = useConfigStore.getState();
+
+    acceptRecommendedConfig();
+    expect(useConfigStore.getState().localConfigAutoApplied).toBe(true);
+
+    setModelOverride('Qwen2.5 1.5B (GGUF)', { contextSize: 2048 });
+    expect(useConfigStore.getState().localConfigAutoApplied).toBe(false);
+
+    acceptRecommendedConfig();
+    expect(useConfigStore.getState().localConfigAutoApplied).toBe(true);
+
+    applyModelSettings('SmolLM 135M');
+    expect(useConfigStore.getState().localConfigAutoApplied).toBe(false);
   });
 });

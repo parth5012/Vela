@@ -38,7 +38,6 @@ import { RecommendationBanner } from '../components/ui/RecommendationBanner';
 import {
   detectRamBytes,
   detectGpuVendor,
-  getOptimalSettingsForRam,
   type GpuVendor,
 } from '../utils/ramDetection';
 import { styles } from '../styles/setupStyles';
@@ -176,8 +175,7 @@ export default function SetupScreen() {
   const detectedRamBytes = useConfigStore((s) => s.detectedRamBytes);
   const setDetectedRamBytes = useConfigStore((s) => s.setDetectedRamBytes);
   const localConfigAutoApplied = useConfigStore((s) => s.localConfigAutoApplied);
-  const setLocalConfigAutoApplied = useConfigStore((s) => s.setLocalConfigAutoApplied);
-  const applyModelSettings = useConfigStore((s) => s.applyModelSettings);
+  const acceptRecommendedConfig = useConfigStore((s) => s.acceptRecommendedConfig);
   const [setupGpuVendor, setSetupGpuVendor] = useState<GpuVendor | null>(null);
 
   useEffect(() => {
@@ -212,9 +210,7 @@ export default function SetupScreen() {
 
   const handleApplyLocalRecommendation = () => {
     if (detectedRamBytes && detectedRamBytes > 0) {
-      const rec = getOptimalSettingsForRam(detectedRamBytes);
-      applyModelSettings(rec.modelName);
-      setLocalConfigAutoApplied(true);
+      acceptRecommendedConfig();
     }
   };
 
