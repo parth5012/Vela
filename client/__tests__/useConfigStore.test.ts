@@ -314,8 +314,9 @@ describe('useConfigStore', () => {
     });
   });
 
-  it('initializes modelOverrides to {} on v9 -> v10 migration while preserving execution params', async () => {
+  it('initializes modelOverrides to {} and clears legacy detectedRamBytes on v9 -> v10 migration while preserving execution params', async () => {
     const AsyncStorage = require('@react-native-async-storage/async-storage');
+    useConfigStore.setState({ detectedRamBytes: null });
     await AsyncStorage.setItem(
       'vela-config-storage',
       JSON.stringify({
@@ -325,6 +326,7 @@ describe('useConfigStore', () => {
           localContextSize: 4096,
           localMaxTokens: 1024,
           gpuBackendPreference: 'vulkan',
+          detectedRamBytes: 0,
           modelOverrides: undefined,
         },
         version: 9,
@@ -335,6 +337,7 @@ describe('useConfigStore', () => {
 
     const migrated = useConfigStore.getState();
     expect(migrated.modelOverrides).toEqual({});
+    expect(migrated.detectedRamBytes).toBeNull();
     expect(migrated.localContextSize).toBe(4096);
     expect(migrated.localMaxTokens).toBe(1024);
     expect(migrated.gpuBackendPreference).toBe('vulkan');

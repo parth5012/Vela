@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, type StyleProp, type ViewStyle } from 'react-na
 import { Card, Label, PrimaryButton, useAurora } from './settingsKit';
 import PressableScale from './PressableScale';
 import { classifyDeviceTier, getDeviceTierBadgeColors } from '../../utils/ramDetection';
-import { isDarkTheme } from '../../utils/theme';
+import { isDarkTheme, THEME_COLORS } from '../../utils/theme';
 
 export interface RecommendationBannerProps {
   ramBytes: number | null;
@@ -31,12 +31,13 @@ export function RecommendationBanner({
   const isLightSurface = surface === 'light' || !isDarkTheme(theme);
   const tierInfo = classifyDeviceTier(ramBytes);
   const appliedBadgeColors = getDeviceTierBadgeColors('flagship', !isLightSurface);
-  const textPrimary = surface === 'light' ? '#1D1B20' : colors.text;
-  const textMuted = surface === 'light' ? '#4B4654' : colors.textMuted;
-  const outlineBorder = surface === 'light' ? '#E8E0F2' : colors.glassBorder;
+  const lightPalette = THEME_COLORS.berry;
+  const textPrimary = surface === 'light' ? lightPalette.text : colors.text;
+  const textMuted = surface === 'light' ? lightPalette.textMuted : colors.textMuted;
+  const outlineBorder = surface === 'light' ? lightPalette.glassBorder : colors.glassBorder;
   const cardSurfaceStyle =
     surface === 'light'
-      ? { backgroundColor: '#FBF7FE', borderColor: '#E8E0F2' }
+      ? { backgroundColor: lightPalette.background, borderColor: lightPalette.glassBorder }
       : undefined;
 
   if (isApplied) {

@@ -437,4 +437,74 @@ describe('LocalAiScreen RAM Auto-Config Integration (#612, #615)', () => {
       expect.any(Array)
     );
   });
+
+  it('commits Execution Parameters via onBlur (Expo web path), syncs unedited Customize sibling draft, and avoids cross-model writes on switch', async () => {
+    let component: renderer.ReactTestRenderer | undefined;
+    await act(async () => {
+      component = renderer.create(<LocalAiScreen />);
+    });
+    mounted = component;
+
+    expect(
+      await flushUntil(() =>
+        component!.root.findAllByProps({ accessibilityLabel: 'Customize configuration' }).length > 0
+      )
+    ).toBe(true);
+
+    // 1. Customize pre-populates draft inputs on an 8 GB device without mutating store
+    act(() => {
+      component!.root.findByProps({ accessibilityLabel: 'Customize configuration' }).props.onPress();
+    });
+    const ctxInput = () => component!.root.findByProps({ accessibilityLabel: 'Context Size (Tokens)' });
+    const maxInput = () => component!.root.findByProps({ accessibilityLabel: 'Max Output Tokens' });
+    expect(ctxInput().props.value).toBe('4096');
+    expect(maxInput().props.value).toBe('1024');
+
+    // 2. Editing Context Size and blurring (RNW onBlur) commits override and syncs unedited Max Output Tokens back to store (512)
+    act(() => {
+      ctxInput().props.onFocus();
+      ctxInput().props.onChangeText('3072');
+    });
+    act(() => {
+      ctxInput().props.onBlur();
+    });
+
+    const activeModel = useConfigStore.getState().localModelName;
+    expect(useConfigStore.getState().modelOverrides[activeModel]).toEqual({ contextSize: 3072 });
+    expect(useConfigStore.getState().localContextSize).toBe(3072);
+    expect(maxInput().props.value).toBe('512');
+
+    // 3. Switching models while draft is dirty must not write the dirty draft onto the newly selected model on a late blur
+    act(() => {
+      ctxInput().props.onFocus();
+      ctxInput().props.onChangeText('9999');
+    });
+    const smolRow = component!.root.findByProps({
+      accessibilityLabel: 'SmolLM 135M Recommended, Not downloaded',
+    });
+    act(() => {
+      smolRow.props.onPress();
+    });
+    expect(useConfigStore.getState().localModelName).toBe('SmolLM 135M');
+    act(() => {
+      ctxInput().props.onBlur();
+    });
+    expect(useConfigStore.getState().modelOverrides['SmolLM 135M']).toBeUndefined();
+    expect(useConfigStore.getState().localContextSize).toBe(4096);
+
+    // 4. Reset Overrides clears dirty draft back to store value even if localContextSize did not change numerically
+    act(() => {
+      useConfigStore.getState().setModelOverride('SmolLM 135M', { gpuBackend: 'cpu' });
+    });
+    act(() => {
+      ctxInput().props.onFocus();
+      ctxInput().props.onChangeText('8192');
+    });
+    const resetBtn = component!.root.findByProps({ accessibilityLabel: 'Reset overrides for SmolLM 135M' });
+    act(() => {
+      resetBtn.props.onPress();
+    });
+    expect(useConfigStore.getState().modelOverrides['SmolLM 135M']).toBeUndefined();
+    expect(ctxInput().props.value).toBe('4096');
+  });
 });

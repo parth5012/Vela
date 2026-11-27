@@ -543,7 +543,10 @@ export const useConfigStore = create<ConfigState>()(
       applyModelSettings: (modelName) =>
         set((state) => {
           const override = state.modelOverrides[modelName];
-          const hasPositiveRam = typeof state.detectedRamBytes === 'number' && state.detectedRamBytes > 0;
+          const hasPositiveRam =
+            typeof state.detectedRamBytes === 'number' &&
+            Number.isFinite(state.detectedRamBytes) &&
+            state.detectedRamBytes > 0;
           const tierSettings = hasPositiveRam ? getOptimalSettingsForRam(state.detectedRamBytes!) : null;
           return {
             localModelName: modelName,
@@ -556,7 +559,11 @@ export const useConfigStore = create<ConfigState>()(
         }),
       acceptRecommendedConfig: () =>
         set((state) => {
-          if (!state.detectedRamBytes || state.detectedRamBytes <= 0) {
+          if (
+            typeof state.detectedRamBytes !== 'number' ||
+            !Number.isFinite(state.detectedRamBytes) ||
+            state.detectedRamBytes <= 0
+          ) {
             return state;
           }
           const rec = getOptimalSettingsForRam(state.detectedRamBytes);
@@ -633,6 +640,7 @@ export const useConfigStore = create<ConfigState>()(
             if (persistedState.modelOverrides === undefined) {
               persistedState.modelOverrides = {};
             }
+            delete persistedState.detectedRamBytes;
           }
           if (fromVersion < 4) {
             if (persistedState.defaultAgent === undefined) {
