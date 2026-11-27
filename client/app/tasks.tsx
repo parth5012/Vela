@@ -337,6 +337,20 @@ export default function TasksScreen() {
     }
   };
 
+  const getOutcomeBadgeProps = (status: string) => {
+    const isCompleted = status === 'completed';
+    const isRunning = status === 'running';
+    return {
+      label: isCompleted ? 'SUCCESS' : status.toUpperCase(),
+      backgroundColor: isCompleted
+        ? 'rgba(16, 185, 129, 0.15)'
+        : isRunning
+        ? 'rgba(59, 130, 246, 0.15)'
+        : 'rgba(239, 68, 68, 0.15)',
+      color: isCompleted ? '#10b981' : isRunning ? '#3b82f6' : '#ef4444',
+    };
+  };
+
   const recentTask = recentRun ? taskList.find((t) => t.id === recentRun.task_id) : null;
 
   return (
@@ -345,16 +359,18 @@ export default function TasksScreen() {
       {recentRun && dismissedNotificationId !== recentRun.id && (
         <View style={[styles.notificationBanner, { backgroundColor: colors.glass, borderColor: colors.glassBorder }]}>
           <View style={styles.notificationHeader}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+            <View style={styles.notificationTitleRow}>
               <Text style={[styles.notificationTitle, { color: colors.text }]}>
                 🔔 Recent Run Notification
               </Text>
-              <Text style={[styles.outcomeBadge, {
-                backgroundColor: recentRun.status === 'completed' ? 'rgba(16, 185, 129, 0.15)' : recentRun.status === 'running' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                color: recentRun.status === 'completed' ? '#10b981' : recentRun.status === 'running' ? '#3b82f6' : '#ef4444'
-              }]}>
-                {recentRun.status.toUpperCase()}
-              </Text>
+              {(() => {
+                const badge = getOutcomeBadgeProps(recentRun.status);
+                return (
+                  <Text style={[styles.outcomeBadge, { backgroundColor: badge.backgroundColor, color: badge.color }]}>
+                    {badge.label}
+                  </Text>
+                );
+              })()}
             </View>
             <PressableScale
               onPress={() => setDismissedNotificationId(recentRun.id)}
@@ -468,14 +484,14 @@ export default function TasksScreen() {
                   }]}>
                     {task.status.toUpperCase()}
                   </Text>
-                  {latestRunsByTask[task.id] && (
-                    <Text style={[styles.outcomeBadge, {
-                      backgroundColor: latestRunsByTask[task.id].status === 'completed' ? 'rgba(16, 185, 129, 0.15)' : latestRunsByTask[task.id].status === 'running' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                      color: latestRunsByTask[task.id].status === 'completed' ? '#10b981' : latestRunsByTask[task.id].status === 'running' ? '#3b82f6' : '#ef4444'
-                    }]}>
-                      {latestRunsByTask[task.id].status === 'completed' ? 'SUCCESS' : latestRunsByTask[task.id].status.toUpperCase()}
-                    </Text>
-                  )}
+                  {latestRunsByTask[task.id] && (() => {
+                    const badge = getOutcomeBadgeProps(latestRunsByTask[task.id].status);
+                    return (
+                      <Text style={[styles.outcomeBadge, { backgroundColor: badge.backgroundColor, color: badge.color }]}>
+                        {badge.label}
+                      </Text>
+                    );
+                  })()}
                 </View>
               </PressableScale>
 
@@ -613,7 +629,7 @@ export default function TasksScreen() {
                 ))}
               </View>
               {formRecurrence === 'custom' && (
-                <View style={{ marginTop: 10 }}>
+                <View style={styles.customCronContainer}>
                   <TextInput
                     value={customCronInput}
                     onChangeText={setCustomCronInput}
@@ -772,9 +788,9 @@ export default function TasksScreen() {
                 </View>
               </View>
 
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20 }}>
+              <View style={styles.historyHeaderRow}>
                 <Text style={[styles.historyTitle, { color: colors.text, paddingHorizontal: 0 }]}>Execution Run History</Text>
-                <Text style={{ color: colors.textMuted, fontSize: 11 }}>
+                <Text style={[styles.historyRetentionText, { color: colors.textMuted }]}>
                   Retention: last {taskHistoryRetention} runs
                 </Text>
               </View>
@@ -792,12 +808,14 @@ export default function TasksScreen() {
                         <Text style={{ color: colors.text, fontSize: 13, fontWeight: 'bold' }}>
                           📅 {new Date(run.started_at).toLocaleString()}
                         </Text>
-                        <Text style={[styles.badge, {
-                          backgroundColor: run.status === 'completed' ? 'rgba(16, 185, 129, 0.15)' : run.status === 'running' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                          color: run.status === 'completed' ? '#10b981' : run.status === 'running' ? '#3b82f6' : '#ef4444'
-                        }]}>
-                          {run.status.toUpperCase()}
-                        </Text>
+                        {(() => {
+                          const badge = getOutcomeBadgeProps(run.status);
+                          return (
+                            <Text style={[styles.badge, { backgroundColor: badge.backgroundColor, color: badge.color }]}>
+                              {badge.label}
+                            </Text>
+                          );
+                        })()}
                       </View>
                       {run.completed_at ? (
                         <Text style={{ color: colors.textMuted, fontSize: 11, marginBottom: 8 }}>

@@ -376,4 +376,22 @@ export const styles = StyleSheet.create({
     overflow: 'hidden',
     letterSpacing: 0.6,
   },
+  customCronContainer: {
+    marginTop: 10,
+  },
+  historyHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  historyRetentionText: {
+    fontSize: 11,
+  },
+  notificationTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
 });
