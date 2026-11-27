@@ -317,4 +317,63 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     marginTop: 6,
   },
+  notificationBanner: {
+    padding: 14,
+    marginHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 4,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  notificationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  notificationTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  notificationBody: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 8,
+  },
+  notificationActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  notificationBtn: {
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  notificationBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  cronHelperText: {
+    fontSize: 12,
+    marginTop: 6,
+    letterSpacing: 0.2,
+  },
+  statusBadgesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  outcomeBadge: {
+    fontSize: 10,
+    fontWeight: '800',
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 6,
+    overflow: 'hidden',
+    letterSpacing: 0.6,
+  },
 });
