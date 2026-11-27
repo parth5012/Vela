@@ -3,8 +3,10 @@ import * as TaskManager from 'expo-task-manager';
 import * as BackgroundTask from 'expo-background-task';
 import db from '../db/client';
 import { tasks, taskRuns } from '../db/schema';
-import { eq, and, lte, isNull, or } from 'drizzle-orm';
+import { eq, and, lte, isNull, or, inArray } from 'drizzle-orm';
 import { runTask } from './taskRunner';
+import { calculateNextCronRun, isCronRule } from './cron';
+import { useConfigStore } from '../store/useConfigStore';
 import {
   isCheckinSchedulerTask,
   gateCheckinTask,
@@ -23,6 +25,7 @@ async function advanceTaskSchedule(taskId: string, recurrenceRule: string, start
       next_run: nextRunTime,
     })
     .where(eq(tasks.id, taskId));
+  await pruneTaskRuns(taskId);
 }
 
 export function calculateNextRun(recurrenceRule: string, lastRun: number): number {
@@ -37,8 +40,34 @@ export function calculateNextRun(recurrenceRule: string, lastRun: number): numbe
     return base + 24 * 60 * 60 * 1000;
   } else if (recurrenceRule === 'weekly') {
     return base + 7 * 24 * 60 * 60 * 1000;
+  } else if (isCronRule(recurrenceRule)) {
+    return calculateNextCronRun(recurrenceRule, base);
   }
   return base + 24 * 60 * 60 * 1000;
+}
+
+export async function pruneTaskRuns(taskId: string, retentionLimit?: number): Promise<void> {
+  if (!db) return;
+  const limit = retentionLimit ?? useConfigStore.getState().taskHistoryRetention ?? 20;
+  if (limit <= 0) return;
+
+  try {
+    const runs = await db
+      .select({ id: taskRuns.id, started_at: taskRuns.started_at })
+      .from(taskRuns)
+      .where(eq(taskRuns.task_id, taskId));
+
+    if (runs.length <= limit) return;
+
+    const sorted = [...runs].sort((a, b) => Number(b.started_at) - Number(a.started_at));
+    const toPrune = sorted.slice(limit);
+    if (toPrune.length > 0) {
+      await db.delete(taskRuns).where(inArray(taskRuns.id, toPrune.map((r) => r.id)));
+    }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn('[backgroundTasks] Failed to prune task runs:', message);
+  }
 }
 
 const generateId = () => {

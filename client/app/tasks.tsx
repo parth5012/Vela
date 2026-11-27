@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, Modal, Switch, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
@@ -8,7 +8,8 @@ import { tasks, taskRuns, TaskEntity, TaskRunEntity } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { AuroraScreen, Card, PrimaryButton } from '../components/ui/settingsKit';
 import { useAurora } from '../hooks/useAurora';
-import { calculateNextRun } from '../utils/backgroundTasks';
+import { calculateNextRun, pruneTaskRuns } from '../utils/backgroundTasks';
+import { isValidCron, describeCron, isCronRule } from '../utils/cron';
 import { runTask } from '../utils/taskRunner';
 import { isUserVisibleTask } from '../utils/checkinScheduler';
 import { useAgents } from '../hooks/useAgents';
@@ -26,17 +27,22 @@ const generateId = () => {
 export default function TasksScreen() {
   const { colors, sizes, aurora } = useAurora();
   const appConnectionMode = useConfigStore((s) => s.connectionMode);
+  const taskHistoryRetention = useConfigStore((s) => s.taskHistoryRetention) ?? 20;
 
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'paused'>('all');
   const [taskList, setTaskList] = useState<TaskEntity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [latestRunsByTask, setLatestRunsByTask] = useState<Record<string, TaskRunEntity>>({});
+  const [recentRun, setRecentRun] = useState<TaskRunEntity | null>(null);
+  const [dismissedNotificationId, setDismissedNotificationId] = useState<string | null>(null);
 
   // Form State
   const [isFormModalVisible, setIsFormModalVisible] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskEntity | null>(null);
   const [formTitle, setFormTitle] = useState('');
   const [formDescription, setFormDescription] = useState('');
-  const [formRecurrence, setFormRecurrence] = useState<'15m' | '1h' | '12h' | '24h' | 'weekly'>('24h');
+  const [formRecurrence, setFormRecurrence] = useState<string>('24h');
+  const [customCronInput, setCustomCronInput] = useState('0 9 * * 1-5');
   const [formPrompt, setFormPrompt] = useState('');
   const [formAgent, setFormAgent] = useState('personal assistant');
   const [formConnectionMode, setFormConnectionMode] = useState<'server' | 'local' | 'cloud' | null>(null);
@@ -48,9 +54,14 @@ export default function TasksScreen() {
   const [taskRunHistory, setTaskRunHistory] = useState<TaskRunEntity[]>([]);
   const [runningTaskId, setRunningTaskId] = useState<string | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const isMounted = useRef(true);
 
   useEffect(() => {
+    isMounted.current = true;
     loadTasks();
+    return () => {
+      isMounted.current = false;
+    };
   }, []);
 
   const loadTasks = async () => {
@@ -59,13 +70,37 @@ export default function TasksScreen() {
       if (db) {
         await initializeDatabase().catch(() => {});
         const result = await db.select().from(tasks);
+        if (!isMounted.current) return;
         // Scheduler rows (description = vela:checkin) run headless; keep them out of the user list.
-        setTaskList(result.filter(isUserVisibleTask));
+        const userTasks = result.filter(isUserVisibleTask);
+        setTaskList(userTasks);
+
+        try {
+          const runs = await db.select().from(taskRuns);
+          if (!isMounted.current) return;
+          const runMap: Record<string, TaskRunEntity> = {};
+          const sortedRuns = [...runs].sort((a, b) => Number(b.started_at) - Number(a.started_at));
+          if (sortedRuns.length > 0) {
+            setRecentRun(sortedRuns[0]);
+            for (const run of sortedRuns) {
+              if (!runMap[run.task_id]) {
+                runMap[run.task_id] = run;
+              }
+            }
+          } else {
+            setRecentRun(null);
+          }
+          setLatestRunsByTask(runMap);
+        } catch (runErr) {
+          console.warn('[tasks] Failed to load latest runs:', runErr);
+        }
       }
     } catch (error) {
       console.error('Failed to load tasks:', error);
     } finally {
-      setLoading(false);
+      if (isMounted.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -74,8 +109,8 @@ export default function TasksScreen() {
       setLoadingHistory(true);
       if (db) {
         const runs = await db.select().from(taskRuns).where(eq(taskRuns.task_id, taskId));
-        const sortedRuns = [...runs].sort((a, b) => b.started_at - a.started_at);
-        setTaskRunHistory(sortedRuns);
+        const sortedRuns = [...runs].sort((a, b) => Number(b.started_at) - Number(a.started_at));
+        setTaskRunHistory(sortedRuns.slice(0, taskHistoryRetention));
       }
     } catch (error) {
       console.error('Failed to load run history:', error);
@@ -89,7 +124,13 @@ export default function TasksScreen() {
       setEditingTask(task);
       setFormTitle(task.title);
       setFormDescription(task.description || '');
-      setFormRecurrence(task.recurrence_rule as any);
+      if (isCronRule(task.recurrence_rule)) {
+        setFormRecurrence('custom');
+        setCustomCronInput(task.recurrence_rule);
+      } else {
+        setFormRecurrence(task.recurrence_rule);
+        setCustomCronInput('0 9 * * 1-5');
+      }
       setFormPrompt(task.task_prompt);
       setFormAgent(task.linked_agent || 'personal assistant');
       setFormConnectionMode(task.connection_mode ?? null);
@@ -98,6 +139,7 @@ export default function TasksScreen() {
       setFormTitle('');
       setFormDescription('');
       setFormRecurrence('24h');
+      setCustomCronInput('0 9 * * 1-5');
       setFormPrompt('');
       setFormAgent('personal assistant');
       setFormConnectionMode(null);
@@ -115,6 +157,16 @@ export default function TasksScreen() {
       return;
     }
 
+    let effectiveRecurrence = formRecurrence;
+    if (formRecurrence === 'custom') {
+      const trimmedCron = customCronInput.trim();
+      if (!isValidCron(trimmedCron)) {
+        Alert.alert('Validation Error', 'Please enter a valid 5-field cron expression (e.g. 0 9 * * 1-5).');
+        return;
+      }
+      effectiveRecurrence = trimmedCron;
+    }
+
     try {
       if (!db) return;
       await initializeDatabase().catch(() => {});
@@ -122,14 +174,14 @@ export default function TasksScreen() {
       const now = Date.now();
       if (editingTask) {
         const nextRunTime = editingTask.status === 'active' 
-          ? calculateNextRun(formRecurrence, editingTask.last_run || now)
+          ? calculateNextRun(effectiveRecurrence, editingTask.last_run || now)
           : null;
 
         await db.update(tasks)
           .set({
             title: formTitle.trim(),
             description: formDescription.trim(),
-            recurrence_rule: formRecurrence,
+            recurrence_rule: effectiveRecurrence,
             task_prompt: formPrompt.trim(),
             linked_agent: formAgent.trim(),
             connection_mode: formConnectionMode,
@@ -141,13 +193,13 @@ export default function TasksScreen() {
           id: generateId(),
           title: formTitle.trim(),
           description: formDescription.trim(),
-          recurrence_rule: formRecurrence,
+          recurrence_rule: effectiveRecurrence,
           task_prompt: formPrompt.trim(),
           linked_agent: formAgent.trim(),
           connection_mode: formConnectionMode,
           status: 'active',
           last_run: null,
-          next_run: calculateNextRun(formRecurrence, now),
+          next_run: calculateNextRun(effectiveRecurrence, now),
           created_at: now,
         };
 
@@ -236,14 +288,16 @@ export default function TasksScreen() {
           output,
         })
         .where(eq(taskRuns.id, runId));
-    } catch (err: any) {
-      Alert.alert('Task failed', err.name === 'TypeError' ? 'Network unavailable' : (err.message || 'Execution failed'));
+    } catch (err: unknown) {
+      const errObj = err instanceof Error ? err : new Error(String(err));
+      const message = errObj.name === 'TypeError' ? 'Network unavailable' : (errObj.message || 'Execution failed');
+      Alert.alert('Task failed', message);
       try {
         await db.update(taskRuns)
           .set({
             status: 'failed',
             completed_at: Date.now(),
-            output: err.name === 'TypeError' ? 'Network unavailable' : (err.message || 'Execution failed'),
+            output: message,
           })
           .where(eq(taskRuns.id, runId));
       } catch (rowErr) {
@@ -258,14 +312,17 @@ export default function TasksScreen() {
             next_run: nextRunTime,
           })
           .where(eq(tasks.id, task.id));
+        await pruneTaskRuns(task.id, taskHistoryRetention);
       } catch (scheduleErr) {
         console.warn('[tasks] Failed to advance schedule:', scheduleErr);
       }
 
-      setRunningTaskId(null);
-      loadTasks();
-      if (selectedTask?.id === task.id) {
-        loadRunHistory(task.id);
+      if (isMounted.current) {
+        setRunningTaskId(null);
+        loadTasks();
+        if (selectedTask?.id === task.id) {
+          loadRunHistory(task.id);
+        }
       }
     }
   };
@@ -287,12 +344,75 @@ export default function TasksScreen() {
       case '12h': return 'Every 12 hours';
       case '24h': return 'Daily';
       case 'weekly': return 'Weekly';
-      default: return rule;
+      default:
+        if (isCronRule(rule)) return describeCron(rule);
+        return rule;
     }
   };
 
+  const getOutcomeBadgeProps = (status: TaskRunEntity['status'] | string) => {
+    const isCompleted = status === 'completed';
+    const isRunning = status === 'running';
+    return {
+      label: isCompleted ? 'SUCCESS' : status.toUpperCase(),
+      backgroundColor: isCompleted
+        ? 'rgba(16, 185, 129, 0.15)'
+        : isRunning
+        ? 'rgba(59, 130, 246, 0.15)'
+        : 'rgba(239, 68, 68, 0.15)',
+      color: isCompleted ? '#10b981' : isRunning ? '#3b82f6' : '#ef4444',
+    };
+  };
+
+  const recentTask = recentRun ? taskList.find((t) => t.id === recentRun.task_id) : null;
+
   return (
     <AuroraScreen title="Task Scheduler" showHeader={false}>
+      {/* Recent Task Run Notification Banner */}
+      {recentRun && dismissedNotificationId !== recentRun.id && (
+        <View style={[styles.notificationBanner, { backgroundColor: colors.glass, borderColor: colors.glassBorder }]}>
+          <View style={styles.notificationHeader}>
+            <View style={styles.notificationTitleRow}>
+              <Text style={[styles.notificationTitle, { color: colors.text }]}>
+                🔔 Recent Run Notification
+              </Text>
+              {(() => {
+                const badge = getOutcomeBadgeProps(recentRun.status);
+                return (
+                  <Text style={[styles.outcomeBadge, { backgroundColor: badge.backgroundColor, color: badge.color }]}>
+                    {badge.label}
+                  </Text>
+                );
+              })()}
+            </View>
+            <PressableScale
+              onPress={() => setDismissedNotificationId(recentRun.id)}
+              accessibilityLabel="Dismiss notification"
+              style={styles.notificationBtn}
+            >
+              <Text style={{ color: colors.textMuted, fontSize: 12 }}>✕</Text>
+            </PressableScale>
+          </View>
+          <Text style={[styles.notificationBody, { color: colors.textMuted }]} numberOfLines={2}>
+            {recentTask ? `${recentTask.title}: ` : ''}{recentRun.output || 'Task execution completed.'}
+          </Text>
+          <View style={styles.notificationActions}>
+            <Text style={{ color: colors.textMuted, fontSize: 11 }}>
+              📅 {new Date(recentRun.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </Text>
+            {recentTask && (
+              <PressableScale
+                onPress={() => handleOpenDetail(recentTask)}
+                accessibilityLabel="View run logs"
+                style={[styles.notificationBtn, { borderColor: aurora.acc1 + '40', backgroundColor: aurora.acc1 + '1A' }]}
+              >
+                <Text style={[styles.notificationBtnText, { color: aurora.acc1 }]}>View Run Logs</Text>
+              </PressableScale>
+            )}
+          </View>
+        </View>
+      )}
+
       {/* Filter Tabs */}
       <View style={[styles.filterContainer, { backgroundColor: colors.glass, borderColor: colors.glassBorder }]}>
         {(['all', 'active', 'paused'] as const).map((filter) => {
@@ -370,13 +490,21 @@ export default function TasksScreen() {
                     </Text>
                   ) : null}
                 </View>
-                <View style={styles.statusIndicator}>
+                <View style={styles.statusBadgesRow}>
                   <Text style={[styles.badge, { 
                     backgroundColor: task.status === 'active' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
                     color: task.status === 'active' ? '#10b981' : '#ef4444'
                   }]}>
                     {task.status.toUpperCase()}
                   </Text>
+                  {latestRunsByTask[task.id] && (() => {
+                    const badge = getOutcomeBadgeProps(latestRunsByTask[task.id].status);
+                    return (
+                      <Text style={[styles.outcomeBadge, { backgroundColor: badge.backgroundColor, color: badge.color }]}>
+                        {badge.label}
+                      </Text>
+                    );
+                  })()}
                 </View>
               </PressableScale>
 
@@ -495,10 +623,10 @@ export default function TasksScreen() {
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.textMuted }]}>Recurrence Schedule</Text>
               <View style={styles.recurrencePills}>
-                {['15m', '1h', '12h', '24h', 'weekly'].map((r) => (
+                {['15m', '1h', '12h', '24h', 'weekly', 'custom'].map((r) => (
                   <PressableScale
                     key={r}
-                    onPress={() => setFormRecurrence(r as any)}
+                    onPress={() => setFormRecurrence(r)}
                     accessibilityState={{ selected: formRecurrence === r }}
                     accessibilityLabel={r}
                     style={({ pressed }) => [
@@ -513,6 +641,35 @@ export default function TasksScreen() {
                   </PressableScale>
                 ))}
               </View>
+              {formRecurrence === 'custom' && (
+                <View style={styles.customCronContainer}>
+                  <TextInput
+                    value={customCronInput}
+                    onChangeText={setCustomCronInput}
+                    placeholder="0 9 * * 1-5"
+                    placeholderTextColor={colors.textDark}
+                    accessibilityLabel="Custom cron expression"
+                    style={[
+                      styles.textInput,
+                      {
+                        color: colors.text,
+                        borderColor: isValidCron(customCronInput) ? colors.glassBorder : '#ef4444',
+                        backgroundColor: 'rgba(0,0,0,0.25)',
+                      },
+                    ]}
+                  />
+                  <Text
+                    style={[
+                      styles.cronHelperText,
+                      { color: isValidCron(customCronInput) ? '#10b981' : colors.textMuted },
+                    ]}
+                  >
+                    {isValidCron(customCronInput)
+                      ? `✓ ${describeCron(customCronInput)}`
+                      : '5-field cron: minute (0-59) hour (0-23) dom (1-31) month (1-12) dow (0-7)'}
+                  </Text>
+                </View>
+              )}
             </View>
 
             <View style={styles.inputGroup}>
@@ -644,7 +801,12 @@ export default function TasksScreen() {
                 </View>
               </View>
 
-              <Text style={[styles.historyTitle, { color: colors.text }]}>Execution Run History</Text>
+              <View style={styles.historyHeaderRow}>
+                <Text style={[styles.historyTitle, { color: colors.text, paddingHorizontal: 0 }]}>Execution Run History</Text>
+                <Text style={[styles.historyRetentionText, { color: colors.textMuted }]}>
+                  Retention: last {taskHistoryRetention} runs
+                </Text>
+              </View>
               <ScrollView style={{ flex: 1, paddingHorizontal: 20 }}>
                 {loadingHistory ? (
                   <ActivityIndicator color={aurora.acc1} style={{ marginVertical: 20 }} />
@@ -659,12 +821,14 @@ export default function TasksScreen() {
                         <Text style={{ color: colors.text, fontSize: 13, fontWeight: 'bold' }}>
                           📅 {new Date(run.started_at).toLocaleString()}
                         </Text>
-                        <Text style={[styles.badge, {
-                          backgroundColor: run.status === 'completed' ? 'rgba(16, 185, 129, 0.15)' : run.status === 'running' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                          color: run.status === 'completed' ? '#10b981' : run.status === 'running' ? '#3b82f6' : '#ef4444'
-                        }]}>
-                          {run.status.toUpperCase()}
-                        </Text>
+                        {(() => {
+                          const badge = getOutcomeBadgeProps(run.status);
+                          return (
+                            <Text style={[styles.badge, { backgroundColor: badge.backgroundColor, color: badge.color }]}>
+                              {badge.label}
+                            </Text>
+                          );
+                        })()}
                       </View>
                       {run.completed_at ? (
                         <Text style={{ color: colors.textMuted, fontSize: 11, marginBottom: 8 }}>
