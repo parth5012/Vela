@@ -163,6 +163,7 @@ export function calculateNextCronRun(expression: string, fromTimestamp: number):
 }
 
 export function describeCron(expression: string): string {
+  if (!expression || typeof expression !== 'string') return '';
   const trimmed = expression.trim();
   if (trimmed === '* * * * *') return 'Every minute';
   if (trimmed === '*/15 * * * *') return 'Every 15 minutes';
@@ -172,5 +173,6 @@ export function describeCron(expression: string): string {
   if (trimmed === '0 9 * * *') return 'Daily at 09:00';
   if (trimmed === '0 9 * * 1-5') return 'At 09:00 on weekdays';
   if (trimmed === '0 0 * * 0' || trimmed === '0 0 * * 7') return 'Weekly on Sunday';
-  return `Cron (${trimmed})`;
+  const sanitized = trimmed.replace(/[^0-9a-zA-Z\s*,\-\/]/g, '');
+  return `Cron (${sanitized})`;
 }

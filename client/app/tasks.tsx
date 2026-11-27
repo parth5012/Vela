@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, Modal, Switch, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
@@ -54,9 +54,14 @@ export default function TasksScreen() {
   const [taskRunHistory, setTaskRunHistory] = useState<TaskRunEntity[]>([]);
   const [runningTaskId, setRunningTaskId] = useState<string | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const isMounted = useRef(true);
 
   useEffect(() => {
+    isMounted.current = true;
     loadTasks();
+    return () => {
+      isMounted.current = false;
+    };
   }, []);
 
   const loadTasks = async () => {
@@ -65,12 +70,14 @@ export default function TasksScreen() {
       if (db) {
         await initializeDatabase().catch(() => {});
         const result = await db.select().from(tasks);
+        if (!isMounted.current) return;
         // Scheduler rows (description = vela:checkin) run headless; keep them out of the user list.
         const userTasks = result.filter(isUserVisibleTask);
         setTaskList(userTasks);
 
         try {
           const runs = await db.select().from(taskRuns);
+          if (!isMounted.current) return;
           const runMap: Record<string, TaskRunEntity> = {};
           const sortedRuns = [...runs].sort((a, b) => Number(b.started_at) - Number(a.started_at));
           if (sortedRuns.length > 0) {
@@ -91,7 +98,9 @@ export default function TasksScreen() {
     } catch (error) {
       console.error('Failed to load tasks:', error);
     } finally {
-      setLoading(false);
+      if (isMounted.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -279,14 +288,16 @@ export default function TasksScreen() {
           output,
         })
         .where(eq(taskRuns.id, runId));
-    } catch (err: any) {
-      Alert.alert('Task failed', err.name === 'TypeError' ? 'Network unavailable' : (err.message || 'Execution failed'));
+    } catch (err: unknown) {
+      const errObj = err instanceof Error ? err : new Error(String(err));
+      const message = errObj.name === 'TypeError' ? 'Network unavailable' : (errObj.message || 'Execution failed');
+      Alert.alert('Task failed', message);
       try {
         await db.update(taskRuns)
           .set({
             status: 'failed',
             completed_at: Date.now(),
-            output: err.name === 'TypeError' ? 'Network unavailable' : (err.message || 'Execution failed'),
+            output: message,
           })
           .where(eq(taskRuns.id, runId));
       } catch (rowErr) {
@@ -306,10 +317,12 @@ export default function TasksScreen() {
         console.warn('[tasks] Failed to advance schedule:', scheduleErr);
       }
 
-      setRunningTaskId(null);
-      loadTasks();
-      if (selectedTask?.id === task.id) {
-        loadRunHistory(task.id);
+      if (isMounted.current) {
+        setRunningTaskId(null);
+        loadTasks();
+        if (selectedTask?.id === task.id) {
+          loadRunHistory(task.id);
+        }
       }
     }
   };
@@ -337,7 +350,7 @@ export default function TasksScreen() {
     }
   };
 
-  const getOutcomeBadgeProps = (status: string) => {
+  const getOutcomeBadgeProps = (status: TaskRunEntity['status'] | string) => {
     const isCompleted = status === 'completed';
     const isRunning = status === 'running';
     return {
