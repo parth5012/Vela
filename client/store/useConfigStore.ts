@@ -185,6 +185,9 @@ interface ConfigState {
   googleSetupPending: boolean;
   setGoogleSetupPending: (val: boolean) => void;
 
+  taskHistoryRetention: number;
+  setTaskHistoryRetention: (limit: number) => void;
+
   // Connection and provider modes
   connectionMode: ConnectionMode;
   setConnectionMode: (mode: ConnectionMode) => void;
@@ -313,6 +316,7 @@ export const useConfigStore = create<ConfigState>()(
         contacts: 'undetermined',
       } as Record<OSPermission, OSPermissionStatus>,
       googleSetupPending: false,
+      taskHistoryRetention: 20,
 
       // Defaults for connection mode
       connectionMode: 'server',
@@ -401,6 +405,7 @@ export const useConfigStore = create<ConfigState>()(
             contacts: 'undetermined',
           } as Record<OSPermission, OSPermissionStatus>,
           googleSetupPending: false,
+          taskHistoryRetention: 20,
           floatingOverlay: { ...DEFAULT_FLOATING_OVERLAY_CONFIG },
           suggestionStarters: [
             { label: '👩🏫 Teach Concept', text: 'Teach intuition behind binary search trace example', agent: 'teacher' },
@@ -445,6 +450,7 @@ export const useConfigStore = create<ConfigState>()(
           },
         })),
       setGoogleSetupPending: (val) => set({ googleSetupPending: val }),
+      setTaskHistoryRetention: (limit: number) => set({ taskHistoryRetention: Math.max(1, limit) }),
       
       // Settors for connection & cloud mode
       setConnectionMode: (connectionMode) =>
