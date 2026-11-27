@@ -7,7 +7,7 @@ import {
   getGpuBackendPreference,
   type GpuVendor,
 } from '../../utils/ramDetection';
-import { isDarkTheme } from '../../utils/theme';
+import { isDarkTheme, THEME_COLORS } from '../../utils/theme';
 
 export interface DeviceCapabilityCardProps {
   ramBytes: number | null;
@@ -35,17 +35,19 @@ export function DeviceCapabilityCard({
   const { colors, sizes, theme } = useAurora();
   const isLightSurface = surface === 'light' || !isDarkTheme(theme);
   const tierInfo = classifyDeviceTier(ramBytes);
-  const badgeColor = getDeviceTierBadgeColors(tierInfo.tier, !isLightSurface);
 
   const isDetecting = ramBytes === null || ramBytes === undefined;
   const ramInvalid = !isDetecting && (!Number.isFinite(ramBytes) || ramBytes <= 0);
-  const badgeLabel = isDetecting ? 'Detecting…' : tierInfo.label;
+  const effectiveTierInfo = ramInvalid ? classifyDeviceTier(0) : tierInfo;
+  const badgeColor = getDeviceTierBadgeColors(effectiveTierInfo.tier, !isLightSurface);
+  const badgeLabel = isDetecting ? 'Detecting…' : effectiveTierInfo.label;
 
-  const textPrimary = surface === 'light' ? '#1D1B20' : colors.text;
-  const textMuted = surface === 'light' ? '#4B4654' : colors.textMuted;
+  const lightPalette = THEME_COLORS.berry;
+  const textPrimary = surface === 'light' ? lightPalette.text : colors.text;
+  const textMuted = surface === 'light' ? lightPalette.textMuted : colors.textMuted;
   const cardSurfaceStyle =
     surface === 'light'
-      ? { backgroundColor: '#FBF7FE', borderColor: '#E8E0F2' }
+      ? { backgroundColor: lightPalette.background, borderColor: lightPalette.glassBorder }
       : undefined;
 
   const resolvedVendor = gpuVendor ?? null;
@@ -57,6 +59,12 @@ export function DeviceCapabilityCard({
           gpuBackendPreference,
           modelName
         ).toUpperCase()} compute)`;
+
+  const hardwareDetailsText = `${gpuLabel}${
+    typeof freeStorageBytes === 'number' && Number.isFinite(freeStorageBytes) && freeStorageBytes > 0
+      ? ` • ${(freeStorageBytes / (1024 ** 3)).toFixed(1)} GB free`
+      : ''
+  }${!compact && architecture ? ` • ${architecture}` : ''}`;
 
   return (
     <Card style={[cardSurfaceStyle, style]}>
@@ -99,6 +107,9 @@ export function DeviceCapabilityCard({
           <Text style={[cardStyles.primaryText, { color: textPrimary, fontSize: sizes.text }]}>
             RAM: Unknown
           </Text>
+          <Text style={[cardStyles.detailsText, { color: textMuted, fontSize: sizes.sub }]}>
+            {hardwareDetailsText}
+          </Text>
           <Text style={[cardStyles.mutedText, { color: textMuted, fontSize: sizes.sub }]}>
             We couldn't read your device's total memory. Manual selection is available with OOM safeguards.
           </Text>
@@ -109,11 +120,7 @@ export function DeviceCapabilityCard({
             {`${(ramBytes / (1024 ** 3)).toFixed(1)} GB physical memory`}
           </Text>
           <Text style={[cardStyles.detailsText, { color: textMuted, fontSize: sizes.sub }]}>
-            {gpuLabel}
-            {typeof freeStorageBytes === 'number' && Number.isFinite(freeStorageBytes) && freeStorageBytes > 0
-              ? ` • ${(freeStorageBytes / (1024 ** 3)).toFixed(1)} GB free`
-              : ''}
-            {!compact && architecture ? ` • ${architecture}` : ''}
+            {hardwareDetailsText}
           </Text>
         </View>
       )}

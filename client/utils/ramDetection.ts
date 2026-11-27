@@ -135,7 +135,7 @@ const DEVICE_TIER_SPECS: Record<DeviceTier, Omit<DeviceTierInfo, 'badgeColor'>> 
  * - Mid-Tier:    4-6 GB   (e.g., Qwen2.5 0.5B, ctx 2048, max 512)
  * - Performance: 6-8 GB   (e.g., Qwen2.5 1.5B (GGUF), ctx 4096, max 1024)
  * - Flagship:    > 8 GB   (e.g., Qwen2.5 1.5B (GGUF), ctx 8192, max 4096)
- * - Unknown:     <= 0, NaN, or non-finite (fails safe to unknown tier)
+ * - Unknown:     <= 0, NaN, or -Infinity (fails safe to unknown tier)
  */
 export function classifyDeviceTier(ramBytes: number | null | undefined): DeviceTierInfo {
   let tier: DeviceTier;

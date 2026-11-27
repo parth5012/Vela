@@ -121,14 +121,59 @@ export default function LocalAiScreen() {
 
   const [contextDraft, setContextDraft] = useState(() => String(localContextSize || 2048));
   const [maxTokensDraft, setMaxTokensDraft] = useState(() => String(localMaxTokens || 512));
+  const draftModelRef = useRef(localModelName);
+  const dirtyContextRef = useRef(false);
+  const dirtyMaxTokensRef = useRef(false);
+
+  useEffect(() => {
+    draftModelRef.current = localModelName;
+    dirtyContextRef.current = false;
+    dirtyMaxTokensRef.current = false;
+  }, [localModelName]);
 
   useEffect(() => {
     setContextDraft(String(localContextSize || 2048));
+    dirtyContextRef.current = false;
   }, [localContextSize, localModelName]);
 
   useEffect(() => {
     setMaxTokensDraft(String(localMaxTokens || 512));
+    dirtyMaxTokensRef.current = false;
   }, [localMaxTokens, localModelName]);
+
+  const commitContextDraft = () => {
+    const activeModel = useConfigStore.getState().localModelName;
+    if (!dirtyContextRef.current || draftModelRef.current !== activeModel) {
+      return;
+    }
+    dirtyContextRef.current = false;
+    const num = parseInt(contextDraft, 10);
+    if (Number.isFinite(num) && num > 0) {
+      setModelOverride(activeModel, { contextSize: num });
+    } else {
+      setContextDraft(String(useConfigStore.getState().localContextSize || 2048));
+    }
+    if (!dirtyMaxTokensRef.current) {
+      setMaxTokensDraft(String(useConfigStore.getState().localMaxTokens || 512));
+    }
+  };
+
+  const commitMaxTokensDraft = () => {
+    const activeModel = useConfigStore.getState().localModelName;
+    if (!dirtyMaxTokensRef.current || draftModelRef.current !== activeModel) {
+      return;
+    }
+    dirtyMaxTokensRef.current = false;
+    const num = parseInt(maxTokensDraft, 10);
+    if (Number.isFinite(num) && num > 0) {
+      setModelOverride(activeModel, { maxTokens: num });
+    } else {
+      setMaxTokensDraft(String(useConfigStore.getState().localMaxTokens || 512));
+    }
+    if (!dirtyContextRef.current) {
+      setContextDraft(String(useConfigStore.getState().localContextSize || 2048));
+    }
+  };
 
   const [showUnsupportedModels, setShowUnsupportedModels] = useState(false);
   const [detectedGpuVendor, setDetectedGpuVendor] = useState<GpuVendor | null>(null);
@@ -326,6 +371,12 @@ export default function LocalAiScreen() {
     contextInputRef.current?.focus();
   };
 
+  const switchModel = (modelName: string) => {
+    dirtyContextRef.current = false;
+    dirtyMaxTokensRef.current = false;
+    applyModelSettings(modelName);
+  };
+
   const handleSelectModel = (modelName: string) => {
     if (!hasValidRam) {
       Alert.alert(
@@ -333,7 +384,7 @@ export default function LocalAiScreen() {
         "We couldn't verify your device's total memory. Selecting this model could risk an out-of-memory crash if it exceeds available RAM.",
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Select Anyway', onPress: () => applyModelSettings(modelName) },
+          { text: 'Select Anyway', onPress: () => switchModel(modelName) },
         ]
       );
       return;
@@ -345,7 +396,7 @@ export default function LocalAiScreen() {
         'Warning: This model requires more memory than recommended for your device and may run slowly.',
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Select', onPress: () => applyModelSettings(modelName) },
+          { text: 'Select', onPress: () => switchModel(modelName) },
         ]
       );
     } else if (status === 'unsupported') {
@@ -354,11 +405,11 @@ export default function LocalAiScreen() {
         'Warning: High OOM Risk. This model requires significantly more RAM than your device has. It is likely to crash. Do you want to select it anyway?',
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Select Anyway', onPress: () => applyModelSettings(modelName) },
+          { text: 'Select Anyway', onPress: () => switchModel(modelName) },
         ]
       );
     } else {
-      applyModelSettings(modelName);
+      switchModel(modelName);
     }
   };
   const [customModels, setCustomModels] = useState<CustomModelRecord[]>([]);
@@ -394,7 +445,7 @@ export default function LocalAiScreen() {
 
   const handleSelectCustomModel = async (model: CustomModelRecord) => {
     const selectAction = async () => {
-      applyModelSettings(model.name);
+      switchModel(model.name);
       await AsyncStorage.setItem(localModelStorageKey(model.name), 'true');
       await AsyncStorage.setItem(`${localModelStorageKey(model.name)}_path`, model.localUri);
     };
@@ -875,8 +926,13 @@ export default function LocalAiScreen() {
             <Pressable
               onPress={() => {
                 const currentModel = useConfigStore.getState().localModelName;
+                dirtyContextRef.current = false;
+                dirtyMaxTokensRef.current = false;
                 clearModelOverride(currentModel);
                 applyModelSettings(currentModel);
+                const nextState = useConfigStore.getState();
+                setContextDraft(String(nextState.localContextSize || 2048));
+                setMaxTokensDraft(String(nextState.localMaxTokens || 512));
               }}
               style={{
                 backgroundColor: 'rgba(255,255,255,0.08)',
@@ -911,17 +967,16 @@ export default function LocalAiScreen() {
               }}
               keyboardType="numeric"
               value={contextDraft}
+              onFocus={() => {
+                draftModelRef.current = useConfigStore.getState().localModelName;
+              }}
               onChangeText={(val) => {
+                dirtyContextRef.current = true;
                 setContextDraft(val.replace(/[^0-9]/g, ''));
               }}
-              onEndEditing={() => {
-                const num = parseInt(contextDraft, 10);
-                if (Number.isFinite(num) && num > 0) {
-                  setModelOverride(useConfigStore.getState().localModelName, { contextSize: num });
-                } else {
-                  setContextDraft(String(localContextSize || 2048));
-                }
-              }}
+              onBlur={commitContextDraft}
+              onSubmitEditing={commitContextDraft}
+              onEndEditing={commitContextDraft}
             />
           </View>
           <View style={{ flex: 1 }}>
@@ -939,17 +994,16 @@ export default function LocalAiScreen() {
               }}
               keyboardType="numeric"
               value={maxTokensDraft}
+              onFocus={() => {
+                draftModelRef.current = useConfigStore.getState().localModelName;
+              }}
               onChangeText={(val) => {
+                dirtyMaxTokensRef.current = true;
                 setMaxTokensDraft(val.replace(/[^0-9]/g, ''));
               }}
-              onEndEditing={() => {
-                const num = parseInt(maxTokensDraft, 10);
-                if (Number.isFinite(num) && num > 0) {
-                  setModelOverride(useConfigStore.getState().localModelName, { maxTokens: num });
-                } else {
-                  setMaxTokensDraft(String(localMaxTokens || 512));
-                }
-              }}
+              onBlur={commitMaxTokensDraft}
+              onSubmitEditing={commitMaxTokensDraft}
+              onEndEditing={commitMaxTokensDraft}
             />
           </View>
         </View>
@@ -1129,7 +1183,7 @@ export default function LocalAiScreen() {
         <Label>RAM</Label>
         {detectedRamBytes !== null && (
           <Text style={{ color: colors.text, fontSize: sizes.sub, fontWeight: '700', marginBottom: 6 }}>
-            {detectedRamBytes > 0
+            {hasValidRam
               ? `Device RAM: ${(detectedRamBytes / (1024 ** 3)).toFixed(1)} GB`
               : "Device RAM: unavailable — couldn't read total memory"}
           </Text>

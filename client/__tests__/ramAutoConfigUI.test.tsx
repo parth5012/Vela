@@ -112,11 +112,21 @@ describe('DeviceCapabilityCard (#612, #615)', () => {
       let component: renderer.ReactTestRenderer | undefined;
       act(() => {
         component = renderer.create(
-          <DeviceCapabilityCard ramBytes={badRam} gpuVendor={null} />
+          <DeviceCapabilityCard
+            ramBytes={badRam}
+            gpuVendor="adreno"
+            freeStorageBytes={12 * GB}
+            architecture="arm64-v8a"
+          />
         );
       });
-      const texts = getText(component!.root);
+      const root = component!.root;
+      expect(root.findByProps({ accessibilityLabel: 'Device Tier: RAM Unknown' })).toBeDefined();
+      const texts = getText(root);
       expect(texts).toContain('RAM: Unknown');
+      expect(texts).toContain('ADRENO (OPENCL compute)');
+      expect(texts).toContain('12.0 GB free');
+      expect(texts).toContain('arm64-v8a');
       expect(texts).not.toContain('NaN GB');
       expect(texts).not.toContain('Infinity GB');
     }

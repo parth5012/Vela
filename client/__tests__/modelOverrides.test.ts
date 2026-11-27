@@ -167,8 +167,8 @@ describe('useConfigStore per-model overrides (#612, #615)', () => {
     expect(useConfigStore.getState().localConfigAutoApplied).toBe(false);
   });
 
-  it('acceptRecommendedConfig is a no-op when detectedRamBytes is unknown (0, null, NaN)', () => {
-    for (const badRam of [0, null, NaN]) {
+  it('acceptRecommendedConfig is a no-op when detectedRamBytes is unknown (0, null, NaN, Infinity)', () => {
+    for (const badRam of [0, null, NaN, Infinity]) {
       useConfigStore.setState({
         detectedRamBytes: badRam,
         localModelName: 'SmolLM 135M',
