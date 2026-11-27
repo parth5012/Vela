@@ -138,6 +138,16 @@ repro_steps = [
 ]
 notes = "Implemented batching loop up to max_batches with transactional per-batch commits and graceful failure handling that preserves earlier batch marks in backend/cron/consolidate.py."
 
+[BUG-client-189]
+title = "Cast appContext.reactContext to ReactContext before calling getJSModule in DeviceAgentModule.kt"
+status = "fixed"
+failing_test = "client/__tests__/killSwitch.test.ts::casts appContext.reactContext to ReactContext before getJSModule in DeviceAgentModule.kt"
+repro_steps = [
+  "cd client && eas build --platform android --profile production",
+  "Observe: :device-agent:compileReleaseKotlin fails at DeviceAgentModule.kt:54:53 with Unresolved reference 'getJSModule'"
+]
+notes = "In Expo SDK 57 expo-modules-core, AppContext.reactContext is typed as android.content.Context?, not ReactContext?. Safe-casted to com.facebook.react.bridge.ReactContext before calling getJSModule in emitVolumeKeyEvent()."
+
 
 
 

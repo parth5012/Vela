@@ -51,7 +51,7 @@ class DeviceAgentModule : Module() {
         fun emitVolumeKeyEvent() {
             instance?.sendEvent(VOLUME_KEY_EVENT, mapOf("source" to "volume_key"))
             try {
-                instance?.appContext?.reactContext?.getJSModule(
+                (instance?.appContext?.reactContext as? com.facebook.react.bridge.ReactContext)?.getJSModule(
                     com.facebook.react.modules.core.DeviceEventManagerModule.RCTDeviceEventEmitter::class.java
                 )?.emit(VOLUME_KEY_EVENT, com.facebook.react.bridge.Arguments.createMap().apply {
                     putString("source", "volume_key")

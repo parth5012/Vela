@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { executeDeviceAction, abortDeviceAction } from '../utils/deviceActionExecutor';
 import { useDeviceSessionStore } from '../store/useDeviceSessionStore';
 import { Platform } from 'react-native';
@@ -313,5 +315,16 @@ describe('Kill Switch & Emergency Abort Integration', () => {
     expect(history[0].target).toBe('password');
     // Secret must be masked!
     expect(history[0].value).toBe('••••••••');
+  });
+
+  it('casts appContext.reactContext to ReactContext before getJSModule in DeviceAgentModule.kt', () => {
+    const kt = fs.readFileSync(
+      path.resolve(__dirname, '../modules/device-agent/android/src/main/java/com/vela/client/deviceagent/DeviceAgentModule.kt'),
+      'utf8'
+    );
+    expect(kt).not.toMatch(/reactContext\s*\??\.\s*getJSModule/);
+    if (kt.includes('getJSModule')) {
+      expect(kt).toMatch(/reactContext\s+as\?\s+com\.facebook\.react\.bridge\.ReactContext\)\s*\?\.\s*getJSModule/);
+    }
   });
 });
