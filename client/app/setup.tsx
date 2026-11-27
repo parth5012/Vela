@@ -222,7 +222,7 @@ export default function SetupScreen() {
   }, []);
 
   const handleApplyLocalRecommendation = () => {
-    if (detectedRamBytes && detectedRamBytes > 0) {
+    if (typeof detectedRamBytes === 'number' && Number.isFinite(detectedRamBytes) && detectedRamBytes > 0) {
       acceptRecommendedConfig();
     }
   };

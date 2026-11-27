@@ -438,7 +438,7 @@ describe('LocalAiScreen RAM Auto-Config Integration (#612, #615)', () => {
     );
   });
 
-  it('commits Execution Parameters via onBlur (Expo web path), syncs unedited Customize sibling draft, and avoids cross-model writes on switch', async () => {
+  it('Customize switches to recommended baseline with modelOverrides={}, keeps inputs synced without edit, and persists edits via onBlur', async () => {
     let component: renderer.ReactTestRenderer | undefined;
     await act(async () => {
       component = renderer.create(<LocalAiScreen />);
@@ -451,16 +451,30 @@ describe('LocalAiScreen RAM Auto-Config Integration (#612, #615)', () => {
       )
     ).toBe(true);
 
-    // 1. Customize pre-populates draft inputs on an 8 GB device without mutating store
+    // 1. Customize sets recommended baseline (4096 / 1024) in store & drafts without creating modelOverrides or marking Applied
     act(() => {
       component!.root.findByProps({ accessibilityLabel: 'Customize configuration' }).props.onPress();
     });
     const ctxInput = () => component!.root.findByProps({ accessibilityLabel: 'Context Size (Tokens)' });
     const maxInput = () => component!.root.findByProps({ accessibilityLabel: 'Max Output Tokens' });
+    expect(useConfigStore.getState().localModelName).toBe('Qwen2.5 1.5B (GGUF)');
+    expect(useConfigStore.getState().localContextSize).toBe(4096);
+    expect(useConfigStore.getState().localMaxTokens).toBe(1024);
+    expect(useConfigStore.getState().modelOverrides).toEqual({});
+    expect(useConfigStore.getState().localConfigAutoApplied).toBe(false);
     expect(ctxInput().props.value).toBe('4096');
     expect(maxInput().props.value).toBe('1024');
 
-    // 2. Editing Context Size and blurring (RNW onBlur) commits override and syncs unedited Max Output Tokens back to store (512)
+    // Dismissing keyboard without editing keeps store and UI synced at 4096 / 1024
+    act(() => {
+      ctxInput().props.onFocus();
+      ctxInput().props.onBlur();
+    });
+    expect(useConfigStore.getState().modelOverrides).toEqual({});
+    expect(ctxInput().props.value).toBe('4096');
+    expect(maxInput().props.value).toBe('1024');
+
+    // 2. Editing Context Size and blurring (RNW onBlur) commits override and preserves 1024 Max Output Tokens (no snap-back to 512)
     act(() => {
       ctxInput().props.onFocus();
       ctxInput().props.onChangeText('3072');
@@ -472,9 +486,27 @@ describe('LocalAiScreen RAM Auto-Config Integration (#612, #615)', () => {
     const activeModel = useConfigStore.getState().localModelName;
     expect(useConfigStore.getState().modelOverrides[activeModel]).toEqual({ contextSize: 3072 });
     expect(useConfigStore.getState().localContextSize).toBe(3072);
-    expect(maxInput().props.value).toBe('512');
+    expect(useConfigStore.getState().localMaxTokens).toBe(1024);
+    expect(maxInput().props.value).toBe('1024');
 
-    // 3. Switching models while draft is dirty must not write the dirty draft onto the newly selected model on a late blur
+    // 3. Re-selecting the already-active model resets an uncommitted dirty draft back to store value
+    act(() => {
+      ctxInput().props.onFocus();
+      ctxInput().props.onChangeText('9999');
+    });
+    const qwenRow = component!.root.findByProps({
+      accessibilityLabel: 'Qwen2.5 1.5B (GGUF) Recommended, Not downloaded',
+    });
+    act(() => {
+      qwenRow.props.onPress();
+    });
+    expect(ctxInput().props.value).toBe('3072');
+    act(() => {
+      ctxInput().props.onBlur();
+    });
+    expect(useConfigStore.getState().localContextSize).toBe(3072);
+
+    // 4. Switching to another model while draft is dirty must not write the dirty draft onto the newly selected model on a late blur
     act(() => {
       ctxInput().props.onFocus();
       ctxInput().props.onChangeText('9999');
@@ -492,7 +524,7 @@ describe('LocalAiScreen RAM Auto-Config Integration (#612, #615)', () => {
     expect(useConfigStore.getState().modelOverrides['SmolLM 135M']).toBeUndefined();
     expect(useConfigStore.getState().localContextSize).toBe(4096);
 
-    // 4. Reset Overrides clears dirty draft back to store value even if localContextSize did not change numerically
+    // 5. Reset Overrides clears dirty draft back to store value even if localContextSize did not change numerically
     act(() => {
       useConfigStore.getState().setModelOverride('SmolLM 135M', { gpuBackend: 'cpu' });
     });

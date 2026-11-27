@@ -253,7 +253,7 @@ export interface ConfigState {
   localContextSize: number;
   localMaxTokens: number;
   gpuBackendPreference: GpuBackendPreference;
-  
+
   // Per-model overrides dictionary
   modelOverrides: Record<string, ModelOverrideConfig>;
   setModelOverride: (modelName: string, override: Partial<ModelOverrideConfig>) => void;
