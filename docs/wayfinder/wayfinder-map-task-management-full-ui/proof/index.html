@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Proof: Task Management Full UI</title>
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: #111827;
+      --border: #1f2937;
+      --text: #f9fafb;
+      --text-muted: #9ca3af;
+      --primary: #3b82f6;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --badge-bg: #1e293b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background-color: var(--bg); color: var(--text); padding: 2rem; max-width: 1000px; margin: 0 auto; line-height: 1.5; }
+    header { margin-bottom: 2rem; border-bottom: 1px solid var(--border); padding-bottom: 1.5rem; }
+    h1 { font-size: 1.8rem; margin-bottom: 0.5rem; color: #fff; }
+    .subtitle { color: var(--text-muted); font-size: 0.95rem; }
+    .badge { display: inline-block; padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
+    .badge-success { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
+    .badge-primary { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4); }
+    .badge-warning { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
+    
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 0.75rem; padding: 1.25rem; }
+    .card h3 { font-size: 1.1rem; margin-bottom: 0.75rem; color: #fff; display: flex; align-items: center; justify-content: space-between; }
+    
+    .mock-banner { background: #1a2234; border: 1px solid #2e3d5a; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem; }
+    .mock-banner-title { font-weight: 600; display: flex; justify-content: space-between; margin-bottom: 0.25rem; font-size: 0.9rem; }
+    .mock-banner-desc { font-size: 0.8rem; color: var(--text-muted); }
+    
+    .schedule-picker { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem; }
+    .pill { padding: 0.35rem 0.75rem; border-radius: 0.375rem; font-size: 0.8rem; border: 1px solid var(--border); background: #1e293b; color: var(--text-muted); cursor: default; }
+    .pill-active { background: #2563eb; color: #fff; border-color: #3b82f6; font-weight: 600; }
+    
+    .cron-input-box { background: #0b1120; border: 1px solid #374151; border-radius: 0.375rem; padding: 0.5rem; font-family: monospace; font-size: 0.85rem; color: #38bdf8; margin-top: 0.5rem; display: flex; justify-content: space-between; align-items: center; }
+    .cron-hint { font-size: 0.75rem; color: #34d399; margin-top: 0.25rem; }
+    
+    table { width: 100%; border-collapse: collapse; margin-top: 0.75rem; font-size: 0.85rem; }
+    th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
+    th { color: var(--text-muted); font-weight: 500; }
+    td.status-col { text-align: right; }
+    
+    pre { background: #0b1120; border: 1px solid var(--border); border-radius: 0.5rem; padding: 1rem; font-size: 0.8rem; overflow-x: auto; color: #e5e7eb; margin-top: 1rem; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Proof: Task Management Full UI</h1>
+    <div class="subtitle">Wayfinder Map #616 • Branch: <code>t3/wf-616-task-ui</code> • Commit: <code>HEAD</code></div>
+  </header>
+
+  <div class="grid">
+    <!-- UI Component: Notification Banner Card -->
+    <div class="card">
+      <h3>
+        Notification Summary Banner
+        <span class="badge badge-success">Verified</span>
+      </h3>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+        Top dismissible card surfacing the latest background task run execution outcome.
+      </p>
+      <div class="mock-banner">
+        <div class="mock-banner-title">
+          <span>🔔 Daily DB Cleanup</span>
+          <span class="badge badge-success">SUCCESS</span>
+        </div>
+        <div class="mock-banner-desc">Completed in 1,240ms • 2 minutes ago</div>
+        <div style="font-size: 0.75rem; color: #60a5fa; margin-top: 0.5rem; text-decoration: underline;">View Run Logs →</div>
+      </div>
+    </div>
+
+    <!-- UI Component: Schedule Picker & Custom Cron -->
+    <div class="card">
+      <h3>
+        Schedule Picker & Cron
+        <span class="badge badge-success">Verified</span>
+      </h3>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+        Presets alongside custom 5-field cron parsing with syntax feedback and human translation.
+      </p>
+      <div class="schedule-picker">
+        <span class="pill">15m</span>
+        <span class="pill">1h</span>
+        <span class="pill">24h</span>
+        <span class="pill pill-active">custom</span>
+      </div>
+      <div class="cron-input-box">
+        <span>0 9 * * 1-5</span>
+        <span style="color: #34d399; font-size: 0.75rem;">VALID</span>
+      </div>
+      <div class="cron-hint">✓ At 09:00 on weekdays</div>
+    </div>
+
+    <!-- UI Component: Status Badges -->
+    <div class="card">
+      <h3>
+        Lifecycle & Run Badges
+        <span class="badge badge-success">Verified</span>
+      </h3>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+        Clear dual-tier status indicators across card headers and list rows.
+      </p>
+      <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+        <span class="badge badge-success">ACTIVE</span>
+        <span class="badge badge-warning">PAUSED</span>
+      </div>
+      <div style="display: flex; gap: 0.5rem;">
+        <span class="badge badge-success">SUCCESS</span>
+        <span class="badge badge-primary">RUNNING</span>
+        <span class="badge" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4);">FAILED</span>
+      </div>
+    </div>
+
+    <!-- UI Component: Execution History & Retention -->
+    <div class="card">
+      <h3>
+        Run History & Logs
+        <span class="badge badge-success">Verified</span>
+      </h3>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+        Detailed execution logs modal with output preview, duration, and 20-run retention pruning.
+      </p>
+      <div style="background: #0b1120; padding: 0.5rem; border-radius: 0.375rem; font-size: 0.75rem; font-family: monospace;">
+        <div style="color: #9ca3af;">Retention: last 20 runs kept per task</div>
+        <div style="color: #34d399; margin-top: 0.25rem;">[2026-11-27 10:40:00] Run #19: Success (412ms)</div>
+        <div style="color: #34d399;">[2026-11-27 10:41:00] Run #20: Success (388ms)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Verification Gate Summary -->
+  <div class="card" style="margin-bottom: 2rem;">
+    <h3>Automated Verification Matrix</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Verification Suite / Command</th>
+          <th>Coverage Target</th>
+          <th class="status-col">Result</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>npm run arch:check</code></td>
+          <td>Certified module boundaries & zero forbidden imports</td>
+          <td class="status-col"><span class="badge badge-success">0 Violations</span></td>
+        </tr>
+        <tr>
+          <td><code>npm run design:lint</code></td>
+          <td>Aurora token system adherence & no inline styling anti-patterns</td>
+          <td class="status-col"><span class="badge badge-success">0 Errors</span></td>
+        </tr>
+        <tr>
+          <td><code>cron.test.ts</code></td>
+          <td>5-field cron parsing, step/range/wildcard matching, next run</td>
+          <td class="status-col"><span class="badge badge-success">12/12 Passed</span></td>
+        </tr>
+        <tr>
+          <td><code>taskManagementBlackbox.test.tsx</code></td>
+          <td>End-to-end blackbox assertions (badges, picker, banners, history)</td>
+          <td class="status-col"><span class="badge badge-success">11/11 Passed</span></td>
+        </tr>
+        <tr>
+          <td><code>tasksScreen.test.tsx</code></td>
+          <td>Interactive form editing, modal display, card actions</td>
+          <td class="status-col"><span class="badge badge-success">8/8 Passed</span></td>
+        </tr>
+        <tr>
+          <td><code>taskRunner.test.ts</code> & <code>tasksSchema.test.ts</code></td>
+          <td>Lifecycle orchestration, SQLite persistence, schema validation</td>
+          <td class="status-col"><span class="badge badge-success">13/13 Passed</span></td>
+        </tr>
+        <tr>
+          <td><code>npx tsc --noEmit</code></td>
+          <td>Static TypeScript type safety</td>
+          <td class="status-col"><span class="badge badge-success">0 Errors</span></td>
+        </tr>
+        <tr>
+          <td><code>python vela_ci.py bugs</code></td>
+          <td>Bug regression catalog integrity (BUGS.toml)</td>
+          <td class="status-col"><span class="badge badge-success">Pass</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>Automated Test Execution Output</h3>
+    <pre>PASS client/utils/__tests__/cron.test.ts
+PASS client/schema/__tests__/tasksSchema.test.ts
+PASS client/services/__tests__/taskRunner.test.ts
+PASS client/app/__tests__/tasksScreen.test.tsx
+PASS client/__tests__/taskManagementBlackbox.test.tsx
+
+Test Suites: 5 passed, 5 total
+Tests:       44 passed, 44 total
+Snapshots:   0 total
+Time:        3.412 s
+Ran all test suites matching /tasksScreen.test.tsx|taskManagementBlackbox.test.tsx|tasksSchema.test.ts|taskRunner.test.ts|cron.test.ts/i.</pre>
+  </div>
+
+</body>
+</html>
