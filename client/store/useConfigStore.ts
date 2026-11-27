@@ -248,6 +248,9 @@ interface ConfigState {
 
 const SECURE_KEY = 'vela-api-key';
 
+const clampRestoredMaxTokens = (contextSize: number, maxTokens: number): number =>
+  Math.min(maxTokens, Math.max(64, contextSize));
+
 const applyRecommendedPreset = (state: ConfigState, autoApplied: boolean): Partial<ConfigState> | ConfigState => {
   if (
     typeof state.detectedRamBytes !== 'number' ||
@@ -257,14 +260,22 @@ const applyRecommendedPreset = (state: ConfigState, autoApplied: boolean): Parti
     return state;
   }
   const rec = getOptimalSettingsForRam(state.detectedRamBytes);
+  const existingOverride = !autoApplied ? state.modelOverrides[rec.modelName] : undefined;
   const nextOverrides = { ...state.modelOverrides };
-  delete nextOverrides[rec.modelName];
+  if (autoApplied) {
+    delete nextOverrides[rec.modelName];
+  }
+  const resolvedContextSize = existingOverride?.contextSize ?? rec.contextSize;
+  const resolvedMaxTokens = clampRestoredMaxTokens(
+    resolvedContextSize,
+    existingOverride?.maxTokens ?? rec.maxTokens
+  );
   return {
     localModelName: rec.modelName,
     isConfigured: computeIsConfigured({ ...state, localModelName: rec.modelName }),
-    localContextSize: rec.contextSize,
-    localMaxTokens: rec.maxTokens,
-    gpuBackendPreference: 'auto',
+    localContextSize: resolvedContextSize,
+    localMaxTokens: resolvedMaxTokens,
+    gpuBackendPreference: existingOverride?.gpuBackend ?? 'auto',
     localConfigAutoApplied: autoApplied,
     modelOverrides: nextOverrides,
   };
@@ -571,11 +582,17 @@ export const useConfigStore = create<ConfigState>()(
             Number.isFinite(state.detectedRamBytes) &&
             state.detectedRamBytes > 0;
           const tierSettings = hasPositiveRam ? getOptimalSettingsForRam(state.detectedRamBytes!) : null;
+          const resolvedContextSize =
+            override?.contextSize ?? tierSettings?.contextSize ?? state.localContextSize;
+          const resolvedMaxTokens = clampRestoredMaxTokens(
+            resolvedContextSize,
+            override?.maxTokens ?? tierSettings?.maxTokens ?? state.localMaxTokens
+          );
           return {
             localModelName: modelName,
             isConfigured: computeIsConfigured({ ...state, localModelName: modelName }),
-            localContextSize: override?.contextSize ?? tierSettings?.contextSize ?? state.localContextSize,
-            localMaxTokens: override?.maxTokens ?? tierSettings?.maxTokens ?? state.localMaxTokens,
+            localContextSize: resolvedContextSize,
+            localMaxTokens: resolvedMaxTokens,
             gpuBackendPreference: override?.gpuBackend ?? 'auto',
             localConfigAutoApplied: false,
           };

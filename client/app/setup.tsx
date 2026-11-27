@@ -174,6 +174,9 @@ export default function SetupScreen() {
   const [shizukuRequesting, setShizukuRequesting] = useState(false);
   const [shizukuRequestResult, setShizukuRequestResult] = useState<string | null>(null);
 
+  const isMounted = useRef(true);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const detectedRamBytes = useConfigStore((s) => s.detectedRamBytes);
   const setDetectedRamBytes = useConfigStore((s) => s.setDetectedRamBytes);
   const isRecommendationApplied = useConfigStore(selectIsRecommendationApplied);
@@ -226,9 +229,6 @@ export default function SetupScreen() {
       acceptRecommendedConfig();
     }
   };
-
-  const isMounted = useRef(true);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // WF-447-06: one staggered arrival for the fork cards (the Recognition beat).
   // The group resets each time the fork step mounts so returning via Back

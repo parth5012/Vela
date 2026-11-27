@@ -388,6 +388,10 @@ export default function LocalAiScreen() {
   };
 
   const switchModel = (modelName: string) => {
+    if (modelName === useConfigStore.getState().localModelName) {
+      syncDraftsFromStore();
+      return;
+    }
     applyModelSettings(modelName);
     syncDraftsFromStore();
   };

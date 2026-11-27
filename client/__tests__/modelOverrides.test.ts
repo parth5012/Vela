@@ -198,4 +198,43 @@ describe('useConfigStore per-model overrides (#612, #615)', () => {
     expect(useConfigStore.getState().modelOverrides['Qwen2.5 1.5B (GGUF)']).toBeUndefined();
     expect(useConfigStore.getState().gpuBackendPreference).toBe('auto');
   });
+
+  it('prepareRecommendedForCustomize sets recommended baseline cleanly and preserves any existing override', () => {
+    useConfigStore.getState().prepareRecommendedForCustomize();
+    let state = useConfigStore.getState();
+    expect(state.localModelName).toBe('Qwen2.5 1.5B (GGUF)');
+    expect(state.localContextSize).toBe(4096);
+    expect(state.localMaxTokens).toBe(1024);
+    expect(state.localConfigAutoApplied).toBe(false);
+    expect(state.modelOverrides).toEqual({});
+
+    // Now customize contextSize and gpuBackend, switch away, and invoke Customize again
+    useConfigStore.getState().setModelOverride('Qwen2.5 1.5B (GGUF)', {
+      contextSize: 3072,
+      gpuBackend: 'cpu',
+    });
+    useConfigStore.getState().applyModelSettings('SmolLM 135M');
+    useConfigStore.getState().prepareRecommendedForCustomize();
+
+    state = useConfigStore.getState();
+    expect(state.localModelName).toBe('Qwen2.5 1.5B (GGUF)');
+    expect(state.localContextSize).toBe(3072);
+    expect(state.localMaxTokens).toBe(1024);
+    expect(state.gpuBackendPreference).toBe('cpu');
+    expect(state.modelOverrides['Qwen2.5 1.5B (GGUF)']).toEqual({
+      contextSize: 3072,
+      gpuBackend: 'cpu',
+    });
+  });
+
+  it('clamps restored maxTokens to restored contextSize in applyModelSettings', () => {
+    const { setModelOverride, applyModelSettings } = useConfigStore.getState();
+
+    setModelOverride('TinyLlama 1.1B', { contextSize: 256, maxTokens: 1024 });
+    applyModelSettings('TinyLlama 1.1B');
+
+    const state = useConfigStore.getState();
+    expect(state.localContextSize).toBe(256);
+    expect(state.localMaxTokens).toBe(256);
+  });
 });
