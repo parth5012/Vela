@@ -131,3 +131,15 @@ Each entry:
 - Phase 1 HITL: verified all 10 child tickets are pre-locked AFK tasks (`ready-for-agent`, `afk`). Phase 1 complete with 0 HITL tickets. Stacked-PR mode selected (10 code-changing AFK tickets >= 5).
 - WF-01 (#670): E2E Contract — created `client/e2e/ui/COVERAGE.md` mapping all 20 features to planned spec paths with explicit native-lane caveats for Local AI, Device Agent, Offline Sync, and FCM Push; added maintenance rule to `AGENTS.md` and `client/AGENTS.md`; recorded the 13 locked architecture decisions in `DECISIONS.md`.
 
+
+## 2026-11-27 — wayfinder-ship map #616 (Task Management Full UI)
+- Phase 1 HITL: #1168 grilling resolved with 3 human decisions (Navigation drawer placement, default 20-run retention with user config override, dismissible notification banner card at top of Tasks screen). #1167 research resolved with findings on existing background runner and schema. Map #616 decisions appended; both tickets closed.
+- Phase 2 AFK single-PR mode: 4 code-changing AFK tickets (#1169, #1170, #1171, #1175) < 5 threshold.
+- Ticket #1169 (Task): Implemented `taskHistoryRetention` in `useConfigStore`, zero-dependency 5-field cron parser & scheduler in `client/utils/cron.ts`, and batch retention pruning in `client/utils/backgroundTasks.ts`.
+- Ticket #1170 (Blackbox Test): Wrote `client/__tests__/taskManagementBlackbox.test.tsx` verifying schedule picker, custom cron validation, badges, notification banner card, and retention limits. Confirmed RED failure on notification card.
+- Ticket #1171 (Implementation): Delivered full UI in `client/app/tasks.tsx` and `client/styles/tasksStyles.ts` covering presets + custom cron builder with live translation, lifecycle and outcome badges, dismissible notification banner card, and execution history modal. All tests green (44/44).
+- Ticket #1172 (Verification): Automated verification gates green (`arch:check` 0 violations, `design:lint` 0 errors, `tsc --noEmit` clean, `jest` 44/44 passed, `python vela_ci.py bugs` clean).
+- Ticket #1173 (Council Review): Convened 6 council members (`beam free`, `hy4 free`, `gemini 4 hydrogen`, `sonnet 4.6`, `tidepool alpha free`, `nemotron 3.5 free`) — UNANIMOUS APPROVAL (6/6).
+- Ticket #1174 (Proof): Generated self-contained HTML proof dashboard at `docs/wayfinder/wayfinder-map-task-management-full-ui/proof/index.html`.
+- Ticket #1175 (Refactor): Extracted `getOutcomeBadgeProps` helper, moved inline styles to `client/styles/tasksStyles.ts`, verified 0 lint/arch violations and 48/48 tests passed.
+- CI gate: `python vela_ci.py ci` green (9 steps in 538.9s).
