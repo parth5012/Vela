@@ -539,4 +539,83 @@ describe('LocalAiScreen RAM Auto-Config Integration (#612, #615)', () => {
     expect(useConfigStore.getState().modelOverrides['SmolLM 135M']).toBeUndefined();
     expect(ctxInput().props.value).toBe('4096');
   });
+
+  it('preserves Applied state on active-model reselection and clamps out-of-range execution parameters', async () => {
+    const { Alert } = require('react-native');
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+
+    let component: renderer.ReactTestRenderer | undefined;
+    await act(async () => {
+      component = renderer.create(<LocalAiScreen />);
+    });
+    mounted = component;
+
+    expect(
+      await flushUntil(() =>
+        component!.root.findAllByProps({ label: 'Accept Recommended' }).length > 0
+      )
+    ).toBe(true);
+
+    act(() => {
+      component!.root.findByProps({ label: 'Accept Recommended' }).props.onPress();
+    });
+    expect(useConfigStore.getState().localConfigAutoApplied).toBe(true);
+
+    // Re-selecting active model keeps Applied badge active
+    const activeRow = component!.root.findByProps({
+      accessibilityLabel: 'Qwen2.5 1.5B (GGUF) Recommended, Not downloaded',
+    });
+    act(() => {
+      activeRow.props.onPress();
+    });
+    expect(useConfigStore.getState().localConfigAutoApplied).toBe(true);
+    expect(
+      component!.root.findAllByProps({ accessibilityLabel: 'Recommended configuration applied' }).length
+    ).toBeGreaterThan(0);
+
+    const ctxInput = () => component!.root.findByProps({ accessibilityLabel: 'Context Size (Tokens)' });
+    const maxInput = () => component!.root.findByProps({ accessibilityLabel: 'Max Output Tokens' });
+
+    // Clamp contextSize upper bound (99999 -> 32768)
+    act(() => {
+      ctxInput().props.onFocus();
+      ctxInput().props.onChangeText('99999');
+    });
+    act(() => {
+      ctxInput().props.onBlur();
+    });
+    expect(useConfigStore.getState().localContextSize).toBe(32768);
+    expect(ctxInput().props.value).toBe('32768');
+
+    // Clamp maxTokens lower bound (1 -> 64) and upper bound (> contextSize)
+    act(() => {
+      maxInput().props.onFocus();
+      maxInput().props.onChangeText('1');
+    });
+    act(() => {
+      maxInput().props.onBlur();
+    });
+    expect(useConfigStore.getState().localMaxTokens).toBe(64);
+    expect(maxInput().props.value).toBe('64');
+
+    // Clamp contextSize lower bound (10 -> 128) and sibling down-clamp when maxTokens > contextSize
+    act(() => {
+      maxInput().props.onFocus();
+      maxInput().props.onChangeText('2048');
+    });
+    act(() => {
+      maxInput().props.onBlur();
+    });
+    act(() => {
+      ctxInput().props.onFocus();
+      ctxInput().props.onChangeText('10');
+    });
+    act(() => {
+      ctxInput().props.onBlur();
+    });
+    expect(useConfigStore.getState().localContextSize).toBe(128);
+    expect(useConfigStore.getState().localMaxTokens).toBe(128);
+    expect(ctxInput().props.value).toBe('128');
+    expect(maxInput().props.value).toBe('128');
+  });
 });
