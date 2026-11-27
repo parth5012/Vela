@@ -118,12 +118,22 @@ export default function LocalAiScreen() {
   const clearModelOverride = useConfigStore((s) => s.clearModelOverride);
   const applyModelSettings = useConfigStore((s) => s.applyModelSettings);
   const acceptRecommendedConfig = useConfigStore((s) => s.acceptRecommendedConfig);
+  const prepareRecommendedForCustomize = useConfigStore((s) => s.prepareRecommendedForCustomize);
 
   const [contextDraft, setContextDraft] = useState(() => String(localContextSize || 2048));
   const [maxTokensDraft, setMaxTokensDraft] = useState(() => String(localMaxTokens || 512));
   const draftModelRef = useRef(localModelName);
   const dirtyContextRef = useRef(false);
   const dirtyMaxTokensRef = useRef(false);
+
+  const syncDraftsFromStore = useCallback(() => {
+    const next = useConfigStore.getState();
+    draftModelRef.current = next.localModelName;
+    dirtyContextRef.current = false;
+    dirtyMaxTokensRef.current = false;
+    setContextDraft(String(next.localContextSize || 2048));
+    setMaxTokensDraft(String(next.localMaxTokens || 512));
+  }, []);
 
   useEffect(() => {
     draftModelRef.current = localModelName;
@@ -142,36 +152,42 @@ export default function LocalAiScreen() {
   }, [localMaxTokens, localModelName]);
 
   const commitContextDraft = () => {
-    const activeModel = useConfigStore.getState().localModelName;
+    const state = useConfigStore.getState();
+    const activeModel = state.localModelName;
     if (!dirtyContextRef.current || draftModelRef.current !== activeModel) {
       return;
     }
     dirtyContextRef.current = false;
     const num = parseInt(contextDraft, 10);
     if (Number.isFinite(num) && num > 0) {
-      setModelOverride(activeModel, { contextSize: num });
+      const clamped = Math.max(128, Math.min(32768, num));
+      setContextDraft(String(clamped));
+      const patch: { contextSize: number; maxTokens?: number } = { contextSize: clamped };
+      if (state.localMaxTokens > clamped) {
+        patch.maxTokens = clamped;
+        setMaxTokensDraft(String(clamped));
+      }
+      setModelOverride(activeModel, patch);
     } else {
-      setContextDraft(String(useConfigStore.getState().localContextSize || 2048));
-    }
-    if (!dirtyMaxTokensRef.current) {
-      setMaxTokensDraft(String(useConfigStore.getState().localMaxTokens || 512));
+      setContextDraft(String(state.localContextSize || 2048));
     }
   };
 
   const commitMaxTokensDraft = () => {
-    const activeModel = useConfigStore.getState().localModelName;
+    const state = useConfigStore.getState();
+    const activeModel = state.localModelName;
     if (!dirtyMaxTokensRef.current || draftModelRef.current !== activeModel) {
       return;
     }
     dirtyMaxTokensRef.current = false;
     const num = parseInt(maxTokensDraft, 10);
     if (Number.isFinite(num) && num > 0) {
-      setModelOverride(activeModel, { maxTokens: num });
+      const maxAllowed = Math.max(64, state.localContextSize || 2048);
+      const clamped = Math.max(64, Math.min(maxAllowed, num));
+      setMaxTokensDraft(String(clamped));
+      setModelOverride(activeModel, { maxTokens: clamped });
     } else {
-      setMaxTokensDraft(String(useConfigStore.getState().localMaxTokens || 512));
-    }
-    if (!dirtyContextRef.current) {
-      setContextDraft(String(useConfigStore.getState().localContextSize || 2048));
+      setMaxTokensDraft(String(state.localMaxTokens || 512));
     }
   };
 
@@ -358,23 +374,22 @@ export default function LocalAiScreen() {
   const handleApplyRecommendation = () => {
     if (hasValidRam) {
       acceptRecommendedConfig();
+      syncDraftsFromStore();
       Alert.alert('Recommendation Applied', 'Recommended settings applied successfully.');
     }
   };
 
   const handleCustomizeRecommendation = () => {
     if (!isRecommendationApplied && hasValidRam) {
-      const rec = getOptimalSettingsForRam(detectedRamBytes);
-      setContextDraft(String(rec.contextSize));
-      setMaxTokensDraft(String(rec.maxTokens));
+      prepareRecommendedForCustomize();
+      syncDraftsFromStore();
     }
     contextInputRef.current?.focus();
   };
 
   const switchModel = (modelName: string) => {
-    dirtyContextRef.current = false;
-    dirtyMaxTokensRef.current = false;
     applyModelSettings(modelName);
+    syncDraftsFromStore();
   };
 
   const handleSelectModel = (modelName: string) => {
@@ -499,7 +514,7 @@ export default function LocalAiScreen() {
             await deleteCustomModel(model.id);
             clearModelOverride(model.name);
             if (localModelName === model.name) {
-              applyModelSettings('Qwen2.5 0.5B');
+              switchModel('Qwen2.5 0.5B');
             }
             await loadCustomModelsList();
             refreshFreeDiskBytes();
@@ -926,13 +941,9 @@ export default function LocalAiScreen() {
             <Pressable
               onPress={() => {
                 const currentModel = useConfigStore.getState().localModelName;
-                dirtyContextRef.current = false;
-                dirtyMaxTokensRef.current = false;
                 clearModelOverride(currentModel);
                 applyModelSettings(currentModel);
-                const nextState = useConfigStore.getState();
-                setContextDraft(String(nextState.localContextSize || 2048));
-                setMaxTokensDraft(String(nextState.localMaxTokens || 512));
+                syncDraftsFromStore();
               }}
               style={{
                 backgroundColor: 'rgba(255,255,255,0.08)',

@@ -217,6 +217,7 @@ interface ConfigState {
   clearModelOverride: (modelName: string) => void;
   applyModelSettings: (modelName: string) => void;
   acceptRecommendedConfig: () => void;
+  prepareRecommendedForCustomize: () => void;
   setLocalModelDownloadProgress: (val: number | null) => void;
   setWifiOnlyDownload: (val: boolean) => void;
   setLocalModelName: (val: string) => void;
@@ -246,6 +247,28 @@ interface ConfigState {
 }
 
 const SECURE_KEY = 'vela-api-key';
+
+const applyRecommendedPreset = (state: ConfigState, autoApplied: boolean): Partial<ConfigState> | ConfigState => {
+  if (
+    typeof state.detectedRamBytes !== 'number' ||
+    !Number.isFinite(state.detectedRamBytes) ||
+    state.detectedRamBytes <= 0
+  ) {
+    return state;
+  }
+  const rec = getOptimalSettingsForRam(state.detectedRamBytes);
+  const nextOverrides = { ...state.modelOverrides };
+  delete nextOverrides[rec.modelName];
+  return {
+    localModelName: rec.modelName,
+    isConfigured: computeIsConfigured({ ...state, localModelName: rec.modelName }),
+    localContextSize: rec.contextSize,
+    localMaxTokens: rec.maxTokens,
+    gpuBackendPreference: 'auto',
+    localConfigAutoApplied: autoApplied,
+    modelOverrides: nextOverrides,
+  };
+};
 
 export const useConfigStore = create<ConfigState>()(
   persist(
@@ -558,27 +581,9 @@ export const useConfigStore = create<ConfigState>()(
           };
         }),
       acceptRecommendedConfig: () =>
-        set((state) => {
-          if (
-            typeof state.detectedRamBytes !== 'number' ||
-            !Number.isFinite(state.detectedRamBytes) ||
-            state.detectedRamBytes <= 0
-          ) {
-            return state;
-          }
-          const rec = getOptimalSettingsForRam(state.detectedRamBytes);
-          const nextOverrides = { ...state.modelOverrides };
-          delete nextOverrides[rec.modelName];
-          return {
-            localModelName: rec.modelName,
-            isConfigured: computeIsConfigured({ ...state, localModelName: rec.modelName }),
-            localContextSize: rec.contextSize,
-            localMaxTokens: rec.maxTokens,
-            gpuBackendPreference: 'auto',
-            localConfigAutoApplied: true,
-            modelOverrides: nextOverrides,
-          };
-        }),
+        set((state) => applyRecommendedPreset(state, true)),
+      prepareRecommendedForCustomize: () =>
+        set((state) => applyRecommendedPreset(state, false)),
 
       // Multimodal setters (#559, #562)
       setMaxImagesPerMessage: (maxImagesPerMessage) =>
